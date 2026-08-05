@@ -1,46 +1,79 @@
-# Security Policy
+# Аюулгүй байдлын бодлого
 
-## Supported Versions
+<p>
+  <img src="docs/assets/icons/flag-mn.png" width="18" height="18" alt=""> <b>Монгол</b>
+  &nbsp;·&nbsp;
+  <a href="docs/SECURITY_EN.md"><img src="docs/assets/icons/flag-en.png" width="18" height="18" alt=""> English</a>
+</p>
 
-The following table lists the versions of `open-gerege-mn-erp` currently supported with security updates:
+---
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+## Дэмжигдэж буй хувилбарууд
 
-## Reporting a Vulnerability
+| Хувилбар | Аюулгүй байдлын шинэчлэлт |
+| --- | --- |
+| 0.1.x | Дэмжигдэнэ |
+| < 0.1.0 | Дэмжигдэхгүй |
 
-We take the security of `open-gerege-mn-erp` seriously. If you believe you have discovered a security vulnerability in this project, please report it to us responsibly.
+---
 
-### How to Report
+## Эмзэг байдал мэдээлэх
 
-**Please DO NOT report security vulnerabilities through public GitHub issues.**
+`open-gerege-mn-erp` төслийн аюулгүй байдалд бид нухацтай ханддаг. Эмзэг байдал
+илрүүлсэн бол хариуцлагатайгаар мэдээлнэ үү.
 
-Instead, report vulnerabilities directly to the security team:
-- **Email**: security@gerege.mn
-- **Authors**: Gerege Systems Development Team & Gemini AI
+### Хэрхэн мэдээлэх вэ
 
-### Information to Include
+**Эмзэг байдлыг нээлттэй GitHub issue-ээр мэдээлэхгүй байхыг хүсье.**
 
-When reporting a vulnerability, please include:
-1. Type of issue (e.g., SQL injection, XSS, broken authentication, rate limiter bypass).
-2. Full steps to reproduce the vulnerability (including HTTP request samples or code snippets).
-3. Potential impact of the vulnerability.
-4. Any suggested remediations or patches.
+Шууд аюулгүй байдлын багт мэдэгдэнэ үү:
 
-### Response & Disclosure Process
+- **И-мэйл**: `security@gerege.mn`
+- **Хариуцагч**: Gerege Systems Development Team
 
-1. **Acknowledgement**: We will acknowledge receipt of your vulnerability report within 24-48 hours.
-2. **Investigation**: The engineering team will investigate and verify the issue.
-3. **Patching**: If confirmed, a fix will be implemented, tested, and released as a security patch.
-4. **Public Disclosure**: A public security advisory will be issued alongside the release notes.
+### Мэдээлэлд оруулах зүйлс
 
-## Security Features Included
+1. Эмзэг байдлын төрөл (SQL injection, XSS, нэвтрэлтийн алдаа, хурдны
+   хязгаарлалт тойрох гэх мэт).
+2. Давтан гаргах бүрэн алхмууд — HTTP хүсэлтийн жишээ эсвэл кодын хэсэг.
+3. Учирч болох эрсдэл, нөлөөллийн хүрээ.
+4. Санал болгож буй засварын арга (байвал).
 
-- **Multi-Tenancy Isolation**: Strict `tenant_id` database context scoping to prevent cross-tenant data leaks.
-- **Tenant-Level App Gating**: Inactive or uninstalled modules reject access with `403 Forbidden`.
-- **Security Headers**: Includes `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy`, and `HSTS`.
-- **IP Rate Limiting**: Throttles brute-force login attempts (`golang.org/x/time/rate`).
-- **Path Traversal Guards**: Validates all manifest/app slug parameters against regex `^[a-z0-9-]+$`.
-- **Password Security**: Uses `bcrypt` password hashing.
+### Хариу өгөх ба ил болгох журам
+
+1. **Хүлээн авалт** — мэдээллийг 24–48 цагийн дотор хүлээн авсныг баталгаажуулна.
+2. **Шалгалт** — инженерийн баг асуудлыг нягтлан баталгаажуулна.
+3. **Засвар** — баталгаажсан тохиолдолд засварыг хийж, тестлээд аюулгүй байдлын
+   шинэчлэлт болгон гаргана.
+4. **Ил болгох** — хувилбарын тэмдэглэлтэй хамт нийтийн зөвлөмж (advisory)
+   гаргана.
+
+---
+
+## Платформд хэрэгжсэн хамгаалалтууд
+
+| Хамгаалалт | Тайлбар |
+| --- | --- |
+| Тенант тусгаарлалт | Бүх асуулга `tenant_id`-аар хязгаарлагдаж, тенант хоорондын өгөгдөл алдагдахаас сэргийлнэ |
+| Апп хаалт | Суулгаагүй эсвэл идэвхгүй модуль руу хандахад `403 Forbidden` |
+| Session токен | 256 бит санамсаргүй утга; өгөгдлийн санд зөвхөн SHA-256 хэш хадгалагдана; гарахад цуцлагдана |
+| Нууц үг | `bcrypt` хэш |
+| Хурдны хязгаарлалт | Нэвтрэх хүсэлтэд IP-д суурилсан хязгаарлалт (`golang.org/x/time/rate`) |
+| Прокси толгой | `X-Forwarded-For`-д зөвхөн `TRUST_PROXY_HEADERS=true` үед итгэнэ |
+| Аюулгүй байдлын толгойнууд | `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`, production дээр `HSTS` |
+| Замын хамгаалалт | Апп slug зөвхөн `a-z`, `0-9`, `-`, `_` тэмдэгт зөвшөөрнө |
+| OAuth2 client танилт | Заавал шаардлагатай, тогтмол хугацааны харьцуулалт |
+| Төрийн интеграцийн mock | `ENVIRONMENT=production` үед автоматаар унтарна |
+| Админ эрх | Апп суулгах, идэвхжүүлэх, интеграц бүртгэх нь тенантын админ эрх шаардана |
+
+---
+
+## Тогтмол шалгалтууд
+
+CI нь push ба pull request бүр дээр дараах шалгалтыг ажиллуулна:
+
+- `govulncheck` — Go-ийн эмзэг байдлын мэдээллийн сантай тулгах.
+- `gosec` — эх кодын аюулгүй байдлын статик шинжилгээ.
+- `golangci-lint` — алдаа шалгалт, статик шинжилгээ.
+
+Мөн долоо хоног бүрийн Даваа гарагт эмзэг байдлын шалгалт автоматаар ажиллана.

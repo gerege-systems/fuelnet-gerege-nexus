@@ -1,39 +1,62 @@
-# Contributor Covenant Code of Conduct
+# Хамт олны ёс зүйн дүрэм
 
-## Our Pledge
+<p>
+  <img src="docs/assets/icons/flag-mn.png" width="18" height="18" alt=""> <b>Монгол</b>
+  &nbsp;·&nbsp;
+  <a href="docs/CODE_OF_CONDUCT_EN.md"><img src="docs/assets/icons/flag-en.png" width="18" height="18" alt=""> English</a>
+</p>
 
-We as members, contributors, and leaders pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
+---
 
-We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
+## Бидний амлалт
 
-## Our Standards
+Бид гишүүд, хувь нэмэр оруулагчид, удирдагчдын хувьд нас, бие бялдар, харагдах
+болон харагдахгүй хөгжлийн бэрхшээл, үндэс угсаа, хүйсийн онцлог, хүйсийн
+илэрхийлэл, туршлагын түвшин, боловсрол, нийгэм эдийн засгийн байдал, иргэншил,
+гадаад төрх, арьс өнгө, шашин шүтлэг, хүйсийн чиг баримжаанаас үл хамааран
+хүн бүрд дарамтгүй орчинг бүрдүүлэхээ амлаж байна.
 
-Examples of behavior that contributes to a positive environment for our community include:
-* Demonstrating empathy and kindness toward other people
-* Being respectful of differing opinions, viewpoints, and experiences
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing to those affected by our mistakes, and learning from the experience
-* Focusing on what is best not just for us as individuals, but for the overall community
+Бид нээлттэй, найрсаг, олон талт, хүртээмжтэй, эрүүл хамт олныг цогцлооход
+хувь нэмэр оруулах байдлаар үйлдэж, харилцахаа амлаж байна.
 
-Examples of unacceptable behavior include:
-* The use of sexualized language or imagery, and sexual attention or advances of any kind
-* Trolling, insulting or derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information, such as a physical or email address, without their explicit permission
-* Other conduct which could reasonably be considered inappropriate in a professional setting
+## Бидний хэм хэмжээ
 
-## Enforcement Responsibilities
+Эерэг орчин бүрдүүлэхэд хувь нэмэр оруулах үйлдлүүд:
 
-Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
+- Бусдад эмпати, эелдэг байдлыг илэрхийлэх.
+- Өөр өөр үзэл бодол, туршлагыг хүндэтгэх.
+- Бүтээлч санал шүүмжийг өгөх, түүнийг талархан хүлээж авах.
+- Алдаагаа хүлээн зөвшөөрч, хохирсон хүмүүсээс уучлалт гуйж, туршлага болгох.
+- Зөвхөн хувь хүний бус, нийт хамт олонд юу хамгийн сайн болохыг эрхэмлэх.
 
-## Scope
+Хүлээн зөвшөөрөгдөхгүй үйлдлүүд:
 
-This Code of Conduct applies within all community spaces, and also applies when an individual is officially representing the community in public spaces.
+- Бэлгийн шинжтэй хэл яриа, дүрс зураг, аливаа хэлбэрийн бэлгийн анхаарал,
+  дөхөж очих оролдлого.
+- Троллдох, доромжлох, гутаан доромжилсон сэтгэгдэл, хувь хүн болон улс төрийн
+  дайралт.
+- Нийтийн болон хувийн дарамт.
+- Бусдын хувийн мэдээллийг (гэрийн хаяг, и-мэйл гэх мэт) зөвшөөрөлгүй нийтлэх.
+- Мэргэжлийн орчинд зохисгүй гэж үзэж болох бусад үйлдэл.
 
-## Enforcement
+## Хэрэгжүүлэх хариуцлага
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at `community@gerege.mn`. All complaints will be reviewed and investigated promptly and fairly.
+Хамт олны удирдагчид хүлээн зөвшөөрөгдөх зан үйлийн хэм хэмжээг тодруулж,
+хэрэгжүүлэх үүрэгтэй бөгөөд зохисгүй, заналхийлсэн, доромжилсон эсвэл хортой
+гэж үзсэн аливаа үйлдэлд зохистой, шударга арга хэмжээ авна.
 
-## Attribution
+## Хамрах хүрээ
 
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org), version 2.1.
+Энэхүү ёс зүйн дүрэм нь хамт олны бүх орон зайд, түүнчлэн хувь хүн олон нийтийн
+орчинд хамт олныг албан ёсоор төлөөлж байгаа үед үйлчилнэ.
+
+## Хэрэгжилт
+
+Доромжилсон, дарамталсан болон бусад хүлээн зөвшөөрөгдөхгүй үйлдлийн талаар
+`community@gerege.mn` хаягаар төслийн багт мэдэгдэнэ үү. Бүх гомдлыг нэн даруй,
+шударгаар хянан шалгана.
+
+## Эх сурвалж
+
+Энэхүү дүрмийг [Contributor Covenant](https://www.contributor-covenant.org)
+хувилбар 2.1-ээс тохируулан боловсруулсан.

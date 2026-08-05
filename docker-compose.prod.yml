@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: platform_erp_postgres
+    environment:
+      POSTGRES_DB: platform_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - platform_erp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d platform_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: platform_erp_migrate
+    command: ["/app/migrate", "up"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: platform_erp_backend
+    environment:
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
+      PORT: 8080
+      ENVIRONMENT: production
+      ALLOWED_ORIGINS: https://openerp.gerege.mn,http://openerp.gerege.mn
+    ports:
+      - "127.0.0.1:8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://openerp.gerege.mn/api/v1
+    container_name: platform_erp_frontend
+    ports:
+      - "127.0.0.1:3008:3000"
+    depends_on:
+      - backend
+
+volumes:
+  platform_erp_postgres_data:
