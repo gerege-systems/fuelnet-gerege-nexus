@@ -113,10 +113,11 @@ npm run build
 
 ## 🙏 Acknowledgements & Inspiration
 
-This open-source platform draws design inspiration and architectural patterns from two outstanding open-source projects:
+This open-source platform draws design inspiration and architectural patterns from outstanding open-source projects and authors:
 
-1. **[Odoo](https://github.com/odoo/odoo)** — Inspired our modular business application system, tenant-level App Store installer, dynamic menu composition, and topological module dependency resolution.
-2. **[go-zero (zeromicro/go-zero)](https://github.com/zeromicro/go-zero)** — Inspired our cloud-native resilience engine, including Google SRE adaptive circuit breaking (`resilience/breaker.go`), in-flight load shedding (`resilience/loadshedder.go`), singleflight query coalescing (`resilience/singleflight.go`), and exponential backoff retries (`resilience/retry.go`).
+1. **[snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)** by **[@snykk](https://github.com/snykk)** — Provided the initial Go REST API boilerplate foundation.
+2. **[Odoo](https://github.com/odoo/odoo)** — Inspired our modular business application system, tenant-level App Store installer, dynamic menu composition, and topological module dependency resolution.
+3. **[go-zero (zeromicro/go-zero)](https://github.com/zeromicro/go-zero)** — Inspired our cloud-native resilience engine, including Google SRE adaptive circuit breaking (`resilience/breaker.go`), in-flight load shedding (`resilience/loadshedder.go`), singleflight query coalescing (`resilience/singleflight.go`), and exponential backoff retries (`resilience/retry.go`).
 
 ---
 
