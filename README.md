@@ -9,11 +9,13 @@ An open-source, production-oriented **Modular Monolith ERP & Business Applicatio
 
 ---
 
-## 👥 Authors & Maintainers
+## 👥 Authors & Contributors
 
 This open-source project is created and maintained by:
 - 🏛️ **Gerege Systems Development Team**
+- 🎨 **[@craftzbay](https://github.com/craftzbay)**
 - 🤖 **Gemini AI**
+- 🧠 **Claude AI**
 
 ---
 
@@ -123,6 +125,4 @@ This open-source platform draws design inspiration and architectural patterns fr
 
 ## 📄 License
 
-Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for more information.
-
-Copyright (c) 2026 **Gerege Systems Development Team & Gemini AI**.
+Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI**.

@@ -62,5 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[Odoo](https://github.com/odoo/odoo)**: Modular app ecosystem, App Store dependency resolver, and dynamic menu architecture.
 - **[go-zero](https://github.com/zeromicro/go-zero)**: High-performance cloud-native resilience engine (Adaptive Circuit Breaker, Load Shedder, Singleflight, Exponential Retry).
 
-### Authors
-- **Gerege Systems Development Team & Gemini AI**
+### Authors & Contributors
+- **Gerege Systems Development Team**
+- **[@craftzbay](https://github.com/craftzbay)**
+- **Gemini AI**
+- **Claude AI**
