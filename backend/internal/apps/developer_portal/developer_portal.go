@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
@@ -21,20 +23,39 @@ type DeveloperPortalModule struct {
 	ssoProvider *ssoprovider.SSOProvider
 }
 
+// NewDeveloperPortalModule builds the module and registers it in the compile-time app registry.
 func NewDeveloperPortalModule(ssoProvider *ssoprovider.SSOProvider) *DeveloperPortalModule {
-	return &DeveloperPortalModule{
+	m := &DeveloperPortalModule{
 		ssoProvider: ssoProvider,
+	}
+	appregistry.Register(m)
+	return m
+}
+
+func (m *DeveloperPortalModule) ID() string      { return "io.example.developer_portal" }
+func (m *DeveloperPortalModule) Name() string    { return "Developer Portal & OAuth2 SSO" }
+func (m *DeveloperPortalModule) Version() string { return "1.0.0" }
+
+func (m *DeveloperPortalModule) Dependencies() []internal.Dependency { return nil }
+
+func (m *DeveloperPortalModule) Permissions() []internal.PermissionDefinition {
+	return []internal.PermissionDefinition{
+		{Code: "developer.read", Name: "Read Developer Apps", Description: "View registered OAuth2 client applications"},
+		{Code: "developer.manage", Name: "Manage Developer Apps", Description: "Register and configure OAuth2 client applications"},
 	}
 }
 
-func (m *DeveloperPortalModule) ID() string {
-	return "io.example.developer_portal"
+func (m *DeveloperPortalModule) Menus() []internal.MenuDefinition {
+	return []internal.MenuDefinition{
+		{ID: "developer_apps", Label: "Developer Apps", Path: "/developer/apps", Icon: "code", Order: 60},
+	}
 }
 
-func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router) {
-	r.Route("/api/v1/developer/apps", func(r chi.Router) {
-		r.Get("/", m.handleListApps)
-		r.Post("/", m.handleCreateApp)
+func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
+	r.Route("/api/v1/developer/apps", func(dr chi.Router) {
+		dr.Use(tenantAuthMiddleware)
+		dr.Get("/", m.handleListApps)
+		dr.Post("/", m.handleCreateApp)
 	})
 }
 

@@ -1,26 +1,28 @@
 {
   "id": "io.example.developer_portal",
-  "name": "Developer Portal & OAuth2 SSO Apps",
-  "summary": "Register third-party OAuth2/OIDC applications, manage API keys, and configure SSO client applications.",
+  "name": "Developer Portal & OAuth2 SSO",
   "version": "1.0.0",
-  "category": "Developer Tools",
-  "author": "Gerege Systems & AI Team",
-  "website": "https://openerp.gerege.mn",
-  "license": "Apache-2.0",
-  "icon": "Code2",
-  "depends": [],
+  "platform": ">=0.1.0 <2.0.0",
+  "dependencies": [],
   "permissions": [
-    "developer.read",
-    "developer.manage"
+    {
+      "code": "developer.read",
+      "name": "Read Developer Apps",
+      "description": "Allows viewing registered OAuth2 client applications"
+    },
+    {
+      "code": "developer.manage",
+      "name": "Manage Developer Apps",
+      "description": "Allows registering and configuring OAuth2 client applications"
+    }
   ],
   "menus": [
     {
-      "id": "menu_developer_portal",
-      "name": "Developer Apps",
-      "sequence": 50,
-      "action": "/developer/apps",
-      "icon": "Code2",
-      "groups": ["developer.manage"]
+      "id": "developer_apps",
+      "label": "Developer Apps",
+      "path": "/developer/apps",
+      "icon": "code",
+      "order": 60
     }
   ]
 }

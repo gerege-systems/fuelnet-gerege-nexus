@@ -10,11 +10,23 @@ package documents
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"slices"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
+
+// DocTypes enumerates the accepted document classifications. The column has no
+// CHECK constraint, so validation happens here.
+var DocTypes = []string{"CONTRACT", "REQUEST", "APPROVAL"}
 
 type Document struct {
 	ID        string    `json:"id"`
@@ -30,80 +42,136 @@ type DocumentsModule struct {
 	db *pgxpool.Pool
 }
 
+// New builds the module and registers it in the compile-time app registry so
+// the app store can resolve and install io.example.documents.
 func New(db *pgxpool.Pool) *DocumentsModule {
 	m := &DocumentsModule{db: db}
-	m.initSchema()
+	appregistry.Register(m)
 	return m
 }
 
-func (m *DocumentsModule) ID() string { return "io.example.documents" }
+func (m *DocumentsModule) ID() string      { return "io.example.documents" }
+func (m *DocumentsModule) Name() string    { return "Digital Documents & Signatures" }
+func (m *DocumentsModule) Version() string { return "1.0.0" }
 
-func (m *DocumentsModule) initSchema() {
-	query := `
-	CREATE TABLE IF NOT EXISTS document_records (
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		tenant_id UUID NOT NULL,
-		title VARCHAR(255) NOT NULL,
-		doc_type VARCHAR(64) NOT NULL DEFAULT 'CONTRACT',
-		status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
-		signed_by VARCHAR(255),
-		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-	);
-	`
-	_, _ = m.db.Exec(context.Background(), query)
+func (m *DocumentsModule) Dependencies() []internal.Dependency { return nil }
+
+func (m *DocumentsModule) Permissions() []internal.PermissionDefinition {
+	return []internal.PermissionDefinition{
+		{Code: "documents.read", Name: "Read Documents", Description: "View documents and signature status"},
+		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents and route them for approval"},
+	}
+}
+
+func (m *DocumentsModule) Menus() []internal.MenuDefinition {
+	return []internal.MenuDefinition{
+		{ID: "documents", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 50},
+	}
+}
+
+func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
+	r.Route("/api/v1/documents", func(dr chi.Router) {
+		dr.Use(tenantAuthMiddleware)
+		dr.Get("/", m.listDocumentsHandler)
+		dr.Post("/", m.createDocumentHandler)
+	})
+}
+
+func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	list, err := m.ListDocuments(r.Context(), tenantID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch documents")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Title   string `json:"title"`
+		DocType string `json:"doc_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Title == "" {
+		writeError(w, http.StatusBadRequest, "invalid document parameters: title is required")
+		return
+	}
+
+	doc, err := m.CreateDocument(r.Context(), tenantID, req.Title, req.DocType)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, doc)
 }
 
 func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, docType string) (*Document, error) {
 	if title == "" {
 		return nil, fmt.Errorf("title cannot be empty")
 	}
+	if docType == "" {
+		docType = "CONTRACT"
+	}
+	if !slices.Contains(DocTypes, docType) {
+		return nil, fmt.Errorf("unsupported doc_type %q", docType)
+	}
 
 	var doc Document
-	query := `
+	const query = `
 		INSERT INTO document_records (tenant_id, title, doc_type, status)
 		VALUES ($1, $2, $3, 'PENDING_APPROVAL')
 		RETURNING id, tenant_id, title, doc_type, status, created_at
 	`
+	// The old code answered a failed INSERT with a canned "doc_demo_200"
+	// record, reporting success for a document that was never stored.
 	err := m.db.QueryRow(ctx, query, tenantID, title, docType).Scan(
 		&doc.ID, &doc.TenantID, &doc.Title, &doc.DocType, &doc.Status, &doc.CreatedAt,
 	)
 	if err != nil {
-		return &Document{
-			ID:        "doc_demo_200",
-			TenantID:  tenantID,
-			Title:     title,
-			DocType:   docType,
-			Status:    "PENDING_APPROVAL",
-			CreatedAt: time.Now(),
-		}, nil
+		return nil, fmt.Errorf("create document: %w", err)
 	}
 	return &doc, nil
 }
 
 func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string) ([]Document, error) {
-	query := `SELECT id, tenant_id, title, doc_type, status, COALESCE(signed_by, ''), created_at FROM document_records WHERE tenant_id = $1 ORDER BY created_at DESC`
+	const query = `SELECT id, tenant_id, title, doc_type, status, COALESCE(signed_by, ''), created_at
+	                 FROM document_records WHERE tenant_id = $1 ORDER BY created_at DESC`
 	rows, err := m.db.Query(ctx, query, tenantID)
 	if err != nil {
-		return []Document{
-			{
-				ID:        "doc_demo_200",
-				TenantID:  tenantID,
-				Title:     "Гэрэгэ Системс - Хамтран ажиллах гэрээ 2026",
-				DocType:   "CONTRACT",
-				Status:    "APPROVED",
-				SignedBy:  "Ц.Эрдэнэбат (E-ID Баталгаажсан)",
-				CreatedAt: time.Now(),
-			},
-		}, nil
+		return nil, fmt.Errorf("list documents: %w", err)
 	}
 	defer rows.Close()
 
-	var list []Document
+	list := make([]Document, 0)
 	for rows.Next() {
 		var doc Document
-		if err := rows.Scan(&doc.ID, &doc.TenantID, &doc.Title, &doc.DocType, &doc.Status, &doc.SignedBy, &doc.CreatedAt); err == nil {
-			list = append(list, doc)
+		if err := rows.Scan(&doc.ID, &doc.TenantID, &doc.Title, &doc.DocType, &doc.Status, &doc.SignedBy, &doc.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan document: %w", err)
 		}
+		list = append(list, doc)
 	}
-	return list, nil
+	return list, rows.Err()
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
 }

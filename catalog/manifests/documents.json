@@ -2,15 +2,23 @@
   "id": "io.example.documents",
   "name": "Digital Documents & Signatures",
   "version": "1.0.0",
-  "platform": ">=0.1.0",
-  "dependencies": {},
+  "platform": ">=0.1.0 <2.0.0",
+  "dependencies": [],
   "permissions": [
-    "documents.read",
-    "documents.manage"
+    {
+      "code": "documents.read",
+      "name": "Read Documents",
+      "description": "Allows viewing documents and signature status"
+    },
+    {
+      "code": "documents.manage",
+      "name": "Manage Documents",
+      "description": "Allows creating documents and routing them for approval"
+    }
   ],
   "menus": [
     {
-      "id": "menu_documents",
+      "id": "documents",
       "label": "Documents & E-Sign",
       "path": "/documents",
       "icon": "file-text",

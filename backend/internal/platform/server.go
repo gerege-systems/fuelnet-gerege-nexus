@@ -215,17 +215,6 @@ func (s *Server) setupRoutes() {
 			pr.With(s.requireAdmin).Get("/integrations", s.handleListIntegrations)
 			pr.With(s.requireAdmin).Post("/integrations", s.handleRegisterIntegration)
 
-			// Billing App (io.example.billing)
-			pr.Get("/billing/invoices", s.handleListInvoices)
-			pr.Post("/billing/invoices", s.handleCreateInvoice)
-
-			// Documents App (io.example.documents)
-			pr.Get("/documents", s.handleListDocuments)
-			pr.Post("/documents", s.handleCreateDocument)
-
-			// Developer Portal & OAuth2 SSO App (io.example.developer_portal)
-			s.devPortalMod.RegisterRoutes(pr)
-
 			// Store — reads are open to any tenant member, mutations are
 			// tenant-administrator only. Previously every authenticated user
 			// could install, enable or disable apps for the whole tenant.
@@ -246,10 +235,17 @@ func (s *Server) setupRoutes() {
 	s.registerAppModuleRoutes()
 }
 
+// registerAppModuleRoutes mounts every compile-time business module behind the
+// tenant app gate. Billing, Documents and the Developer Portal used to be wired
+// straight into the protected group, so their endpoints stayed reachable for
+// tenants that had never installed the app.
 func (s *Server) registerAppModuleRoutes() {
 	s.contactsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.contacts"))
 	s.productsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.products"))
 	s.inventoryMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.inventory"))
+	s.billingMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.billing"))
+	s.documentsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.documents"))
+	s.devPortalMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.developer_portal"))
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -877,96 +873,6 @@ func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "registered", "integration": cfg})
-}
-
-func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-
-	list, err := s.billingMod.ListInvoices(r.Context(), tenantID)
-	if err != nil {
-		http.Error(w, `{"error":"failed to fetch invoices"}`, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(list)
-}
-
-func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-
-	var req struct {
-		ContactName string  `json:"contact_name"`
-		Amount      float64 `json:"amount"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ContactName == "" || req.Amount <= 0 {
-		http.Error(w, `{"error":"invalid invoice parameters"}`, http.StatusBadRequest)
-		return
-	}
-
-	inv, err := s.billingMod.CreateInvoice(r.Context(), tenantID, req.ContactName, req.Amount)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(inv)
-}
-
-func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-
-	list, err := s.documentsMod.ListDocuments(r.Context(), tenantID)
-	if err != nil {
-		http.Error(w, `{"error":"failed to fetch documents"}`, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(list)
-}
-
-func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-
-	var req struct {
-		Title   string `json:"title"`
-		DocType string `json:"doc_type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Title == "" {
-		http.Error(w, `{"error":"invalid document parameters"}`, http.StatusBadRequest)
-		return
-	}
-
-	if req.DocType == "" {
-		req.DocType = "CONTRACT"
-	}
-
-	doc, err := s.documentsMod.CreateDocument(r.Context(), tenantID, req.Title, req.DocType)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(doc)
 }
 
 // writeJSONError emits a JSON error body. Interpolating err.Error() straight

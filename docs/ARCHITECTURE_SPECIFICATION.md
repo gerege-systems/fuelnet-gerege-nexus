@@ -1,43 +1,40 @@
-# 🏛️ Gerege Template Platform — Technical Architecture & Capabilities Specification
+# 🏛️ Gerege Template Platform — Архитектур ба Системийн Боломжийн Дэлгэрэнгүй Заавар (Technical Architecture Specification)
 
-Welcome to the comprehensive technical architecture specification for **Gerege Template Platform**, an open-source, production-grade Modular Monolith ERP and business application engine built for enterprise scalability, resilience, and national digital infrastructure integration.
+🇲🇳 **Үндэсний Хэл**: Монгол (Mongolian Default Language) | 🇬🇧 **Secondary Language**: English
 
 ---
 
-## 🚀 Key Advantages & Architecture Highlights
+## 🇲🇳 1. Системийн Ерөнхий Архитектур ба Давуу Талууд (Mongolian)
 
-### 1. ⚡ High-Performance Modular Monolith Architecture
-Unlike traditional microservice architectures that introduce network latency and operational complexity, or monolithic applications that suffer from tight coupling, **Gerege Template Platform** implements a **Compile-Time Go Modular Monolith**:
-- **Zero-Latency In-Process Invocations**: Business modules (`contacts`, `products`, `inventory`, `billing`, `documents`) implement a strictly defined Go `Module` interface and compile directly into the single binary.
-- **Dynamic Tenant-Level App Store Gating**: An application being present in the Go binary does **not** mean it is enabled for a tenant. Installation, enablement, dynamic menu composition, and RBAC permissions are evaluated dynamically at runtime per tenant in PostgreSQL (`app_installations`).
-- **Topological Dependency Resolution Engine**: Pure Go recursive dependency resolver using Directed Acyclic Graphs (DAG) and semver constraints. Installing `Inventory` automatically resolves and installs `Products` and `Contacts` in order, with full cycle detection.
+**Gerege Template Platform** нь өндөр бүтээмжтэй, Монгол улсын цахим дэд бүтэцтэй нягт холбогдох боломжтой **Modular Monolith ERP & Бизнес Аппликейшн Платформ** юм.
 
-### 2. 🛡️ Cloud-Native Resilience Engine (go-zero Inspired)
-Located in [`backend/internal/platform/resilience`](../backend/internal/platform/resilience), the platform incorporates Google SRE-level resilience mechanics:
-- **Adaptive Circuit Breaker (`breaker.go`)**: Implements sliding window error-rate monitoring to shed traffic automatically when downstream databases or services fail, preventing cascading failures.
-- **Adaptive In-Flight Load Shedder (`loadshedder.go`)**: Monitors active HTTP concurrency and CPU load. Under extreme traffic spikes, it sheds load gracefully by returning `503 Service Unavailable` with `Retry-After` headers.
-- **Singleflight Query Coalescing (`singleflight.go`)**: Suppresses duplicate concurrent queries, guaranteeing that thundering herd / cache stampede traffic executes database queries exactly **once** while sharing the result across all callers.
-- **Exponential Backoff Retries (`retry.go`)**: Smart retry execution helper (`DoWithRetry`) for transient network or database failures.
+### ⚡ Өндөр Бүтээмжтэй Модулиар Монолит Архитектур
+- **Zero-Latency Execution**: Бизнес аппликейшн модулиуд (`contacts`, `products`, `inventory`, `billing`, `documents`, `developer_portal`) нь Go хэлний `Module` контрактыг хэрэгжүүлэн нэг бинари програмд компиллогдон ажиллана.
+- **Тенант Бүрийн Апп Стор Систем**: Баазад байгаа модулиуд нь тенант бүрийн хувьд идэвхжүүлсэн эсэх нь PostgreSQL сангаас динамикаар удирлагдана (`app_installations`).
+- **DAG Хамаарал Шийдвэрлэх Модель**: Directed Acyclic Graph болон semver ашиглан модулиудын хамаарлыг алдаагүй тооцоолно.
 
-### 3. 🇲🇳 National Digital Infrastructure & State Data Exchange Integration
-The platform comes pre-configured with native integration layers for Mongolian enterprise ecosystem standards:
-- **`xyp.gerege.mn` / `platform/gerege/xyp.go`**: Official Mongolian State Data Exchange (ХУР Төрийн мэдээлэл солилцооны систем) integration for instant Citizen Civil Registration (`WS100101`) and Legal Entity/Company verification (`WS100201`).
-- **`eidmongolia.mn` & `developer.sso.mn`**: National E-ID Single Sign-On (SSO) engine supporting 4 official authentication channels:
-  1. 🖊️ **PKI Digital Signature (Тоон гарын үсэг)**
-  2. 📱 **Mobile OTP (Нэг удаагийн код)**
-  3. 🏦 **Bank SSO Credentials (Банкны суваг)**
-  4. 👤 **Biometric Face Verification (Царай танилт)**
-- **`dan.gerege.mn`**: Gerege Systems DAN SSO Gateway integration service.
+### 🛡️ Cloud-Native Resilience Engine (go-zero Inspired)
+- **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Сүлжээ болон системд алдаа гарахад ачааллыг автоматаар тусгаарлах Google SRE стандарт.
+- **Adaptive Load Shedding (`resilience/loadshedder.go`)**: Сүлжээний хэт ачааллын үед `503 Service Unavailable` буцаан системийг хамгаалах.
+- **Singleflight Coalescing (`resilience/singleflight.go`)**: Давхардсан асуулгуудыг 1 удаа ажиллуулан DB ачааллыг бууруулах.
 
-### 4. 🤖 AI Copilot & Smart Business Intelligence Engine
-Located in [`backend/internal/platform/ai`](../backend/internal/platform/ai):
-- **Gemini AI Copilot (`copilot.go`)**: Context-aware natural language assistant connected directly to tenant ERP database state. Classifies intents and returns structured answers with interactive suggestion chips.
-- **AI Inventory Demand Forecaster (`inventory_forecaster.go`)**: Analyzes stock levels and historical movements to automatically generate safety stock alerts and reorder quantity recommendations.
+### 🇲🇳 Төрийн Мэдээлэл Солилцоо ба Танилт Нэвтрэлт
+- **ХУР Систем (`xyp.gerege.mn`)**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээдийн мэдээлэл (`WS100201`).
+- **E-ID ба ДАН Танилт (`eidmongolia.mn` & `developer.sso.mn`)**: Тоон гарын үсэг, Mobile OTP, Банкны SSO, Царай танилт.
+- **ORY Hydra SSO Provider (`/.well-known/openid-configuration`)**: Өөрийн OAuth2 & OpenID Connect provider.
 
-### 5. 📊 Observability & Async Background Processing
-- **Prometheus Metrics (`/metrics`)**: Exposes real-time HTTP request throughput, latency histograms, and error rates using `github.com/prometheus/client_golang`.
-- **OpenTelemetry Tracing**: Distributed tracing initialization for end-to-end request tracing.
-- **Asynchronous Worker Queues (`platform/mailer`)**: Non-blocking worker pool with retry logic for email OTP delivery and background notifications.
+---
+
+## 🇬🇧 2. System Architecture & Technical Specifications (English)
+
+### ⚡ High-Performance Modular Monolith Architecture
+- **In-Process Invocations**: Business modules implement a strict Go `Module` interface compiled directly into the binary for zero-latency execution.
+- **Tenant App Store Engine**: Per-tenant module enablement, RBAC permissions, and dynamic menus managed via PostgreSQL (`app_installations`).
+
+### 🛡️ Cloud-Native Resilience Engine
+- **Adaptive Circuit Breaker**: Google SRE sliding-window error monitoring.
+- **Adaptive Load Shedding**: Graceful load shedding under high CPU/concurrency limits.
+- **Singleflight Coalescing**: Thundering herd and cache stampede query suppression.
 
 ---
 
@@ -45,7 +42,7 @@ Located in [`backend/internal/platform/ai`](../backend/internal/platform/ai):
 
 ```
 +-----------------------------------------------------------------------------------+
-|                            Gerege Template Platform                           |
+|                              Gerege Template Platform                             |
 +-----------------------------------------------------------------------------------+
                                           |
                 +-------------------------+-------------------------+
@@ -59,7 +56,7 @@ Located in [`backend/internal/platform/ai`](../backend/internal/platform/ai):
         |               |                                   |               |
 +---------------+ +---------------+                 +---------------+ +---------------+
 | AI Copilot UI | | E-ID / DAN    |                 | Cloud-Native  | | State Exchange|
-|  Drawer Panel | | SSO Modal     |                 | Resilience    | |  (xyp.gerege)|
+|  Drawer Panel | | SSO Provider  |                 | Resilience    | |  (xyp.gerege)|
 +---------------+ +---------------+                 +---------------+ +---------------+
                                                             |
                                                     +---------------+

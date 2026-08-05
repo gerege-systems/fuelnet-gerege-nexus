@@ -1,17 +1,19 @@
-# Gerege Template Platform
+# Gerege Template Platform 🇲🇳
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8.svg)](https://go.dev)
 [![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-An open-source, production-oriented **Modular Monolith ERP & Business Application Platform** inspired by Odoo's app ecosystem. Built for enterprise scalability, resilience, and national digital identity/data exchange integration using **Go 1.24**, **Chi Router**, **PostgreSQL (pgx/v5)**, **Goose Migrations**, and **Next.js (App Router)**.
+**Gerege Template Platform** нь Odoo болон cloud-native экосистемээс санаа авсан, өндөр бүтээмжтэй, Монгол улсын цахим дэд бүтэц (ДАН, E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой **Монгол Хэлний Үндсэн Сонголттой (Mongolian Default Language)** Нээлттэй Эх бүхий **Modular Monolith ERP & Бизнес Аппликейшн Платформ** юм.
+
+*Read this in [English](README.en.md).*
 
 ---
 
-## 👥 Authors & Contributors
+## 👥 Хөгжүүлэгчид ба Зохиогчид (Authors & Contributors)
 
-This open-source project is created and maintained by:
+Төслийг хамтран хөгжүүлэгчид:
 - 🏛️ **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
 - 🎨 **[@craftzbay](https://github.com/craftzbay)**
 - 🤖 **Gemini AI**
@@ -19,70 +21,73 @@ This open-source project is created and maintained by:
 
 ---
 
-## 🌟 Unique Advantages & Core Features
+## 🌟 Үндсэн Боломжууд ба Давуу Талууд
 
-### 1. ⚡ High-Performance Modular Monolith Architecture
-- **Compile-Time Go App Modules**: Applications implement a unified `Module` Go contract and compile into a single binary for zero-latency in-process execution.
-- **Tenant-Level App Store Engine**: Per-tenant application gating, dynamic menu composition, and RBAC permissions managed dynamically via PostgreSQL (`app_installations`).
-- **Topological Dependency Resolution Engine**: Pure Go recursive dependency resolver using Directed Acyclic Graphs (DAG) and semver constraints.
+### 1. ⚡ Өндөр Бүтээмжтэй Модулиар Монолит Архитектур
+- **Compile-Time Go Апп Модулиуд**: Модулиуд (`contacts`, `products`, `inventory`, `billing`, `documents`, `developer_portal`) нь нэг бинари програмд компиллогдон ажиллах тул сүлжээний хоцрогдолгүй (zero-latency execution).
+- **Тенант Бүрийн Апп Стор Систем**: PostgreSQL дээр тенант бүрийн аппликейшний эрх, меню болон RBAC тохиргоо динамикаар удирлагдана (`app_installations`).
+- **Модулийн Хамаарал Шийдвэрлэх Модель**: DAG (Directed Acyclic Graph) болон semver ашигласан хамаарал шийдвэрлэх систем.
 
-### 2. 🛡️ Cloud-Native Resilience Engine (go-zero Inspired)
-- **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Google SRE sliding window error-rate monitoring and rejection handling.
-- **Adaptive Load Shedding (`resilience/loadshedder.go`)**: In-flight HTTP request concurrency control returning `503 Service Unavailable` with `Retry-After` headers under high load.
-- **Singleflight Coalescing (`resilience/singleflight.go`)**: Thundering herd & cache stampede query suppression.
-- **Exponential Backoff Retry (`resilience/retry.go`)**: `DoWithRetry` execution helper for transient network/DB failures.
+### 2. 🛡️ Cloud-Native Resilience Engine (go-zero Сангаас Санаа Авсан)
+- **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Google SRE стандартын алдааны харьцааг хянах систем.
+- **Adaptive Load Shedding (`resilience/loadshedder.go`)**: Сүлжээний хэт ачааллын үед `503 Service Unavailable` буцаан хамгаалах хөдөлгүүр.
+- **Singleflight Coalescing (`resilience/singleflight.go`)**: Давхардсан хүсэлтүүдийг 1 удаа ажиллуулж кэш дээр ачаалал бууруулах.
+- **Exponential Backoff Retry (`resilience/retry.go`)**: Сүлжээний саатлын үеийн давтан ажиллуулах функц.
 
-### 3. 🇲🇳 National Digital Infrastructure Integration
-- **State Data Exchange (`xyp.gerege.mn` / `platform/gerege/xyp.go`)**: Official Mongolian State Data Exchange (ХУР Төрийн мэдээлэл солилцооны систем) for Citizen Civil Registration (`WS100101`) and Company Legal Entity verification (`WS100201`).
-- **National E-ID SSO (`eidmongolia.mn` & `developer.sso.mn`)**: OAuth2 / OpenID Connect (OIDC) authentication supporting PKI Digital Signature (Тоон гарын үсэг), Mobile OTP, Bank SSO, and Biometric Face Verification.
-- **Gerege DAN SSO Gateway (`dan.gerege.mn`)**: Dedicated SSO gateway token verification and citizen profile resolution.
+### 3. 🇲🇳 Монгол Улсын Цахим Дэд Бүтцийн Интеграци
+- **Төрийн Мэдээлэл Солилцооны ХУР Систем (`xyp.gerege.mn`)**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээд/ААН (`WS100201`) баталгаажуулалт.
+- **Үндэсний E-ID & ДАН SSO Танилт Нэвтрэлт (`eidmongolia.mn` & `developer.sso.mn`)**:
+  1. 🖊️ **Тоон гарын үсэг (PKI Digital Signature)**
+  2. 📱 **Нэг удаагийн код (Mobile OTP)**
+  3. 🏦 **Банкны суваг (Bank SSO)**
+  4. 👤 **Царай танилт (Biometric Face Verification)**
+- **Gerege DAN SSO Gateway (`dan.gerege.mn`)**: Иргэний ДАН сесс токен баталгаажуулах гарц.
+- **ORY Hydra Grade SSO Provider Engine (`/.well-known/openid-configuration`)**: OAuth2 & OpenID Connect OIDC танилт нэвтрэлтийн систем.
 
-### 4. 🤖 AI Copilot & Smart Business Intelligence
-- **Gemini AI Assistant (`platform/ai/copilot.go`)**: Natural language ERP assistant connected to live tenant database state with intent classification and actionable UI suggestion chips.
-- **AI Inventory Demand Forecaster (`platform/ai/inventory_forecaster.go`)**: Historical stock movement analysis and safety stock reorder point recommendations.
-
-### 5. 🔌 External System Integrations & Webhooks
-- **Integration Manager (`platform/integration/integration.go`)**: HMAC-SHA256 signed event dispatcher and connector manager (`/settings/integrations`).
-
----
-
-## 🚀 Demo Credentials
-
-- **Admin Email**: `admin@example.com`
-- **Password**: `Password123!`
-- **Demo Tenant**: `Demo Corporation` (`slug: demo`)
+### 4. 🤖 AI Copilot & Бизнес Аналитик
+- **Gemini AI Туслах (`platform/ai/copilot.go`)**: Байгууллагын өгөгдлийн сантай холбогдсон AI Copilot туслах.
+- **AI Агуулахын Захиалга Таамаглагч (`platform/ai/inventory_forecaster.go`)**: Үлдэгдэл болон захиалгын хэмжээг AI-аар таамаглах.
 
 ---
 
-## 📦 Production Business Application Suite
+## 🚀 Туршилтын Нэвтрэх Эрх (Demo Credentials)
 
-1. 📇 **Contacts (`io.example.contacts`)**: Customer/vendor management with instant XYP (`xyp.gerege.mn`) civil registration auto-fill (`/contacts`).
-2. 📦 **Products (`io.example.products`)**: Product catalog, pricing, and tenant-scoped SKUs (`/products`).
-3. 🏭 **Inventory (`io.example.inventory`)**: Warehouse management, live stock levels, append-only stock movement audit log, and transactional adjustments (`/inventory`).
-4. 💳 **Public Billing & e-Barimt (`io.example.billing`)**: Public service fee invoicing, 10% VAT calculation, and e-Barimt tax receipt generation (`/billing`).
-5. 📄 **Digital Documents & E-Signatures (`io.example.documents`)**: Enterprise document routing, approval workflows, and E-ID / DAN digital signature verification (`/documents`).
+- **И-мэйл хаяг**: `admin@example.com`
+- **Нууц үг**: `Password123!`
+- **Тенант**: `Demo Corporation` (`slug: demo`)
 
 ---
 
-## 🛠️ Quick Start & Setup
+## 📦 Бэлэн Бизнес Аппликейшнүүд
 
-### Prerequisites
+1. 📇 **Contacts (`io.example.contacts`)**: Харилцагчийн бүртгэл + ХУР авто-бөглөлт (`/contacts`).
+2. 📦 **Products (`io.example.products`)**: Бараа бүтээгдэхүүн, үнэ ба SKU бүртгэл (`/products`).
+3. 🏭 **Inventory (`io.example.inventory`)**: Агуулахын хөдөлгөөн ба аюулгүйн үлдэгдэл (`/inventory`).
+4. 💳 **Public Billing & e-Barimt (`io.example.billing`)**: Нийтийн нэхэмжлэх, 10% НӨАТ ба e-Barimt татварын баримт (`/billing`).
+5. 📄 **Digital Documents & E-Signatures (`io.example.documents`)**: Цахим баримт бичиг, тоон гарын үсэг ба баталгаажуулалт (`/documents`).
+6. 💻 **Developer Portal & OAuth2 SSO (`io.example.developer_portal`)**: Хөгжүүлэгчийн OAuth2 Client апп бүртгэл ба тохиргоо (`/developer/apps`).
+
+---
+
+## 🛠️ Төслийг Ажиллуулах Заавар
+
+### Шаардлагатай Програмууд
 - Go 1.24+
 - Node.js 20+
-- PostgreSQL 16+ (or Docker Compose)
+- PostgreSQL 16+ (эсвэл Docker Compose)
 
-### 1. Run with Docker Compose
+### 1. Docker Compose-оор ажиллуулах
 ```bash
 docker-compose up -d
 ```
 
-### 2. Manual Development Setup
+### 2. Гараар ажиллуулах
 
 #### Backend:
 ```bash
 cd backend
 go mod tidy
-DATABASE_URL="postgres://postgres:postgres@localhost:5432/platform_db?sslmode=disable" go run ./cmd/migrate up
+DATABASE_URL="postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable" go run ./cmd/migrate up
 go run ./cmd/api
 ```
 
@@ -92,45 +97,44 @@ cd frontend
 npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) and log in using `admin@example.com` / `Password123!`.
+Вэб хөтөч дээрээ [http://localhost:3000](http://localhost:3000) хаягаар орон `admin@example.com` / `Password123!` эрхээр нэвтэрнэ үү.
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Тест Ажиллуулах
 
 ```bash
-# Run backend unit & resolver tests
+# Backend нэгж тестүүдийг ажиллуулах
 cd backend
-go test ./...
+go test -v -race ./...
 
-# Frontend build check
+# Frontend build шалгах
 cd frontend
 npm run build
 ```
 
 ---
 
-## 📚 Documentation Index
+## 📚 Баримт Бичгүүдийн Индекс
 
-- 🏛️ [Architecture Specification](docs/ARCHITECTURE_SPECIFICATION.md) - Deep-dive technical architecture & capabilities
-- 📘 [Module Authoring Guide](docs/MODULE_AUTHORING_GUIDE.md) - How to build custom business modules
-- 🤝 [Contributing Guidelines](CONTRIBUTING.md) - How to submit bug reports and PRs
-- 🛡️ [Security Policy](SECURITY.md) - Vulnerability reporting and security features
-- 📜 [Code of Conduct](CODE_OF_CONDUCT.md) - Community standards
-- 📋 [Changelog](CHANGELOG.md) - Release history and versioning
-
----
-
-## 🙏 Acknowledgements & Inspiration
-
-This open-source platform draws design inspiration and architectural patterns from outstanding open-source projects and authors:
-
-1. **[snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)** by **[@snykk](https://github.com/snykk)** — Provided the initial Go REST API boilerplate foundation.
-2. **[Odoo](https://github.com/odoo/odoo)** — Inspired our modular business application system, tenant-level App Store installer, dynamic menu composition, and topological module dependency resolution.
-3. **[go-zero (zeromicro/go-zero)](https://github.com/zeromicro/go-zero)** — Inspired our cloud-native resilience engine, including Google SRE adaptive circuit breaking (`resilience/breaker.go`), in-flight load shedding (`resilience/loadshedder.go`), singleflight query coalescing (`resilience/singleflight.go`), and exponential backoff retries (`resilience/retry.go`).
+- 🏛️ [Архитектурын Дэлгэрэнгүй Заавар (Mongolian / English)](docs/ARCHITECTURE_SPECIFICATION.md)
+- 📘 [Модуль Хөгжүүлэх Заавар](docs/MODULE_AUTHORING_GUIDE.md)
+- 🤝 [Хамтран Ажиллах Заавар](CONTRIBUTING.md)
+- 🛡️ [Аюулгүй Байдлын Бодлого](SECURITY.md)
+- 📋 [Өөрчлөлтийн Түүх (Changelog)](CHANGELOG.md)
+- 🇬🇧 [English Readme](README.en.md)
 
 ---
 
-## 📄 License
+## 🙏 Ашигласан & Санаа Авсан Төслүүд
+
+1. **[snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)** by **[@snykk](https://github.com/snykk)** — Go REST API суурь архитектур.
+2. **[Odoo](https://github.com/odoo/odoo)** — Модулиар Апп Стор болон хамаарал шийдвэрлэх модель.
+3. **[go-zero (zeromicro/go-zero)](https://github.com/zeromicro/go-zero)** — Cloud-native resilience engine (Circuit Breaker, Load Shedder, Singleflight).
+
+---
+
+## 📄 Лиценз
 
 Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI**.
+Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for more information.
