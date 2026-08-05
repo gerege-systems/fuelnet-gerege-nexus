@@ -15,7 +15,6 @@ high-performance open-source ERP platform possible.
 ## Maintainers
 
 - **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
-- **[@craftzbay](https://github.com/craftzbay)**
 - **Gemini AI**, **Claude AI**
 
 ---

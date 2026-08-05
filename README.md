@@ -48,7 +48,6 @@
 | Оролцогч | Үүрэг |
 | --- | --- |
 | **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | Архитектур, платформын цөм |
-| **[@craftzbay](https://github.com/craftzbay)** | Frontend ба UX |
 | **Gemini AI** | Код үүсгэлт, баримтжуулалт |
 | **Claude AI** | Код шинжилгээ, аюулгүй байдлын аудит |
 
@@ -288,7 +287,7 @@ CI нь push ба pull request бүр дээр lint, тест, frontend build, D
 
 ## Лиценз
 
-Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI &
+Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
 Claude AI**. Apache 2.0 лицензээр тараагдана — [`LICENSE`](LICENSE)-ийг үзнэ үү.
 
 Тугны дүрсийг [Flaticon](https://www.flaticon.com/)-оос авсан

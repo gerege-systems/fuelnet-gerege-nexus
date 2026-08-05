@@ -46,7 +46,6 @@ network hops or operational cost of microservices.
 | Contributor | Role |
 | --- | --- |
 | **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | Architecture, platform core |
-| **[@craftzbay](https://github.com/craftzbay)** | Frontend and UX |
 | **Gemini AI** | Code generation, documentation |
 | **Claude AI** | Code analysis, security audit |
 
@@ -283,7 +282,7 @@ Report vulnerabilities as described in [`SECURITY.md`](../SECURITY.md).
 
 ## License
 
-Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI &
+Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
 Claude AI**. Distributed under the Apache 2.0 License — see
 [`LICENSE`](../LICENSE).
 

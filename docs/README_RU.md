@@ -47,7 +47,6 @@ PostgreSQL определяет, какие приложения активны 
 | Участник | Роль |
 | --- | --- |
 | **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | Архитектура, ядро платформы |
-| **[@craftzbay](https://github.com/craftzbay)** | Frontend и UX |
 | **Gemini AI** | Генерация кода, документация |
 | **Claude AI** | Анализ кода, аудит безопасности |
 
@@ -287,7 +286,7 @@ gosec при каждом push и pull request.
 
 ## Лицензия
 
-Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI &
+Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
 Claude AI**. Распространяется по лицензии Apache 2.0 — см.
 [`LICENSE`](../LICENSE).
 

@@ -36,6 +36,12 @@ const iconMap: Record<string, React.ReactNode> = {
   "file-text": <FileText className="w-5 h-5" />,
 };
 
+// Routes that render without the authenticated app shell. The landing page
+// used to be gated like every other route: Layout called getMe(), the call
+// failed for an anonymous visitor and pushed them straight to /login, so the
+// landing page was unreachable.
+const PUBLIC_ROUTES = ["/", "/login"];
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [user, setUser] = useState<any>(null);
@@ -43,7 +49,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const isPublic = PUBLIC_ROUTES.includes(pathname);
+
   useEffect(() => {
+    if (isPublic) {
+      setLoading(false);
+      return;
+    }
+
     async function loadData() {
       try {
         const u = await api.getMe();
@@ -51,15 +64,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         const m = await api.getMenus();
         setMenus(m || []);
       } catch (err) {
-        if (pathname !== "/login") {
-          router.push("/login");
-        }
+        router.push("/login");
       } finally {
         setLoading(false);
       }
     }
     loadData();
-  }, [pathname, router]);
+  }, [pathname, router, isPublic]);
 
   const handleLogout = async () => {
     try {
@@ -71,6 +82,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   if (pathname === "/login") {
     return <main className="min-h-screen bg-slate-100 flex items-center justify-center">{children}</main>;
+  }
+
+  // The landing page brings its own full-page chrome.
+  if (pathname === "/") {
+    return <>{children}</>;
   }
 
   if (loading) {
