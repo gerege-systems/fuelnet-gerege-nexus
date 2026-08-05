@@ -19,13 +19,13 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/mailer"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/xyp"
 	"golang.org/x/time/rate"
 )
 
@@ -38,7 +38,7 @@ type Server struct {
 	copilotSvc   *ai.CopilotService
 	forecaster   *ai.Forecaster
 	eidSvc       *eid.EIDService
-	xypSvc       *xyp.XYPService
+	geregeSvc    *gerege.GeregeService
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -89,7 +89,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		copilotSvc:   ai.NewCopilotService(db),
 		forecaster:   ai.NewForecaster(db),
 		eidSvc:       eid.NewEIDService(),
-		xypSvc:       xyp.NewXYPService(),
+		geregeSvc:    gerege.NewGeregeService(),
 	}
 
 	s.setupRoutes()
@@ -628,7 +628,7 @@ func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := s.xypSvc.GetCitizenInfo(r.Context(), req.RegNumber)
+	info, err := s.geregeSvc.GetCitizenInfo(r.Context(), req.RegNumber)
 	if err != nil {
 		http.Error(w, `{"error":"XYP citizen query failed: `+err.Error()+`"}`, http.StatusBadRequest)
 		return
@@ -655,7 +655,7 @@ func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := s.xypSvc.GetCompanyInfo(r.Context(), req.CompanyReg)
+	info, err := s.geregeSvc.GetCompanyInfo(r.Context(), req.CompanyReg)
 	if err != nil {
 		http.Error(w, `{"error":"XYP company query failed: `+err.Error()+`"}`, http.StatusBadRequest)
 		return

@@ -1,18 +1,18 @@
-package xyp_test
+package gerege_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/xyp"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
 )
 
-func TestXYPMockCitizenQuery(t *testing.T) {
-	svc := xyp.NewXYPService()
+func TestGeregeMockCitizenQuery(t *testing.T) {
+	svc := gerege.NewGeregeService()
 
 	info, err := svc.GetCitizenInfo(context.Background(), "AA90010111")
 	if err != nil {
-		t.Fatalf("unexpected error during mock XYP citizen query: %v", err)
+		t.Fatalf("unexpected error during mock Gerege citizen query: %v", err)
 	}
 
 	if info.RegNumber != "AA90010111" {
@@ -23,12 +23,12 @@ func TestXYPMockCitizenQuery(t *testing.T) {
 	}
 }
 
-func TestXYPMockCompanyQuery(t *testing.T) {
-	svc := xyp.NewXYPService()
+func TestGeregeMockCompanyQuery(t *testing.T) {
+	svc := gerege.NewGeregeService()
 
 	company, err := svc.GetCompanyInfo(context.Background(), "5589412")
 	if err != nil {
-		t.Fatalf("unexpected error during mock XYP company query: %v", err)
+		t.Fatalf("unexpected error during mock Gerege company query: %v", err)
 	}
 
 	if company.Name != "Гэрэгэ Системс ХХК" {

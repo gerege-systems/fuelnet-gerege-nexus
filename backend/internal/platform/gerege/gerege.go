@@ -1,4 +1,4 @@
-package xyp
+package gerege
 
 import (
 	"context"
@@ -20,22 +20,22 @@ type CitizenInfo struct {
 }
 
 type CompanyInfo struct {
-	CompanyReg  string `json:"company_reg"`
-	Name        string `json:"name"`
-	Executive   string `json:"executive"`
-	Address     string `json:"address"`
-	VatPayer    bool   `json:"vat_payer"`
-	Status      string `json:"status"`
+	CompanyReg   string `json:"company_reg"`
+	Name         string `json:"name"`
+	Executive    string `json:"executive"`
+	Address      string `json:"address"`
+	VatPayer     bool   `json:"vat_payer"`
+	Status       string `json:"status"`
 	FoundingDate string `json:"founding_date"`
 }
 
-type XYPService struct {
+type GeregeService struct {
 	endpoint string
 	mockMode bool
 	apiKey   string
 }
 
-func NewXYPService() *XYPService {
+func NewGeregeService() *GeregeService {
 	endpoint := os.Getenv("XYP_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "https://xyp.gerege.mn/api/v1"
@@ -43,7 +43,7 @@ func NewXYPService() *XYPService {
 	mock := os.Getenv("XYP_MOCK_MODE") != "false"
 	apiKey := os.Getenv("XYP_API_KEY")
 
-	return &XYPService{
+	return &GeregeService{
 		endpoint: endpoint,
 		mockMode: mock,
 		apiKey:   apiKey,
@@ -51,7 +51,7 @@ func NewXYPService() *XYPService {
 }
 
 // GetCitizenInfo queries citizen data from ХУР (xyp.gerege.mn)
-func (s *XYPService) GetCitizenInfo(ctx context.Context, regNumber string) (*CitizenInfo, error) {
+func (s *GeregeService) GetCitizenInfo(ctx context.Context, regNumber string) (*CitizenInfo, error) {
 	if regNumber == "" {
 		return nil, errors.New("empty registration number")
 	}
@@ -78,7 +78,7 @@ func (s *XYPService) GetCitizenInfo(ctx context.Context, regNumber string) (*Cit
 }
 
 // GetCompanyInfo queries legal entity data from ХУР (xyp.gerege.mn)
-func (s *XYPService) GetCompanyInfo(ctx context.Context, companyReg string) (*CompanyInfo, error) {
+func (s *GeregeService) GetCompanyInfo(ctx context.Context, companyReg string) (*CompanyInfo, error) {
 	if companyReg == "" {
 		return nil, errors.New("empty company registration number")
 	}
@@ -87,12 +87,12 @@ func (s *XYPService) GetCompanyInfo(ctx context.Context, companyReg string) (*Co
 
 	if s.mockMode {
 		return &CompanyInfo{
-			CompanyReg:  cleanReg,
-			Name:        "Гэрэгэ Системс ХХК",
-			Executive:   "Ц.Эрдэнэбат",
-			Address:     "Улаанбаатар хот, Хан-Уул дүүрэг, Гэрэгэ тауэр 5 давхар",
-			VatPayer:    true,
-			Status:      "ACTIVE",
+			CompanyReg:   cleanReg,
+			Name:         "Гэрэгэ Системс ХХК",
+			Executive:    "Ц.Эрдэнэбат",
+			Address:      "Улаанбаатар хот, Хан-Уул дүүрэг, Гэрэгэ тауэр 5 давхар",
+			VatPayer:     true,
+			Status:       "ACTIVE",
 			FoundingDate: "2018-05-15",
 		}, nil
 	}
