@@ -20,6 +20,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/mailer"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 	"golang.org/x/time/rate"
@@ -93,6 +94,7 @@ func (s *Server) setupRoutes() {
 
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(resilience.NewLoadShedder(1000).Middleware)
 	r.Use(observability.MetricsMiddleware)
 	r.Use(security.HeadersMiddleware)
 	r.Use(cors.Handler(cors.Options{
