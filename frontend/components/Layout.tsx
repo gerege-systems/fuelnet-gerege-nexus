@@ -81,12 +81,12 @@ export default function Layout({children}:{children:React.ReactNode}){
 
     <div className="flex flex-1 min-h-0">
       {mobileOpen&&<button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={()=>setMobileOpen(false)}/>}
-      <div className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 flex border-r transition-transform lg:translate-x-0 ${mobileOpen?"translate-x-0":"-translate-x-full"}`}>
+      <div className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 flex transition-transform lg:translate-x-0 ${mobileOpen?"translate-x-0":"-translate-x-full"}`}>
         <nav className="w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={locale==="en"?"Platform":"Платформ"} icon={<LayoutGrid className="w-5 h-5"/>}/>
           {apps.map(app=><AppRailLink key={app.id} href={app.path} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
         </nav>
-        <aside className={`overflow-hidden transition-all duration-200 ${panelOpen||mobileOpen?"w-56":"w-0"}`}>
+        <aside className={`overflow-hidden transition-all duration-200 ${panelOpen||mobileOpen?"w-56 border-r border-[var(--gerege-border)]":"w-0"}`}>
           <div className="w-56 py-5"><div className="px-4 mb-3 text-xs font-bold uppercase tracking-wider text-slate-700 truncate">{brandTitle}</div><nav className="space-y-1 px-2">
             {selected?<AppMenuGroups menus={selected.menus} pathname={pathname}/>:platformMenus}
           </nav></div>
