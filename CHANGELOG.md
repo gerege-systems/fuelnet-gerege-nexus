@@ -13,7 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Modular Monolith Core Architecture**:
   - Pure Go compile-time `Module` interface and global module registry (`appregistry`).
   - Tenant-level app installation, enablement, and menu visibility engine (`appinstaller`).
-  - **Automated Production Deployment & CI/CD Pipeline ([`openerp.gerege.mn`](.github/workflows/deploy.yml))**:
+  - **ORY Hydra-Grade OAuth2 & OpenID Connect (OIDC) SSO Provider ([`internal/platform/ssoprovider`](backend/internal/platform/ssoprovider))**:
+  - OpenID Connect Discovery (`/.well-known/openid-configuration`), JWKS URI (`/.well-known/jwks.json`), and OAuth2 Authorization Server (`/oauth2/token`, `/oauth2/introspect`, `/oauth2/revoke`).
+  - Supports `authorization_code`, `client_credentials`, and `refresh_token` grant flows.
+- **Developer Portal App Module ([`io.example.developer_portal`](backend/internal/apps/developer_portal))**:
+  - Developer portal interface (`/developer/apps`) to register third-party OAuth2 client applications, issue Client IDs and Client Secrets, and manage redirect URIs.
+- **Automated Production Deployment & CI/CD Pipeline ([`openerp.gerege.mn`](.github/workflows/deploy.yml))**:
   - Continuous Integration & Automated Deployment pipeline building GHCR Docker images and deploying to `openerp.gerege.mn`.
   - Production Multi-Stage Dockerfile ([`deploy/Dockerfile`](deploy/Dockerfile)) and Nginx SSL Reverse Proxy config ([`deploy/nginx/openerp.gerege.mn.conf`](deploy/nginx/openerp.gerege.mn.conf)).
   - Recursive dependency resolution algorithm with cycle detection and semver validation.
