@@ -66,10 +66,10 @@ export default function Layout({children}:{children:React.ReactNode}){
       <Link href="/apps" className="w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-border)]">
         {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
       </Link>
-      <div className={`h-full px-4 flex flex-col justify-center overflow-hidden transition-all duration-200 ${panelOpen?"w-56":"w-0 px-0"}`}>
+      <div className={`h-full px-4 flex flex-col justify-center overflow-hidden transition-all duration-200 ${panelOpen?"w-56 border-r border-[var(--gerege-border)]":"w-0 px-0"}`}>
         <span className="text-[11px] text-slate-500 truncate">{selected?.name||"Gerege ERP"}</span><strong className="text-[15px] text-slate-900 truncate">{brandTitle}</strong>
       </div>
-      <div className="w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-border)]"><button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={locale==="en"?"Toggle menu":"Цэс нээх, хаах"}><MenuIcon className="w-5 h-5"/></button></div>
+      <div className="w-16 h-full shrink-0 grid place-items-center"><button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={locale==="en"?"Toggle menu":"Цэс нээх, хаах"}><MenuIcon className="w-5 h-5"/></button></div>
       <div className="hidden lg:flex items-center gap-2 px-4 min-w-0"><span className="gerege-session-dot w-2 h-2 rounded-full shrink-0"/><strong className="text-base text-slate-800 font-semibold truncate max-w-56">{user?.tenant_name||"Demo Tenant"}</strong></div>
       <div className="hidden md:flex flex-1 items-center justify-center min-w-0 px-5 relative">
         <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&results[0]){router.push(results[0].path);setQuery("")}}} placeholder={locale==="en"?"Search apps and menus...":"Апп, цэс хайх..."} className="w-full h-10 rounded-full border border-slate-200 bg-slate-100/80 pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--gerege-blue)_15%,transparent)]"/>
