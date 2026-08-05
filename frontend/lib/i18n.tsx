@@ -524,6 +524,43 @@ const dictionary = {
   "gov.fee": { mn: "Хураамж", en: "Fee" },
   "gov.duration": { mn: "Хугацаа", en: "Duration" },
   "gov.days": { mn: "хоног", en: "days" },
+
+  // ─── Access control ────────────────────────────────────────────────────────
+  "access.eyebrow": { mn: "RBAC · Байгууллагын аюулгүй байдал", en: "RBAC · Tenant security" },
+  "access.title": { mn: "Эрхийн тохиргоо", en: "Access rights" },
+  "access.subtitle": {
+    mn: "Role бүрийн нэмэгдэх эрх болон хэрэглэгчийн role оноолтыг удирдана.",
+    en: "Manage the additive rights of each role and who holds them.",
+  },
+  "access.loading": { mn: "Эрхийн тохиргоо ачаалж байна…", en: "Loading access settings…" },
+  "access.tab.roles": { mn: "Role ба эрх", en: "Roles and rights" },
+  "access.tab.members": { mn: "Хэрэглэгчид", en: "Members" },
+  "access.roleSummary": { mn: "{count} эрх", en: "{count} rights" },
+  "access.newRole": { mn: "Шинэ role", en: "New role" },
+  "access.codePlaceholder": { mn: "sales_manager", en: "sales_manager" },
+  "access.namePlaceholder": { mn: "Борлуулалтын менежер", en: "Sales manager" },
+  "access.descriptionPlaceholder": { mn: "Тайлбар", en: "Description" },
+  "access.addRole": { mn: "Role нэмэх", en: "Add role" },
+  "access.noDescription": { mn: "Тайлбаргүй", en: "No description" },
+  "access.adminNote": {
+    mn: "Administrator role бүх эрхийг автоматаар эзэмшинэ.",
+    en: "The administrator role always holds every right.",
+  },
+  "access.confirmDelete": { mn: "{name} role-ийг устгах уу?", en: "Delete the {name} role?" },
+  "access.members.title": { mn: "Хэрэглэгчийн role оноолт", en: "Role assignment" },
+  "access.members.hint": {
+    mn: "Олон role-ийн эрх нийлж үйлчилнэ. Өөрчлөлт шууд хадгалагдана.",
+    en: "Rights from several roles add up. Changes save immediately.",
+  },
+  "access.saved": { mn: "Эрхүүд хадгалагдлаа", en: "Rights saved" },
+  "access.roleCreated": { mn: "Role үүслээ", en: "Role created" },
+  "access.roleDeleted": { mn: "Role устлаа", en: "Role deleted" },
+  "access.memberUpdated": { mn: "Хэрэглэгчийн role шинэчлэгдлээ", en: "Member roles updated" },
+  "access.error.load": { mn: "Эрхийн мэдээлэл ачаалж чадсангүй", en: "Could not load access settings" },
+  "access.error.save": { mn: "Хадгалж чадсангүй", en: "Could not save" },
+  "access.error.create": { mn: "Role үүсгэж чадсангүй", en: "Could not create the role" },
+  "access.error.delete": { mn: "Устгаж чадсангүй", en: "Could not delete" },
+  "access.error.assign": { mn: "Role оноож чадсангүй", en: "Could not assign the role" },
 } as const;
 
 export type TranslationKey = keyof typeof dictionary;

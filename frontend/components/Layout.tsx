@@ -67,7 +67,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   </MenuGroup><MenuGroup title={locale==="en"?"Settings":"Тохиргоо"}>
     <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("shell.appearance")}/>
     <NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Share2 className="w-5 h-5"/>} label={t("shell.integrations")}/>
-    {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={locale==="en"?"Access rights":"Эрхийн тохиргоо"}/>}
+    {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={t("access.title")}/>}
   </MenuGroup></>;
 
   return <div className="gerege-shell min-h-screen flex flex-col">
