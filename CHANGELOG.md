@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Modular Monolith Core Architecture**:
   - Pure Go compile-time `Module` interface and global module registry (`appregistry`).
   - Tenant-level app installation, enablement, and menu visibility engine (`appinstaller`).
+  - **Automated Production Deployment & CI/CD Pipeline ([`openerp.gerege.mn`](.github/workflows/deploy.yml))**:
+  - Continuous Integration & Automated Deployment pipeline building GHCR Docker images and deploying to `openerp.gerege.mn`.
+  - Production Multi-Stage Dockerfile ([`deploy/Dockerfile`](deploy/Dockerfile)) and Nginx SSL Reverse Proxy config ([`deploy/nginx/openerp.gerege.mn.conf`](deploy/nginx/openerp.gerege.mn.conf)).
   - Recursive dependency resolution algorithm with cycle detection and semver validation.
 - **Shared-Schema Multi-Tenancy**:
   - Context-scoped `tenant_id` isolation across all business entities and repositories.
