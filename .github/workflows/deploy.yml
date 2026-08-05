@@ -10,7 +10,10 @@ name: Deploy to Production (openerp.gerege.mn)
 #   DEPLOY_PORT                 defaults to 22
 #   POSTGRES_PASSWORD           database password on the server
 #   SSO_DEFAULT_CLIENT_SECRET   OAuth2 secret for the built-in client
+#
+# Repository variables:
 #   PUBLIC_ORIGIN               defaults to https://openerp.gerege.mn
+#   DEMO_MODE                   "true" seeds the demo account and mock connectors
 on:
   push:
     branches: [main, master]
@@ -31,7 +34,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PUBLIC_ORIGIN: ${{ secrets.PUBLIC_ORIGIN || 'https://openerp.gerege.mn' }}
+  # Repository variables, not secrets: the `secrets` context is not available
+  # in workflow-level env (or in a job name), which fails workflow validation
+  # outright — the run never starts.
+  PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN || 'https://openerp.gerege.mn' }}
   # Repository variable (Settings → Variables), not a secret. "true" turns the
   # target into a public demo: seeded demo account plus mock E-ID/DAN/XYP.
   DEMO_MODE: ${{ vars.DEMO_MODE || 'false' }}
@@ -84,7 +90,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
 
   deploy:
-    name: Roll out to ${{ secrets.DEPLOY_HOST || 'openerp.gerege.mn' }}
+    name: Roll out to production
     runs-on: ubuntu-latest
     needs: [build-and-push]
     steps:
