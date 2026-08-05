@@ -42,7 +42,7 @@ const dictionary = {
 
   // ─── App shell ─────────────────────────────────────────────────────────────
   "shell.loadingPlatform": { mn: "Платформыг ачаалж байна...", en: "Loading ERP Platform..." },
-  "shell.appStore": { mn: "Апп Стор", en: "App Store" },
+  "shell.appStore": { mn: "Апп Дэлгүүр", en: "App Store" },
   "shell.installedApps": { mn: "Суулгасан аппууд", en: "Installed Apps" },
   "shell.integrations": { mn: "Интеграцууд", en: "Integrations" },
   "shell.developerApps": { mn: "Хөгжүүлэгчийн аппууд", en: "Developer Apps" },
@@ -95,7 +95,7 @@ const dictionary = {
   },
   "landing.modules.title": { mn: "Бэлэн бизнес аппликейшнүүд", en: "Business applications" },
   "landing.modules.subtitle": {
-    mn: "Апп Стороос тенант бүрээр идэвхжүүлэн ашиглах боломжтой Go бизнес модулиуд.",
+    mn: "Апп Дэлгүүрээс тенант бүрээр идэвхжүүлэн ашиглах боломжтой Go бизнес модулиуд.",
     en: "Go modules you enable per tenant from the app store.",
   },
   "landing.footer.license": { mn: "— Apache 2.0 лицензээр тараагдана", en: "— Distributed under the Apache 2.0 License" },
@@ -126,7 +126,7 @@ const dictionary = {
     en: "XYP state data exchange",
   },
   "landing.feature1.body": {
-    mn: "Go хэл дээр компиллогдох Модулиар Монолит архитектур. Сүлжээний хоцрогдолгүй (zero-latency execution), тенант бүрийн Апп Стор тохиргоо ба DAG хамаарал шийдвэрлэгч.",
+    mn: "Go хэл дээр компиллогдох Модулиар Монолит архитектур. Сүлжээний хоцрогдолгүй (zero-latency execution), тенант бүрийн Апп Дэлгүүрийн тохиргоо ба DAG хамаарал шийдвэрлэгч.",
     en: "A modular monolith compiled in Go: zero-latency in-process execution, per-tenant app store configuration and a DAG dependency resolver.",
   },
   "landing.feature2.body": {
@@ -199,7 +199,7 @@ const dictionary = {
   },
 
   // ─── App store ─────────────────────────────────────────────────────────────
-  "store.title": { mn: "Апп Стор", en: "App Store" },
+  "store.title": { mn: "Апп Дэлгүүр", en: "App Store" },
   "store.subtitle": {
     mn: "Тенантдаа хэрэгтэй бизнес модулиудыг суулгаж, идэвхжүүлнэ.",
     en: "Install and enable the business modules your tenant needs.",
@@ -271,7 +271,7 @@ const dictionary = {
   "integrations.type": { mn: "Төрөл", en: "Type" },
 
   // ─── Screens (generated) ───────────────────────────────────────────────────
-  "apps.platformAppStore": { mn: "Платформын Апп Стор", en: "Platform App Store" },
+  "apps.platformAppStore": { mn: "Платформын Апп Дэлгүүр", en: "Platform App Store" },
   "apps.loadingAppsCatalog": { mn: "Апп каталог ачаалж байна...", en: "Loading apps catalog..." },
   "apps.noAppsFoundMatchingYourQuery": { mn: "Хайлтад тохирох апп олдсонгүй.", en: "No apps found matching your query." },
   "apps.searchApps": { mn: "Апп хайх...", en: "Search apps..." },
