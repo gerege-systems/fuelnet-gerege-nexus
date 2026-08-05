@@ -34,15 +34,14 @@
 - **Singleflight Coalescing (`resilience/singleflight.go`)**: Давхардсан хүсэлтүүдийг 1 удаа ажиллуулж кэш дээр ачаалал бууруулах.
 - **Exponential Backoff Retry (`resilience/retry.go`)**: Сүлжээний саатлын үеийн давтан ажиллуулах функц.
 
-### 3. 🇲🇳 Монгол Улсын Цахим Дэд Бүтцийн Интеграци
-- **Төрийн Мэдээлэл Солилцооны ХУР Систем (`xyp.gerege.mn`)**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээд/ААН (`WS100201`) баталгаажуулалт.
-- **Үндэсний E-ID & ДАН SSO Танилт Нэвтрэлт (`eidmongolia.mn` & `developer.sso.mn`)**:
+### 3. 🇲🇳 Төрийн Цахим Дэд Бүтцийн Интеграци
+- **Төрийн Мэдээлэл Солилцооны ХУР Систем**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээд/ААН (`WS100201`) баталгаажуулалт.
+- **Төрийн ДАН & Үндэсний E-ID Системтэй Холбогдох Интеграци ([`developer.sso.mn`](https://developer.sso.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**:
   1. 🖊️ **Тоон гарын үсэг (PKI Digital Signature)**
   2. 📱 **Нэг удаагийн код (Mobile OTP)**
   3. 🏦 **Банкны суваг (Bank SSO)**
   4. 👤 **Царай танилт (Biometric Face Verification)**
-- **Gerege DAN SSO Gateway (`dan.gerege.mn`)**: Иргэний ДАН сесс токен баталгаажуулах гарц.
-- **ORY Hydra Grade SSO Provider Engine (`/.well-known/openid-configuration`)**: OAuth2 & OpenID Connect OIDC танилт нэвтрэлтийн систем.
+- **Платформын Өөрийн ORY Hydra Grade SSO Provider (`/.well-known/openid-configuration`)**: Байгууллага өөрөө гуравдагч системүүдэд OAuth2 / OpenID Connect OIDC танилт нэвтрэлт олгох бие даасан сервер.
 
 ### 4. 🤖 AI Copilot & Бизнес Аналитик
 - **Gemini AI Туслах (`platform/ai/copilot.go`)**: Байгууллагын өгөгдлийн сантай холбогдсон AI Copilot туслах.

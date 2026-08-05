@@ -6,7 +6,7 @@ services:
       POSTGRES_DB: platform_db
       POSTGRES_USER: postgres
       # Matches .env.example and the Makefile DATABASE_URL default.
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: postgrespassword
     ports:
       - "5432:5432"
     volumes:
@@ -44,7 +44,7 @@ services:
     container_name: platform_migrate
     command: ["/app/migrate", "up"]
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/platform_db?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,7 +56,7 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: platform_backend
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/platform_db?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
       PORT: 8080
       ENVIRONMENT: development
       ALLOWED_ORIGINS: http://localhost:3000

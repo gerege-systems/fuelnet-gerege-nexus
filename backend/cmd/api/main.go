@@ -75,6 +75,10 @@ func main() {
 
 	if err := db.Ping(ctx); err != nil {
 		slog.Warn("database ping failed on startup", "error", err)
+	} else {
+		// Restores the documented demo login (admin@example.com). Skipped in
+		// production unless SEED_DEMO_DATA is set explicitly.
+		seedInitialData(ctx, db)
 	}
 
 	// Initialize Platform Server

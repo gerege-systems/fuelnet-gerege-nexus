@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/billing"
@@ -49,6 +50,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 )
+
+// PlatformVersion is the semver the app-store manifests are validated against.
+const PlatformVersion = "1.0.0"
 
 type Server struct {
 	db             *pgxpool.Pool
@@ -83,24 +87,44 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		return nil, err
 	}
 
-	// Populate full manifests
+	// Populate full manifests.
+	//
+	// A manifest that failed to load used to be replaced by a silent stub with
+	// no dependencies, permissions or menus. Three shipped manifests were in
+	// fact malformed (object instead of array for "dependencies", plain
+	// strings instead of objects for "permissions") and nobody noticed: the
+	// apps installed with an empty dependency graph and never contributed a
+	// menu entry. Catalog integrity is now a startup error.
+	catalogDir := filepath.Dir(catalogPath)
 	catalog := make([]appcatalog.CatalogApp, 0, len(rawCatalog))
 	for _, app := range rawCatalog {
-		manifestPath := "catalog/manifests/" + app.Slug + ".json"
-		manifest, err := appcatalog.LoadManifestFile(manifestPath, "1.0.0")
+		if !security.IsValidSlug(app.Slug) {
+			return nil, fmt.Errorf("catalog app %q has an invalid slug %q", app.ID, app.Slug)
+		}
+		manifestPath := filepath.Join(catalogDir, "manifests", app.Slug+".json")
+		manifest, err := appcatalog.LoadManifestFile(manifestPath, PlatformVersion)
 		if err != nil {
-			manifest = appcatalog.Manifest{
-				ID:       app.ID,
-				Name:     app.Name,
-				Version:  app.Version,
-				Platform: ">=0.1.0",
-			}
+			return nil, fmt.Errorf("load manifest for %s: %w", app.ID, err)
+		}
+		if manifest.ID != app.ID {
+			return nil, fmt.Errorf("manifest %s declares id %q but the catalog entry is %q",
+				manifestPath, manifest.ID, app.ID)
 		}
 		app.Manifest = manifest
 		catalog = append(catalog, app)
 	}
 
-	installer := appinstaller.NewAppInstaller(db, catalog, "1.0.0")
+	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
+
+	// Keep the apps table in step with the catalog file. A missing row makes
+	// installation fail on the app_installations foreign key, so this is a
+	// startup concern, not a seeding concern. A cold database must not stop the
+	// process from booting — /ready reports that separately.
+	syncCtx, cancelSync := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelSync()
+	if err := installer.SyncCatalog(syncCtx); err != nil {
+		slog.Error("failed to sync app catalog into database", "error", err)
+	}
 
 	// Instantiate compile-time Go modules once. Each constructor registers the
 	// module in the global app registry; calling them twice (here and again in

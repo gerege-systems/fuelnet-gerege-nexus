@@ -19,9 +19,9 @@
 - **Singleflight Coalescing (`resilience/singleflight.go`)**: Давхардсан асуулгуудыг 1 удаа ажиллуулан DB ачааллыг бууруулах.
 
 ### 🇲🇳 Төрийн Мэдээлэл Солилцоо ба Танилт Нэвтрэлт
-- **ХУР Систем (`xyp.gerege.mn`)**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээдийн мэдээлэл (`WS100201`).
-- **E-ID ба ДАН Танилт (`eidmongolia.mn` & `developer.sso.mn`)**: Тоон гарын үсэг, Mobile OTP, Банкны SSO, Царай танилт.
-- **ORY Hydra SSO Provider (`/.well-known/openid-configuration`)**: Өөрийн OAuth2 & OpenID Connect provider.
+- **ХУР Төрийн Мэдээлэл Солилцооны Систем**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээдийн мэдээлэл (`WS100201`).
+- **Төрийн ДАН & E-ID Танилт Нэвтрэлт ([`eidmongolia.mn`](https://eidmongolia.mn) & [`developer.sso.mn`](https://developer.sso.mn))**: Төрийн нэгдсэн ДАН танилт нэвтрэлтийн системтэй холбогдон Тоон гарын үсэг, Mobile OTP, Банкны SSO, Царай танилтаар баталгаажуулах.
+- **ORY Hydra SSO Provider (`/.well-known/openid-configuration`)**: Өөрийн бие даасан OAuth2 & OpenID Connect provider.
 
 ---
 

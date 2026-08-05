@@ -1,6 +1,6 @@
 .PHONY: dev-backend dev-frontend up down migrate seed test build
 
-DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/platform_db?sslmode=disable
+DATABASE_URL ?= postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable
 
 dev-backend:
 	cd backend && go run ./cmd/api

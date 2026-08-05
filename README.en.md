@@ -34,10 +34,9 @@ This open-source project is created and maintained by:
 - **Exponential Backoff Retry (`resilience/retry.go`)**: `DoWithRetry` execution helper for transient network/DB failures.
 
 ### 3. 🇲🇳 National Digital Infrastructure Integration
-- **State Data Exchange (`xyp.gerege.mn` / `platform/gerege/xyp.go`)**: Official Mongolian State Data Exchange (ХУР Төрийн мэдээлэл солилцооны систем) for Citizen Civil Registration (`WS100101`) and Company Legal Entity verification (`WS100201`).
-- **National E-ID SSO (`eidmongolia.mn` & `developer.sso.mn`)**: OAuth2 / OpenID Connect (OIDC) authentication supporting PKI Digital Signature (Тоон гарын үсэг), Mobile OTP, Bank SSO, and Biometric Face Verification.
-- **Gerege DAN SSO Gateway (`dan.gerege.mn`)**: Dedicated SSO gateway token verification and citizen profile resolution.
-- **ORY Hydra Grade SSO Provider Engine (`/.well-known/openid-configuration`)**: Built-in OAuth2 & OpenID Connect identity provider.
+- **State Data Exchange (ХУР)**: Official Mongolian State Data Exchange for Citizen Civil Registration (`WS100101`) and Company Legal Entity verification (`WS100201`).
+- **Mongolian Government DAN SSO & E-ID Integration ([`developer.sso.mn`](https://developer.sso.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**: Integrates with official State DAN SSO identity verification supporting PKI Digital Signatures, Mobile OTP, Bank SSO, and Biometric Face Verification.
+- **Built-in ORY Hydra Grade SSO Provider Engine (`/.well-known/openid-configuration`)**: Independent OAuth2 & OpenID Connect identity provider for issuing OAuth2 tokens to third-party applications.
 
 ### 4. 🤖 AI Copilot & Smart Business Intelligence
 - **Gemini AI Assistant (`platform/ai/copilot.go`)**: Natural language ERP assistant connected to live tenant database state with intent classification and actionable UI suggestion chips.

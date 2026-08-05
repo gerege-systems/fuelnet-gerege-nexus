@@ -48,7 +48,12 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 			statusCode = http.StatusOK
 		}
 		status := strconv.Itoa(statusCode)
-		path := r.URL.Path
+
+		// Only routed patterns may become label values. Falling back to
+		// r.URL.Path meant every 404 for a random URL minted a new Prometheus
+		// time series — unbounded cardinality that an unauthenticated client
+		// could drive until the process ran out of memory.
+		path := "unmatched"
 		if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePattern() != "" {
 			path = rctx.RoutePattern()
 		}

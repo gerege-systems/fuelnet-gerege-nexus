@@ -12,6 +12,7 @@ package ai
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -80,7 +81,10 @@ func (s *CopilotService) Query(ctx context.Context, req CopilotRequest) (*Copilo
 }
 
 func (s *CopilotService) classifyIntent(prompt string) string {
-	lower := prompt
+	// The keyword table is lowercase, so the prompt has to be folded too —
+	// "How much Stock do we have?" previously fell through to the generic
+	// answer.
+	lower := strings.ToLower(prompt)
 	if containsAny(lower, "stock", "inventory", "warehouse", "quantity") {
 		return "inventory_status"
 	}
@@ -95,12 +99,8 @@ func (s *CopilotService) classifyIntent(prompt string) string {
 
 func containsAny(s string, keywords ...string) bool {
 	for _, k := range keywords {
-		if len(k) > 0 && len(s) > 0 {
-			for i := 0; i <= len(s)-len(k); i++ {
-				if s[i:i+len(k)] == k {
-					return true
-				}
-			}
+		if k != "" && strings.Contains(s, k) {
+			return true
 		}
 	}
 	return false

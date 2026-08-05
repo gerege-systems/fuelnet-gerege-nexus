@@ -117,8 +117,12 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 			}
 		}
 
-		// Register app permissions for tenant
-		mod, _ := appregistry.Get(app.ID)
+		// Register app permissions for tenant. Get returning !ok used to fall
+		// through to a nil-interface method call and panic the request.
+		mod, ok := appregistry.Get(app.ID)
+		if !ok {
+			return fmt.Errorf("compile-time module missing for %s", appID)
+		}
 		for _, perm := range mod.Permissions() {
 			permID := uuid.New().String()
 			_, _ = tx.Exec(ctx,
@@ -203,6 +207,33 @@ func (ai *AppInstaller) EnableApp(ctx context.Context, tenantID, appSlug, userID
 		"app_slug": targetApp.Slug,
 	})
 
+	return nil
+}
+
+// SyncCatalog mirrors catalog/apps.json into the `apps` table.
+//
+// app_installations.app_id has a foreign key to apps(id), and the rows used to
+// come from a hand-written INSERT in the demo seeder that only listed three of
+// the six shipped apps. Installing any of the others — or any app added to the
+// catalog later — failed with a foreign-key violation. The catalog file is the
+// single source of truth; the table is now derived from it on every boot.
+func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
+	for _, app := range ai.catalog {
+		_, err := ai.db.Exec(ctx,
+			`INSERT INTO apps (id, slug, name, description, icon_url, category, visibility)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT (id) DO UPDATE SET
+			     slug        = EXCLUDED.slug,
+			     name        = EXCLUDED.name,
+			     description = EXCLUDED.description,
+			     icon_url    = EXCLUDED.icon_url,
+			     category    = EXCLUDED.category,
+			     visibility  = EXCLUDED.visibility`,
+			app.ID, app.Slug, app.Name, app.Description, app.IconURL, app.Category, app.Visibility)
+		if err != nil {
+			return fmt.Errorf("sync catalog app %s: %w", app.ID, err)
+		}
+	}
 	return nil
 }
 
