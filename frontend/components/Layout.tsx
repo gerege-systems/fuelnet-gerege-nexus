@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
@@ -27,10 +27,15 @@ import {
   Moon,
   Sun,
   Building2,
+  Database,
+  Workflow,
+  Layers3,
+  ChevronRight,
 } from "lucide-react";
 
 interface Menu {
   id: string;
+  parent_id?: string;
   label: string;
   path: string;
   icon: string;
@@ -43,6 +48,10 @@ const iconMap: Record<string, React.ReactNode> = {
   boxes: <Boxes className="w-5 h-5" />,
   "credit-card": <CreditCard className="w-5 h-5" />,
   "file-text": <FileText className="w-5 h-5" />,
+  code: <Code2 className="w-5 h-5" />,
+  database: <Database className="w-5 h-5" />,
+  workflow: <Workflow className="w-5 h-5" />,
+  layers: <Layers3 className="w-5 h-5" />,
 };
 
 // Routes that render without the authenticated app shell. The landing page
@@ -56,6 +65,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale } = useI18n();
@@ -88,6 +98,35 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname, router, isPublic, locale]);
 
   useEffect(() => setSidebarOpen(false), [pathname]);
+
+  const menuTree = useMemo(() => {
+    const children = new Map<string, Menu[]>();
+    for (const item of menus) {
+      if (!item.parent_id) continue;
+      children.set(item.parent_id, [...(children.get(item.parent_id) || []), item]);
+    }
+    for (const siblings of children.values()) siblings.sort((a, b) => a.order - b.order);
+    return menus
+      .filter((item) => !item.parent_id)
+      .sort((a, b) => a.order - b.order)
+      .map((item) => ({ ...item, children: children.get(item.id) || [] }));
+  }, [menus]);
+
+  useEffect(() => {
+    setExpandedMenus((current) => {
+      const next = new Set(current);
+      for (const parent of menuTree) {
+        if (parent.children.some((child) => pathname.startsWith(child.path))) next.add(parent.id);
+      }
+      return next;
+    });
+  }, [menuTree, pathname]);
+
+  const toggleMenu = (id: string) => setExpandedMenus((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const handleLogout = async () => {
     try {
@@ -245,18 +284,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <Share2 className="gerege-nav-icon w-5 h-5" />
                   <span>{t("shell.integrations")}</span>
-                </Link>
-
-                <Link
-                  href="/developer/apps"
-                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
-                    pathname === "/developer/apps"
-                      ? "gerege-nav-link-active font-semibold"
-                      : ""
-                  }`}
-                >
-                  <Code2 className="gerege-nav-icon w-5 h-5" />
-                  <span>{t("shell.developerApps")}</span>
                 </Link>
               </nav>
             </div>
