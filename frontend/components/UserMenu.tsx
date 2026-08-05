@@ -1,0 +1,153 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ChevronDown, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { LOCALES, useI18n } from "@/lib/i18n";
+import { ColorMode, useTheme } from "@/lib/theme";
+
+const MODES: { value: ColorMode; icon: typeof Sun; labelKey: "appearance.light" | "appearance.dark" | "appearance.system" }[] = [
+  { value: "light", icon: Sun, labelKey: "appearance.light" },
+  { value: "dark", icon: Moon, labelKey: "appearance.dark" },
+  { value: "system", icon: Monitor, labelKey: "appearance.system" },
+];
+
+/**
+ * Account menu in the header. Language and colour mode live here rather than as
+ * separate header controls, so the toolbar carries one affordance instead of
+ * three.
+ */
+export default function UserMenu({
+  user,
+  onLogout,
+}: {
+  user: { name?: string; email?: string } | null;
+  onLogout: () => void;
+}) {
+  const { t, locale, setLocale } = useI18n();
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close on an outside click or Escape, the way a menu is expected to behave.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const initial = (user?.name || user?.email || "G").slice(0, 1).toUpperCase();
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-2.5 transition ${
+          open ? "border-[var(--gerege-blue)] bg-[var(--gerege-blue-soft)]" : "border-slate-200 hover:bg-slate-50"
+        }`}
+      >
+        <span className="w-8 h-8 rounded-full bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] grid place-items-center text-xs font-bold">
+          {initial}
+        </span>
+        <span className="hidden md:block text-sm font-medium text-slate-800 truncate max-w-36">{user?.name}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-2 w-[320px] rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden z-50"
+        >
+          <div className="px-4 py-3.5 border-b border-slate-100">
+            <p className="text-sm font-semibold text-slate-900 truncate">{user?.name}</p>
+            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+          </div>
+
+          <div className="py-1.5 border-b border-slate-100">
+            <Link
+              href="/settings/appearance"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+              role="menuitem"
+            >
+              <Settings className="w-4 h-4 text-slate-400" />
+              {t("shell.settings")}
+            </Link>
+          </div>
+
+          <div className="px-4 py-3 space-y-3 border-b border-slate-100">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("userMenu.preferences")}
+            </p>
+
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-600">{t("common.language")}</span>
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+                {LOCALES.map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => setLocale(option.code)}
+                    aria-pressed={locale === option.code}
+                    title={option.label}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold uppercase transition ${
+                      locale === option.code ? "bg-white text-[var(--gerege-blue)] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {option.code}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-600">{t("userMenu.theme")}</span>
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+                {MODES.map(({ value, icon: Icon, labelKey }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => theme.updateTheme({ mode: value })}
+                    aria-pressed={theme.mode === value}
+                    title={t(labelKey)}
+                    className={`grid place-items-center w-8 h-7 rounded-md transition ${
+                      theme.mode === value ? "bg-white text-[var(--gerege-blue)] shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50"
+            role="menuitem"
+          >
+            <LogOut className="w-4 h-4" />
+            {t("shell.logout")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

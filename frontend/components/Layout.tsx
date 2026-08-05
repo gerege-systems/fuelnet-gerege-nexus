@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
+import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
 import {
   LayoutGrid,
@@ -15,17 +15,13 @@ import {
   Users,
   Package,
   Boxes,
-  LogOut,
   Share2,
   CreditCard,
   FileText,
   Code2,
   Menu,
   X,
-  ChevronDown,
   Palette,
-  Moon,
-  Sun,
   Building2,
   Database,
   Workflow,
@@ -181,28 +177,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <button onClick={theme.toggleMode} className="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label={locale === "en" ? "Toggle theme" : "Theme солих"} title={locale === "en" ? "Toggle theme" : "Theme солих"}>
-            {theme.resolvedMode === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-          <LanguageSwitcher />
-          <div className="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200">
-            <span className="w-8 h-8 rounded-full bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] grid place-items-center text-xs font-bold">
-              {(user?.name || user?.email || "G").slice(0, 1).toUpperCase()}
-            </span>
-            <span className="flex flex-col leading-tight max-w-40">
-              <span className="text-sm font-medium text-slate-800 truncate">{user?.name}</span>
-              <span className="text-[11px] text-slate-500 truncate">{user?.email}</span>
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 px-2.5 py-2 rounded-lg hover:bg-red-50 transition"
-            title={t("shell.logout")}
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden xl:inline">{t("shell.logout")}</span>
-          </button>
+          {/* Language and colour mode moved into the account menu, so the
+              toolbar carries one control instead of three. */}
+          <UserMenu user={user} onLogout={handleLogout} />
         </div>
       </header>
 

@@ -416,6 +416,9 @@ const dictionary = {
   "appearance.density": { mn: "Дэлгэцийн нягтрал", en: "Display density" },
   "appearance.comfortable": { mn: "Тав тухтай", en: "Comfortable" },
   "appearance.compact": { mn: "Нягт", en: "Compact" },
+  // ─── Account menu ──────────────────────────────────────────────────────────
+  "userMenu.preferences": { mn: "Тохиргоо", en: "Preferences" },
+  "userMenu.theme": { mn: "Загвар", en: "Theme" },
 } as const;
 
 export type TranslationKey = keyof typeof dictionary;
