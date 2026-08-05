@@ -1,0 +1,148 @@
+"use client";
+
+import React from "react";
+import { Dashboard, GovApiError, TaskStatus } from "@/lib/gov";
+import { useI18n } from "@/lib/i18n";
+import { AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
+
+export const STATUS_STYLE: Record<TaskStatus, string> = {
+  RECEIVED: "bg-slate-100 text-slate-700",
+  ASSIGNED: "bg-sky-100 text-sky-700",
+  IN_PROGRESS: "bg-blue-100 text-blue-700",
+  FORWARDED: "bg-violet-100 text-violet-700",
+  INFO_REQUESTED: "bg-amber-100 text-amber-700",
+  AWAITING_VERIFICATION: "bg-orange-100 text-orange-700",
+  RETURNED: "bg-rose-100 text-rose-700",
+  COMPLETED: "bg-emerald-100 text-emerald-700",
+  CLOSED: "bg-indigo-100 text-indigo-700",
+  REJECTED: "bg-red-100 text-red-700",
+  CANCELLED: "bg-slate-100 text-slate-500",
+};
+
+export const ALL_STATUSES = Object.keys(STATUS_STYLE) as TaskStatus[];
+
+/** Status label and badge, translated through the shared dictionary. */
+export function useStatusLabel() {
+  const { t } = useI18n();
+  return (status: TaskStatus) => {
+    const label = t(`gov.status.${status}` as never);
+    return label === `gov.status.${status}` ? status : label;
+  };
+}
+
+export function StatusBadge({ status }: { status: TaskStatus }) {
+  const label = useStatusLabel();
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${STATUS_STYLE[status] || "bg-slate-100"}`}>
+      {label(status)}
+    </span>
+  );
+}
+
+/** Turns any thrown value into a message carrying the backend's machine code. */
+export function describeError(err: unknown, fallback: string): string {
+  if (err instanceof GovApiError) return `${err.message} (${err.code})`;
+  return fallback;
+}
+
+export function PageHeader({
+  icon,
+  title,
+  subtitle,
+  actions,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          {icon}
+          {title}
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
+      </div>
+      {actions}
+    </header>
+  );
+}
+
+export function Banner({
+  tone,
+  message,
+  onDismiss,
+}: {
+  tone: "error" | "success";
+  message: string;
+  onDismiss: () => void;
+}) {
+  const { t } = useI18n();
+  const error = tone === "error";
+  return (
+    <div
+      className={`p-3 border text-sm rounded-lg flex items-start gap-2 ${
+        error ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+      }`}
+    >
+      {error ? <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> : <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />}
+      <span className="flex-1">{message}</span>
+      <button onClick={onDismiss} aria-label={t("common.close")}>
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+export function Loading({ label }: { label?: string }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex items-center gap-2 text-slate-500 text-sm">
+      <Loader2 className="w-4 h-4 animate-spin" />
+      {label || t("gov.loading")}
+    </div>
+  );
+}
+
+export function EmptyState({ message }: { message: string }) {
+  return <p className="p-6 text-sm text-slate-500">{message}</p>;
+}
+
+/** The counters every level uses to monitor its authorised scope. */
+export function DashboardCards({ dashboard }: { dashboard: Dashboard | null }) {
+  const { t } = useI18n();
+  if (!dashboard) return null;
+
+  const cards = [
+    { key: "received", label: t("gov.card.received"), value: dashboard.received, tone: "text-slate-700" },
+    { key: "in_progress", label: t("gov.card.inProgress"), value: dashboard.in_progress, tone: "text-blue-600" },
+    { key: "delegated", label: t("gov.card.delegated"), value: dashboard.delegated, tone: "text-violet-600" },
+    {
+      key: "verify",
+      label: t("gov.card.awaitingVerification"),
+      value: dashboard.awaiting_verification,
+      tone: "text-orange-600",
+    },
+    { key: "returned", label: t("gov.card.returned"), value: dashboard.returned, tone: "text-rose-600" },
+    {
+      key: "completed",
+      label: t("gov.card.completed"),
+      value: dashboard.completed + dashboard.closed,
+      tone: "text-emerald-600",
+    },
+    { key: "overdue", label: t("gov.card.overdue"), value: dashboard.overdue, tone: "text-red-600" },
+  ];
+
+  return (
+    <section className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+      {cards.map((card) => (
+        <div key={card.key} className="p-4 bg-white border border-slate-200 rounded-xl">
+          <div className={`text-2xl font-bold ${card.tone}`}>{card.value}</div>
+          <div className="text-[11px] text-slate-500 leading-snug mt-1">{card.label}</div>
+        </div>
+      ))}
+    </section>
+  );
+}

@@ -104,6 +104,18 @@ export interface WorkflowTemplate {
   Mode: FulfillmentMode;
 }
 
+export interface RoutingRule {
+  id: string;
+  service_id?: string | null;
+  priority: number;
+  match_field?: string;
+  match_value?: string;
+  strategy: RoutingStrategy;
+  target_unit_id?: string | null;
+  active: boolean;
+  created_at: string;
+}
+
 export interface Task {
   id: string;
   application_id: string;
@@ -151,6 +163,18 @@ export interface RequestDetail {
   request: RequestSummary;
   tasks: Task[];
   timeline: TimelineEvent[];
+}
+
+export interface Appointment {
+  id: string;
+  application_id?: string | null;
+  service_id: string;
+  service_name?: string;
+  citizen_name: string;
+  scheduled_at: string;
+  location: string;
+  status: string;
+  created_at: string;
 }
 
 export interface Dashboard {
@@ -247,6 +271,8 @@ export const gov = {
   unitTree: () => request<OrgUnit[]>("/gov/units/tree"),
   workflows: () => request<Workflow[]>("/gov/workflows"),
   templates: () => request<WorkflowTemplate[]>("/gov/workflow-templates"),
+  /** The list endpoint omits steps, so step-level SLA needs the version by id. */
+  workflowVersion: (id: string) => request<WorkflowVersion>(`/gov/workflow-versions/${id}`),
 
   // Operations
   dashboard: () => request<Dashboard>("/gov/dashboard"),
@@ -268,7 +294,41 @@ export const gov = {
     body: JSON.stringify(body),
   }),
 
+  appointments: () => request<Appointment[]>("/gov/appointments"),
+
+  bookAppointment: (body: {
+    service_id: string;
+    citizen_name: string;
+    scheduled_at: string;
+    location?: string;
+    application_id?: string | null;
+  }) => request<Appointment>("/gov/appointments", { method: "POST", body: JSON.stringify(body) }),
+
+  requests: (query: TaskQuery = {}) => request<Page<Task>>(`/gov/tasks${toQuery({ ...query })}`),
+
   // Configuration
+  createService: (body: {
+    code: string;
+    name: string;
+    category?: string;
+    description?: string;
+    fee?: number;
+    duration_days?: number;
+    required_evidences?: string[];
+    appointment_required?: boolean;
+  }) => request<GovService>("/gov/services", { method: "POST", body: JSON.stringify(body) }),
+
+  routingRules: () => request<RoutingRule[]>("/gov/routing-rules"),
+
+  createRoutingRule: (body: {
+    strategy: RoutingStrategy;
+    service_id?: string | null;
+    priority?: number;
+    match_field?: string;
+    match_value?: string;
+    target_unit_id?: string | null;
+  }) => request<RoutingRule>("/gov/routing-rules", { method: "POST", body: JSON.stringify(body) }),
+
   createUnit: (body: { code: string; name: string; unit_type?: string; parent_id?: string | null; region_code?: string }) =>
     request<OrgUnit>("/gov/units", { method: "POST", body: JSON.stringify(body) }),
 
