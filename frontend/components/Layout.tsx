@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; icon:string; order:number }
 interface AppNav { id:string; name:string; icon:string; path:string; menus:MenuItem[] }
@@ -65,7 +65,9 @@ export default function Layout({children}:{children:React.ReactNode}){
   const platformMenus=<><MenuGroup title={locale==="en"?"Modules":"Модуль"}>
     <NavLink href="/apps" active={pathname==="/apps"} icon={<LayoutGrid className="w-5 h-5"/>} label={t("shell.appStore")}/><NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("shell.installedApps")}/><NavLink href="/settings/ai" active={pathname==="/settings/ai"} icon={<BrainCircuit className="w-5 h-5"/>} label="AI тохиргоо"/>
   </MenuGroup><MenuGroup title={locale==="en"?"Settings":"Тохиргоо"}>
-    <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("shell.appearance")}/><NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Share2 className="w-5 h-5"/>} label={t("shell.integrations")}/><NavLink href="/module/platform/security" active={pathname==="/module/platform/security"} icon={<Settings className="w-5 h-5"/>} label={locale==="en"?"Security policies":"Аюулгүй байдлын бодлого"}/>
+    <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("shell.appearance")}/>
+    <NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Share2 className="w-5 h-5"/>} label={t("shell.integrations")}/>
+    {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={locale==="en"?"Access rights":"Эрхийн тохиргоо"}/>}
   </MenuGroup></>;
 
   return <div className="gerege-shell min-h-screen flex flex-col">
