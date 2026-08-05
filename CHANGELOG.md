@@ -141,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Official Gerege Systems DAN SSO Gateway integration service (`POST /api/v1/auth/dan/login`).
   - Citizen identity verification and session token validation against `https://dan.gerege.mn/api/v1`.
 - **E-ID Digital Identity & DAN SSO Authentication ([`internal/platform/eid`](backend/internal/platform/eid))**:
-  - Aligned 100% with official **[eidmongolia.mn](https://eidmongolia.mn)** & **[developer.sso.mn](https://developer.sso.mn)** OAuth2 and OpenID Connect (OIDC) specifications.
+  - Aligned 100% with official **[eidmongolia.mn](https://eidmongolia.mn)** & **[developer.gerege.mn](https://developer.gerege.mn)** OAuth2 and OpenID Connect (OIDC) specifications.
   - Supports 4 official Mongolian authentication channels: PKI Digital Signature (Тоон гарын үсэг), Mobile OTP, Bank SSO, and Biometric Face Verification.
 - **External System Integrations & Webhook Engine ([`internal/platform/integration`](backend/internal/platform/integration))**:
   - Event Dispatcher & Connector Manager supporting HMAC-SHA256 signature signing, asynchronous webhooks, and third-party REST connectors.

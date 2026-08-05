@@ -35,7 +35,7 @@ This open-source project is created and maintained by:
 
 ### 3. 🇲🇳 National Digital Infrastructure Integration
 - **State Data Exchange (ХУР)**: Official Mongolian State Data Exchange for Citizen Civil Registration (`WS100101`) and Company Legal Entity verification (`WS100201`).
-- **Mongolian Government DAN SSO & E-ID Integration ([`developer.sso.mn`](https://developer.sso.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**: Integrates with official State DAN SSO identity verification supporting PKI Digital Signatures, Mobile OTP, Bank SSO, and Biometric Face Verification.
+- **Mongolian Government DAN SSO & E-ID Integration ([`developer.gerege.mn`](https://developer.gerege.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**: Integrates with official State DAN SSO identity verification supporting PKI Digital Signatures, Mobile OTP, Bank SSO, and Biometric Face Verification.
 - **Built-in ORY Hydra Grade SSO Provider Engine (`/.well-known/openid-configuration`)**: Independent OAuth2 & OpenID Connect identity provider for issuing OAuth2 tokens to third-party applications.
 
 ### 4. 🤖 AI Copilot & Smart Business Intelligence

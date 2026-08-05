@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package eid provides integration with National Digital Identity (eidmongolia.mn & developer.sso.mn)
+ * Package eid provides integration with National Digital Identity (eidmongolia.mn & developer.gerege.mn)
  * supporting PKI, Mobile OTP, Bank SSO, and Biometric authentication.
  */
 

@@ -36,7 +36,7 @@
 
 ### 3. 🇲🇳 Төрийн Цахим Дэд Бүтцийн Интеграци
 - **Төрийн Мэдээлэл Солилцооны ХУР Систем**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээд/ААН (`WS100201`) баталгаажуулалт.
-- **Төрийн ДАН & Үндэсний E-ID Системтэй Холбогдох Интеграци ([`developer.sso.mn`](https://developer.sso.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**:
+- **Төрийн ДАН & Үндэсний E-ID Системтэй Холбогдох Интеграци ([`developer.gerege.mn`](https://developer.gerege.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**:
   1. 🖊️ **Тоон гарын үсэг (PKI Digital Signature)**
   2. 📱 **Нэг удаагийн код (Mobile OTP)**
   3. 🏦 **Банкны суваг (Bank SSO)**
