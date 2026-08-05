@@ -1,0 +1,76 @@
+name: CI/CD Pipeline & Production Deployment (openerp.gerege.mn)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    name: Lint & Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Go Format & Vet
+        run: |
+          cd backend
+          go vet ./...
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Run Backend Unit Tests
+        run: |
+          cd backend
+          go test -v -race -coverprofile=coverage.out ./...
+
+  build-and-deploy:
+    name: Build & Deploy to openerp.gerege.mn
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Backend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+
+      - name: Deploy to Production Server (openerp.gerege.mn) via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'openerp.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            echo "::notice::Deploying latest version to openerp.gerege.mn..."
+            cd /opt/open-gerege-mn-erp || mkdir -p /opt/open-gerege-mn-erp
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            docker pull ghcr.io/${{ github.repository }}/backend:latest
+            docker-compose up -d --remove-orphans
+            docker system prune -f
