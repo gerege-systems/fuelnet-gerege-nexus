@@ -4,9 +4,9 @@ on:
   schedule:
     - cron: "0 9 * * 1" # Every Monday at 9am UTC
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 permissions:
   contents: read
