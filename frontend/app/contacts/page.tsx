@@ -1,0 +1,188 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { Users, Plus, Mail, Phone, Building, CheckCircle, XCircle } from "lucide-react";
+
+interface Contact {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  company: string;
+  active: boolean;
+}
+
+export default function ContactsPage() {
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", active: true });
+  const [error, setError] = useState("");
+
+  const loadContacts = async () => {
+    try {
+      const data = await api.getContacts();
+      setContacts(data || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load contacts. Ensure Contacts app is installed & enabled.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadContacts();
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.createContact(form);
+      setShowModal(false);
+      setForm({ name: "", email: "", phone: "", company: "", active: true });
+      await loadContacts();
+    } catch (err: any) {
+      setError(err.message || "Failed to create contact");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
+            <Users className="w-6 h-6 text-indigo-600" />
+            <span>Contacts Directory</span>
+          </h1>
+          <p className="text-sm text-slate-500">Manage business contacts, customers, and partners</p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center space-x-2 transition"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Contact</span>
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="py-8 text-slate-500 text-sm">Loading contacts...</div>
+      ) : contacts.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm">
+          No contacts created yet. Click "New Contact" to add your first record.
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+                <th className="py-3 px-4">Name</th>
+                <th className="py-3 px-4">Email</th>
+                <th className="py-3 px-4">Phone</th>
+                <th className="py-3 px-4">Company</th>
+                <th className="py-3 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {contacts.map((c) => (
+                <tr key={c.id} className="hover:bg-slate-50">
+                  <td className="py-3.5 px-4 font-bold text-slate-900">{c.name}</td>
+                  <td className="py-3.5 px-4 text-slate-600 flex items-center space-x-1 pt-4">
+                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{c.email || "—"}</span>
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-600">{c.phone || "—"}</td>
+                  <td className="py-3.5 px-4 text-slate-700 font-medium">{c.company || "—"}</td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        c.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {c.active ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                      <span>{c.active ? "Active" : "Inactive"}</span>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Create New Contact</h2>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Phone</label>
+                <input
+                  type="text"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Company</label>
+                <input
+                  type="text"
+                  value={form.company}
+                  onChange={(e) => setForm({ ...form, company: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-sm"
+                >
+                  Save Contact
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+vendor/
+
+# Next.js build output
+.next/
+frontend/.next/
+out/
+frontend/out/
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go / Binary outputs
+bin/
+tmp/
+*.exe
+*.dll
+*.so
+*.dylib
+*.node
+
+# Logs & Coverage
+*.log
+coverage.out
+coverage.html

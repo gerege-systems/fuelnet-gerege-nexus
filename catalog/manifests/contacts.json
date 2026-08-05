@@ -1,0 +1,28 @@
+{
+  "id": "io.example.contacts",
+  "name": "Contacts",
+  "version": "1.0.0",
+  "platform": ">=0.1.0 <2.0.0",
+  "dependencies": [],
+  "permissions": [
+    {
+      "code": "contacts.read",
+      "name": "Read Contacts",
+      "description": "Allows viewing business contacts"
+    },
+    {
+      "code": "contacts.manage",
+      "name": "Manage Contacts",
+      "description": "Allows creating and editing contacts"
+    }
+  ],
+  "menus": [
+    {
+      "id": "contacts",
+      "label": "Contacts",
+      "path": "/contacts",
+      "icon": "users",
+      "order": 10
+    }
+  ]
+}

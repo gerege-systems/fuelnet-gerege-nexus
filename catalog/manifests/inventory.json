@@ -1,0 +1,37 @@
+{
+  "id": "io.example.inventory",
+  "name": "Inventory",
+  "version": "1.0.0",
+  "platform": ">=0.1.0 <2.0.0",
+  "dependencies": [
+    {
+      "id": "io.example.contacts",
+      "version_constraint": "^1.0.0"
+    },
+    {
+      "id": "io.example.products",
+      "version_constraint": "^1.0.0"
+    }
+  ],
+  "permissions": [
+    {
+      "code": "inventory.read",
+      "name": "Read Inventory",
+      "description": "Allows viewing stock levels and warehouses"
+    },
+    {
+      "code": "inventory.manage",
+      "name": "Manage Inventory",
+      "description": "Allows performing stock adjustments"
+    }
+  ],
+  "menus": [
+    {
+      "id": "inventory",
+      "label": "Inventory",
+      "path": "/inventory",
+      "icon": "boxes",
+      "order": 30
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "io.example.contacts",
+    "slug": "contacts",
+    "name": "Contacts",
+    "description": "Manage business contacts, customers, and vendors.",
+    "icon_url": "/icons/contacts.png",
+    "category": "CRM",
+    "visibility": "public",
+    "version": "1.0.0"
+  },
+  {
+    "id": "io.example.products",
+    "slug": "products",
+    "name": "Products",
+    "description": "Product catalog management, pricing, and SKUs.",
+    "icon_url": "/icons/products.png",
+    "category": "Sales",
+    "visibility": "public",
+    "version": "1.0.0"
+  },
+  {
+    "id": "io.example.inventory",
+    "slug": "inventory",
+    "name": "Inventory",
+    "description": "Warehouse management, stock tracking, and adjustments.",
+    "icon_url": "/icons/inventory.png",
+    "category": "Supply Chain",
+    "visibility": "public",
+    "version": "1.0.0"
+  }
+]
