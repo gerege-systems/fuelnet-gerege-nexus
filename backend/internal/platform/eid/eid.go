@@ -139,7 +139,9 @@ func (s *EIDService) ExchangeCode(ctx context.Context, code, redirectURI string)
 	if err != nil {
 		return nil, fmt.Errorf("E-ID Mongolia token exchange failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -197,7 +199,9 @@ func (s *EIDService) fetchUserInfo(ctx context.Context, accessToken string) (*EI
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	var raw struct {
 		Sub       string `json:"sub"`

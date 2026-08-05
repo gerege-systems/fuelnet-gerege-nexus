@@ -32,7 +32,7 @@ func IsValidSlug(slug string) bool {
 		return false
 	}
 	for _, ch := range slug {
-		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-') {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' {
 			return false
 		}
 	}

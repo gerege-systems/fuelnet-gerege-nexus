@@ -42,9 +42,10 @@ func TestLoadShedder(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 
-			if rec.Code == http.StatusOK {
+			switch rec.Code {
+			case http.StatusOK:
 				atomic.AddInt64(&successCount, 1)
-			} else if rec.Code == http.StatusServiceUnavailable {
+			case http.StatusServiceUnavailable:
 				atomic.AddInt64(&shedCount, 1)
 			}
 		}()

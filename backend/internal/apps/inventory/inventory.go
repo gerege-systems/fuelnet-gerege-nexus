@@ -245,7 +245,9 @@ func (m *Module) adjustStockHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"tx begin error"}`, http.StatusInternalServerError)
 		return
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	// Fetch current stock level
 	var currentQty float64

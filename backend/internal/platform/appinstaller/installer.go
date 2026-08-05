@@ -79,7 +79,9 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	// Install apps in topological order (dependencies first)
 	for _, appID := range installOrderIDs {

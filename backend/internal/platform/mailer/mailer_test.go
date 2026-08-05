@@ -30,6 +30,7 @@ func TestAsyncOTPMailer(t *testing.T) {
 		t.Fatal("expected enqueue to succeed")
 	}
 
+	time.Sleep(50 * time.Millisecond)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := asyncMailer.Shutdown(ctx)

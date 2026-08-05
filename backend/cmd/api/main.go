@@ -36,7 +36,9 @@ func main() {
 	if err != nil {
 		slog.Error("failed to setup tracing", "error", err)
 	} else {
-		defer shutdownTracing(ctx)
+		defer func() {
+			_ = shutdownTracing(ctx)
+		}()
 	}
 
 	poolConfig, err := pgxpool.ParseConfig(dbURL)
