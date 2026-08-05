@@ -186,4 +186,34 @@ export const api = {
         suggested_reorder: number;
       }>
     >("/ai/stock-forecast"),
+
+  // XYP State Data Exchange (xyp.gerege.mn)
+  queryXYPCitizen: (regNumber: string) =>
+    fetcher<{
+      reg_number: string;
+      civil_id: string;
+      last_name: string;
+      first_name: string;
+      gender: string;
+      address: string;
+      passport_status: string;
+      verified: boolean;
+    }>("/xyp/citizen", {
+      method: "POST",
+      body: JSON.stringify({ reg_number: regNumber }),
+    }),
+
+  queryXYPCompany: (companyReg: string) =>
+    fetcher<{
+      company_reg: string;
+      name: string;
+      executive: string;
+      address: string;
+      vat_payer: boolean;
+      status: string;
+      founding_date: string;
+    }>("/xyp/company", {
+      method: "POST",
+      body: JSON.stringify({ company_reg: companyReg }),
+    }),
 };

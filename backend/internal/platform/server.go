@@ -25,6 +25,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/xyp"
 	"golang.org/x/time/rate"
 )
 
@@ -37,6 +38,7 @@ type Server struct {
 	copilotSvc   *ai.CopilotService
 	forecaster   *ai.Forecaster
 	eidSvc       *eid.EIDService
+	xypSvc       *xyp.XYPService
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -87,6 +89,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		copilotSvc:   ai.NewCopilotService(db),
 		forecaster:   ai.NewForecaster(db),
 		eidSvc:       eid.NewEIDService(),
+		xypSvc:       xyp.NewXYPService(),
 	}
 
 	s.setupRoutes()
@@ -146,6 +149,10 @@ func (s *Server) setupRoutes() {
 			// AI Copilot & Forecasting
 			pr.Post("/ai/copilot", s.handleAICopilot)
 			pr.Get("/ai/stock-forecast", s.handleAIForecast)
+
+			// XYP State Information Exchange System (xyp.gerege.mn)
+			pr.Post("/xyp/citizen", s.handleXYPCitizenQuery)
+			pr.Post("/xyp/company", s.handleXYPCompanyQuery)
 
 			// Store
 			pr.Get("/store/apps", s.handleListStoreApps)
@@ -604,4 +611,58 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 			"is_admin":  true,
 		},
 	})
+}
+
+func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		RegNumber string `json:"reg_number"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RegNumber == "" {
+		http.Error(w, `{"error":"invalid registration number"}`, http.StatusBadRequest)
+		return
+	}
+
+	info, err := s.xypSvc.GetCitizenInfo(r.Context(), req.RegNumber)
+	if err != nil {
+		http.Error(w, `{"error":"XYP citizen query failed: `+err.Error()+`"}`, http.StatusBadRequest)
+		return
+	}
+
+	audit.Record(r.Context(), tenantID, "system", "xyp.citizen_queried", "xyp", map[string]any{"reg_number": req.RegNumber})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		CompanyReg string `json:"company_reg"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CompanyReg == "" {
+		http.Error(w, `{"error":"invalid company registration number"}`, http.StatusBadRequest)
+		return
+	}
+
+	info, err := s.xypSvc.GetCompanyInfo(r.Context(), req.CompanyReg)
+	if err != nil {
+		http.Error(w, `{"error":"XYP company query failed: `+err.Error()+`"}`, http.StatusBadRequest)
+		return
+	}
+
+	audit.Record(r.Context(), tenantID, "system", "xyp.company_queried", "xyp", map[string]any{"company_reg": req.CompanyReg})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(info)
 }

@@ -121,7 +121,29 @@ export default function ContactsPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Create New Contact</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-900">Create New Contact</h2>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const info = await api.queryXYPCitizen("AA90010111");
+                    setForm({
+                      name: `${info.last_name} ${info.first_name}`,
+                      email: `${info.reg_number.toLowerCase()}@gerege.mn`,
+                      phone: "99112233",
+                      company: "ХУР Баталгаажсан Иргэн",
+                      active: true,
+                    });
+                  } catch (err: any) {
+                    alert("XYP Query Failed: " + err.message);
+                  }
+                }}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 transition"
+              >
+                ⚡ ХУР / XYP Auto-fill
+              </button>
+            </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
