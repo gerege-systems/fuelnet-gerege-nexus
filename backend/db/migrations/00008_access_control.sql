@@ -21,6 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_access_events_tenant_created
 
 -- Prevent cross-tenant role assignment at the database boundary. The lookup
 -- path already filters by tenant, but invalid links must not be storable.
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION enforce_membership_role_tenant() RETURNS TRIGGER AS $$
 BEGIN
     IF NOT EXISTS (
@@ -33,6 +34,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 DROP TRIGGER IF EXISTS membership_role_tenant_guard ON membership_roles;
 CREATE TRIGGER membership_role_tenant_guard
@@ -58,6 +60,7 @@ SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.code = 'admin'
 ON CONFLICT DO NOTHING;
 
 -- Provision the same baseline for tenants created after this migration.
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION seed_tenant_access_roles() RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO roles (tenant_id, code, name, description, is_system)
@@ -77,6 +80,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 DROP TRIGGER IF EXISTS tenant_access_role_seed ON tenants;
 CREATE TRIGGER tenant_access_role_seed
@@ -92,6 +96,7 @@ JOIN roles r ON r.tenant_id = m.tenant_id AND r.code = 'user'
 WHERE NOT EXISTS (SELECT 1 FROM membership_roles mr WHERE mr.membership_id = m.id)
 ON CONFLICT DO NOTHING;
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION assign_default_membership_role() RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO membership_roles (membership_id, role_id)
@@ -101,6 +106,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 DROP TRIGGER IF EXISTS membership_default_role ON memberships;
 CREATE TRIGGER membership_default_role
