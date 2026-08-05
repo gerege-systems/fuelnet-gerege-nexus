@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Sparkles, X, Send, Bot, User, ArrowRight } from "lucide-react";
 
 interface Message {
@@ -11,6 +12,7 @@ interface Message {
 }
 
 export default function AICopilot() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,7 +59,7 @@ export default function AICopilot() {
         className="fixed bottom-6 right-6 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-medium p-3.5 rounded-full shadow-lg flex items-center space-x-2 transition-all transform hover:scale-105 z-50"
       >
         <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
-        <span className="text-sm font-semibold pr-1">AI Copilot</span>
+        <span className="text-sm font-semibold pr-1">{t("copilotUI.aiCopilot")}</span>
       </button>
 
       {/* Drawer Panel */}
@@ -70,8 +72,8 @@ export default function AICopilot() {
                 <Bot className="w-5 h-5 text-indigo-400" />
               </div>
               <div>
-                <h3 className="font-bold text-sm">ERP AI Assistant</h3>
-                <p className="text-[11px] text-slate-400">Powered by Gemini AI Engine</p>
+                <h3 className="font-bold text-sm">{t("copilotUI.erpAiAssistant")}</h3>
+                <p className="text-[11px] text-slate-400">{t("copilotUI.poweredByGeminiAiEngine")}</p>
               </div>
             </div>
             <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white p-1">
@@ -127,7 +129,7 @@ export default function AICopilot() {
           >
             <input
               type="text"
-              placeholder="Ask AI Copilot..."
+              placeholder={t("copilotUI.askAiCopilot")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"

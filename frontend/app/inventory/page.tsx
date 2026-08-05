@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Boxes, Warehouse as WarehouseIcon, ArrowUpRight, Plus, Sliders, History } from "lucide-react";
 
 interface Warehouse {
@@ -34,6 +35,7 @@ interface StockMovement {
 }
 
 export default function InventoryPage() {
+  const { t } = useI18n();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
@@ -111,7 +113,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <Boxes className="w-6 h-6 text-amber-600" />
-            <span>Inventory & Warehouse Operations</span>
+            <span>{t("inventory.inventoryWarehouseOperations")}</span>
           </h1>
           <p className="text-sm text-slate-500">Track stock levels across warehouses and log adjustments</p>
         </div>
@@ -121,7 +123,7 @@ export default function InventoryPage() {
             className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-sm py-2 px-3 rounded-lg flex items-center space-x-1.5 transition"
           >
             <WarehouseIcon className="w-4 h-4 text-slate-500" />
-            <span>New Warehouse</span>
+            <span>{t("inventory.newWarehouse")}</span>
           </button>
           <button
             onClick={() => {
@@ -138,7 +140,7 @@ export default function InventoryPage() {
             className="bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center space-x-2 transition"
           >
             <Sliders className="w-4 h-4" />
-            <span>Adjust Stock</span>
+            <span>{t("inventory.adjustStock")}</span>
           </button>
         </div>
       </div>
@@ -156,14 +158,14 @@ export default function InventoryPage() {
       )}
 
       {loading ? (
-        <div className="py-8 text-slate-500 text-sm">Loading inventory data...</div>
+        <div className="py-8 text-slate-500 text-sm">{t("inventory.loadingInventoryData")}</div>
       ) : (
         <div className="space-y-8">
           {/* Section 1: Warehouses */}
           <div>
             <h2 className="text-lg font-bold text-slate-900 mb-3 flex items-center space-x-2">
               <WarehouseIcon className="w-5 h-5 text-slate-600" />
-              <span>Warehouses</span>
+              <span>{t("inventory.warehouses")}</span>
             </h2>
             {warehouses.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
@@ -186,7 +188,7 @@ export default function InventoryPage() {
 
           {/* Section 2: Stock Levels Overview */}
           <div>
-            <h2 className="text-lg font-bold text-slate-900 mb-3">Live Stock Levels</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-3">{t("inventory.liveStockLevels")}</h2>
             {stockLevels.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
                 No stock recorded yet. Click "Adjust Stock" to perform stock intake.
@@ -196,9 +198,9 @@ export default function InventoryPage() {
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                      <th className="py-3 px-4">Warehouse</th>
-                      <th className="py-3 px-4">Product</th>
-                      <th className="py-3 px-4">Available Quantity</th>
+                      <th className="py-3 px-4">{t("inventory.warehouse")}</th>
+                      <th className="py-3 px-4">{t("inventory.product")}</th>
+                      <th className="py-3 px-4">{t("inventory.availableQuantity")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -229,7 +231,7 @@ export default function InventoryPage() {
           <div>
             <h2 className="text-lg font-bold text-slate-900 mb-3 flex items-center space-x-2">
               <History className="w-5 h-5 text-slate-600" />
-              <span>Stock Movements History</span>
+              <span>{t("inventory.stockMovementsHistory")}</span>
             </h2>
             {movements.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
@@ -240,11 +242,11 @@ export default function InventoryPage() {
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                      <th className="py-3 px-4">Date & Time</th>
-                      <th className="py-3 px-4">Warehouse</th>
-                      <th className="py-3 px-4">Product</th>
-                      <th className="py-3 px-4">Change</th>
-                      <th className="py-3 px-4">Reference Note</th>
+                      <th className="py-3 px-4">{t("inventory.dateTime")}</th>
+                      <th className="py-3 px-4">{t("inventory.warehouse")}</th>
+                      <th className="py-3 px-4">{t("inventory.product")}</th>
+                      <th className="py-3 px-4">{t("inventory.change")}</th>
+                      <th className="py-3 px-4">{t("inventory.referenceNote")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -279,7 +281,7 @@ export default function InventoryPage() {
       {showWhModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Create Warehouse</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("inventory.createWarehouse")}</h2>
             <form onSubmit={handleCreateWarehouse} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Code *</label>
@@ -305,7 +307,7 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Address</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("inventory.address")}</label>
                 <textarea
                   value={whForm.address}
                   onChange={(e) => setWhForm({ ...whForm, address: e.target.value })}
@@ -338,7 +340,7 @@ export default function InventoryPage() {
       {showAdjModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Stock Adjustment</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("inventory.stockAdjustment")}</h2>
             <form onSubmit={handleAdjustStock} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Select Warehouse *</label>
@@ -387,10 +389,10 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Reference / Reason</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("inventory.referenceReason")}</label>
                 <input
                   type="text"
-                  placeholder="e.g. PO-98421 or Physical count adjustment"
+                  placeholder={t("inventory.egPo98421OrPhysicalCountAdjustment")}
                   value={adjForm.reference}
                   onChange={(e) => setAdjForm({ ...adjForm, reference: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500"

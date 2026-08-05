@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Settings, ShieldCheck, Clock, Power, PowerOff } from "lucide-react";
 
 interface InstalledApp {
@@ -16,6 +17,7 @@ interface InstalledApp {
 }
 
 export default function InstalledAppsSettingsPage() {
+  const { t } = useI18n();
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function InstalledAppsSettingsPage() {
       <div className="border-b border-slate-200 pb-4">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
           <Settings className="w-6 h-6 text-slate-600" />
-          <span>Installed Apps Settings</span>
+          <span>{t("settingsApps.installedAppsSettings")}</span>
         </h1>
         <p className="text-sm text-slate-500">
           Manage installed tenant modules, check operational status, and enable/disable features.
@@ -64,7 +66,7 @@ export default function InstalledAppsSettingsPage() {
       </div>
 
       {loading ? (
-        <div className="py-8 text-slate-500 text-sm">Loading installed apps...</div>
+        <div className="py-8 text-slate-500 text-sm">{t("settingsApps.loadingInstalledApps")}</div>
       ) : apps.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
           No apps installed for this tenant yet. Visit the{" "}
@@ -78,12 +80,12 @@ export default function InstalledAppsSettingsPage() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                <th className="py-3 px-4">Application Name</th>
-                <th className="py-3 px-4">Module ID</th>
-                <th className="py-3 px-4">Installed Version</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Installed Date</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-3 px-4">{t("settingsApps.applicationName")}</th>
+                <th className="py-3 px-4">{t("settingsApps.moduleId")}</th>
+                <th className="py-3 px-4">{t("settingsApps.installedVersion")}</th>
+                <th className="py-3 px-4">{t("settingsApps.status")}</th>
+                <th className="py-3 px-4">{t("settingsApps.installedDate")}</th>
+                <th className="py-3 px-4 text-right">{t("settingsApps.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

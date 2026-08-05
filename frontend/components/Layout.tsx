@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import AICopilot from "@/components/AICopilot";
 import {
   LayoutGrid,
@@ -48,6 +50,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useI18n();
 
   const isPublic = PUBLIC_ROUTES.includes(pathname);
 
@@ -92,7 +95,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-medium">
-        Loading ERP Platform...
+        {t("shell.loadingPlatform")}
       </div>
     );
   }
@@ -113,6 +116,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center space-x-4">
+          <LanguageSwitcher variant="dark" />
           <div className="flex items-center space-x-2 text-sm text-slate-300">
             <UserCheck className="w-4 h-4 text-emerald-400" />
             <span className="font-medium">{user?.name}</span>
@@ -123,7 +127,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             className="flex items-center space-x-1 text-xs bg-slate-800 hover:bg-red-900/50 text-slate-300 hover:text-red-300 px-3 py-1.5 rounded-md border border-slate-700 transition"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Logout</span>
+            <span>{t("shell.logout")}</span>
           </button>
         </div>
       </header>
@@ -134,7 +138,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="space-y-6">
             <div>
               <div className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Core Applications
+                {t("shell.modules")}
               </div>
               <nav className="space-y-1 px-2">
                 <Link
@@ -146,7 +150,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   <LayoutGrid className="w-5 h-5 text-indigo-500" />
-                  <span>App Store</span>
+                  <span>{t("shell.appStore")}</span>
                 </Link>
 
                 {menus.map((m) => (
@@ -168,7 +172,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             <div>
               <div className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Platform Settings
+                {t("shell.settings")}
               </div>
               <nav className="space-y-1 px-2">
                 <Link
@@ -180,7 +184,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   <Settings className="w-5 h-5 text-slate-500" />
-                  <span>Installed Apps</span>
+                  <span>{t("shell.installedApps")}</span>
                 </Link>
 
                 <Link
@@ -192,7 +196,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   <Share2 className="w-5 h-5 text-slate-500" />
-                  <span>Integrations & Webhooks</span>
+                  <span>{t("shell.integrations")}</span>
                 </Link>
 
                 <Link
@@ -204,7 +208,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   <Code2 className="w-5 h-5 text-slate-500" />
-                  <span>Developer OAuth2 Apps</span>
+                  <span>{t("shell.developerApps")}</span>
                 </Link>
               </nav>
             </div>
