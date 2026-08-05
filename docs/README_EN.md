@@ -184,6 +184,35 @@ only when `SEED_DEMO_DATA=true` is set explicitly.
 
 ---
 
+## Automated deployment
+
+Every push to `main` runs [`deploy.yml`](../.github/workflows/deploy.yml):
+
+1. Build and push the backend and frontend images to GHCR (`:latest` and `:<sha>`).
+2. Copy `docker-compose.prod.yml` to the server.
+3. Write the server `.env` from GitHub secrets and pull the images.
+4. Run migrations to completion, then swap the API and frontend over.
+5. Probe `/health` and `/ready`, printing container logs and failing the run if
+   the rollout is unhealthy.
+
+Deploy manually from Actions → *Deploy to Production* → **Run workflow**,
+optionally pinning an image tag.
+
+Required repository secrets:
+
+| Secret | Required | Description |
+| --- | --- | --- |
+| `DEPLOY_SSH_KEY` | Yes | Private key of the deploy user. Without it the rollout is skipped |
+| `POSTGRES_PASSWORD` | Yes | Database password on the server |
+| `SSO_DEFAULT_CLIENT_SECRET` | Yes | Mandatory for the built-in OAuth2 client in production |
+| `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | No | Default to `openerp.gerege.mn` / `deploy` / `22` |
+| `PUBLIC_ORIGIN` | No | Defaults to `https://openerp.gerege.mn` |
+
+The server needs Docker only — no source tree and no Go/Node toolchain. See
+[`deploy/.env.prod.example`](../deploy/.env.prod.example) for the values.
+
+---
+
 ## Configuration
 
 See [`.env.example`](../.env.example) for the complete list.

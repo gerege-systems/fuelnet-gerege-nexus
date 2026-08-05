@@ -187,6 +187,35 @@ npm run dev
 
 ---
 
+## Автомат deploy
+
+`main` салбар руу push хийх бүрд [`deploy.yml`](.github/workflows/deploy.yml)
+ажиллана:
+
+1. Backend ба frontend образыг GHCR руу угсарч илгээнэ (`:latest` ба `:<sha>`).
+2. `docker-compose.prod.yml`-ийг серверт хуулна.
+3. Серверт `.env`-ийг GitHub secret-ээс шинээр бичиж, образуудыг татна.
+4. Миграц бүрэн дуусмагц API ба frontend солигдоно.
+5. `/health` ба `/ready`-г шалгаж, амжилтгүй бол лог хэвлээд алдаа өгнө.
+
+Гараар ажиллуулахдаа Actions → *Deploy to Production* → **Run workflow**
+(шаардвал тодорхой tag зааж болно).
+
+Шаардлагатай repository secrets:
+
+| Secret | Заавал | Тайлбар |
+| --- | --- | --- |
+| `DEPLOY_SSH_KEY` | Тийм | Deploy хэрэглэгчийн хувийн түлхүүр. Байхгүй бол rollout алгасана |
+| `POSTGRES_PASSWORD` | Тийм | Сервер дэх өгөгдлийн сангийн нууц үг |
+| `SSO_DEFAULT_CLIENT_SECRET` | Тийм | Production дээр OAuth2 client-д зайлшгүй |
+| `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | Үгүй | Анхдагч: `openerp.gerege.mn` / `deploy` / `22` |
+| `PUBLIC_ORIGIN` | Үгүй | Анхдагч: `https://openerp.gerege.mn` |
+
+Серверт зөвхөн Docker шаардлагатай — эх код ч, Go/Node ч хэрэггүй. Утгуудын
+жишээг [`deploy/.env.prod.example`](deploy/.env.prod.example)-ээс үзнэ үү.
+
+---
+
 ## Тохиргооны хувьсагчид
 
 Бүрэн жагсаалтыг [`.env.example`](.env.example)-ээс үзнэ үү.
