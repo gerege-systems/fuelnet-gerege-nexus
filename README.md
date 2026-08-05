@@ -48,7 +48,6 @@
 | Оролцогч | Үүрэг |
 | --- | --- |
 | **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | Архитектур, платформын цөм |
-| **[@craftzbay](https://github.com/craftzbay)** | Frontend ба UX |
 | **Gemini AI** | Код үүсгэлт, баримтжуулалт |
 | **Claude AI** | Код шинжилгээ, аюулгүй байдлын аудит |
 
@@ -188,6 +187,35 @@ npm run dev
 
 ---
 
+## Автомат deploy
+
+`main` салбар руу push хийх бүрд [`deploy.yml`](.github/workflows/deploy.yml)
+ажиллана:
+
+1. Backend ба frontend образыг GHCR руу угсарч илгээнэ (`:latest` ба `:<sha>`).
+2. `docker-compose.prod.yml`-ийг серверт хуулна.
+3. Серверт `.env`-ийг GitHub secret-ээс шинээр бичиж, образуудыг татна.
+4. Миграц бүрэн дуусмагц API ба frontend солигдоно.
+5. `/health` ба `/ready`-г шалгаж, амжилтгүй бол лог хэвлээд алдаа өгнө.
+
+Гараар ажиллуулахдаа Actions → *Deploy to Production* → **Run workflow**
+(шаардвал тодорхой tag зааж болно).
+
+Шаардлагатай repository secrets:
+
+| Secret | Заавал | Тайлбар |
+| --- | --- | --- |
+| `DEPLOY_SSH_KEY` | Тийм | Deploy хэрэглэгчийн хувийн түлхүүр. Байхгүй бол rollout алгасана |
+| `POSTGRES_PASSWORD` | Тийм | Сервер дэх өгөгдлийн сангийн нууц үг |
+| `SSO_DEFAULT_CLIENT_SECRET` | Тийм | Production дээр OAuth2 client-д зайлшгүй |
+| `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | Үгүй | Анхдагч: `openerp.gerege.mn` / `deploy` / `22` |
+| `PUBLIC_ORIGIN` | Үгүй | Анхдагч: `https://openerp.gerege.mn` |
+
+Серверт зөвхөн Docker шаардлагатай — эх код ч, Go/Node ч хэрэггүй. Утгуудын
+жишээг [`deploy/.env.prod.example`](deploy/.env.prod.example)-ээс үзнэ үү.
+
+---
+
 ## Тохиргооны хувьсагчид
 
 Бүрэн жагсаалтыг [`.env.example`](.env.example)-ээс үзнэ үү.
@@ -202,6 +230,8 @@ npm run dev
 | `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
 | `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх |
 | `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
+| `GEMINI_API_KEY` | — | AI chat, voice, TTS, орчуулгыг идэвхжүүлэх түлхүүр |
+| `GEMINI_MODEL` / `GEMINI_TTS_MODEL` | Gemini 2.5 Flash загварууд | Chat ба дууны model сонголт |
 | `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |
 
 ---
@@ -218,6 +248,9 @@ npm run dev
 | `POST` | `/api/v1/auth/logout` | Session-ийг цуцлах |
 | `GET` | `/api/v1/menus` | Тенантад идэвхтэй цэсүүд |
 | `GET` | `/api/v1/store/apps` | Апп сторын жагсаалт |
+| `POST` | `/api/v1/ai/chat`, `/stt`, `/tts`, `/translate` | Tenant-safe Gemini AI pipeline |
+| `GET/PUT` | `/api/v1/admin/ai/prompts/{key}` | AI prompt тохируулах (админ) |
+| `GET/POST` | `/api/v1/admin/ai/knowledge` | AI мэдлэгийн сан (админ) |
 | `POST` | `/api/v1/store/apps/{slug}/install` | Апп суулгах (админ) |
 | `POST` | `/oauth2/token` | OAuth2 client credentials токен |
 
@@ -288,7 +321,7 @@ CI нь push ба pull request бүр дээр lint, тест, frontend build, D
 
 ## Лиценз
 
-Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI &
+Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
 Claude AI**. Apache 2.0 лицензээр тараагдана — [`LICENSE`](LICENSE)-ийг үзнэ үү.
 
 Тугны дүрсийг [Flaticon](https://www.flaticon.com/)-оос авсан

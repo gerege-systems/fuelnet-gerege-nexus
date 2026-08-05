@@ -7,7 +7,14 @@
     "icon_url": "/icons/contacts.png",
     "category": "CRM",
     "visibility": "public",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Харилцагчид",
+        "description": "Байгууллагын харилцагч, үйлчлүүлэгч, нийлүүлэгчдийн бүртгэл.",
+        "category": "Харилцагчийн удирдлага"
+      }
+    }
   },
   {
     "id": "io.example.products",
@@ -17,7 +24,14 @@
     "icon_url": "/icons/products.png",
     "category": "Sales",
     "visibility": "public",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Бараа бүтээгдэхүүн",
+        "description": "Барааны каталог, үнэ ба тенантад хамаарах SKU удирдлага.",
+        "category": "Борлуулалт"
+      }
+    }
   },
   {
     "id": "io.example.inventory",
@@ -27,7 +41,14 @@
     "icon_url": "/icons/inventory.png",
     "category": "Supply Chain",
     "visibility": "public",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Агуулах",
+        "description": "Агуулахын удирдлага, үлдэгдлийн хяналт ба тохируулга.",
+        "category": "Нийлүүлэлтийн сүлжээ"
+      }
+    }
   },
   {
     "id": "io.example.billing",
@@ -37,7 +58,14 @@
     "icon_url": "/icons/billing.png",
     "category": "Finance",
     "visibility": "public",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Нэхэмжлэх ба e-Barimt",
+        "description": "Улсын хураамжийн нэхэмжлэх, төлбөр ба e-Barimt татварын баримт.",
+        "category": "Санхүү"
+      }
+    }
   },
   {
     "id": "io.example.documents",
@@ -47,7 +75,14 @@
     "icon_url": "/icons/documents.png",
     "category": "Productivity",
     "visibility": "public",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Цахим баримт ба гарын үсэг",
+        "description": "Байгууллагын баримт бичгийн урсгал, тоон гарын үсэг ба батламжийн процесс.",
+        "category": "Бүтээмж"
+      }
+    }
   },
   {
     "id": "io.example.developer_portal",
@@ -57,6 +92,13 @@
     "icon_url": "/icons/developer_portal.png",
     "category": "Developer Tools",
     "visibility": "public",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Хөгжүүлэгчийн портал ба OAuth2 SSO",
+        "description": "OAuth2 / OpenID Connect client аппликейшны удирдлага ба API эрхийн мэдээлэл.",
+        "category": "Хөгжүүлэгчийн хэрэгсэл"
+      }
+    }
   }
 ]

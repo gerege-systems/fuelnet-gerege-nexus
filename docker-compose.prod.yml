@@ -1,11 +1,22 @@
+# Production stack for openerp.gerege.mn.
+#
+# This file pulls pre-built images from GHCR — it never builds on the server.
+# CI builds and pushes both images, copies this file over and runs it, so the
+# server needs neither the source tree nor a Go/Node toolchain.
+#
+# Required environment (see deploy/.env.prod.example):
+#   IMAGE_BACKEND, IMAGE_FRONTEND, IMAGE_TAG, POSTGRES_PASSWORD,
+#   SSO_DEFAULT_CLIENT_SECRET, PUBLIC_ORIGIN
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: platform_erp_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: platform_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
       - "127.0.0.1:5434:5432"
     volumes:
@@ -16,29 +27,47 @@ services:
       timeout: 5s
       retries: 5
 
+  # One-shot migration runner. `up -d` waits for it to exit successfully before
+  # starting the API, so the schema is never behind the binary.
   migrate:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
+    image: ${IMAGE_BACKEND}:${IMAGE_TAG:-latest}
     container_name: platform_erp_migrate
+    pull_policy: always
     command: ["/app/migrate", "up"]
     environment:
-      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/platform_db?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
   backend:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
+    image: ${IMAGE_BACKEND}:${IMAGE_TAG:-latest}
     container_name: platform_erp_backend
+    restart: unless-stopped
+    pull_policy: always
     environment:
-      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/platform_db?sslmode=disable
       PORT: 8080
       ENVIRONMENT: production
-      ALLOWED_ORIGINS: https://openerp.gerege.mn,http://openerp.gerege.mn
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-https://openerp.gerege.mn}
+      # Nginx terminates TLS in front of the API, so the forwarded client
+      # address can be trusted here.
+      TRUST_PROXY_HEADERS: "true"
+      SSO_ISSUER: ${PUBLIC_ORIGIN:-https://openerp.gerege.mn}
+      SSO_DEFAULT_CLIENT_SECRET: ${SSO_DEFAULT_CLIENT_SECRET:?SSO_DEFAULT_CLIENT_SECRET is required in production}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL:-gemini-2.5-flash-preview-tts}
+      GEMINI_VOICE: ${GEMINI_VOICE:-Kore}
+      # DEMO_MODE turns this deployment into a public showcase: it seeds the
+      # published demo account and lets the E-ID / DAN / XYP connectors answer
+      # with canned identities. Anyone can then sign in, so leave it false for
+      # any instance holding real data.
+      SEED_DEMO_DATA: ${DEMO_MODE:-false}
+      EID_MOCK_MODE: ${DEMO_MODE:-false}
+      DAN_MOCK_MODE: ${DEMO_MODE:-false}
+      XYP_MOCK_MODE: ${DEMO_MODE:-false}
     ports:
       - "127.0.0.1:8082:8080"
     depends_on:
@@ -53,16 +82,15 @@ services:
       retries: 5
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: https://openerp.gerege.mn/api/v1
+    image: ${IMAGE_FRONTEND}:${IMAGE_TAG:-latest}
     container_name: platform_erp_frontend
+    restart: unless-stopped
+    pull_policy: always
     ports:
       - "127.0.0.1:3008:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   platform_erp_postgres_data:

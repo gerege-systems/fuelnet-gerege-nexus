@@ -4,13 +4,149 @@
 
 @layer base {
   :root {
-    --background: 220 14% 96%;
-    --foreground: 224 71% 4%;
+    /* Gerege Theme — aligned with open-gerege-mn's shared design system. */
+    --gerege-blue: #0064e1;
+    --gerege-blue-hover: #0054c2;
+    --gerege-blue-soft: #eef6ff;
+    /* Chrome-profile style tonal surfaces derived from the selected accent. */
+    --gerege-bg: #f3f7fd;
+    --gerege-chrome: #edf4fd;
+    --gerege-surface-2: #eef4fb;
+    --gerege-navy: #0b2550;
+    --gerege-surface: #ffffff;
+    --gerege-fg: #172033;
+    --gerege-muted: #667085;
+    --gerege-border: #e4e9f0;
+    --gerege-success: #159455;
+    --gerege-danger: #d92d20;
+    --gerege-radius-card: 10px;
+    --gerege-radius-control: 8px;
+    --gerege-shadow-menu: 0 8px 24px rgb(16 24 40 / 8%);
+    --background: 216 45% 98%;
+    --foreground: 222 38% 15%;
   }
 
-  body {
-    background-color: #f8fafc;
-    color: #0f172a;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  html[data-theme="dark"] {
+    --gerege-bg: #111722;
+    --gerege-chrome: #172131;
+    --gerege-surface: #171f2c;
+    --gerege-surface-2: #202a38;
+    --gerege-fg: #f2f4f7;
+    --gerege-muted: #98a2b3;
+    --gerege-border: #2b3646;
+    --gerege-blue-soft: #102d55;
+    --background: 216 33% 10%;
+    --foreground: 210 20% 96%;
   }
+
+  html[data-accent="teal"] {
+    --gerege-blue: #008b99; --gerege-blue-hover: #007582; --gerege-blue-soft: #e5f6f7;
+    --gerege-bg: #f1f8f8; --gerege-chrome: #e8f5f5; --gerege-surface-2: #edf7f7; --gerege-border: #d7e9e9;
+  }
+  html[data-accent="violet"] {
+    --gerege-blue: #7656d6; --gerege-blue-hover: #6343bf; --gerege-blue-soft: #f0ebff;
+    --gerege-bg: #f6f3fb; --gerege-chrome: #f0ecfa; --gerege-surface-2: #f3effa; --gerege-border: #e3dcf1;
+  }
+  html[data-accent="emerald"] {
+    --gerege-blue: #16845b; --gerege-blue-hover: #0f6f4b; --gerege-blue-soft: #e8f6ef;
+    --gerege-bg: #f1f8f5; --gerege-chrome: #e9f5ef; --gerege-surface-2: #eef7f2; --gerege-border: #d8e9df;
+  }
+  html[data-theme="dark"][data-accent="teal"] { --gerege-blue-soft: #12383d; --gerege-bg: #0f1c20; --gerege-chrome: #14282d; --gerege-surface-2: #193238; --gerege-border: #29454a; }
+  html[data-theme="dark"][data-accent="violet"] { --gerege-blue-soft: #2b2348; --gerege-bg: #171421; --gerege-chrome: #211b30; --gerege-surface-2: #292239; --gerege-border: #3b3250; }
+  html[data-theme="dark"][data-accent="emerald"] { --gerege-blue-soft: #173a2d; --gerege-bg: #101c18; --gerege-chrome: #162820; --gerege-surface-2: #1c3229; --gerege-border: #2d473d; }
+
+  body {
+    background-color: var(--gerege-bg);
+    color: var(--gerege-fg);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    color: var(--gerege-fg);
+    letter-spacing: -0.015em;
+  }
+
+  :focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--gerege-blue) 28%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .gerege-shell { background: var(--gerege-bg); color: var(--gerege-fg); }
+  .gerege-topbar { background: var(--gerege-chrome); border-color: var(--gerege-border); }
+  .gerege-sidebar { background: var(--gerege-chrome); border-color: var(--gerege-border); }
+  .gerege-nav-link { color: #475467; border-radius: var(--gerege-radius-control); }
+  .gerege-nav-link:hover { background: var(--gerege-surface-2); color: var(--gerege-fg); }
+  .gerege-nav-link-active {
+    color: var(--gerege-blue);
+    background: var(--gerege-blue-soft);
+    box-shadow: inset 3px 0 0 var(--gerege-blue);
+  }
+  .gerege-nav-icon { color: #98a2b3; }
+  .gerege-nav-link-active .gerege-nav-icon { color: var(--gerege-blue); }
+  .gerege-parent-menu { border: 0; background: transparent; }
+  .gerege-submenu { border-left: 1px solid var(--gerege-border); }
+  .gerege-submenu .gerege-nav-link-active { box-shadow: none; position: relative; }
+  .gerege-submenu .gerege-nav-link-active::before {
+    content: "";
+    position: absolute;
+    left: -13px;
+    width: 3px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--gerege-blue);
+  }
+  .gerege-session-dot {
+    background: var(--gerege-success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gerege-success) 16%, transparent);
+  }
+}
+
+html[data-density="compact"] { font-size: 14px; }
+html[data-density="compact"] .gerege-topbar { height: 56px; }
+html[data-density="compact"] main { padding-top: 1rem; padding-bottom: 1rem; }
+
+/* Original Theme preserves the repository's original Odoo-inspired shell. */
+html[data-design="original"] .gerege-topbar { background: #0f172a; border-color: #1e293b; color: white; }
+html[data-design="original"] .gerege-topbar .text-slate-900,
+html[data-design="original"] .gerege-topbar .text-slate-800 { color: #f8fafc !important; }
+html[data-design="original"] .gerege-topbar .text-slate-500,
+html[data-design="original"] .gerege-topbar .text-slate-600 { color: #94a3b8 !important; }
+html[data-design="original"] .gerege-topbar .border-slate-200 { border-color: #334155 !important; }
+html[data-design="original"] .original-brand-mark { color: #818cf8; background: #1e293b; }
+html[data-design="original"] .gerege-nav-link-active {
+  color: var(--gerege-blue);
+  background: var(--gerege-blue-soft);
+  box-shadow: none;
+}
+html[data-design="original"] .gerege-nav-link-active .gerege-nav-icon { color: var(--gerege-blue); }
+html[data-design="original"] .gerege-session-dot { background: #10b981; }
+
+html[data-design="gerege"] .original-brand-mark { color: var(--gerege-blue); background: var(--gerege-blue-soft); }
+
+/* Tailwind's neutral utility surfaces inside the authenticated shell should
+   participate in the selected tonal palette instead of staying fixed gray. */
+html[data-theme="light"] .gerege-shell .bg-slate-50,
+html[data-theme="light"] .gerege-shell .bg-slate-100 { background-color: var(--gerege-surface-2) !important; }
+
+html[data-theme="dark"] .bg-white { background-color: var(--gerege-surface) !important; }
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100 { background-color: var(--gerege-surface-2) !important; }
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-700 { color: var(--gerege-fg) !important; }
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-400 { color: var(--gerege-muted) !important; }
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300 { border-color: var(--gerege-border) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }

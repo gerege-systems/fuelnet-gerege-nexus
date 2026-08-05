@@ -2,8 +2,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v
 
 async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : null;
+  // Server-owned content (menu labels, app store copy) is translated by the
+  // API, so every request carries the locale the user picked.
+  const locale = typeof window !== "undefined" ? window.localStorage.getItem("locale") || "mn" : "mn";
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "Accept-Language": locale,
     ...(options.headers as Record<string, string>),
   };
   if (token) {
@@ -179,6 +183,29 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ prompt }),
     }),
+
+  chatAI: (data: {
+    prompt?: string;
+    lang?: string;
+    history?: Array<{ role: "user" | "model"; text: string }>;
+    audio?: { mime: string; data: string };
+  }) => fetcher<{ answer: string; reply: string; steps?: Array<{ tool: string }>; degraded?: boolean }>("/ai/chat", {
+    method: "POST", body: JSON.stringify(data),
+  }),
+
+  speakAI: (text: string) => fetcher<{ mime: string; data: string }>("/ai/tts", {
+    method: "POST", body: JSON.stringify({ text }),
+  }),
+
+  translateAI: (data: { text?: string; audio?: { mime: string; data: string }; target_lang: string; speak?: boolean }) =>
+    fetcher<{ source_text: string; translated: string; audio?: { mime: string; data: string } }>("/ai/translate", {
+      method: "POST", body: JSON.stringify(data),
+    }),
+
+  getAIPrompts: () => fetcher<Array<{key:string;content:string;active:boolean;global:boolean}>>("/admin/ai/prompts"),
+  updateAIPrompt: (key:string, content:string, active=true) => fetcher(`/admin/ai/prompts/${key}`, {method:"PUT",body:JSON.stringify({content,active})}),
+  getAIKnowledge: () => fetcher<Array<{id:string;title:string;content:string;source_url:string;updated_at:string}>>("/admin/ai/knowledge"),
+  createAIKnowledge: (data:{title:string;content:string;source_url:string}) => fetcher<{id:string}>("/admin/ai/knowledge",{method:"POST",body:JSON.stringify(data)}),
 
   getAIForecast: () =>
     fetcher<

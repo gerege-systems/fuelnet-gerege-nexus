@@ -44,7 +44,6 @@
 | 贡献者 | 职责 |
 | --- | --- |
 | **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | 架构与平台核心 |
-| **[@craftzbay](https://github.com/craftzbay)** | 前端与用户体验 |
 | **Gemini AI** | 代码生成与文档 |
 | **Claude AI** | 代码分析与安全审计 |
 
@@ -272,7 +271,7 @@ govulncheck 与 gosec。
 
 ## 许可证
 
-Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI &
+Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
 Claude AI**。基于 Apache 2.0 许可证发布，详见 [`LICENSE`](../LICENSE)。
 
 国旗图标来自 [Flaticon](https://www.flaticon.com/)

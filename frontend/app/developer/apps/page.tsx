@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Layout from "@/components/Layout";
 import { Code2, Key, Shield, Plus, CheckCircle2, Copy } from "lucide-react";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 interface OAuth2Client {
   id: string;
@@ -16,6 +16,7 @@ interface OAuth2Client {
 }
 
 export default function DeveloperAppsPage() {
+  const { t } = useI18n();
   const [apps, setApps] = useState<OAuth2Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -58,16 +59,15 @@ export default function DeveloperAppsPage() {
   };
 
   return (
-    <Layout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
               <Code2 className="w-7 h-7 text-indigo-600" />
-              <span>Developer Portal & OAuth2 SSO Provider</span>
+              <span>{t("developer.title")}</span>
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              ORY Hydra Grade OAuth2 & OpenID Connect (OIDC) Identity Provider & Client Applications
+              {t("developer.subtitle")}
             </p>
           </div>
           <button
@@ -75,7 +75,7 @@ export default function DeveloperAppsPage() {
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
-            <span>Register OAuth2 Client</span>
+            <span>{t("developer.registerOauth2Client")}</span>
           </button>
         </div>
 
@@ -84,7 +84,7 @@ export default function DeveloperAppsPage() {
           <div className="flex items-center space-x-3">
             <Shield className="w-8 h-8 text-cyan-400" />
             <div>
-              <h3 className="font-semibold text-sm">OIDC Discovery Endpoint</h3>
+              <h3 className="font-semibold text-sm">{t("developer.oidcDiscoveryEndpoint")}</h3>
               <p className="text-xs text-slate-400 font-mono">/.well-known/openid-configuration</p>
             </div>
           </div>
@@ -94,7 +94,7 @@ export default function DeveloperAppsPage() {
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-400">Loading OAuth2 client apps...</div>
+          <div className="p-12 text-center text-slate-400">{t("developer.loadingOauth2ClientApps")}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {apps.map((app) => (
@@ -118,12 +118,27 @@ export default function DeveloperAppsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Client Secret:</span>
-                    <span className="text-slate-900">{app.client_secret}</span>
+                    {/* The API returns the secret only in the response that
+                        creates the client; later reads redact it. */}
+                    {app.client_secret ? (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-slate-900 font-bold">{app.client_secret}</span>
+                        <button onClick={() => copyToClipboard(app.client_secret, `${app.client_id}-secret`)}>
+                          {copiedId === `${app.client_id}-secret` ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 italic">{t("developer.secretHidden")}</span>
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-slate-700 block mb-1">Redirect URIs</span>
+                  <span className="text-xs font-semibold text-slate-700 block mb-1">{t("developer.redirectUris")}</span>
                   <div className="flex flex-wrap gap-1">
                     {app.redirect_uris.map((uri, idx) => (
                       <span key={idx} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
@@ -134,7 +149,7 @@ export default function DeveloperAppsPage() {
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-slate-700 block mb-1">Scopes</span>
+                  <span className="text-xs font-semibold text-slate-700 block mb-1">{t("developer.scopes")}</span>
                   <div className="flex flex-wrap gap-1">
                     {app.scopes.map((scope, idx) => (
                       <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono">
@@ -152,7 +167,7 @@ export default function DeveloperAppsPage() {
         {showModal && (
           <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Register New OAuth2 Client App</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t("developer.registerNewOauth2ClientApp")}</h2>
               <form onSubmit={handleCreateApp} className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Application Name *</label>
@@ -194,7 +209,6 @@ export default function DeveloperAppsPage() {
             </div>
           </div>
         )}
-      </div>
-    </Layout>
+    </div>
   );
 }

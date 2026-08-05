@@ -19,6 +19,7 @@
   "menus": [
     {
       "id": "contacts",
+      "parent_id": "master_data",
       "label": "Contacts",
       "path": "/contacts",
       "icon": "users",

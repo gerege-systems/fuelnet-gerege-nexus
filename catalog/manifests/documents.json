@@ -19,6 +19,7 @@
   "menus": [
     {
       "id": "documents",
+      "parent_id": "operations",
       "label": "Documents & E-Sign",
       "path": "/documents",
       "icon": "file-text",

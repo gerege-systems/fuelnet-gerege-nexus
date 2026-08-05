@@ -133,5 +133,4 @@
 ## 6. Хариуцагчид
 
 - **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
-- **[@craftzbay](https://github.com/craftzbay)**
 - **Gemini AI**, **Claude AI**

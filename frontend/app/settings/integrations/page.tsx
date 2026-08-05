@@ -2,9 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Share2, Plus, CheckCircle2, ShieldAlert, Activity, Globe, RefreshCw } from "lucide-react";
 
 export default function IntegrationsPage() {
+  const { t } = useI18n();
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -49,7 +51,7 @@ export default function IntegrationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <Share2 className="w-7 h-7 text-indigo-600" />
-            <span>External System Integrations & Webhooks</span>
+            <span>{t("integrations.externalSystemIntegrationsWebhooks")}</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Manage government gateways, REST API connectors, and event webhooks
@@ -67,13 +69,13 @@ export default function IntegrationsPage() {
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Integration</span>
+            <span>{t("integrations.addIntegration")}</span>
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">Loading integrations...</div>
+        <div className="py-12 text-center text-slate-400">{t("integrations.loadingIntegrations")}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {integrations.map((item) => (
@@ -124,13 +126,13 @@ export default function IntegrationsPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Register Integration Connector</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.registerIntegrationConnector")}</h2>
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Integration Name *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Sales Webhook"
+                  placeholder={t("integrations.egSalesWebhook")}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -139,16 +141,16 @@ export default function IntegrationsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Integration Type</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.integrationType")}</label>
                 <select
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="webhook">Webhook Listener</option>
-                  <option value="government">Government Gateway</option>
-                  <option value="payment">Payment Gateway</option>
-                  <option value="custom_rest">Custom REST Endpoint</option>
+                  <option value="webhook">{t("integrations.webhookListener")}</option>
+                  <option value="government">{t("integrations.governmentGateway")}</option>
+                  <option value="payment">{t("integrations.paymentGateway")}</option>
+                  <option value="custom_rest">{t("integrations.customRestEndpoint")}</option>
                 </select>
               </div>
 
@@ -165,10 +167,10 @@ export default function IntegrationsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Secret Key (Signing)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.secretKeySigning")}</label>
                 <input
                   type="password"
-                  placeholder="Optional HMAC secret"
+                  placeholder={t("integrations.optionalHmacSecret")}
                   value={form.secret_key}
                   onChange={(e) => setForm({ ...form, secret_key: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"

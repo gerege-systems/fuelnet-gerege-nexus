@@ -4,7 +4,9 @@ package config
 
 import (
 	"log/slog"
+	"net/http"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -36,4 +38,37 @@ func MockEnabled(name string) bool {
 // IsProduction reports whether ENVIRONMENT=production.
 func IsProduction() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("ENVIRONMENT")), "production")
+}
+
+// SupportedLocales lists the languages the API can answer in. The first entry
+// is the default.
+var SupportedLocales = []string{"mn", "en"}
+
+// LocaleFromRequest resolves the caller's language from the `lang` query
+// parameter, falling back to Accept-Language and then to the default locale.
+// Server-owned content (menu labels, catalog copy) is translated with it, so a
+// client never has to ship translations for data it does not own.
+func LocaleFromRequest(r *http.Request) string {
+	if lang := normalizeLocale(r.URL.Query().Get("lang")); lang != "" {
+		return lang
+	}
+
+	// Accept-Language: mn-MN,mn;q=0.9,en;q=0.8
+	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
+		tag, _, _ := strings.Cut(part, ";")
+		if lang := normalizeLocale(tag); lang != "" {
+			return lang
+		}
+	}
+
+	return SupportedLocales[0]
+}
+
+func normalizeLocale(tag string) string {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	base, _, _ := strings.Cut(tag, "-")
+	if slices.Contains(SupportedLocales, base) {
+		return base
+	}
+	return ""
 }

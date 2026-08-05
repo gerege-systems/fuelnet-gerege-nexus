@@ -52,7 +52,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "products", Label: "Products", Path: "/products", Icon: "package", Order: 20},
+		{ID: "products", ParentID: "master_data", Label: "Products", Path: "/products", Icon: "package", Order: 20, Labels: map[string]string{"mn": "Бараа бүтээгдэхүүн"}},
 	}
 }
 

@@ -163,6 +163,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Authors & Contributors
 - **Gerege Systems Development Team**
-- **[@craftzbay](https://github.com/craftzbay)**
 - **Gemini AI**
 - **Claude AI**

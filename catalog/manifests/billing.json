@@ -24,6 +24,7 @@
   "menus": [
     {
       "id": "billing",
+      "parent_id": "operations",
       "label": "Public Billing",
       "path": "/billing",
       "icon": "credit-card",

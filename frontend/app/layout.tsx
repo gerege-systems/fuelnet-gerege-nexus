@@ -1,23 +1,32 @@
 "use client";
 
 import "./globals.css";
-import React from "react";
+import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Layout from "@/components/Layout";
-
-const queryClient = new QueryClient();
+import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Created per mount rather than at module scope so the cache is not shared
+  // across requests when the bundle is reused.
+  const [queryClient] = useState(() => new QueryClient());
+
   return (
-    <html lang="en">
+    // I18nProvider keeps <html lang> in step with the selected locale.
+    <html lang="mn">
       <body>
-        <QueryClientProvider client={queryClient}>
-          <Layout>{children}</Layout>
-        </QueryClientProvider>
+        <ThemeProvider>
+          <I18nProvider>
+            <QueryClientProvider client={queryClient}>
+              <Layout>{children}</Layout>
+            </QueryClientProvider>
+          </I18nProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
