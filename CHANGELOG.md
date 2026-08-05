@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prometheus metrics endpoint (`/metrics`) recording HTTP request rates and latency histograms (`github.com/prometheus/client_golang`).
   - OpenTelemetry tracing initialization (`SetupTracing`).
   - Async OTP Mailer queue with worker pool, retry logic, and graceful shutdown (`internal/platform/mailer`).
+- **Public Billing & e-Barimt Module ([`io.example.billing`](backend/internal/apps/billing))**:
+  - Public service fee invoices, 10% VAT calculation for Mongolia e-Barimt, and status tracking (`/billing`).
+- **Digital Documents & E-Signatures Module ([`io.example.documents`](backend/internal/apps/documents))**:
+  - Legal contract routing, multi-stage approval workflow, and E-ID / DAN digital signature verification (`/documents`).
 - **External System Integrations & Webhook Engine ([`internal/platform/integration`](backend/internal/platform/integration))**:
   - Event Dispatcher & Connector Manager supporting HMAC-SHA256 signature signing, asynchronous webhooks, and third-party REST connectors.
   - Dedicated Integration Settings Manager UI (`/settings/integrations`) with real-time status & health tracking.
