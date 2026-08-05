@@ -97,16 +97,55 @@ Add a manifest file in `catalog/manifests/invoices.json`:
   "id": "io.example.invoices",
   "name": "Invoices",
   "version": "1.0.0",
-  "description": "Invoicing, customer billing, and payment tracking.",
-  "category": "Accounting",
+  "platform": ">=0.1.0 <2.0.0",
   "dependencies": [
-    {"app_id": "io.example.contacts", "version_constraint": ">=1.0.0"},
-    {"app_id": "io.example.products", "version_constraint": ">=1.0.0"}
+    { "id": "io.example.contacts", "version_constraint": "^1.0.0" },
+    { "id": "io.example.products", "version_constraint": "^1.0.0" }
+  ],
+  "permissions": [
+    {
+      "code": "invoices.read",
+      "name": "Read Invoices",
+      "description": "Allows viewing invoices"
+    },
+    {
+      "code": "invoices.manage",
+      "name": "Manage Invoices",
+      "description": "Allows issuing and editing invoices"
+    }
+  ],
+  "menus": [
+    {
+      "id": "invoices",
+      "label": "Invoices",
+      "path": "/invoices",
+      "icon": "receipt",
+      "order": 70
+    }
   ]
 }
 ```
 
-And update `catalog/apps.json` to index the new app in the App Store!
+The field names must match `appcatalog.Manifest` exactly:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string | Must equal the `id` of the matching `catalog/apps.json` entry |
+| `version` | string | Valid semver |
+| `platform` | string | Semver constraint checked against the platform version (`1.0.0`) |
+| `dependencies` | **array** of `{id, version_constraint}` | Not an object — `{}` fails to parse |
+| `permissions` | **array of objects** `{code, name, description}` | Not an array of strings |
+| `menus` | array of `{id, label, path, icon, order}` | `label`/`path`/`order`, not `name`/`action`/`sequence` |
+
+The file name must be `catalog/manifests/<slug>.json`, where `<slug>` is the
+slug used in `catalog/apps.json` (lowercase letters, digits, `-` and `_`).
+A manifest that fails to load or whose `id` disagrees with the catalog entry is
+a **startup error** — the server refuses to boot rather than silently
+installing the app with an empty dependency, permission and menu set.
+
+And update `catalog/apps.json` to index the new app in the App Store! The
+`apps` database table is synchronised from that file on every boot, so no
+manual SQL is required.
 
 ---
 

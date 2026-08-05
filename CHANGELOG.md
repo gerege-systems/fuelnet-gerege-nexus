@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed — CI/CD pipeline
+
+- **Go toolchain mismatch broke every job**: `backend/go.mod` requires `go 1.25.7`
+  while the workflows pinned `go-version: "1.24"` and both Dockerfiles used
+  `golang:1.24-alpine` (which sets `GOTOOLCHAIN=local`, so the build hard-fails).
+  All jobs now resolve the version from `backend/go.mod` and the image builder
+  sets `GOTOOLCHAIN=auto`.
+- **Security workflow could never pass**: `govulncheck ./...` and `gosec ./...`
+  ran at the repository root, which contains no `go.mod`. They now run against
+  `backend/`. The workflow also only triggered on PRs to `master` while the
+  default branch is `main`.
+- **GHCR push lacked `packages: write`**, so deployment failed with `denied:
+  installation not allowed to Write the repository`.
+- **Removed the `swag-drift` job**: the sources carry no swagger annotations and
+  `backend/docs/` is untracked, so it could only fail or pass vacuously.
+- `deploy.yml` no longer duplicates lint/test from `ci.yml`; it runs migrations
+  before swapping the API over, uses `docker compose`, lower-cases the GHCR
+  image path, and skips cleanly when deployment secrets are absent.
+- Added a **frontend CI job** (`npm ci` + `tsc --noEmit` + `next build`) — the
+  Next.js app was never built by CI.
+- Added `.dockerignore`, a pinned `backend/.golangci.yml` (v2), deleted the
+  duplicate `backend/Dockerfile`, untracked committed `.DS_Store` files, and
+  `gofmt`-ed the 11 files that had drifted.
+- `docker-compose.yml`: added a one-shot **migration service** (the API used to
+  start against an empty schema), health checks, and build-time
+  `NEXT_PUBLIC_API_URL`; `frontend/Dockerfile` now uses `npm ci` with the lock
+  file. Database credentials are consistent across compose, `.env.example` and
+  the Makefile.
+
+### Fixed — Security
+
+- **Session tokens were the user's UUID**, the same value returned by
+  `/api/v1/auth/me`. Replaced with opaque 256-bit `crypto/rand` tokens stored as
+  SHA-256 digests in a new `sessions` table, with expiry and real revocation on
+  logout (logout previously only dropped the cookie).
+- **Mock national-identity mode was on by default** (`os.Getenv(...) != "false"`),
+  so in production `/auth/eid/login` and `/auth/dan/login` accepted any
+  registration number and logged the caller in as the first user in the table
+  with `is_admin: true`. Mock mode is now refused in production unless requested
+  explicitly, and identities are matched against a real ERP user.
+- **OAuth2 token endpoint accepted any known `client_id` with no secret**
+  (`clientSecret != "" && ...` skipped the check entirely). Client
+  authentication is now mandatory and constant-time, supports HTTP Basic,
+  validates the grant type, and is also enforced on `/oauth2/introspect` and
+  `/oauth2/revoke`.
+- Removed the **hard-coded client secret** `secret_gerege_dev_2026`;
+  `ListClients` no longer discloses client secrets.
+- App install/enable/disable and integration registration now require a **tenant
+  administrator** — any authenticated user could previously reconfigure the
+  tenant.
+- Login rate limiting no longer trusts `X-Forwarded-For` unless
+  `TRUST_PROXY_HEADERS=true`.
+- Halved-entropy `generateRandomString` (hex output truncated back to `n`) fixed.
+- `/metrics` no longer labels unmatched routes with the raw request path —
+  unbounded Prometheus cardinality driven by unauthenticated requests.
+
+### Fixed — App store & modules
+
+- **Billing, Documents and the Developer Portal could not be installed**: their
+  modules were never registered in `appregistry`, their rows were missing from
+  the `apps` table (foreign-key violation), and `developer_portal` was rejected
+  by the slug validator, which forbade underscores.
+- The `apps` table is now **synchronised from `catalog/apps.json` on boot**
+  instead of a hand-maintained INSERT that listed three of six apps.
+- **Three manifests were malformed** (`"dependencies": {}` instead of an array,
+  permissions as plain strings, `depends`/`sequence`/`action` keys). They parsed
+  into a silent stub with no dependencies, permissions or menus. Manifests are
+  fixed, and a manifest that fails to load is now a startup error.
+- Billing and Documents no longer create their tables at boot with the error
+  discarded; the schema moved into migration `00004`. Both stop answering failed
+  writes with **fabricated demo records** (`inv_demo_100`, `doc_demo_200`).
+- The app store reported disabled apps as "not installed" because `installed`
+  and `enabled` were both derived from the enabled-only query.
+- Fixed a nil-interface panic in `InstallApp` when a module was missing from the
+  registry, and a nil-pointer dereference in the E-ID/DAN login handlers that
+  called `err.Error()` on a nil error.
+
+### Fixed — Reliability
+
+- `AsyncOTPMailer.Shutdown` closed the queue while workers and retries could
+  still send on it (**panic: send on closed channel**) and dropped already-queued
+  mail; it now drains, is idempotent, and refuses post-shutdown enqueues.
+- AI Copilot intent classification was case-sensitive against a lowercase
+  keyword table, so "Stock" never matched.
+- Restored demo-data seeding (dropped from `cmd/api`), now idempotent and
+  disabled in production unless `SEED_DEMO_DATA` is set.
+
+---
+
 ## [0.1.0] - 2026-08-05
 
 ### Added

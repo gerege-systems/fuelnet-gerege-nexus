@@ -12,6 +12,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +20,33 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
 )
+
+// resolveCatalogPath locates catalog/apps.json.
+//
+// The documented quick start is `cd backend && go run ./cmd/api`, but the
+// catalog lives at the repository root, so the relative default resolved to
+// backend/catalog/apps.json and the server refused to start. The parent
+// directory is therefore tried as a fallback before giving up.
+func resolveCatalogPath(configured string) string {
+	if configured != "" {
+		return configured
+	}
+
+	const defaultPath = "catalog/apps.json"
+	if _, err := os.Stat(defaultPath); err == nil {
+		return defaultPath
+	}
+	if parent := filepath.Join("..", defaultPath); fileExists(parent) {
+		slog.Info("using app catalog from parent directory", "path", parent)
+		return parent
+	}
+	return defaultPath
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
 
 const (
 	demoTenantID = "00000000-0000-0000-0000-000000000001"

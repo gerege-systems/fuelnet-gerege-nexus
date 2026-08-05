@@ -39,10 +39,7 @@ func main() {
 		dbURL = "postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable"
 	}
 
-	catalogPath := os.Getenv("APP_CATALOG_PATH")
-	if catalogPath == "" {
-		catalogPath = "catalog/apps.json"
-	}
+	catalogPath := resolveCatalogPath(os.Getenv("APP_CATALOG_PATH"))
 
 	ctx := context.Background()
 
