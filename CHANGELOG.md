@@ -38,8 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Async OTP Mailer queue with worker pool, retry logic, and graceful shutdown (`internal/platform/mailer`).
 - **Public Billing & e-Barimt Module ([`io.example.billing`](backend/internal/apps/billing))**:
   - Public service fee invoices, 10% VAT calculation for Mongolia e-Barimt, and status tracking (`/billing`).
-- **Digital Documents & E-Signatures Module ([`io.example.documents`](backend/internal/apps/documents))**:
-  - Legal contract routing, multi-stage approval workflow, and E-ID / DAN digital signature verification (`/documents`).
+- **E-ID Digital Identity & DAN SSO Authentication ([`internal/platform/eid`](backend/internal/platform/eid))**:
+  - Aligned 100% with official **[eidmongolia.mn](https://eidmongolia.mn)** & **[developer.sso.mn](https://developer.sso.mn)** OAuth2 and OpenID Connect (OIDC) specifications.
+  - Supports 4 official Mongolian authentication channels: PKI Digital Signature (Тоон гарын үсэг), Mobile OTP, Bank SSO, and Biometric Face Verification.
 - **External System Integrations & Webhook Engine ([`internal/platform/integration`](backend/internal/platform/integration))**:
   - Event Dispatcher & Connector Manager supporting HMAC-SHA256 signature signing, asynchronous webhooks, and third-party REST connectors.
   - Dedicated Integration Settings Manager UI (`/settings/integrations`) with real-time status & health tracking.
