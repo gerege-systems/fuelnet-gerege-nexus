@@ -27,11 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - App Store (`/apps`) with search, categories, dependency badges, and Install/Enable/Disable controls.
   - Installed Apps Settings (`/settings/apps`).
   - Dedicated business UIs for `/contacts`, `/products`, and `/inventory`.
-- **Security Hardening**:
-  - HTTP security headers (`CSP`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`).
-  - IP Rate Limiting middleware for authentication endpoints (`golang.org/x/time/rate`).
-  - Safe CORS whitelist and path traversal guards (`IsValidSlug`).
-  - bcrypt password hashing (`golang.org/x/crypto/bcrypt`).
+- **High-Performance Resilience Engine (go-zero Inspired)**:
+  - **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Google SRE style sliding window adaptive circuit breaker.
+  - **Adaptive Load Shedding (`resilience/loadshedder.go`)**: In-flight HTTP request concurrency shedder returning `503 Service Unavailable` under heavy traffic spikes.
+  - **Singleflight Coalescing (`resilience/singleflight.go`)**: Duplicate query suppressor preventing thundering herd cache stampedes.
+  - **Exponential Backoff Retry (`resilience/retry.go`)**: `DoWithRetry` execution helper for resilient DB/network operations.
 - **Observability & Async Messaging**:
   - Prometheus metrics endpoint (`/metrics`) recording HTTP request rates and latency histograms (`github.com/prometheus/client_golang`).
   - OpenTelemetry tracing initialization (`SetupTracing`).
