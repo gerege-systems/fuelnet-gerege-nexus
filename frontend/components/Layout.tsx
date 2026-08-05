@@ -17,6 +17,7 @@ import {
   Share2,
   CreditCard,
   FileText,
+  Code2,
 } from "lucide-react";
 
 interface Menu {
@@ -176,6 +177,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <Share2 className="w-5 h-5 text-slate-500" />
                   <span>Integrations & Webhooks</span>
+                </Link>
+
+                <Link
+                  href="/developer/apps"
+                  className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition ${
+                    pathname === "/developer/apps"
+                      ? "bg-indigo-50 text-indigo-600 font-semibold"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <Code2 className="w-5 h-5 text-slate-500" />
+                  <span>Developer OAuth2 Apps</span>
                 </Link>
               </nav>
             </div>

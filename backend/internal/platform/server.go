@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/developer_portal"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/products"
@@ -30,6 +31,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 	"golang.org/x/time/rate"
 )
@@ -44,10 +46,12 @@ type Server struct {
 	forecaster     *ai.Forecaster
 	eidSvc         *eid.EIDService
 	danSvc         *dan.DANService
+	ssoProvider    *ssoprovider.SSOProvider
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	billingMod     *billing.BillingModule
 	documentsMod   *documents.DocumentsModule
+	devPortalMod   *developer_portal.DeveloperPortalModule
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -91,6 +95,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
 	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
 
+	ssoProvider := ssoprovider.NewSSOProvider()
+	devPortalMod := developer_portal.NewDeveloperPortalModule(ssoProvider)
+
 	s := &Server{
 		db:             db,
 		installer:      installer,
@@ -101,10 +108,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		forecaster:     ai.NewForecaster(db),
 		eidSvc:         eid.NewEIDService(),
 		danSvc:         dan.NewDANService(),
+		ssoProvider:    ssoProvider,
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integration.NewManager(),
 		billingMod:     billingMod,
 		documentsMod:   documentsMod,
+		devPortalMod:   devPortalMod,
 	}
 
 	s.setupRoutes()
@@ -147,6 +156,13 @@ func (s *Server) setupRoutes() {
 	// Prometheus Metrics Endpoint
 	r.Handle("/metrics", observability.MetricsHandler())
 
+	// ORY Hydra Grade OpenID Connect & OAuth2 Provider Endpoints
+	r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
+	r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
+	r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
+	r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospectEndpoint)
+	r.Post("/oauth2/revoke", s.ssoProvider.HandleRevokeEndpoint)
+
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
 		// Auth with rate limiting
@@ -181,6 +197,9 @@ func (s *Server) setupRoutes() {
 			// Documents App (io.example.documents)
 			pr.Get("/documents", s.handleListDocuments)
 			pr.Post("/documents", s.handleCreateDocument)
+
+			// Developer Portal & OAuth2 SSO App (io.example.developer_portal)
+			s.devPortalMod.RegisterRoutes(pr)
 
 			// Store
 			pr.Get("/store/apps", s.handleListStoreApps)

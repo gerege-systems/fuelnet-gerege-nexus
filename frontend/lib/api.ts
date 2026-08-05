@@ -272,4 +272,12 @@ export const api = {
 
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
+
+  // Developer Portal & OAuth2 SSO Apps
+  getDeveloperApps: () => fetcher<any[]>("/developer/apps"),
+  createDeveloperApp: (clientName: string, redirectURIs: string[], scopes?: string[]) =>
+    fetcher<any>("/developer/apps", {
+      method: "POST",
+      body: JSON.stringify({ client_name: clientName, redirect_uris: redirectURIs, scopes }),
+    }),
 };

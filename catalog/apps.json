@@ -48,5 +48,15 @@
     "category": "Productivity",
     "visibility": "public",
     "version": "1.0.0"
+  },
+  {
+    "id": "io.example.developer_portal",
+    "slug": "developer_portal",
+    "name": "Developer Portal & OAuth2 SSO",
+    "description": "OAuth2 / OpenID Connect client application management and API credentials.",
+    "icon_url": "/icons/developer_portal.png",
+    "category": "Developer Tools",
+    "visibility": "public",
+    "version": "1.0.0"
   }
 ]

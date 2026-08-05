@@ -1,0 +1,83 @@
+package developer_portal
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+)
+
+type DeveloperPortalModule struct {
+	ssoProvider *ssoprovider.SSOProvider
+}
+
+func NewDeveloperPortalModule(ssoProvider *ssoprovider.SSOProvider) *DeveloperPortalModule {
+	return &DeveloperPortalModule{
+		ssoProvider: ssoProvider,
+	}
+}
+
+func (m *DeveloperPortalModule) ID() string {
+	return "io.example.developer_portal"
+}
+
+func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router) {
+	r.Route("/api/v1/developer/apps", func(r chi.Router) {
+		r.Get("/", m.handleListApps)
+		r.Post("/", m.handleCreateApp)
+	})
+}
+
+func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Request) {
+	_, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized tenant context"}`, http.StatusUnauthorized)
+		return
+	}
+
+	clients := m.ssoProvider.ListClients()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(clients)
+}
+
+func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
+	_, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized tenant context"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		ClientName   string   `json:"client_name"`
+		RedirectURIs []string `json:"redirect_uris"`
+		Scopes       []string `json:"scopes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.ClientName == "" {
+		http.Error(w, `{"error":"client_name is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Scopes) == 0 {
+		req.Scopes = []string{"openid", "profile", "erp.read"}
+	}
+
+	client := &ssoprovider.OAuth2Client{
+		ClientName:   req.ClientName,
+		RedirectURIs: req.RedirectURIs,
+		Scopes:       req.Scopes,
+		GrantTypes:   []string{"authorization_code", "client_credentials"},
+	}
+
+	m.ssoProvider.RegisterClient(client)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(client)
+}
