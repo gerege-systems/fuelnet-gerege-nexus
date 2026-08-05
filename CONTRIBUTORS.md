@@ -4,8 +4,8 @@ Thank you to everyone in **Gerege Systems** and the open-source community who ha
 
 ## Core Maintainers & Organization Members
 - 🏛️ **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
-  - **[@erdenebatt](https://github.com/erdenebatt)** (Erdenebat Tsenddorj)
-  - **[@craftzbay](https://github.com/craftzbay)**
+  - **[@erdenebatt](https://github.com/erdenebatt)** (Erdenebat Tsenddorj - Maintainer)
+  - **[@craftzbay](https://github.com/craftzbay)** (Bayarsaikhan Otgonbayar)
   - **[@BunnyMN](https://github.com/BunnyMN)**
   - **[@codesaur](https://github.com/codesaur)**
   - **[@Gankhulug1998](https://github.com/Gankhulug1998)**
