@@ -33,7 +33,9 @@ export default function GovSlaPage() {
   const load = useCallback(async () => {
     try {
       const [summary, workflows, overdueTasks] = await Promise.all([
-        gov.dashboard(),
+        // Counters need gov.report; the step standards and the overdue list do
+        // not, so a missing grant hides the cards instead of failing the page.
+        gov.dashboard().catch(() => null),
         gov.workflows(),
         gov.tasks({ overdue: true, page_size: 50 }),
       ]);

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { FulfillmentMode, GovService, OrgUnit, Workflow, gov } from "@/lib/gov";
+import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { Banner, EmptyState, Loading, PageHeader, describeError } from "@/components/gov/shared";
 import { Landmark, Plus } from "lucide-react";
@@ -11,6 +12,11 @@ import { Landmark, Plus } from "lucide-react";
  *  /gov/services/{id}/configuration. */
 export default function GovCatalogPage() {
   const { t, locale } = useI18n();
+  // A new service passport is organisation-wide, so the backend asks for the
+  // tenant administrator role; changing how a service is fulfilled asks for
+  // gov.configure. The screen mirrors both instead of offering a 403.
+  const access = useAccess();
+  const mayConfigure = access.can("gov.configure");
   const [services, setServices] = useState<GovService[]>([]);
   const [units, setUnits] = useState<OrgUnit[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -89,7 +95,7 @@ export default function GovCatalogPage() {
     }
   };
 
-  if (loading) return <Loading />;
+  if (loading || !access.ready) return <Loading />;
 
   return (
     <div className="space-y-6">
@@ -98,13 +104,15 @@ export default function GovCatalogPage() {
         title={t("gov.menu.catalog")}
         subtitle={t("gov.menu.catalogHint")}
         actions={
-          <button
-            onClick={() => setCreating((v) => !v)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg"
-          >
-            <Plus className="w-4 h-4" />
-            {t("common.create")}
-          </button>
+          access.isAdmin ? (
+            <button
+              onClick={() => setCreating((v) => !v)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg"
+            >
+              <Plus className="w-4 h-4" />
+              {t("common.create")}
+            </button>
+          ) : undefined
         }
       />
 
@@ -179,8 +187,9 @@ export default function GovCatalogPage() {
                     <td className="px-3 py-2">
                       <select
                         value={service.fulfillment_mode}
+                        disabled={!mayConfigure}
                         onChange={(e) => configure(service, { fulfillment_mode: e.target.value as FulfillmentMode })}
-                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white"
+                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white disabled:bg-slate-50 disabled:text-slate-500"
                       >
                         {(["LOCAL", "DELEGATE", "HYBRID"] as const).map((mode) => (
                           <option key={mode} value={mode}>
@@ -192,8 +201,9 @@ export default function GovCatalogPage() {
                     <td className="px-3 py-2">
                       <select
                         value={service.workflow_version_id || ""}
+                        disabled={!mayConfigure}
                         onChange={(e) => configure(service, { workflow_version_id: e.target.value || null })}
-                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white"
+                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white disabled:bg-slate-50 disabled:text-slate-500"
                       >
                         <option value="">—</option>
                         {publishedVersions.map((version) => (
@@ -206,8 +216,9 @@ export default function GovCatalogPage() {
                     <td className="px-3 py-2">
                       <select
                         value={service.owner_unit_id || ""}
+                        disabled={!mayConfigure}
                         onChange={(e) => configure(service, { owner_unit_id: e.target.value || null })}
-                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white"
+                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white disabled:bg-slate-50 disabled:text-slate-500"
                       >
                         <option value="">—</option>
                         {units.map((unit) => (

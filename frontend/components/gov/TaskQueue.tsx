@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ACTION_PERMISSION,
   ACTION_REQUIRES_COMMENT,
   Dashboard,
   OrgUnit,
@@ -12,6 +13,7 @@ import {
   availableActions,
   gov,
 } from "@/lib/gov";
+import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import RequestDrawer from "@/components/gov/RequestDrawer";
 import {
@@ -36,6 +38,7 @@ const PAGE_SIZE = 20;
 export default function TaskQueue({ showDashboard = true }: { showDashboard?: boolean }) {
   const { t, locale } = useI18n();
   const statusLabel = useStatusLabel();
+  const access = useAccess();
 
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [queue, setQueue] = useState<Page<Task> | null>(null);
@@ -58,7 +61,10 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
     setError(null);
     try {
       const [summary, tasks] = await Promise.all([
-        gov.dashboard(),
+        // The counters need gov.report, which the queue itself does not. A
+        // member who may work the queue but not see supervisory totals still
+        // gets the table.
+        gov.dashboard().catch(() => null),
         gov.tasks({
           status: statusFilter || undefined,
           unit_id: unitFilter || undefined,
@@ -149,7 +155,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
     }
   };
 
-  if (loading) return <Loading />;
+  if (loading || !access.ready) return <Loading />;
 
   return (
     <div className="space-y-6">
@@ -251,15 +257,17 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
                         {busy === task.id ? (
                           <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                         ) : (
-                          availableActions(task.status).map((action) => (
-                            <button
-                              key={action}
-                              onClick={() => act(task, action)}
-                              className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600"
-                            >
-                              {t(`gov.action.${action}` as never)}
-                            </button>
-                          ))
+                          availableActions(task.status)
+                            .filter((action) => access.can(ACTION_PERMISSION[action]))
+                            .map((action) => (
+                              <button
+                                key={action}
+                                onClick={() => act(task, action)}
+                                className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600"
+                              >
+                                {t(`gov.action.${action}` as never)}
+                              </button>
+                            ))
                         )}
                       </div>
                     </td>

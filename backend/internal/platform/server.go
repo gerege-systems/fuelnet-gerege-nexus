@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -519,6 +520,19 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	_ = s.db.QueryRow(r.Context(), `SELECT name, email FROM users WHERE id = $1`, claims.UserID).Scan(&name, &email)
 	_ = s.db.QueryRow(r.Context(), `SELECT name FROM tenants WHERE id = $1`, claims.TenantID).Scan(&tenantName)
 
+	// The effective grant of every role the member holds, so a screen can hide
+	// what the caller may not do. Administrators bypass the check, so their
+	// list stays empty rather than enumerating the whole catalog.
+	granted := make([]string, 0)
+	if !claims.IsAdmin {
+		if permissions, permErr := s.permissions.GetUserPermissions(r.Context(), claims.TenantID, claims.UserID); permErr == nil {
+			for code := range permissions {
+				granted = append(granted, code)
+			}
+			sort.Strings(granted)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"id":          claims.UserID,
@@ -527,6 +541,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"name":        name,
 		"email":       email,
 		"is_admin":    claims.IsAdmin,
+		"permissions": granted,
 	})
 }
 

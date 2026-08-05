@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { GovService, OrgUnit, RoutingRule, RoutingStrategy, Workflow, WorkflowTemplate, gov } from "@/lib/gov";
+import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { Banner, Loading, PageHeader, describeError } from "@/components/gov/shared";
 import { Building2, Route, Workflow as WorkflowIcon } from "lucide-react";
@@ -12,6 +13,10 @@ const STRATEGIES: RoutingStrategy[] = ["SELF", "PARENT", "CHILD", "SPECIFIC_UNIT
  *  versions and the routing rules that pick an executing unit. */
 export default function GovWorkflowPage() {
   const { t, locale } = useI18n();
+  // gov.configure is granted to administrators only by default; everyone else
+  // reads the configuration without the forms that would 403.
+  const access = useAccess();
+  const mayConfigure = access.can("gov.configure");
   const [units, setUnits] = useState<OrgUnit[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
@@ -121,7 +126,7 @@ export default function GovWorkflowPage() {
     }
   };
 
-  if (loading) return <Loading />;
+  if (loading || !access.ready) return <Loading />;
 
   const unitCode = (id?: string | null) => (id ? units.find((u) => u.id === id)?.code || id : "—");
   const serviceName = (id?: string | null) =>
@@ -156,6 +161,7 @@ export default function GovWorkflowPage() {
           ))}
         </ul>
 
+        {mayConfigure && (
         <form onSubmit={submitUnit} className="grid sm:grid-cols-5 gap-2">
           <input
             required
@@ -196,6 +202,7 @@ export default function GovWorkflowPage() {
             {t("common.create")}
           </button>
         </form>
+        )}
       </section>
 
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
@@ -225,6 +232,7 @@ export default function GovWorkflowPage() {
           ))}
         </ul>
 
+        {mayConfigure && (
         <div className="flex flex-wrap gap-2">
           <select
             value={template}
@@ -246,6 +254,7 @@ export default function GovWorkflowPage() {
             {t("gov.config.publish")}
           </button>
         </div>
+        )}
       </section>
 
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
@@ -284,6 +293,7 @@ export default function GovWorkflowPage() {
           </div>
         )}
 
+        {mayConfigure && (
         <form onSubmit={submitRule} className="grid sm:grid-cols-6 gap-2">
           <select
             value={ruleForm.strategy}
@@ -347,6 +357,7 @@ export default function GovWorkflowPage() {
             </button>
           </div>
         </form>
+        )}
       </section>
     </div>
   );

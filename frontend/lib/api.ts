@@ -56,7 +56,9 @@ export const api = {
 
   logout: () => fetcher<{ status: string }>("/auth/logout", { method: "POST" }),
 
-  getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean }>("/auth/me"),
+  // permissions carries the effective grant of every role the member holds; it
+  // is empty for administrators, who bypass the check.
+  getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[] }>("/auth/me"),
 
   getMenus: () => fetcher<Array<{ id: string; app_id?: string; app_name?: string; parent_id?: string; label: string; path?: string; icon: string; order: number }>>("/menus"),
 
