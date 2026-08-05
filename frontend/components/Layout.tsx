@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, APP_MENU_CHANGED_EVENT } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
@@ -30,6 +30,12 @@ export default function Layout({children}:{children:React.ReactNode}){
 
   useEffect(()=>setPanelOpen(localStorage.getItem("gerege_sidebar_open")!=="false"),[]);
   useEffect(()=>{if(isPublic){setLoading(false);return}void(async()=>{try{const [u,m]=await Promise.all([api.getMe(),api.getMenus()]);setUser(u);setMenus(m||[])}catch{router.push("/login")}finally{setLoading(false)}})()},[pathname,router,isPublic,locale]);
+  useEffect(()=>{
+    if(isPublic)return;
+    const refreshMenus=()=>{void api.getMenus().then(m=>setMenus(m||[])).catch(()=>{})};
+    window.addEventListener(APP_MENU_CHANGED_EVENT,refreshMenus);
+    return()=>window.removeEventListener(APP_MENU_CHANGED_EVENT,refreshMenus);
+  },[isPublic,locale]);
   useEffect(()=>{setMobileOpen(false);setMobileMoreOpen(false)},[pathname]);
 
   const apps=useMemo<AppNav[]>(()=>{
