@@ -232,7 +232,7 @@ func (s *Server) handleSetRolePermissions(w http.ResponseWriter, r *http.Request
 		writeJSONError(w, 500, "failed to start permission update")
 		return
 	}
-	defer tx.Rollback(r.Context())
+	defer func() { _ = tx.Rollback(r.Context()) }()
 	var valid int
 	if len(clean) > 0 {
 		if err = tx.QueryRow(r.Context(), `SELECT count(*) FROM permissions WHERE code=ANY($1)`, clean).Scan(&valid); err != nil || valid != len(clean) {
@@ -281,7 +281,7 @@ func (s *Server) handleSetMembershipRoles(w http.ResponseWriter, r *http.Request
 		writeJSONError(w, 500, "failed to start role assignment")
 		return
 	}
-	defer tx.Rollback(r.Context())
+	defer func() { _ = tx.Rollback(r.Context()) }()
 	var exists bool
 	if tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM memberships WHERE id=$1 AND tenant_id=$2)`, id, tenantID).Scan(&exists) != nil || !exists {
 		writeJSONError(w, 404, "membership not found")
