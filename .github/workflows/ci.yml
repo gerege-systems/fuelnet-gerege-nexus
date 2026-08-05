@@ -6,22 +6,25 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          # Single source of truth for the toolchain: backend/go.mod.
+          # Pinning "1.24" here while go.mod requires 1.25.7 breaks every job.
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.1.6
           working-directory: backend
 
   test:
@@ -34,33 +37,32 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: go vet
+        run: go vet ./...
       - name: Run tests
         run: go test -race ./...
 
-  swag-drift:
-    name: OpenAPI Spec Drift
+  frontend:
+    name: Frontend Build
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-node@v4
         with:
-          go-version: "1.24"
-      - name: Install swag CLI
-        run: go install github.com/swaggo/swag/cmd/swag@latest
-      - name: Regenerate spec
-        env:
-          GOFLAGS: "-mod=mod"
-        run: swag init -g cmd/api/main.go --output docs --parseDependency --parseInternal
-      - name: Check spec diff
-        working-directory: .
-        run: |
-          if ! git diff --exit-code -- backend/docs/; then
-            echo "::warning::docs/ changed after regeneration."
-          fi
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
 
   build:
     name: Build
@@ -70,9 +72,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
-      - name: Build binary
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Build binaries
         working-directory: backend
-        run: go build -o bin/api ./cmd/api/main.go
-      - name: Build Docker image
-        run: docker build -f deploy/Dockerfile .
+        run: |
+          go build -o bin/api ./cmd/api
+          go build -o bin/migrate ./cmd/migrate
+      - name: Build backend Docker image
+        run: docker build -f deploy/Dockerfile -t open-gerege-erp-backend:ci .

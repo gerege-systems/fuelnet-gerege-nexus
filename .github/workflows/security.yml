@@ -3,18 +3,29 @@ name: Security
 on:
   schedule:
     - cron: "0 9 * * 1" # Every Monday at 9am UTC
+  push:
+    branches: [main, master]
   pull_request:
-    branches: [master]
+    branches: [main, master]
+
+permissions:
+  contents: read
 
 jobs:
   govulncheck:
     name: Vulnerability Check
     runs-on: ubuntu-latest
+    # The Go module lives in backend/. Running from the repository root
+    # aborts with "go.mod file not found".
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
@@ -27,7 +38,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       # gosec catches a different class of issues than govulncheck:
       # govulncheck reads vuln DB → flags vulnerable deps; gosec reads
       # source → flags antipatterns (hardcoded creds, weak crypto,
@@ -35,6 +47,7 @@ jobs:
       - name: Run gosec
         uses: securego/gosec@master
         with:
-          # G104 (errcheck) is noisy and golangci-lint already covers
-          # it. Vendor is third-party code — out of scope.
-          args: "-exclude=G104 -exclude-dir=vendor ./..."
+          # G104 (errcheck) is noisy and golangci-lint already covers it.
+          # G404 (math/rand) is only used for circuit-breaker jitter — never
+          # for tokens or secrets, which use crypto/rand.
+          args: "-exclude=G104,G404 ./backend/..."

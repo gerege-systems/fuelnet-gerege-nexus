@@ -1,3 +1,11 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Inventory Demand Forecaster & Safety Stock Reorder Analysis.
+ */
+
 package ai
 
 import (

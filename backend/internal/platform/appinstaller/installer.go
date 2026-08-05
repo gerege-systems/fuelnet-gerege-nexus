@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type AppInstaller struct {
@@ -204,6 +204,29 @@ func (ai *AppInstaller) EnableApp(ctx context.Context, tenantID, appSlug, userID
 	})
 
 	return nil
+}
+
+// GetInstallationStatesForTenant returns every installed app for the tenant
+// mapped to whether it is currently enabled. Presence in the map means
+// "installed"; the value means "enabled".
+func (ai *AppInstaller) GetInstallationStatesForTenant(ctx context.Context, tenantID string) (map[string]bool, error) {
+	rows, err := ai.db.Query(ctx,
+		`SELECT app_id, enabled FROM app_installations WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	states := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		var enabled bool
+		if err := rows.Scan(&id, &enabled); err != nil {
+			return nil, err
+		}
+		states[id] = enabled
+	}
+	return states, rows.Err()
 }
 
 func (ai *AppInstaller) GetEnabledAppIDsForTenant(ctx context.Context, tenantID string) ([]string, error) {

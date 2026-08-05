@@ -1,7 +1,9 @@
 package security
 
 import (
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -63,7 +65,7 @@ func (i *IPRateLimiter) cleanupVisitors() {
 func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := getIP(r)
+			ip := ClientIP(r)
 			l := limiter.GetLimiter(ip)
 			if !l.Allow() {
 				http.Error(w, `{"error":"too many requests: rate limit exceeded, try again later"}`, http.StatusTooManyRequests)
@@ -74,13 +76,36 @@ func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler
 	}
 }
 
-func getIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
+// ClientIP resolves the caller address used for rate limiting and audit logs.
+//
+// X-Forwarded-For / X-Real-IP are attacker-controlled unless a trusted proxy
+// rewrites them, so honouring them unconditionally lets anyone bypass the login
+// rate limiter by varying a header. They are only consulted when the deployment
+// declares TRUST_PROXY_HEADERS=true.
+func ClientIP(r *http.Request) string {
+	if trustProxyHeaders() {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if first, _, ok := strings.Cut(xff, ","); ok {
+				return strings.TrimSpace(first)
+			}
+			return strings.TrimSpace(xff)
+		}
+		if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+			return xrip
+		}
 	}
-	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
-		return xrip
+
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 	return r.RemoteAddr
+}
+
+func trustProxyHeaders() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("TRUST_PROXY_HEADERS"))) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
 }

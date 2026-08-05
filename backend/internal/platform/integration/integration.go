@@ -1,3 +1,12 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package integration provides an asynchronous Webhook Event Dispatcher and
+ * external system REST Connector Manager with HMAC-SHA256 signature signing.
+ */
+
 package integration
 
 import (
@@ -22,14 +31,14 @@ const (
 )
 
 type IntegrationConfig struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Type        string            `json:"type"` // e.g. "webhook", "government", "payment", "custom_rest"
-	TargetURL   string            `json:"target_url"`
-	SecretKey   string            `json:"secret_key,omitempty"`
-	Status      ConnectorStatus   `json:"status"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	LastPingAt  time.Time         `json:"last_ping_at"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Type       string            `json:"type"` // e.g. "webhook", "government", "payment", "custom_rest"
+	TargetURL  string            `json:"target_url"`
+	SecretKey  string            `json:"secret_key,omitempty"`
+	Status     ConnectorStatus   `json:"status"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	LastPingAt time.Time         `json:"last_ping_at"`
 }
 
 type EventPayload struct {

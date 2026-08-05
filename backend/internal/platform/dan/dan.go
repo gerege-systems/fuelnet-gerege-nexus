@@ -1,3 +1,12 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package dan provides integration with Gerege Systems DAN SSO Gateway (dan.gerege.mn)
+ * for citizen session verification and identity resolution.
+ */
+
 package dan
 
 import (
@@ -7,6 +16,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
 )
 
 type DANProfile struct {
@@ -33,7 +44,7 @@ func NewDANService() *DANService {
 	if endpoint == "" {
 		endpoint = "https://dan.gerege.mn/api/v1"
 	}
-	mock := os.Getenv("DAN_MOCK_MODE") != "false"
+	mock := config.MockEnabled("DAN_MOCK_MODE")
 	apiKey := os.Getenv("DAN_API_KEY")
 
 	return &DANService{

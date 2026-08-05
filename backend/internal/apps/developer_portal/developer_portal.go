@@ -1,12 +1,20 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package developer_portal implements Developer Apps & OAuth2 SSO Client Portal Go module (io.example.developer_portal).
+ */
+
 package developer_portal
 
 import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/go-chi/chi/v5"
 )
 
 type DeveloperPortalModule struct {

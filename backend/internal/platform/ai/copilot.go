@@ -1,3 +1,12 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package ai provides Gemini AI Copilot natural language ERP assistant
+ * and AI inventory demand forecasting services.
+ */
+
 package ai
 
 import (

@@ -1,3 +1,11 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package billing implements Public Billing & e-Barimt tax receipt Go module (io.example.billing).
+ */
+
 package billing
 
 import (

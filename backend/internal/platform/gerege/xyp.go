@@ -1,3 +1,12 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package gerege provides State Data Exchange Service (xyp.gerege.mn) integration
+ * for citizen civil registration and company legal entity verification.
+ */
+
 package gerege
 
 import (
@@ -6,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
 )
 
 type CitizenInfo struct {
@@ -40,7 +51,7 @@ func NewGeregeService() *GeregeService {
 	if endpoint == "" {
 		endpoint = "https://xyp.gerege.mn/api/v1"
 	}
-	mock := os.Getenv("XYP_MOCK_MODE") != "false"
+	mock := config.MockEnabled("XYP_MOCK_MODE")
 	apiKey := os.Getenv("XYP_API_KEY")
 
 	return &GeregeService{

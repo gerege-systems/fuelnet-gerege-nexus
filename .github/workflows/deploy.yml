@@ -1,43 +1,28 @@
-name: CI/CD Pipeline & Production Deployment (openerp.gerege.mn)
+name: Deploy to Production (openerp.gerege.mn)
 
+# Lint/test/build live in ci.yml — this workflow only publishes and deploys
+# an already-green commit on the release branches.
 on:
   push:
     branches: [main, master]
-  pull_request:
-    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required to push images to ghcr.io — without it the push step fails with
+  # "denied: installation not allowed to Write the repository".
+  packages: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
-  lint:
-    name: Lint & Code Analysis
+  build-and-push:
+    name: Build & Push Backend Image
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: Go Format & Vet
-        run: |
-          cd backend
-          go vet ./...
-
-  test:
-    name: Unit & Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: Run Backend Unit Tests
-        run: |
-          cd backend
-          go test -v -race ./...
-
-  build-and-deploy:
-    name: Build & Deploy to openerp.gerege.mn
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,27 +36,60 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # GHCR rejects uppercase repository paths; github.repository keeps the
+      # owner's original casing.
+      - name: Compute image name
+        id: meta
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/backend" >> "$GITHUB_OUTPUT"
+
       - name: Build & Push Backend Container Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/backend:latest
-            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Deploy to Production Server (openerp.gerege.mn) via SSH
-        continue-on-error: true
-        uses: appleboy/ssh-action@v1.0.3
+  deploy:
+    name: Deploy to openerp.gerege.mn
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    # Skip cleanly on forks/clones where deployment secrets are absent instead
+    # of failing the run.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.repository == 'gerege-systems/open-gerege-mn-erp' }}
+    steps:
+      - name: Check deployment secrets
+        id: guard
+        run: |
+          if [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ]; then
+            echo "::warning::DEPLOY_SSH_KEY is not configured — skipping remote deployment."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
         with:
           host: ${{ secrets.DEPLOY_HOST || 'openerp.gerege.mn' }}
           username: ${{ secrets.DEPLOY_USER || 'deploy' }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: IMAGE
           script: |
-            echo "::notice::Deploying latest version to openerp.gerege.mn..."
-            cd /opt/open-gerege-mn-erp || mkdir -p /opt/open-gerege-mn-erp
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-            docker pull ghcr.io/${{ github.repository }}/backend:latest
-            docker-compose up -d --remove-orphans
+            set -euo pipefail
+            APP_DIR=/opt/open-gerege-mn-erp
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker pull "$IMAGE:latest"
+            # Apply pending database migrations before swapping the API over.
+            docker run --rm --network host --env-file "$APP_DIR/.env" "$IMAGE:latest" /app/migrate up
+            docker compose up -d --remove-orphans
             docker system prune -f

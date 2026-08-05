@@ -1,0 +1,2 @@
+# Next.js static asset directory (app icons, favicons, etc.).
+# Kept in git so the production Dockerfile's `COPY /app/public` step resolves.

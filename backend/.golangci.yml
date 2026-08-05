@@ -1,0 +1,24 @@
+# golangci-lint v2 configuration.
+# Pinned so local runs and CI (golangci-lint-action@v8) agree.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - nilerr
+  exclusions:
+    rules:
+      # Table-driven tests intentionally ignore some returns.
+      - path: _test\.go
+        linters: [errcheck]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

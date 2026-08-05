@@ -1,0 +1,14 @@
+.git
+.github
+**/node_modules
+**/.next
+**/out
+**/bin
+**/tmp
+**/.DS_Store
+docs
+deploy/nginx
+*.md
+!README.md
+coverage.out
+coverage.html

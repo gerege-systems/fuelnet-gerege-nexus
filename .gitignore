@@ -8,6 +8,12 @@ vendor/
 frontend/.next/
 out/
 frontend/out/
+*.tsbuildinfo
+
+# Local environment overrides
+.env
+.env.local
+.env.*.local
 
 # OS / Editor files
 .DS_Store

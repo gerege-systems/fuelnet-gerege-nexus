@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Warehouse struct {
@@ -45,7 +45,7 @@ type StockMovement struct {
 }
 
 type Module struct {
-	db                  *pgxpool.Pool
+	db                 *pgxpool.Pool
 	allowNegativeStock bool
 }
 

@@ -26,13 +26,16 @@ func HeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// SanitizeSlug prevents path traversal attacks by requiring alphanumeric and hyphens only.
+// IsValidSlug prevents path traversal attacks by requiring lowercase
+// alphanumerics, hyphens and underscores only. Underscores are permitted
+// because catalog slugs such as "developer_portal" use them — rejecting them
+// made those apps impossible to install.
 func IsValidSlug(slug string) bool {
 	if slug == "" || len(slug) > 64 {
 		return false
 	}
 	for _, ch := range slug {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' && ch != '_' {
 			return false
 		}
 	}

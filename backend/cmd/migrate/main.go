@@ -1,3 +1,11 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Database migration runner binary for PostgreSQL migrations using Goose.
+ */
+
 package main
 
 import (
@@ -14,7 +22,7 @@ import (
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/platform_db?sslmode=disable"
+		dbURL = "postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable"
 	}
 
 	command := "up"

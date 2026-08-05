@@ -1,3 +1,12 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package eid provides integration with National Digital Identity (eidmongolia.mn & developer.sso.mn)
+ * supporting PKI, Mobile OTP, Bank SSO, and Biometric authentication.
+ */
+
 package eid
 
 import (
@@ -11,6 +20,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
 )
 
 // AuthMethod represents official E-ID Mongolia authentication channels
@@ -25,17 +36,17 @@ const (
 
 // EIDIdentity matches official DAN / E-ID Mongolia user profile schema
 type EIDIdentity struct {
-	CivilID        string     `json:"civil_id"`        // Иргэний бүртгэлийн дугаар
-	RegNumber      string     `json:"reg_number"`      // Регистрийн дугаар (e.g. AA90010111)
-	FirstName      string     `json:"first_name"`      // Өөрийн нэр
-	LastName       string     `json:"last_name"`       // Эцэг/Эхийн нэр
-	FamilyName     string     `json:"family_name"`     // Ургийн овог
-	Gender         string     `json:"gender"`          // Хүйс
-	Email          string     `json:"email"`           // И-мэйл хаяг
-	Phone          string     `json:"phone"`           // Утасны дугаар
-	AuthMethod     AuthMethod `json:"auth_method"`     // Танилт хийсэн арга
-	SignatureHash  string     `json:"signature_hash"`  // Тоон гарын үсгийн хеш
-	VerifiedStatus bool       `json:"verified_status"` // Төрийн сангийн баталгаажуулалт
+	CivilID         string     `json:"civil_id"`        // Иргэний бүртгэлийн дугаар
+	RegNumber       string     `json:"reg_number"`      // Регистрийн дугаар (e.g. AA90010111)
+	FirstName       string     `json:"first_name"`      // Өөрийн нэр
+	LastName        string     `json:"last_name"`       // Эцэг/Эхийн нэр
+	FamilyName      string     `json:"family_name"`     // Ургийн овог
+	Gender          string     `json:"gender"`          // Хүйс
+	Email           string     `json:"email"`           // И-мэйл хаяг
+	Phone           string     `json:"phone"`           // Утасны дугаар
+	AuthMethod      AuthMethod `json:"auth_method"`     // Танилт хийсэн арга
+	SignatureHash   string     `json:"signature_hash"`  // Тоон гарын үсгийн хеш
+	VerifiedStatus  bool       `json:"verified_status"` // Төрийн сангийн баталгаажуулалт
 	AuthenticatedAt time.Time  `json:"authenticated_at"`
 }
 
@@ -56,7 +67,7 @@ type EIDService struct {
 }
 
 func NewEIDService() *EIDService {
-	mock := os.Getenv("EID_MOCK_MODE") != "false"
+	mock := config.MockEnabled("EID_MOCK_MODE")
 	clientID := os.Getenv("EID_CLIENT_ID")
 	if clientID == "" {
 		clientID = "gerege-open-erp-client"
@@ -106,17 +117,17 @@ func (s *EIDService) ExchangeCode(ctx context.Context, code, redirectURI string)
 
 	if s.mockMode {
 		return &EIDIdentity{
-			CivilID:        "CID-99887766",
-			RegNumber:      "AA90010111",
-			FirstName:      "Болд",
-			LastName:       "Бат",
-			FamilyName:     "Боржигон",
-			Gender:         "MALE",
-			Email:          "bat.bold@eidmongolia.mn",
-			Phone:          "99112233",
-			AuthMethod:     AuthMethodPKISignature,
-			SignatureHash:  "sha256_mock_pki_signature_eidmongolia",
-			VerifiedStatus: true,
+			CivilID:         "CID-99887766",
+			RegNumber:       "AA90010111",
+			FirstName:       "Болд",
+			LastName:        "Бат",
+			FamilyName:      "Боржигон",
+			Gender:          "MALE",
+			Email:           "bat.bold@eidmongolia.mn",
+			Phone:           "99112233",
+			AuthMethod:      AuthMethodPKISignature,
+			SignatureHash:   "sha256_mock_pki_signature_eidmongolia",
+			VerifiedStatus:  true,
 			AuthenticatedAt: time.Now(),
 		}, nil
 	}
@@ -170,17 +181,17 @@ func (s *EIDService) AuthenticateWithMethod(ctx context.Context, regNumber, otpC
 
 	if s.mockMode {
 		return &EIDIdentity{
-			CivilID:        "CID-" + regNumber,
-			RegNumber:      strings.ToUpper(regNumber),
-			FirstName:      "Баталгаажсан",
-			LastName:       "Иргэн",
-			FamilyName:     "Монгол",
-			Gender:         "MALE",
-			Email:          strings.ToLower(regNumber) + "@eidmongolia.mn",
-			Phone:          "99001122",
-			AuthMethod:     method,
-			SignatureHash:  "pki_signed_token_" + regNumber,
-			VerifiedStatus: true,
+			CivilID:         "CID-" + regNumber,
+			RegNumber:       strings.ToUpper(regNumber),
+			FirstName:       "Баталгаажсан",
+			LastName:        "Иргэн",
+			FamilyName:      "Монгол",
+			Gender:          "MALE",
+			Email:           strings.ToLower(regNumber) + "@eidmongolia.mn",
+			Phone:           "99001122",
+			AuthMethod:      method,
+			SignatureHash:   "pki_signed_token_" + regNumber,
+			VerifiedStatus:  true,
 			AuthenticatedAt: time.Now(),
 		}, nil
 	}
@@ -217,14 +228,14 @@ func (s *EIDService) fetchUserInfo(ctx context.Context, accessToken string) (*EI
 	}
 
 	return &EIDIdentity{
-		CivilID:        raw.CivilID,
-		RegNumber:      raw.RegNum,
-		FirstName:      raw.GivenName,
-		LastName:       raw.Family,
-		Email:          raw.Email,
-		Phone:          raw.Phone,
-		AuthMethod:     AuthMethodPKISignature,
-		VerifiedStatus: true,
+		CivilID:         raw.CivilID,
+		RegNumber:       raw.RegNum,
+		FirstName:       raw.GivenName,
+		LastName:        raw.Family,
+		Email:           raw.Email,
+		Phone:           raw.Phone,
+		AuthMethod:      AuthMethodPKISignature,
+		VerifiedStatus:  true,
 		AuthenticatedAt: time.Now(),
 	}, nil
 }

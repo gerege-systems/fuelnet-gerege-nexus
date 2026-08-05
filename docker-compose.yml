@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,7 +5,8 @@ services:
     environment:
       POSTGRES_DB: platform_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      # Matches .env.example and the Makefile DATABASE_URL default.
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
@@ -30,28 +29,59 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot goose migration runner. Without this the API starts against an
+  # empty database and every query fails with "relation does not exist".
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: platform_migrate
+    command: ["/app/migrate", "up"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/platform_db?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: deploy/Dockerfile
     container_name: platform_backend
     environment:
-      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/platform_db?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/platform_db?sslmode=disable
       PORT: 8080
+      ENVIRONMENT: development
+      ALLOWED_ORIGINS: http://localhost:3000
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Next.js inlines NEXT_PUBLIC_* at build time — passing it only as a
+        # runtime env var leaves the bundle pointing at the default URL.
+        NEXT_PUBLIC_API_URL: http://localhost:8080/api/v1
     container_name: platform_frontend
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080/api/v1
     ports:
       - "3000:3000"
     depends_on:

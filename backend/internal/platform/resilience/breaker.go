@@ -13,12 +13,12 @@ var ErrServiceUnavailable = errors.New("circuit breaker: service unavailable / t
 // CircuitBreaker implements a Google SRE style adaptive circuit breaker.
 // Requests are rejected with a probability based on (requests - K * accepts) / (requests + 1).
 type CircuitBreaker struct {
-	mu           sync.Mutex
-	k            float64
-	window       time.Duration
-	buckets      []bucket
+	mu             sync.Mutex
+	k              float64
+	window         time.Duration
+	buckets        []bucket
 	bucketDuration time.Duration
-	lastTime     time.Time
+	lastTime       time.Time
 }
 
 type bucket struct {

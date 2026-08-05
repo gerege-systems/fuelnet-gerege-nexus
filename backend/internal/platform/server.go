@@ -1,16 +1,24 @@
+/*
+ * Gerege Template Platform
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package platform provides the core HTTP Server orchestrator, routing table,
+ * authentication middleware, and app installer wiring.
+ */
+
 package platform
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/developer_portal"
@@ -22,6 +30,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
@@ -33,6 +42,11 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 )
 
@@ -40,6 +54,7 @@ type Server struct {
 	db             *pgxpool.Pool
 	installer      *appinstaller.AppInstaller
 	router         *chi.Mux
+	sessions       *auth.SessionStore
 	loginLimiter   *security.IPRateLimiter
 	asyncMailer    *mailer.AsyncOTPMailer
 	copilotSvc     *ai.CopilotService
@@ -52,6 +67,9 @@ type Server struct {
 	billingMod     *billing.BillingModule
 	documentsMod   *documents.DocumentsModule
 	devPortalMod   *developer_portal.DeveloperPortalModule
+	contactsMod    *contacts.Module
+	productsMod    *products.Module
+	inventoryMod   *inventory.Module
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -84,10 +102,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 
 	installer := appinstaller.NewAppInstaller(db, catalog, "1.0.0")
 
-	// Instantiate compile-time Go modules
-	contacts.New(db)
-	products.New(db)
-	inventory.New(db, false) // false = prevent negative stock
+	// Instantiate compile-time Go modules once. Each constructor registers the
+	// module in the global app registry; calling them twice (here and again in
+	// registerAppModuleRoutes) built two instances per app.
+	contactsMod := contacts.New(db)
+	productsMod := products.New(db)
+	inventoryMod := inventory.New(db, false) // false = prevent negative stock
 	billingMod := billing.New(db)
 	documentsMod := documents.New(db)
 
@@ -102,6 +122,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		db:             db,
 		installer:      installer,
 		router:         chi.NewRouter(),
+		sessions:       auth.NewSessionStore(db, auth.DefaultSessionTTL),
 		loginLimiter:   security.NewIPRateLimiter(rate.Limit(5.0/60.0), 5), // 5 logins per minute
 		asyncMailer:    asyncMailer,
 		copilotSvc:     ai.NewCopilotService(db),
@@ -114,6 +135,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		billingMod:     billingMod,
 		documentsMod:   documentsMod,
 		devPortalMod:   devPortalMod,
+		contactsMod:    contactsMod,
+		productsMod:    productsMod,
+		inventoryMod:   inventoryMod,
 	}
 
 	s.setupRoutes()
@@ -186,9 +210,10 @@ func (s *Server) setupRoutes() {
 			pr.Post("/xyp/citizen", s.handleXYPCitizenQuery)
 			pr.Post("/xyp/company", s.handleXYPCompanyQuery)
 
-			// External Integrations Manager
-			pr.Get("/integrations", s.handleListIntegrations)
-			pr.Post("/integrations", s.handleRegisterIntegration)
+			// External Integrations Manager (admin-only: a connector target URL
+			// makes the server issue arbitrary outbound requests)
+			pr.With(s.requireAdmin).Get("/integrations", s.handleListIntegrations)
+			pr.With(s.requireAdmin).Post("/integrations", s.handleRegisterIntegration)
 
 			// Billing App (io.example.billing)
 			pr.Get("/billing/invoices", s.handleListInvoices)
@@ -201,13 +226,19 @@ func (s *Server) setupRoutes() {
 			// Developer Portal & OAuth2 SSO App (io.example.developer_portal)
 			s.devPortalMod.RegisterRoutes(pr)
 
-			// Store
+			// Store — reads are open to any tenant member, mutations are
+			// tenant-administrator only. Previously every authenticated user
+			// could install, enable or disable apps for the whole tenant.
 			pr.Get("/store/apps", s.handleListStoreApps)
 			pr.Get("/store/apps/{slug}", s.handleGetStoreApp)
 			pr.Get("/installed-apps", s.handleListInstalledApps)
-			pr.Post("/store/apps/{slug}/install", s.handleInstallApp)
-			pr.Post("/store/apps/{slug}/enable", s.handleEnableApp)
-			pr.Post("/store/apps/{slug}/disable", s.handleDisableApp)
+
+			pr.Group(func(ar chi.Router) {
+				ar.Use(s.requireAdmin)
+				ar.Post("/store/apps/{slug}/install", s.handleInstallApp)
+				ar.Post("/store/apps/{slug}/enable", s.handleEnableApp)
+				ar.Post("/store/apps/{slug}/disable", s.handleDisableApp)
+			})
 		})
 	})
 
@@ -216,52 +247,46 @@ func (s *Server) setupRoutes() {
 }
 
 func (s *Server) registerAppModuleRoutes() {
-	contactsMod, _ := contacts.New(s.db), true
-	productsMod, _ := products.New(s.db), true
-	inventoryMod, _ := inventory.New(s.db, false), true
-
-	contactsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.contacts"))
-	productsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.products"))
-	inventoryMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.inventory"))
+	s.contactsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.contacts"))
+	s.productsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.products"))
+	s.inventoryMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.inventory"))
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Cookie or Authorization header
-		tokenStr := ""
-		if cookie, err := r.Cookie("session_token"); err == nil {
-			tokenStr = cookie.Value
-		} else if header := r.Header.Get("Authorization"); len(header) > 7 && header[:7] == "Bearer " {
-			tokenStr = header[7:]
-		}
-
-		if tokenStr == "" {
+		token := auth.TokenFromRequest(r)
+		if token == "" {
 			http.Error(w, `{"error":"unauthorized: missing session token"}`, http.StatusUnauthorized)
 			return
 		}
 
-		// Simple session token format: userId:tenantId:isAdmin
-		var userID, tenantID string
-		var isAdmin bool
-		err := s.db.QueryRow(r.Context(),
-			`SELECT u.id, m.tenant_id, u.is_admin 
-			 FROM users u 
-			 JOIN memberships m ON m.user_id = u.id 
-			 WHERE u.id::text = $1 LIMIT 1`, tokenStr).Scan(&userID, &tenantID, &isAdmin)
-
+		claims, err := s.sessions.Resolve(r.Context(), token)
 		if err != nil {
-			http.Error(w, `{"error":"unauthorized: invalid session"}`, http.StatusUnauthorized)
+			http.Error(w, `{"error":"unauthorized: invalid or expired session"}`, http.StatusUnauthorized)
 			return
 		}
 
-		ctx := auth.WithUserContext(r.Context(), auth.UserClaims{
-			UserID:   userID,
-			TenantID: tenantID,
-			IsAdmin:  isAdmin,
-		})
-		ctx = tenant.WithTenantID(ctx, tenantID)
+		ctx := auth.WithUserContext(r.Context(), claims)
+		ctx = tenant.WithTenantID(ctx, claims.TenantID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// requireAdmin gates tenant-administrative endpoints. It must be layered after
+// authMiddleware.
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, err := auth.UserFromContext(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		if !claims.IsAdmin {
+			http.Error(w, `{"error":"forbidden: tenant administrator role required"}`, http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -315,22 +340,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set secure HTTP-only session cookie
-	isProd := os.Getenv("ENVIRONMENT") == "production"
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    userID,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isProd,
-		SameSite: http.SameSiteStrictMode,
-	})
+	token, expiresAt, err := s.issueSession(r, userID, tenantID, "password")
+	if err != nil {
+		http.Error(w, `{"error":"failed to establish session"}`, http.StatusInternalServerError)
+		return
+	}
+	auth.SetSessionCookie(w, token, expiresAt)
 
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{"email": req.Email})
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token": userID,
+		"token":      token,
+		"expires_at": expiresAt,
 		"user": map[string]any{
 			"id":        userID,
 			"tenant_id": tenantID,
@@ -342,18 +364,65 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	isProd := os.Getenv("ENVIRONMENT") == "production"
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   isProd,
-		SameSite: http.SameSiteStrictMode,
-	})
+	// Logout previously only cleared the cookie; the token stayed valid
+	// forever for anyone who had captured it.
+	if token := auth.TokenFromRequest(r); token != "" {
+		if err := s.sessions.Revoke(r.Context(), token); err != nil {
+			slog.Error("failed to revoke session", "error", err)
+		}
+	}
+
+	auth.ClearSessionCookie(w)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "logged_out"})
+}
+
+// issueSession creates a persisted session bound to the caller's IP and agent.
+func (s *Server) issueSession(r *http.Request, userID, tenantID, method string) (string, time.Time, error) {
+	return s.sessions.Create(r.Context(), userID, tenantID, method,
+		r.UserAgent(), security.ClientIP(r))
+}
+
+// resolveNationalIdentityUser maps a verified national identity (E-ID / DAN)
+// onto a local ERP user.
+//
+// The previous implementation ran `SELECT id FROM users LIMIT 1` and granted
+// is_admin unconditionally, i.e. any successful gateway response logged the
+// caller in as an arbitrary — in practice the seeded admin — account.
+func (s *Server) resolveNationalIdentityUser(ctx context.Context, email, regNumber string) (userID, tenantID string, err error) {
+	if email != "" {
+		err = s.db.QueryRow(ctx,
+			`SELECT u.id::text, m.tenant_id::text
+			   FROM users u
+			   JOIN memberships m ON m.user_id = u.id
+			  WHERE lower(u.email) = lower($1)
+			  LIMIT 1`, email).Scan(&userID, &tenantID)
+		if err == nil {
+			return userID, tenantID, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", err
+		}
+	}
+
+	if config.IsProduction() {
+		return "", "", fmt.Errorf("no ERP user is linked to national identity %s", regNumber)
+	}
+
+	// Development convenience only: fall back to the seeded demo account so
+	// the documented mock login flow keeps working locally.
+	err = s.db.QueryRow(ctx,
+		`SELECT u.id::text, m.tenant_id::text
+		   FROM users u
+		   JOIN memberships m ON m.user_id = u.id
+		  ORDER BY u.created_at
+		  LIMIT 1`).Scan(&userID, &tenantID)
+	if err != nil {
+		return "", "", fmt.Errorf("no ERP user available for national identity login: %w", err)
+	}
+	slog.Warn("national identity login fell back to the demo account",
+		"reg_number", regNumber, "email", email)
+	return userID, tenantID, nil
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -400,10 +469,13 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := tenant.FromContext(r.Context())
 	catalog := s.installer.GetCatalog()
 
-	enabledIDs, _ := s.installer.GetEnabledAppIDsForTenant(r.Context(), tenantID)
-	enabledMap := make(map[string]bool)
-	for _, id := range enabledIDs {
-		enabledMap[id] = true
+	// "installed" and "enabled" are distinct states: an app can be installed
+	// and then disabled. Deriving both from the enabled-only query reported
+	// disabled apps as never installed, so the UI offered "Install" again.
+	installedStates, err := s.installer.GetInstallationStatesForTenant(r.Context(), tenantID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to load installed apps")
+		return
 	}
 
 	type StoreAppResponse struct {
@@ -414,10 +486,11 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 
 	res := make([]StoreAppResponse, 0, len(catalog))
 	for _, app := range catalog {
+		state, installed := installedStates[app.ID]
 		res = append(res, StoreAppResponse{
 			CatalogApp: app,
-			Installed:  enabledMap[app.ID],
-			Enabled:    enabledMap[app.ID],
+			Installed:  installed,
+			Enabled:    state,
 		})
 	}
 
@@ -496,7 +569,7 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.InstallApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -518,7 +591,7 @@ func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.DisableApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -540,7 +613,7 @@ func (s *Server) handleEnableApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.EnableApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -568,7 +641,7 @@ func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 		TenantID: tenantID,
 	})
 	if err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -617,47 +690,48 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// err may be nil while identity is nil — calling err.Error() unguarded
+	// panicked the request goroutine.
 	if err != nil || identity == nil {
-		http.Error(w, `{"error":"E-ID verification failed: `+err.Error()+`"}`, http.StatusUnauthorized)
+		msg := "E-ID verification failed"
+		if err != nil {
+			msg = "E-ID verification failed: " + err.Error()
+		}
+		writeJSONError(w, http.StatusUnauthorized, msg)
 		return
 	}
 
-	// Fetch demo tenant & admin user for login session mapping
-	var userID, tenantID string
-	_ = s.db.QueryRow(r.Context(), `SELECT id FROM users LIMIT 1`).Scan(&userID)
-	_ = s.db.QueryRow(r.Context(), `SELECT id FROM tenants LIMIT 1`).Scan(&tenantID)
-
-	if userID == "" {
-		userID = "00000000-0000-0000-0000-000000000002"
-		tenantID = "00000000-0000-0000-0000-000000000001"
+	userID, tenantID, err := s.resolveNationalIdentityUser(r.Context(), identity.Email, identity.RegNumber)
+	if err != nil {
+		writeJSONError(w, http.StatusForbidden, err.Error())
+		return
 	}
 
-	// Set secure session cookie
-	isProd := os.Getenv("ENVIRONMENT") == "production"
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    userID,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isProd,
-		SameSite: http.SameSiteStrictMode,
-	})
+	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to establish session")
+		return
+	}
+	auth.SetSessionCookie(w, token, expiresAt)
 
 	audit.Record(r.Context(), tenantID, userID, "auth.eid_login_success", "eid", map[string]any{
 		"reg_number": identity.RegNumber,
 		"civil_id":   identity.CivilID,
 	})
 
+	claims, _ := s.sessions.Resolve(r.Context(), token)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token":    userID,
-		"identity": identity,
+		"token":      token,
+		"expires_at": expiresAt,
+		"identity":   identity,
 		"user": map[string]any{
 			"id":        userID,
 			"tenant_id": tenantID,
 			"name":      identity.FirstName + " " + identity.LastName,
-			"email":     identity.Email,
-			"is_admin":  true,
+			"email":     claims.Email,
+			"is_admin":  claims.IsAdmin,
 		},
 	})
 }
@@ -685,45 +759,45 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil || profile == nil {
-		http.Error(w, `{"error":"dan.gerege.mn verification failed: `+err.Error()+`"}`, http.StatusUnauthorized)
+		msg := "dan.gerege.mn verification failed"
+		if err != nil {
+			msg = "dan.gerege.mn verification failed: " + err.Error()
+		}
+		writeJSONError(w, http.StatusUnauthorized, msg)
 		return
 	}
 
-	// Session mapping
-	var userID, tenantID string
-	_ = s.db.QueryRow(r.Context(), `SELECT id FROM users LIMIT 1`).Scan(&userID)
-	_ = s.db.QueryRow(r.Context(), `SELECT id FROM tenants LIMIT 1`).Scan(&tenantID)
-
-	if userID == "" {
-		userID = "00000000-0000-0000-0000-000000000002"
-		tenantID = "00000000-0000-0000-0000-000000000001"
+	userID, tenantID, err := s.resolveNationalIdentityUser(r.Context(), profile.Email, profile.RegNumber)
+	if err != nil {
+		writeJSONError(w, http.StatusForbidden, err.Error())
+		return
 	}
 
-	isProd := os.Getenv("ENVIRONMENT") == "production"
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    userID,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isProd,
-		SameSite: http.SameSiteStrictMode,
-	})
+	token, expiresAt, err := s.issueSession(r, userID, tenantID, "dan")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to establish session")
+		return
+	}
+	auth.SetSessionCookie(w, token, expiresAt)
 
 	audit.Record(r.Context(), tenantID, userID, "auth.dan_gerege_login_success", "dan", map[string]any{
 		"reg_number":  profile.RegNumber,
 		"dan_session": profile.DANSessionID,
 	})
 
+	claims, _ := s.sessions.Resolve(r.Context(), token)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token":       userID,
+		"token":       token,
+		"expires_at":  expiresAt,
 		"dan_profile": profile,
 		"user": map[string]any{
 			"id":        userID,
 			"tenant_id": tenantID,
 			"name":      profile.FirstName + " " + profile.LastName,
-			"email":     profile.Email,
-			"is_admin":  true,
+			"email":     claims.Email,
+			"is_admin":  claims.IsAdmin,
 		},
 	})
 }
@@ -745,7 +819,7 @@ func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 
 	info, err := s.geregeSvc.GetCitizenInfo(r.Context(), req.RegNumber)
 	if err != nil {
-		http.Error(w, `{"error":"XYP citizen query failed: `+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
 		return
 	}
 
@@ -772,7 +846,7 @@ func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
 
 	info, err := s.geregeSvc.GetCompanyInfo(r.Context(), req.CompanyReg)
 	if err != nil {
-		http.Error(w, `{"error":"XYP company query failed: `+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
 		return
 	}
 
@@ -840,7 +914,7 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 
 	inv, err := s.billingMod.CreateInvoice(r.Context(), tenantID, req.ContactName, req.Amount)
 	if err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -887,10 +961,19 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.documentsMod.CreateDocument(r.Context(), tenantID, req.Title, req.DocType)
 	if err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(doc)
+}
+
+// writeJSONError emits a JSON error body. Interpolating err.Error() straight
+// into a hand-written JSON string, as the handlers used to, produced invalid
+// JSON as soon as the message contained a quote or newline.
+func writeJSONError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
