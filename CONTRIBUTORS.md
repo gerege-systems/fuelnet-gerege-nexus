@@ -3,7 +3,7 @@
 Thank you to everyone in **Gerege Systems** and the open-source community who has contributed to **Gerege Template Platform**!
 
 ## Core Maintainers & Organization Members
-- 🏛️ **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
+- **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
   - **[@erdenebatt](https://github.com/erdenebatt)** (Erdenebat Tsenddorj - Maintainer)
   - **[@craftzbay](https://github.com/craftzbay)** (Bayarsaikhan Otgonbayar)
   - **[@BunnyMN](https://github.com/BunnyMN)**
@@ -18,8 +18,8 @@ Thank you to everyone in **Gerege Systems** and the open-source community who ha
   - **[@zzzchinguun](https://github.com/zzzchinguun)**
 
 ## AI Pair Programming Partners
-- 🤖 **Gemini AI**
-- 🧠 **Claude AI**
+- **Gemini AI**
+- **Claude AI**
 
 ## Open Source Inspirations
 - **[@snykk](https://github.com/snykk)** — [snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)

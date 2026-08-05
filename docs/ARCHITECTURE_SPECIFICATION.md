@@ -1,44 +1,63 @@
-# 🏛️ Gerege Template Platform — Архитектур ба Системийн Боломжийн Дэлгэрэнгүй Заавар (Technical Architecture Specification)
+# Архитектурын тодорхойлолт
 
-🇲🇳 **Үндэсний Хэл**: Монгол (Mongolian Default Language) | 🇬🇧 **Secondary Language**: English
+**Gerege Template Platform**-ын систем архитектур, давхаргууд ба техникийн
+шийдвэрүүд.
 
----
+<p>
+  <img src="assets/icons/flag-mn.png" width="18" height="18" alt=""> <b>Монгол</b>
+  &nbsp;·&nbsp;
+  <a href="ARCHITECTURE_SPECIFICATION_EN.md"><img src="assets/icons/flag-en.png" width="18" height="18" alt=""> English</a>
+</p>
 
-## 🇲🇳 1. Системийн Ерөнхий Архитектур ба Давуу Талууд (Mongolian)
-
-**Gerege Template Platform** нь өндөр бүтээмжтэй, Монгол улсын цахим дэд бүтэцтэй нягт холбогдох боломжтой **Modular Monolith ERP & Бизнес Аппликейшн Платформ** юм.
-
-### ⚡ Өндөр Бүтээмжтэй Модулиар Монолит Архитектур
-- **Zero-Latency Execution**: Бизнес аппликейшн модулиуд (`contacts`, `products`, `inventory`, `billing`, `documents`, `developer_portal`) нь Go хэлний `Module` контрактыг хэрэгжүүлэн нэг бинари програмд компиллогдон ажиллана.
-- **Тенант Бүрийн Апп Стор Систем**: Баазад байгаа модулиуд нь тенант бүрийн хувьд идэвхжүүлсэн эсэх нь PostgreSQL сангаас динамикаар удирлагдана (`app_installations`).
-- **DAG Хамаарал Шийдвэрлэх Модель**: Directed Acyclic Graph болон semver ашиглан модулиудын хамаарлыг алдаагүй тооцоолно.
-
-### 🛡️ Cloud-Native Resilience Engine (go-zero Inspired)
-- **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Сүлжээ болон системд алдаа гарахад ачааллыг автоматаар тусгаарлах Google SRE стандарт.
-- **Adaptive Load Shedding (`resilience/loadshedder.go`)**: Сүлжээний хэт ачааллын үед `503 Service Unavailable` буцаан системийг хамгаалах.
-- **Singleflight Coalescing (`resilience/singleflight.go`)**: Давхардсан асуулгуудыг 1 удаа ажиллуулан DB ачааллыг бууруулах.
-
-### 🇲🇳 Төрийн Мэдээлэл Солилцоо ба Танилт Нэвтрэлт
-- **ХУР Төрийн Мэдээлэл Солилцооны Систем**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээдийн мэдээлэл (`WS100201`).
-- **Төрийн ДАН & E-ID Танилт Нэвтрэлт ([`eidmongolia.mn`](https://eidmongolia.mn) & [`developer.gerege.mn`](https://developer.gerege.mn))**: Төрийн нэгдсэн ДАН танилт нэвтрэлтийн системтэй холбогдон Тоон гарын үсэг, Mobile OTP, Банкны SSO, Царай танилтаар баталгаажуулах.
-- **ORY Hydra SSO Provider (`/.well-known/openid-configuration`)**: Өөрийн бие даасан OAuth2 & OpenID Connect provider.
+[Баримт бичгийн төв рүү буцах](README.md)
 
 ---
 
-## 🇬🇧 2. System Architecture & Technical Specifications (English)
+## 1. Системийн ерөнхий архитектур
 
-### ⚡ High-Performance Modular Monolith Architecture
-- **In-Process Invocations**: Business modules implement a strict Go `Module` interface compiled directly into the binary for zero-latency execution.
-- **Tenant App Store Engine**: Per-tenant module enablement, RBAC permissions, and dynamic menus managed via PostgreSQL (`app_installations`).
+**Gerege Template Platform** нь өндөр бүтээмжтэй, Монгол Улсын цахим дэд
+бүтэцтэй нягт холбогдох боломжтой **Modular Monolith ERP & бизнес аппликейшн
+платформ** юм.
 
-### 🛡️ Cloud-Native Resilience Engine
-- **Adaptive Circuit Breaker**: Google SRE sliding-window error monitoring.
-- **Adaptive Load Shedding**: Graceful load shedding under high CPU/concurrency limits.
-- **Singleflight Coalescing**: Thundering herd and cache stampede query suppression.
+### 1.1 Өндөр бүтээмжтэй модуль монолит
+
+- **Zero-latency execution** — бизнес модулиуд (`contacts`, `products`,
+  `inventory`, `billing`, `documents`, `developer_portal`) нь Go хэлний `Module`
+  контрактыг хэрэгжүүлж, нэг бинарид компиллогдоно.
+- **Тенант бүрийн апп стор** — модуль тус бүр тенантад идэвхтэй эсэхийг
+  PostgreSQL (`app_installations`) динамикаар шийднэ.
+- **DAG хамаарал шийдвэрлэлт** — Directed Acyclic Graph ба semver ашиглан
+  модулийн хамаарлыг мөчлөг үүсгэхгүйгээр тооцоолно.
+- **Каталогийн синк** — `catalog/apps.json` цорын ганц эх сурвалж бөгөөд `apps`
+  хүснэгт ачаалал бүрт түүнээс шинэчлэгдэнэ.
+
+### 1.2 Cloud-native тэсвэрлэлт (go-zero-оос санаа авсан)
+
+- **Adaptive circuit breaker** (`resilience/breaker.go`) — Google SRE-ийн
+  гулсах цонхон дээрх алдааны харьцаагаар хүсэлтийг татгалзана.
+- **Adaptive load shedding** (`resilience/loadshedder.go`) — зэрэг ажиллах
+  хүсэлтийн тоо хэтэрвэл `503 Service Unavailable` буцаана.
+- **Singleflight coalescing** (`resilience/singleflight.go`) — давхардсан
+  асуулгыг нэгтгэж, кэш нурах үеийн ачааллыг бууруулна.
+- **Exponential backoff retry** (`resilience/retry.go`) — түр зуурын алдаанд
+  давтан оролдоно.
+
+### 1.3 Төрийн мэдээлэл солилцоо ба танилт нэвтрэлт
+
+- **ХУР систем** — иргэний бүртгэл (`WS100101`), хуулийн этгээдийн мэдээлэл
+  (`WS100201`).
+- **ДАН ба E-ID** ([`eidmongolia.mn`](https://eidmongolia.mn),
+  [`developer.gerege.mn`](https://developer.gerege.mn)) — тоон гарын үсэг, Mobile OTP,
+  банкны SSO, царай танилт.
+- **OAuth2 / OIDC provider** (`/.well-known/openid-configuration`) — платформын
+  өөрийн бие даасан танилтын сервер.
+
+> Mock горим нь зөвхөн хөгжүүлэлтийн орчинд ажиллана. `ENVIRONMENT=production`
+> үед автоматаар унтарна.
 
 ---
 
-## 🏛️ System Architecture Diagram
+## 2. Системийн бүтцийн диаграм
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -48,7 +67,7 @@
                 +-------------------------+-------------------------+
                 |                                                   |
       +-------------------+                               +-------------------+
-      | Next.js 15 Client |                               |  Go 1.24 Backend  |
+      | Next.js 15 Client |                               |  Go 1.25 Backend  |
       |   (App Router)    |                               |   (Chi Router)    |
       +-------------------+                               +-------------------+
                 |                                                   |
@@ -56,7 +75,7 @@
         |               |                                   |               |
 +---------------+ +---------------+                 +---------------+ +---------------+
 | AI Copilot UI | | E-ID / DAN    |                 | Cloud-Native  | | State Exchange|
-|  Drawer Panel | | SSO Provider  |                 | Resilience    | |  (xyp.gerege)|
+|  Drawer Panel | | SSO Provider  |                 | Resilience    | | (xyp.gerege)  |
 +---------------+ +---------------+                 +---------------+ +---------------+
                                                             |
                                                     +---------------+
@@ -67,9 +86,52 @@
 
 ---
 
-## 👥 Authors & Maintainers
+## 3. Хүсэлтийн урсгал
 
-- 🏛️ **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
-- 🎨 **[@craftzbay](https://github.com/craftzbay)**
-- 🤖 **Gemini AI**
-- 🧠 **Claude AI**
+1. **Дундын middleware** — логлолт, panic сэргээлт, load shedding, Prometheus
+   хэмжүүр, аюулгүй байдлын толгойнууд, CORS.
+2. **Танилт** — session токеныг cookie эсвэл `Authorization: Bearer` толгойгоос
+   уншиж, `sessions` хүснэгтээс шалгана. Токен нь өгөгдлийн санд SHA-256 хэш
+   хэлбэрээр хадгалагдана.
+3. **Тенантын контекст** — `tenant_id` нь Go context-д шингэж, бүх асуулга
+   түүгээр хязгаарлагдана.
+4. **Апп хаалт** — модулийн маршрут бүр `app_installations` дээрх төлөвөөр
+   шалгагдана; суулгаагүй бол `403 Forbidden`.
+5. **Модулийн handler** — бизнес логик, өгөгдлийн сангийн гүйлгээ.
+
+---
+
+## 4. Өгөгдлийн загварын үндсэн хүснэгтүүд
+
+| Хүснэгт | Зориулалт |
+| --- | --- |
+| `tenants`, `users`, `memberships` | Олон тенант, хэрэглэгчийн харьяалал |
+| `roles`, `permissions`, `role_permissions`, `membership_roles` | RBAC эрхийн загвар |
+| `sessions` | Сервер талын session токен (SHA-256 хэш) |
+| `apps`, `app_versions`, `app_installations`, `installation_events` | Апп стор ба суулгалтын түүх |
+| `contacts`, `products`, `warehouses`, `stock_levels`, `stock_movements` | Үндсэн бизнес өгөгдөл |
+| `billing_invoices`, `document_records` | Нэхэмжлэх ба цахим баримт |
+| `oauth2_clients` | OAuth2 client аппликейшнүүд |
+
+Бүх схемийн өөрчлөлт `backend/db/migrations/` доторх goose миграцаар хийгдэнэ.
+Ажиллах үед DDL гүйцэтгэхийг хориглоно.
+
+---
+
+## 5. Архитектурын шийдвэрүүд
+
+| Шийдвэр | Шалтгаан |
+| --- | --- |
+| Микросервис биш модуль монолит | Процесс доторх дуудлага нь сүлжээний хоцролтгүй; модулийн хил нь Go интерфейсээр хангагдана |
+| ORM ашиглахгүй (`pgx` + гар бичмэл SQL) | Асуулгыг тодорхой, оновчтой байлгах; далд N+1-ээс сэргийлэх |
+| Дундын схем (shared schema) олон тенант | Схем хуулбарлахгүйгээр `tenant_id`-аар тусгаарлана |
+| Каталог файл нь эх сурвалж | Апп нэмэхэд SQL гараар бичихгүй; `apps` хүснэгт автоматаар синк болно |
+| Opaque session токен | JWT-ийн цуцлах боломжгүй байдлаас зайлсхийж, шууд хүчингүй болгоно |
+
+---
+
+## 6. Хариуцагчид
+
+- **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
+- **[@craftzbay](https://github.com/craftzbay)**
+- **Gemini AI**, **Claude AI**

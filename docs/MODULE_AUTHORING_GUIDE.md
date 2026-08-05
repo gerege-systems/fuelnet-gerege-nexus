@@ -1,10 +1,16 @@
 # Module Authoring Guide
 
+<p>
+  <img src="assets/icons/flag-en.png" width="18" height="18" alt=""> <b>English</b>
+</p>
+
+[Back to the documentation hub](README.md)
+
 Welcome to the **open-gerege-mn-erp** Module Authoring Guide! This guide explains how external developers can write, register, and distribute custom business application modules for the platform.
 
 ---
 
-## 🏗️ Module Architecture Overview
+## Module architecture overview
 
 In `open-gerege-mn-erp`, business modules are written in Go as compile-time packages under `backend/internal/apps/`. 
 
@@ -24,7 +30,7 @@ type Module interface {
 
 ---
 
-## 📝 Step-by-Step: Creating a New Module
+## Step by step: creating a new module
 
 ### Step 1: Define Module Struct & Register in `appregistry`
 Create a new directory `backend/internal/apps/invoices/invoices.go`:
@@ -56,8 +62,8 @@ func (m *Module) Version() string { return "1.0.0" }
 
 func (m *Module) Dependencies() []internal.Dependency {
     return []internal.Dependency{
-        {AppID: "io.example.contacts", VersionConstraint: ">=1.0.0"},
-        {AppID: "io.example.products", VersionConstraint: ">=1.0.0"},
+        {ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
+        {ID: "io.example.products", VersionConstraint: "^1.0.0"},
     }
 }
 ```
@@ -149,5 +155,7 @@ manual SQL is required.
 
 ---
 
-## 👥 Authors
-- **Gerege Systems Development Team & Gemini AI**
+## Maintainers
+
+- **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
+- **Gemini AI**, **Claude AI**

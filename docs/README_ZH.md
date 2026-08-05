@@ -76,7 +76,7 @@
 
 - **XYP 国家信息交换系统**（`platform/gerege/xyp.go`）：公民户籍登记
   （`WS100101`）与法人主体核验（`WS100201`）。
-- **国家 E-ID 与 DAN**（[`developer.sso.mn`](https://developer.sso.mn)、
+- **国家 E-ID 与 DAN**（[`developer.gerege.mn`](https://developer.gerege.mn)、
   [`eidmongolia.mn`](https://eidmongolia.mn)）—— PKI 数字签名、手机 OTP、
   银行 SSO 与人脸生物识别。
 - **内置 OAuth2 / OIDC 提供方**

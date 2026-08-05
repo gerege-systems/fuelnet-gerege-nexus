@@ -81,7 +81,7 @@ PostgreSQL определяет, какие приложения активны 
 - **XYP — государственная система обмена данными**
   (`platform/gerege/xyp.go`): регистрация граждан (`WS100101`) и проверка
   юридических лиц (`WS100201`).
-- **Национальные E-ID и DAN** ([`developer.sso.mn`](https://developer.sso.mn),
+- **Национальные E-ID и DAN** ([`developer.gerege.mn`](https://developer.gerege.mn),
   [`eidmongolia.mn`](https://eidmongolia.mn)) — цифровая подпись PKI, мобильный
   OTP, банковский SSO и биометрия по лицу.
 - **Встроенный провайдер OAuth2 / OIDC**

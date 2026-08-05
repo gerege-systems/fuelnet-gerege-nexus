@@ -149,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **XYP State Data Exchange System ([`xyp.gerege.mn`](backend/internal/platform/gerege/xyp.go))**:
   - Official Mongolian State Data Exchange (ХУР Төрийн мэдээлэл солилцооны систем) integration service.
   - Citizen civil registration (`POST /api/v1/xyp/citizen`) & company legal entity verification (`POST /api/v1/xyp/company`).
-  - Interactive "⚡ ХУР / XYP Auto-fill" button integration on Contacts page.
+  - Interactive "ХУР / XYP Auto-fill" button integration on Contacts page.
 - **Database & Migrations**:
   - Goose SQL migrations (`00001_platform_core.sql`, `00002_app_store.sql`, `00003_business_apps.sql`).
   - Automated initial demo data seeder (`admin@example.com` / `Password123!`).

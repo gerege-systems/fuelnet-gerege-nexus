@@ -79,7 +79,7 @@ network hops or operational cost of microservices.
 
 - **XYP — State Information Exchange** (`platform/gerege/xyp.go`): citizen civil
   registration (`WS100101`) and legal entity verification (`WS100201`).
-- **National E-ID and DAN** ([`developer.sso.mn`](https://developer.sso.mn),
+- **National E-ID and DAN** ([`developer.gerege.mn`](https://developer.gerege.mn),
   [`eidmongolia.mn`](https://eidmongolia.mn)) — PKI digital signature, mobile
   OTP, bank SSO and biometric face verification.
 - **Built-in OAuth2 / OIDC provider**

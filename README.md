@@ -81,7 +81,7 @@
 
 - **ХУР — Төрийн мэдээлэл солилцооны систем** (`platform/gerege/xyp.go`):
   иргэний бүртгэл (`WS100101`), хуулийн этгээдийн баталгаажуулалт (`WS100201`).
-- **Үндэсний E-ID ба ДАН** ([`developer.sso.mn`](https://developer.sso.mn),
+- **Үндэсний E-ID ба ДАН** ([`developer.gerege.mn`](https://developer.gerege.mn),
   [`eidmongolia.mn`](https://eidmongolia.mn)) — тоон гарын үсэг (PKI), нэг
   удаагийн код (Mobile OTP), банкны суваг (Bank SSO), царай танилт (Biometric).
 - **Платформын өөрийн OAuth2 / OIDC provider**
