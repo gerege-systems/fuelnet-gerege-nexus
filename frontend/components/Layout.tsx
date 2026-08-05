@@ -229,6 +229,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </Link>
 
                 {menuTree.map((parent) => {
+                  // A root without children but with a path is a plain link;
+                  // rendering it as a group would leave it unreachable, and a
+                  // path-less entry must never reach <Link href> — Next's URL
+                  // formatter throws on undefined.
+                  if (parent.children.length === 0) {
+                    if (!parent.path) return null;
+                    return (
+                      <Link
+                        key={parent.id}
+                        href={parent.path}
+                        className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
+                          pathname.startsWith(parent.path) ? "gerege-nav-link-active font-semibold" : ""
+                        }`}
+                      >
+                        <span className="gerege-nav-icon">{iconMap[parent.icon] || <Package className="w-5 h-5" />}</span>
+                        <span>{parent.label}</span>
+                      </Link>
+                    );
+                  }
+
                   const expanded = expandedMenus.has(parent.id);
                   const active = parent.children.some((child) => child.path && pathname.startsWith(child.path));
                   return (
