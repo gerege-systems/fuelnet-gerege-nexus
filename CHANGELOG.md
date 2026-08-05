@@ -36,7 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prometheus metrics endpoint (`/metrics`) recording HTTP request rates and latency histograms (`github.com/prometheus/client_golang`).
   - OpenTelemetry tracing initialization (`SetupTracing`).
   - Async OTP Mailer queue with worker pool, retry logic, and graceful shutdown (`internal/platform/mailer`).
-- **XYP State Data Exchange System ([`xyp.gerege.mn`](backend/internal/platform/xyp))**:
+- **External System Integrations & Webhook Engine ([`internal/platform/integration`](backend/internal/platform/integration))**:
+  - Event Dispatcher & Connector Manager supporting HMAC-SHA256 signature signing, asynchronous webhooks, and third-party REST connectors.
+  - Dedicated Integration Settings Manager UI (`/settings/integrations`) with real-time status & health tracking.
+- **XYP State Data Exchange System ([`xyp.gerege.mn`](backend/internal/platform/gerege/xyp.go))**:
   - Official Mongolian State Data Exchange (ХУР Төрийн мэдээлэл солилцооны систем) integration service.
   - Citizen civil registration (`POST /api/v1/xyp/citizen`) & company legal entity verification (`POST /api/v1/xyp/company`).
   - Interactive "⚡ ХУР / XYP Auto-fill" button integration on Contacts page.
