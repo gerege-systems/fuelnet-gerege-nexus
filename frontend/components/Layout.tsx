@@ -47,7 +47,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   ],[apps,locale,t]);
   const results=query.trim()?searchIndex.filter(x=>(x.label+" "+x.app).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0,8):[];
 
-  function togglePanel(){if(window.matchMedia("(min-width:1024px)").matches){setPanelOpen(v=>{localStorage.setItem("gerege_sidebar_open",String(!v));return !v})}else setMobileOpen(v=>!v)}
+  function togglePanel(){if(window.matchMedia("(min-width:901px)").matches){setPanelOpen(v=>{localStorage.setItem("gerege_sidebar_open",String(!v));return !v})}else setMobileOpen(v=>!v)}
   async function logout(){try{await api.logout()}catch{}localStorage.removeItem("session_token");router.push("/login")}
   const brandTitle=selected?.name||(locale==="en"?"Platform":"Платформ");
 
@@ -63,41 +63,48 @@ export default function Layout({children}:{children:React.ReactNode}){
 
   return <div className="gerege-shell min-h-screen flex flex-col">
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
-      <Link href="/apps" className="w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-border)]">
+      <Link href="/apps" className="gerege-header-brand w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-border)]">
         {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
       </Link>
-      <div className={`h-full px-4 flex flex-col justify-center overflow-hidden transition-all duration-200 ${panelOpen?"w-56 border-r border-[var(--gerege-border)]":"w-0 px-0"}`}>
-        <span className="text-[11px] text-slate-500 truncate">{selected?.name||"Gerege ERP"}</span><strong className="text-[15px] text-slate-900 truncate">{brandTitle}</strong>
+      <div className={`gerege-header-context h-full flex items-center gap-3 overflow-hidden transition-all duration-200 ${panelOpen?"is-open":""}`}>
+        <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(iconMap[selected.icon]||<Package className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
+        <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">Gerege ERP</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
       </div>
-      <div className="w-16 h-full shrink-0 grid place-items-center"><button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={locale==="en"?"Toggle menu":"Цэс нээх, хаах"}><MenuIcon className="w-5 h-5"/></button></div>
+      <div className="gerege-menu-toggle w-16 h-full shrink-0 grid place-items-center"><button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={locale==="en"?"Toggle menu":"Цэс нээх, хаах"} aria-expanded={mobileOpen}><MenuIcon className="w-5 h-5"/></button></div>
       <div className="hidden lg:flex items-center gap-2 px-4 min-w-0"><span className="gerege-session-dot w-2 h-2 rounded-full shrink-0"/><strong className="text-base text-slate-800 font-semibold truncate max-w-56">{user?.tenant_name||"Demo Tenant"}</strong></div>
-      <div className="hidden md:flex flex-1 items-center justify-center min-w-0 px-5 relative">
+      <div className="gerege-header-search hidden md:flex flex-1 items-center justify-center min-w-0 px-5 relative">
         <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&results[0]){router.push(results[0].path);setQuery("")}}} placeholder={locale==="en"?"Search apps and menus...":"Апп, цэс хайх..."} className="w-full h-10 rounded-full border border-slate-200 bg-slate-100/80 pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--gerege-blue)_15%,transparent)]"/>
           {results.length>0&&<div className="absolute top-12 inset-x-0 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
         </div>
       </div>
-      <div className="hidden sm:flex pr-4 lg:pr-6"><UserMenu user={user} onLogout={logout}/></div>
+      <div className="gerege-header-user flex pr-2 sm:pr-4 lg:pr-6"><UserMenu user={user} onLogout={logout}/></div>
     </header>
 
     <div className="flex flex-1 min-h-0">
-      {mobileOpen&&<button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={()=>setMobileOpen(false)}/>}
-      <div className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 flex border-r transition-transform lg:translate-x-0 ${mobileOpen?"translate-x-0":"-translate-x-full"}`}>
-        <nav className="w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
+      {mobileOpen&&<button className="gerege-mobile-backdrop fixed inset-0 top-16 bg-slate-950/40 z-30" aria-label={locale==="en"?"Close menu":"Цэс хаах"} onClick={()=>setMobileOpen(false)}/>}
+      <div className={`gerege-sidebar top-16 bottom-0 left-0 z-40 flex overflow-hidden ${mobileOpen?"is-mobile-open":""} ${panelOpen?"is-desktop-open":""}`}>
+        <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={locale==="en"?"Platform":"Платформ"} icon={<LayoutGrid className="w-5 h-5"/>}/>
           {apps.map(app=><AppRailLink key={app.id} href={app.path} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
         </nav>
-        <aside className={`overflow-hidden transition-all duration-200 ${panelOpen||mobileOpen?"w-56":"w-0"}`}>
-          <div className="w-56 py-5"><div className="px-4 mb-3 text-xs font-bold uppercase tracking-wider text-slate-700 truncate">{brandTitle}</div><nav className="space-y-1 px-2">
+        <aside className="gerege-menu-panel overflow-hidden">
+          <div className="w-56 py-4"><nav className="space-y-1 px-2">
             {selected?<AppMenuGroups menus={selected.menus} pathname={pathname}/>:platformMenus}
           </nav></div>
         </aside>
       </div>
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
-    </div><AICopilot/>
+      <main className="gerege-main flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+    </div>
+    <nav className="gerege-mobile-tabs" aria-label={locale==="en"?"Apps":"Аппууд"}>
+      <MobileAppTab href="/apps" active={platformActive} label={locale==="en"?"Platform":"Платформ"} icon={<LayoutGrid className="w-5 h-5"/>}/>
+      {apps.map(app=><MobileAppTab key={app.id} href={app.path} active={selected?.id===app.id} label={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+    </nav>
+    <AICopilot/>
   </div>;
 }
 
 function AppRailLink({href,active,title,icon}:{href:string;active:boolean;title:string;icon:React.ReactNode}){return <Link href={href} title={title} aria-label={title} className={`w-11 h-11 rounded-xl grid place-items-center transition ${active?"bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] shadow-sm":"text-slate-500 hover:bg-[var(--gerege-surface-2)] hover:text-slate-800"}`}>{icon}</Link>}
+function MobileAppTab({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-label={label} aria-current={active?"page":undefined} className={`gerege-mobile-tab ${active?"is-active":""}`}><span>{icon}</span><small>{label}</small></Link>}
 function NavLink({href,active,icon,label}:{href:string;active:boolean;icon:React.ReactNode;label:string}){return <Link href={href} className={`gerege-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition ${active?"gerege-nav-link-active font-semibold":""}`}><span className="gerege-nav-icon">{icon}</span><span>{label}</span></Link>}
 function MenuGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="mb-6"><h3 className="px-3 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">{title}</h3><div className="space-y-1">{children}</div></section>}
 function AppMenuGroups({menus,pathname}:{menus:MenuItem[];pathname:string}){const roots=menus.filter(item=>!item.parent_id).sort((a,b)=>a.order-b.order);return <>{roots.map(root=><MenuGroup key={root.id} title={root.label}>{menus.filter(item=>item.parent_id===root.id&&item.path).sort((a,b)=>a.order-b.order).map(item=><NavLink key={item.id} href={item.path!} active={pathname.startsWith(item.path!)} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
