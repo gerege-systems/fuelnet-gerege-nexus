@@ -66,7 +66,7 @@ export default function Layout({children}:{children:React.ReactNode}){
       <Link href="/apps" className="w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-border)]">
         {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
       </Link>
-      <div className={`h-full px-4 flex items-center gap-3 overflow-hidden transition-all duration-200 ${panelOpen?"w-56 border-r border-[var(--gerege-border)]":"w-0 px-0"}`}>
+      <div className={`h-full flex items-center gap-3 overflow-hidden transition-all duration-200 ${mobileOpen?"w-56 px-4 border-r border-[var(--gerege-border)]":"w-0 px-0"} ${panelOpen?"lg:w-56 lg:px-4 lg:border-r":"lg:w-0 lg:px-0 lg:border-r-0"}`}>
         <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(iconMap[selected.icon]||<Package className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
         <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">Gerege ERP</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
       </div>
@@ -82,18 +82,18 @@ export default function Layout({children}:{children:React.ReactNode}){
 
     <div className="flex flex-1 min-h-0">
       {mobileOpen&&<button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={()=>setMobileOpen(false)}/>}
-      <div className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 flex transition-transform lg:translate-x-0 ${mobileOpen?"translate-x-0":"-translate-x-full"}`}>
-        <nav className="w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
+      <div className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 flex overflow-hidden transition-[width] duration-200 ${mobileOpen?"w-72":"w-16"} ${panelOpen?"lg:w-72":"lg:w-16"}`}>
+        <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={locale==="en"?"Platform":"Платформ"} icon={<LayoutGrid className="w-5 h-5"/>}/>
           {apps.map(app=><AppRailLink key={app.id} href={app.path} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
         </nav>
-        <aside className={`overflow-hidden transition-all duration-200 ${panelOpen||mobileOpen?"w-56 border-r border-[var(--gerege-border)]":"w-0"}`}>
+        <aside className={`overflow-hidden transition-all duration-200 ${mobileOpen?"w-56 border-r border-[var(--gerege-border)]":"w-0 border-r-0"} ${panelOpen?"lg:w-56 lg:border-r":"lg:w-0 lg:border-r-0"}`}>
           <div className="w-56 py-4"><nav className="space-y-1 px-2">
             {selected?<AppMenuGroups menus={selected.menus} pathname={pathname}/>:platformMenus}
           </nav></div>
         </aside>
       </div>
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+      <main className="flex-1 ml-16 lg:ml-0 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
     </div><AICopilot/>
   </div>;
 }
