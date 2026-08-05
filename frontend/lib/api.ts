@@ -34,6 +34,18 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+export const APP_MENU_CHANGED_EVENT = "gerege:app-menu-changed";
+
+async function mutateApp(url: string) {
+  const result = await fetcher<{ status: string; app: string }>(url, { method: "POST" });
+  // Layout lives above the App Store pages, so a route refresh does not
+  // recreate it. Notify the mounted shell to refetch tenant menus immediately.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(APP_MENU_CHANGED_EVENT, { detail: result }));
+  }
+  return result;
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -105,11 +117,11 @@ export const api = {
       }>
     >("/installed-apps"),
 
-  installApp: (slug: string) => fetcher<{ status: string; app: string }>(`/store/apps/${slug}/install`, { method: "POST" }),
+  installApp: (slug: string) => mutateApp(`/store/apps/${slug}/install`),
 
-  enableApp: (slug: string) => fetcher<{ status: string; app: string }>(`/store/apps/${slug}/enable`, { method: "POST" }),
+  enableApp: (slug: string) => mutateApp(`/store/apps/${slug}/enable`),
 
-  disableApp: (slug: string) => fetcher<{ status: string; app: string }>(`/store/apps/${slug}/disable`, { method: "POST" }),
+  disableApp: (slug: string) => mutateApp(`/store/apps/${slug}/disable`),
 
   // Contacts App
   getContacts: () =>
