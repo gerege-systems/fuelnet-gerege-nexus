@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type ColorMode = "light" | "dark" | "system";
-export type Accent = "cobalt" | "teal" | "violet" | "emerald";
+export type Accent = "neutral" | "cobalt" | "teal" | "violet" | "emerald";
 export type Density = "comfortable" | "compact";
 export type DesignTheme = "original" | "gerege";
 

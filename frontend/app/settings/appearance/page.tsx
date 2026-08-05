@@ -13,6 +13,7 @@ const modes: { value: ColorMode; label: { mn: string; en: string }; icon: typeof
 ];
 
 const accents: { value: Accent; label: { mn: string; en: string }; color: string }[] = [
+  { value: "neutral", label: { mn: "Цагаан саарал", en: "White & grey" }, color: "#64748b" },
   { value: "cobalt", label: { mn: "Gerege cobalt", en: "Gerege cobalt" }, color: "#0064e1" },
   { value: "teal", label: { mn: "Хөх ногоон", en: "Teal" }, color: "#008b99" },
   { value: "violet", label: { mn: "Нил ягаан", en: "Violet" }, color: "#7656d6" },

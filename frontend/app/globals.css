@@ -43,6 +43,10 @@
     --gerege-blue: #008b99; --gerege-blue-hover: #007582; --gerege-blue-soft: #e5f6f7;
     --gerege-bg: #f1f8f8; --gerege-chrome: #e8f5f5; --gerege-surface-2: #edf7f7; --gerege-border: #d7e9e9;
   }
+  html[data-accent="neutral"] {
+    --gerege-blue: #475569; --gerege-blue-hover: #334155; --gerege-blue-soft: #f1f5f9;
+    --gerege-bg: #f8fafc; --gerege-chrome: #ffffff; --gerege-surface-2: #f1f5f9; --gerege-border: #e2e8f0;
+  }
   html[data-accent="violet"] {
     --gerege-blue: #7656d6; --gerege-blue-hover: #6343bf; --gerege-blue-soft: #f0ebff;
     --gerege-bg: #f6f3fb; --gerege-chrome: #f0ecfa; --gerege-surface-2: #f3effa; --gerege-border: #e3dcf1;
@@ -52,6 +56,7 @@
     --gerege-bg: #f1f8f5; --gerege-chrome: #e9f5ef; --gerege-surface-2: #eef7f2; --gerege-border: #d8e9df;
   }
   html[data-theme="dark"][data-accent="teal"] { --gerege-blue-soft: #12383d; --gerege-bg: #0f1c20; --gerege-chrome: #14282d; --gerege-surface-2: #193238; --gerege-border: #29454a; }
+  html[data-theme="dark"][data-accent="neutral"] { --gerege-blue: #cbd5e1; --gerege-blue-hover: #e2e8f0; --gerege-blue-soft: #273244; --gerege-bg: #111827; --gerege-chrome: #18212f; --gerege-surface-2: #222d3d; --gerege-border: #334155; }
   html[data-theme="dark"][data-accent="violet"] { --gerege-blue-soft: #2b2348; --gerege-bg: #171421; --gerege-chrome: #211b30; --gerege-surface-2: #292239; --gerege-border: #3b3250; }
   html[data-theme="dark"][data-accent="emerald"] { --gerege-blue-soft: #173a2d; --gerege-bg: #101c18; --gerege-chrome: #162820; --gerege-surface-2: #1c3229; --gerege-border: #2d473d; }
 
@@ -104,6 +109,21 @@
   .gerege-session-dot {
     background: var(--gerege-success);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--gerege-success) 16%, transparent);
+  }
+  @media (min-width: 1024px) {
+    .gerege-sidebar.is-collapsed .sidebar-section-title,
+    .gerege-sidebar.is-collapsed .sidebar-footer,
+    .gerege-sidebar.is-collapsed .gerege-submenu,
+    .gerege-sidebar.is-collapsed .gerege-nav-link > span:not(.gerege-nav-icon),
+    .gerege-sidebar.is-collapsed .gerege-nav-link > svg:last-child:not(:first-child) { display: none; }
+    .gerege-sidebar.is-collapsed nav { padding-left: 0.5rem; padding-right: 0.5rem; }
+    .gerege-sidebar.is-collapsed .gerege-nav-link {
+      justify-content: center;
+      gap: 0;
+      padding-left: 0.625rem;
+      padding-right: 0.625rem;
+    }
+    .gerege-sidebar.is-collapsed .gerege-menu-group { width: 100%; }
   }
 }
 

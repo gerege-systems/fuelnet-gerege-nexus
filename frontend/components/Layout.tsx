@@ -169,9 +169,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="gerege-shell min-h-screen flex flex-col">
       {/* Top Navbar */}
       <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
-        <Link href="/apps" className="w-[calc(100%-4rem)] sm:w-60 h-full px-4 flex items-center gap-2.5 min-w-0 shrink-0 border-r border-[var(--gerege-border)] group">
+        <Link href="/apps" className={`w-[calc(100%-4rem)] sm:w-60 h-full px-4 flex items-center gap-2.5 min-w-0 shrink-0 border-r border-[var(--gerege-border)] group transition-all duration-200 ${desktopSidebarOpen ? "lg:w-60" : "lg:w-16 lg:justify-center lg:px-2"}`}>
           {theme.design === "gerege" ? <img src={brandLogo.src} width={36} height={36} alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm shrink-0" /> : <span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center shrink-0"><Building2 className="w-6 h-6" /></span>}
-          <span className="flex flex-col leading-tight min-w-0">
+          <span className={`flex flex-col leading-tight min-w-0 ${desktopSidebarOpen ? "" : "lg:hidden"}`}>
             <span className="font-semibold text-[15px] text-slate-900 truncate">{theme.design === "gerege" ? "Gerege ERP" : "Gerege Template Platform"}</span>
             <span className="text-[11px] text-slate-500 tracking-wide truncate">{theme.design === "gerege" ? "BUSINESS PLATFORM" : "ORIGINAL THEME"}</span>
           </span>
@@ -206,10 +206,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1">
         {/* Sidebar */}
         {sidebarOpen && <button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label={locale === "en" ? "Close menu" : "Цэс хаах"} />}
-        <aside className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 w-60 flex flex-col py-5 justify-between transition-all duration-200 overflow-x-hidden ${sidebarOpen ? "translate-x-0 border-r" : "-translate-x-full border-r"} ${desktopSidebarOpen ? "lg:w-60 lg:translate-x-0 lg:border-r" : "lg:w-0 lg:-translate-x-full lg:border-r-0 lg:py-0"}`}>
+        <aside className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 w-60 flex flex-col py-5 justify-between transition-all duration-200 overflow-x-hidden ${sidebarOpen ? "translate-x-0 border-r" : "-translate-x-full border-r"} ${desktopSidebarOpen ? "lg:w-60 lg:translate-x-0 lg:border-r" : "is-collapsed lg:w-16 lg:translate-x-0 lg:border-r"}`}>
           <div className="space-y-6">
             <div>
-              <div className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <div className="sidebar-section-title px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                 {t("shell.modules")}
               </div>
               <nav className="space-y-1 px-2">
@@ -284,7 +284,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div>
-              <div className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <div className="sidebar-section-title px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                 {t("shell.settings")}
               </div>
               <nav className="space-y-1 px-2">
@@ -327,7 +327,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="px-4 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
+          <div className="sidebar-footer px-4 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
             <span className="text-slate-500 font-medium">Gerege Theme</span><br />
             <span>ERP Platform · 2026</span>
           </div>
