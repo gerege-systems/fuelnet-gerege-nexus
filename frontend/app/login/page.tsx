@@ -141,25 +141,21 @@ export default function LoginPage() {
 
             <form onSubmit={handleEIDLogin} className="space-y-3 text-left">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Танилт Нэвтрэх Суваг
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.identityChannel")}</label>
                 <select
                   value={authMethod}
                   onChange={(e) => setAuthMethod(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="PKI_DIGITAL_SIGNATURE">🖊️ Тоон Гарын Үсэг (PKI)</option>
-                  <option value="MOBILE_OTP">📱 Нэг удаагийн код (Mobile OTP)</option>
-                  <option value="BANK_SSO">🏦 Банкны системээр нэвтрэх</option>
-                  <option value="BIOMETRIC_FACE">👤 Царай танилт (Biometric Face)</option>
+                  <option value="PKI_DIGITAL_SIGNATURE">{t("login.methodPki")}</option>
+                  <option value="MOBILE_OTP">{t("login.methodOtp")}</option>
+                  <option value="BANK_SSO">{t("login.methodBank")}</option>
+                  <option value="BIOMETRIC_FACE">{t("login.methodBiometric")}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Иргэний Регистрийн Дугаар *
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.regNumberRequired")}</label>
                 <input
                   type="text"
                   placeholder="e.g. AA90010111"
@@ -171,9 +167,7 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Баталгаажуулах Код (OTP / Pin)
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.otpCode")}</label>
                 <input
                   type="text"
                   placeholder="Optional for Mock Mode"
@@ -188,16 +182,12 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowEIDModal(false)}
                   className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
-                >
-                  Цуцлах
-                </button>
+                >{t("login.cancel")}</button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-1/2 bg-blue-700 hover:bg-blue-800 text-white font-medium py-2 rounded-lg text-xs"
-                >
-                  Баталгаажуулж Нэвтрэх
-                </button>
+                >{t("login.verifyAndSignIn")}</button>
               </div>
             </form>
           </div>

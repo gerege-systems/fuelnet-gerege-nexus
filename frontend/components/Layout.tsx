@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useTheme } from "@/lib/theme";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import AICopilot from "@/components/AICopilot";
 import {
@@ -14,8 +15,6 @@ import {
   Package,
   Boxes,
   LogOut,
-  Building2,
-  UserCheck,
   Share2,
   CreditCard,
   FileText,
@@ -23,6 +22,10 @@ import {
   Menu,
   X,
   ChevronDown,
+  Palette,
+  Moon,
+  Sun,
+  Building2,
 } from "lucide-react";
 
 interface Menu {
@@ -54,7 +57,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const theme = useTheme();
 
   const isPublic = PUBLIC_ROUTES.includes(pathname);
 
@@ -77,7 +81,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
     }
     loadData();
-  }, [pathname, router, isPublic]);
+    // Menu labels are translated by the API, so switching language has to
+    // refetch them — otherwise the sidebar keeps the labels of the locale that
+    // was active when the page loaded.
+  }, [pathname, router, isPublic, locale]);
 
   useEffect(() => setSidebarOpen(false), [pathname]);
 
@@ -115,25 +122,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={() => setSidebarOpen((open) => !open)}
             className="lg:hidden grid place-items-center w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-            aria-label={sidebarOpen ? "Цэс хаах" : "Цэс нээх"}
+            aria-label={sidebarOpen ? (locale === "en" ? "Close menu" : "Цэс хаах") : (locale === "en" ? "Open menu" : "Цэс нээх")}
             aria-expanded={sidebarOpen}
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <Link href="/apps" className="flex items-center gap-2.5 min-w-0 group">
-            <img src="/brand.webp" alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm shrink-0" />
+            {theme.design === "gerege" ? <img src="/brand.webp" alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm shrink-0" /> : <span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center shrink-0"><Building2 className="w-6 h-6" /></span>}
             <span className="hidden sm:flex flex-col leading-tight min-w-0">
-              <span className="font-semibold text-[15px] text-slate-900 truncate">Gerege ERP</span>
-              <span className="text-[11px] text-slate-500 tracking-wide">BUSINESS PLATFORM</span>
+              <span className="font-semibold text-[15px] text-slate-900 truncate">{theme.design === "gerege" ? "Gerege ERP" : "Gerege Template Platform"}</span>
+              <span className="text-[11px] text-slate-500 tracking-wide">{theme.design === "gerege" ? "BUSINESS PLATFORM" : "ORIGINAL THEME"}</span>
             </span>
           </Link>
           <span className="hidden md:flex items-center gap-2 text-xs text-slate-600 border-l border-slate-200 pl-4 ml-1">
             <span className="gerege-session-dot w-1.5 h-1.5 rounded-full"></span>
-            <span className="truncate max-w-48"><strong className="text-slate-800 font-medium">{user?.tenant_name || "Demo Tenant"}</strong> · идэвхтэй</span>
+            <span className="truncate max-w-48"><strong className="text-slate-800 font-medium">{user?.tenant_name || "Demo Tenant"}</strong> · {locale === "en" ? "active" : "идэвхтэй"}</span>
           </span>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <button onClick={theme.toggleMode} className="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label={locale === "en" ? "Toggle theme" : "Theme солих"} title={locale === "en" ? "Toggle theme" : "Theme солих"}>
+            {theme.resolvedMode === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           <LanguageSwitcher />
           <div className="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200">
             <span className="w-8 h-8 rounded-full bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] grid place-items-center text-xs font-bold">
@@ -158,7 +168,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1">
         {/* Sidebar */}
-        {sidebarOpen && <button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Цэс хаах" />}
+        {sidebarOpen && <button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label={locale === "en" ? "Close menu" : "Цэс хаах"} />}
         <aside className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 w-60 border-r flex flex-col py-5 justify-between transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
           <div className="space-y-6">
             <div>
@@ -166,6 +176,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {t("shell.modules")}
               </div>
               <nav className="space-y-1 px-2">
+                <Link
+                  href="/settings/appearance"
+                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${pathname === "/settings/appearance" ? "gerege-nav-link-active font-semibold" : ""}`}
+                >
+                  <Palette className="gerege-nav-icon w-5 h-5" />
+                  <span>{locale === "en" ? "Appearance" : "Харагдац"}</span>
+                </Link>
                 <Link
                   href="/apps"
                   className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${

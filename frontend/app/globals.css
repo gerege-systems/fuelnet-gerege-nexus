@@ -24,6 +24,25 @@
     --foreground: 222 38% 15%;
   }
 
+  html[data-theme="dark"] {
+    --gerege-bg: #111722;
+    --gerege-surface: #171f2c;
+    --gerege-surface-2: #202a38;
+    --gerege-fg: #f2f4f7;
+    --gerege-muted: #98a2b3;
+    --gerege-border: #2b3646;
+    --gerege-blue-soft: #102d55;
+    --background: 216 33% 10%;
+    --foreground: 210 20% 96%;
+  }
+
+  html[data-accent="teal"] { --gerege-blue: #008b99; --gerege-blue-hover: #007582; --gerege-blue-soft: #e9f8f8; }
+  html[data-accent="violet"] { --gerege-blue: #7656d6; --gerege-blue-hover: #6343bf; --gerege-blue-soft: #f3f0ff; }
+  html[data-accent="emerald"] { --gerege-blue: #16845b; --gerege-blue-hover: #0f6f4b; --gerege-blue-soft: #ebf8f2; }
+  html[data-theme="dark"][data-accent="teal"] { --gerege-blue-soft: #12383d; }
+  html[data-theme="dark"][data-accent="violet"] { --gerege-blue-soft: #2b2348; }
+  html[data-theme="dark"][data-accent="emerald"] { --gerege-blue-soft: #173a2d; }
+
   body {
     background-color: var(--gerege-bg);
     color: var(--gerege-fg);
@@ -63,6 +82,41 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--gerege-success) 16%, transparent);
   }
 }
+
+html[data-density="compact"] { font-size: 14px; }
+html[data-density="compact"] .gerege-topbar { height: 56px; }
+html[data-density="compact"] main { padding-top: 1rem; padding-bottom: 1rem; }
+
+/* Original Theme preserves the repository's original Odoo-inspired shell. */
+html[data-design="original"] .gerege-topbar { background: #0f172a; border-color: #1e293b; color: white; }
+html[data-design="original"] .gerege-topbar .text-slate-900,
+html[data-design="original"] .gerege-topbar .text-slate-800 { color: #f8fafc !important; }
+html[data-design="original"] .gerege-topbar .text-slate-500,
+html[data-design="original"] .gerege-topbar .text-slate-600 { color: #94a3b8 !important; }
+html[data-design="original"] .gerege-topbar .border-slate-200 { border-color: #334155 !important; }
+html[data-design="original"] .original-brand-mark { color: #818cf8; background: #1e293b; }
+html[data-design="original"] .gerege-nav-link-active {
+  color: #4f46e5;
+  background: #eef2ff;
+  box-shadow: none;
+}
+html[data-design="original"] .gerege-nav-link-active .gerege-nav-icon { color: #6366f1; }
+html[data-design="original"] .gerege-session-dot { background: #10b981; }
+
+html[data-design="gerege"] .original-brand-mark { color: var(--gerege-blue); background: var(--gerege-blue-soft); }
+
+html[data-theme="dark"] .bg-white { background-color: var(--gerege-surface) !important; }
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100 { background-color: var(--gerege-surface-2) !important; }
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-700 { color: var(--gerege-fg) !important; }
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-400 { color: var(--gerege-muted) !important; }
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300 { border-color: var(--gerege-border) !important; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }

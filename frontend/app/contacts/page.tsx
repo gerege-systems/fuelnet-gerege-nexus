@@ -134,7 +134,7 @@ export default function ContactsPage() {
                       name: `${info.last_name} ${info.first_name}`,
                       email: `${info.reg_number.toLowerCase()}@gerege.mn`,
                       phone: "99112233",
-                      company: "ХУР Баталгаажсан Иргэн",
+                      company: t("contacts.xypVerifiedCitizen"),
                       active: true,
                     });
                   } catch (err: any) {
@@ -142,9 +142,7 @@ export default function ContactsPage() {
                   }
                 }}
                 className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 transition"
-              >
-                ⚡ ХУР / XYP Auto-fill
-              </button>
+              >{t("contacts.xypAutofill")}</button>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
