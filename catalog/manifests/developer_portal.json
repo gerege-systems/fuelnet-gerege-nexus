@@ -19,6 +19,7 @@
   "menus": [
     {
       "id": "developer_apps",
+      "parent_id": "platform_tools",
       "label": "Developer Apps",
       "path": "/developer/apps",
       "icon": "code",

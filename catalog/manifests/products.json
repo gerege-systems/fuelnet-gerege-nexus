@@ -19,6 +19,7 @@
   "menus": [
     {
       "id": "products",
+      "parent_id": "master_data",
       "label": "Products",
       "path": "/products",
       "icon": "package",

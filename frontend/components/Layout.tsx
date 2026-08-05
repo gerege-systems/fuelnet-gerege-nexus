@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -128,7 +129,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <Link href="/apps" className="flex items-center gap-2.5 min-w-0 group">
-            {theme.design === "gerege" ? <img src="/brand.webp" alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm shrink-0" /> : <span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center shrink-0"><Building2 className="w-6 h-6" /></span>}
+            {theme.design === "gerege" ? <img src={brandLogo.src} width={36} height={36} alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm shrink-0" /> : <span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center shrink-0"><Building2 className="w-6 h-6" /></span>}
             <span className="hidden sm:flex flex-col leading-tight min-w-0">
               <span className="font-semibold text-[15px] text-slate-900 truncate">{theme.design === "gerege" ? "Gerege ERP" : "Gerege Template Platform"}</span>
               <span className="text-[11px] text-slate-500 tracking-wide">{theme.design === "gerege" ? "BUSINESS PLATFORM" : "ORIGINAL THEME"}</span>
@@ -177,13 +178,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
               <nav className="space-y-1 px-2">
                 <Link
-                  href="/settings/appearance"
-                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${pathname === "/settings/appearance" ? "gerege-nav-link-active font-semibold" : ""}`}
-                >
-                  <Palette className="gerege-nav-icon w-5 h-5" />
-                  <span>{locale === "en" ? "Appearance" : "Харагдац"}</span>
-                </Link>
-                <Link
                   href="/apps"
                   className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
                     pathname === "/apps"
@@ -217,6 +211,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {t("shell.settings")}
               </div>
               <nav className="space-y-1 px-2">
+                <Link
+                  href="/settings/appearance"
+                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
+                    pathname === "/settings/appearance"
+                      ? "gerege-nav-link-active font-semibold"
+                      : ""
+                  }`}
+                >
+                  <Palette className="gerege-nav-icon w-5 h-5" />
+                  <span>{t("shell.appearance")}</span>
+                </Link>
+
                 <Link
                   href="/settings/apps"
                   className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${

@@ -21,11 +21,12 @@ type PermissionDefinition struct {
 
 // MenuDefinition defines a navigation menu item for an app module.
 type MenuDefinition struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Path  string `json:"path"`
-	Icon  string `json:"icon"`
-	Order int    `json:"order"`
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id,omitempty"`
+	Label    string `json:"label"`
+	Path     string `json:"path,omitempty"`
+	Icon     string `json:"icon"`
+	Order    int    `json:"order"`
 
 	// Labels holds per-locale overrides keyed by ISO 639-1 code. The menu API
 	// resolves Label from the caller's locale before responding, so the client

@@ -28,6 +28,7 @@
   "menus": [
     {
       "id": "inventory",
+      "parent_id": "operations",
       "label": "Inventory",
       "path": "/inventory",
       "icon": "boxes",

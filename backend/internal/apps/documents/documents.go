@@ -65,7 +65,7 @@ func (m *DocumentsModule) Permissions() []internal.PermissionDefinition {
 
 func (m *DocumentsModule) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "documents", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 50, Labels: map[string]string{"mn": "Баримт ба цахим гарын үсэг"}},
+		{ID: "documents", ParentID: "operations", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 30, Labels: map[string]string{"mn": "Баримт ба цахим гарын үсэг"}},
 	}
 }
 

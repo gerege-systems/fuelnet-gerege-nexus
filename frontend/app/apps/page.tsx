@@ -37,7 +37,7 @@ const appIcons: Record<string, React.ReactNode> = {
 };
 
 export default function AppStorePage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [apps, setApps] = useState<AppItem[]>([]);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -57,8 +57,10 @@ export default function AppStorePage() {
   };
 
   useEffect(() => {
+    setLoading(true);
+    setSelectedCategory("All");
     loadApps();
-  }, []);
+  }, [locale]);
 
   const handleInstall = async (app: AppItem) => {
     setActionLoading(app.slug);

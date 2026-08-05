@@ -17,7 +17,7 @@ interface InstalledApp {
 }
 
 export default function InstalledAppsSettingsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -34,8 +34,9 @@ export default function InstalledAppsSettingsPage() {
   };
 
   useEffect(() => {
+    setLoading(true);
     loadInstalled();
-  }, []);
+  }, [locale]);
 
   const handleToggle = async (app: InstalledApp) => {
     setActionLoading(app.slug);

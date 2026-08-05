@@ -12,6 +12,15 @@ type InstalledAppStore interface {
 	GetEnabledAppIDsForTenant(ctx context.Context, tenantID string) ([]string, error)
 }
 
+// Odoo-style root menus group installed application actions by business area.
+// A root is emitted only when at least one enabled module contributes a child,
+// preventing empty navigation branches for tenants with a small app set.
+var rootMenus = []internal.MenuDefinition{
+	{ID: "master_data", Label: "Master Data", Icon: "database", Order: 10, Labels: map[string]string{"mn": "Үндсэн бүртгэл"}},
+	{ID: "operations", Label: "Operations", Icon: "workflow", Order: 20, Labels: map[string]string{"mn": "Үйл ажиллагаа"}},
+	{ID: "platform_tools", Label: "Platform Tools", Icon: "layers", Order: 30, Labels: map[string]string{"mn": "Платформын хэрэгслүүд"}},
+}
+
 func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]internal.MenuDefinition, error) {
 	enabledAppIDs, err := store.GetEnabledAppIDsForTenant(ctx, tenantID)
 	if err != nil {
@@ -36,8 +45,24 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		}
 	}
 
+	usedParents := make(map[string]bool)
+	for _, item := range menus {
+		if item.ParentID != "" {
+			usedParents[item.ParentID] = true
+		}
+	}
+	for _, root := range rootMenus {
+		if usedParents[root.ID] {
+			root.Label = root.LocalizedLabel(locale)
+			menus = append(menus, root)
+		}
+	}
+
 	sort.Slice(menus, func(i, j int) bool {
-		return menus[i].Order < menus[j].Order
+		if menus[i].ParentID == menus[j].ParentID {
+			return menus[i].Order < menus[j].Order
+		}
+		return menus[i].ID < menus[j].ID
 	})
 
 	return menus, nil
