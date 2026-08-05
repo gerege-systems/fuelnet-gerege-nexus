@@ -1,0 +1,46 @@
+# Changelog
+
+All notable changes to **open-gerege-mn-erp** will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.1.0] - 2026-08-05
+
+### Added
+- **Modular Monolith Core Architecture**:
+  - Pure Go compile-time `Module` interface and global module registry (`appregistry`).
+  - Tenant-level app installation, enablement, and menu visibility engine (`appinstaller`).
+  - Recursive dependency resolution algorithm with cycle detection and semver validation.
+- **Shared-Schema Multi-Tenancy**:
+  - Context-scoped `tenant_id` isolation across all business entities and repositories.
+  - Tenant app gating middleware returning `403 Forbidden` for disabled modules.
+- **Business Modules (Vertical Slices)**:
+  - **Contacts (`io.example.contacts`)**: Business contacts directory with full CRUD.
+  - **Products (`io.example.products`)**: Product catalog management with unique tenant-scoped SKUs.
+  - **Inventory (`io.example.inventory`)**: Warehouse management, live stock levels, append-only stock movement log, and transactional stock adjustments with negative stock protection.
+- **Next.js App Router Admin Shell**:
+  - Top navigation bar with tenant badge (`Demo Corporation`), user profile menu, and logout.
+  - Dynamic sidebar navigation driven by `/api/v1/menus`.
+  - App Store (`/apps`) with search, categories, dependency badges, and Install/Enable/Disable controls.
+  - Installed Apps Settings (`/settings/apps`).
+  - Dedicated business UIs for `/contacts`, `/products`, and `/inventory`.
+- **Security Hardening**:
+  - HTTP security headers (`CSP`, `HSTS`, `X-Frame-Options`, `X-Content-Type-Options`).
+  - IP Rate Limiting middleware for authentication endpoints (`golang.org/x/time/rate`).
+  - Safe CORS whitelist and path traversal guards (`IsValidSlug`).
+  - bcrypt password hashing (`golang.org/x/crypto/bcrypt`).
+- **Observability & Async Messaging**:
+  - Prometheus metrics endpoint (`/metrics`) recording HTTP request rates and latency histograms (`github.com/prometheus/client_golang`).
+  - OpenTelemetry tracing initialization (`SetupTracing`).
+  - Async OTP Mailer queue with worker pool, retry logic, and graceful shutdown (`internal/platform/mailer`).
+- **Database & Migrations**:
+  - Goose SQL migrations (`00001_platform_core.sql`, `00002_app_store.sql`, `00003_business_apps.sql`).
+  - Automated initial demo data seeder (`admin@example.com` / `Password123!`).
+
+---
+
+### Authors
+- **Gerege Systems Development Team & Gemini AI**

@@ -1,6 +1,19 @@
 # open-gerege-mn-erp
 
-A production-oriented MVP of a modular business application platform inspired by Odoo's app ecosystem. Built using Go, Chi Router, PostgreSQL (pgx/v5), Goose migrations, and Next.js (App Router).
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8.svg)](https://go.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+An open-source, production-oriented **Modular Monolith ERP & Business Application Platform** inspired by Odoo's app ecosystem. Built for enterprise scalability using **Go 1.24**, **Chi Router**, **PostgreSQL (pgx/v5)**, **Goose Migrations**, and **Next.js (App Router)**.
+
+---
+
+## 👥 Authors & Maintainers
+
+This open-source project is created and maintained by:
+- 🏛️ **Gerege Systems Development Team**
+- 🤖 **Gemini AI**
 
 ---
 
@@ -20,6 +33,7 @@ The system is structured as a **Modular Monolith**:
 - **Dependency Resolution Engine**: Implements recursive dependency graph traversal and topological sorting. Installing `Inventory` automatically resolves and installs `Products` and `Contacts` in order.
 - **Shared-Schema Multi-Tenancy**: Every business table (`contacts`, `products`, `warehouses`, `stock_levels`, `stock_movements`) contains `tenant_id` and is strictly scoped to the authenticated tenant.
 - **Dynamic RBAC & Menus**: Backend endpoint access and frontend sidebar menus are filtered dynamically based on enabled tenant modules and user permissions.
+- **Observability & Async Workers**: Includes Prometheus metrics (`/metrics`), OpenTelemetry tracing, and an asynchronous OTP Mailer queue with worker pool.
 
 ---
 
@@ -79,14 +93,26 @@ Open [http://localhost:3000](http://localhost:3000) and log in using `admin@exam
 # Run backend unit & resolver tests
 cd backend
 go test ./...
+
+# Frontend build check
+cd frontend
+npm run build
 ```
 
 ---
 
-## 🔐 Security & Remote Registry Future Boundaries
+## 📚 Documentation Index
 
-For this MVP, official manifests are seeded from `catalog/`. The system defines explicit interfaces (`CatalogRepository`, `PackageStorage`, `PackageVerifier`, `Installer`) designed for future remote registry expansion:
-- Future remote packages stored as OCI artifacts in GitHub Container Registry.
-- SHA-256 integrity verification.
-- Sigstore/Cosign or Ed25519 publisher signature verification.
-- Automated vulnerability scanning and SBOM checks before installation.
+- 📘 [Module Authoring Guide](docs/MODULE_AUTHORING_GUIDE.md) - How to build custom business modules
+- 🤝 [Contributing Guidelines](CONTRIBUTING.md) - How to submit bug reports and PRs
+- 🛡️ [Security Policy](SECURITY.md) - Vulnerability reporting and security features
+- 📜 [Code of Conduct](CODE_OF_CONDUCT.md) - Community standards
+- 📋 [Changelog](CHANGELOG.md) - Release history and versioning
+
+---
+
+## 📄 License
+
+Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for more information.
+
+Copyright (c) 2026 **Gerege Systems Development Team & Gemini AI**.
