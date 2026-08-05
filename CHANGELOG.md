@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prometheus metrics endpoint (`/metrics`) recording HTTP request rates and latency histograms (`github.com/prometheus/client_golang`).
   - OpenTelemetry tracing initialization (`SetupTracing`).
   - Async OTP Mailer queue with worker pool, retry logic, and graceful shutdown (`internal/platform/mailer`).
+- **E-ID Digital Identity & DAN SSO Authentication ([`internal/platform/eid`](backend/internal/platform/eid))**:
+  - National E-ID / DAN SSO authentication service supporting both mock dev mode and live production token/OTP verification.
+  - Interactive "Login with E-ID / ДАН Танилт" modal integration on the login page (`POST /api/v1/auth/eid/login`).
 - **Database & Migrations**:
   - Goose SQL migrations (`00001_platform_core.sql`, `00002_app_store.sql`, `00003_business_apps.sql`).
   - Automated initial demo data seeder (`admin@example.com` / `Password123!`).
