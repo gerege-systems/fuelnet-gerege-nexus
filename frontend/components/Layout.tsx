@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import AICopilot from "@/components/AICopilot";
 import {
   LayoutGrid,
   Settings,
@@ -171,6 +172,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Main Content Area */}
         <main className="flex-1 p-6 overflow-y-auto">{children}</main>
       </div>
+      <AICopilot />
     </div>
   );
 }

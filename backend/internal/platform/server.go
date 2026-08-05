@@ -13,6 +13,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/products"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
@@ -32,6 +33,8 @@ type Server struct {
 	router       *chi.Mux
 	loginLimiter *security.IPRateLimiter
 	asyncMailer  *mailer.AsyncOTPMailer
+	copilotSvc   *ai.CopilotService
+	forecaster   *ai.Forecaster
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -79,6 +82,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		router:       chi.NewRouter(),
 		loginLimiter: security.NewIPRateLimiter(rate.Limit(5.0/60.0), 5), // 5 logins per minute
 		asyncMailer:  asyncMailer,
+		copilotSvc:   ai.NewCopilotService(db),
+		forecaster:   ai.NewForecaster(db),
 	}
 
 	s.setupRoutes()
@@ -133,6 +138,10 @@ func (s *Server) setupRoutes() {
 
 			pr.Get("/auth/me", s.handleMe)
 			pr.Get("/menus", s.handleMenus)
+
+			// AI Copilot & Forecasting
+			pr.Post("/ai/copilot", s.handleAICopilot)
+			pr.Get("/ai/stock-forecast", s.handleAIForecast)
 
 			// Store
 			pr.Get("/store/apps", s.handleListStoreApps)
@@ -479,4 +488,49 @@ func (s *Server) handleEnableApp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "enabled", "app": slug})
+}
+
+func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Prompt == "" {
+		http.Error(w, `{"error":"invalid prompt"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.copilotSvc.Query(r.Context(), ai.CopilotRequest{
+		Prompt:   req.Prompt,
+		TenantID: tenantID,
+	})
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(res)
+}
+
+func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	forecast, err := s.forecaster.AnalyzeTenantStock(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, `{"error":"failed to generate forecast"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(forecast)
 }

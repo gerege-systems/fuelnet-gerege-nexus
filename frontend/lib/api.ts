@@ -160,4 +160,24 @@ export const api = {
 
   adjustStock: (data: { warehouse_id: string; product_id: string; quantity_change: number; reference: string }) =>
     fetcher("/inventory/adjustments", { method: "POST", body: JSON.stringify(data) }),
+
+  // AI Assistant & Forecasting
+  queryAICopilot: (prompt: string) =>
+    fetcher<{ answer: string; intent: string; data?: any; actionable?: string[] }>("/ai/copilot", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    }),
+
+  getAIForecast: () =>
+    fetcher<
+      Array<{
+        product_id: string;
+        sku: string;
+        product_name: string;
+        current_stock: number;
+        recommended_min: number;
+        reorder_alert: boolean;
+        suggested_reorder: number;
+      }>
+    >("/ai/stock-forecast"),
 };
