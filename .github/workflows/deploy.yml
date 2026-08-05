@@ -32,6 +32,9 @@ concurrency:
 
 env:
   PUBLIC_ORIGIN: ${{ secrets.PUBLIC_ORIGIN || 'https://openerp.gerege.mn' }}
+  # Repository variable (Settings → Variables), not a secret. "true" turns the
+  # target into a public demo: seeded demo account plus mock E-ID/DAN/XYP.
+  DEMO_MODE: ${{ vars.DEMO_MODE || 'false' }}
 
 jobs:
   build-and-push:
@@ -124,12 +127,13 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SSO_DEFAULT_CLIENT_SECRET: ${{ secrets.SSO_DEFAULT_CLIENT_SECRET }}
           PUBLIC_ORIGIN: ${{ env.PUBLIC_ORIGIN }}
+          DEMO_MODE: ${{ env.DEMO_MODE }}
         with:
           host: ${{ secrets.DEPLOY_HOST || 'openerp.gerege.mn' }}
           username: ${{ secrets.DEPLOY_USER || 'deploy' }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN,REPO,POSTGRES_PASSWORD,SSO_DEFAULT_CLIENT_SECRET,PUBLIC_ORIGIN
+          envs: IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN,REPO,POSTGRES_PASSWORD,SSO_DEFAULT_CLIENT_SECRET,PUBLIC_ORIGIN,DEMO_MODE
           script: |
             set -euo pipefail
             APP_DIR=/opt/open-gerege-mn-erp
@@ -147,6 +151,7 @@ jobs:
             POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
             SSO_DEFAULT_CLIENT_SECRET=${SSO_DEFAULT_CLIENT_SECRET}
             PUBLIC_ORIGIN=${PUBLIC_ORIGIN}
+            DEMO_MODE=${DEMO_MODE}
             EOF
 
             echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
