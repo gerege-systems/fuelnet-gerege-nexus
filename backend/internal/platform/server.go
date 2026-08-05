@@ -26,6 +26,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/developer_portal"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/documents"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/gov_services"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ai"
@@ -73,6 +74,7 @@ type Server struct {
 	integrationMgr *integration.Manager
 	billingMod     *billing.BillingModule
 	documentsMod   *documents.DocumentsModule
+	govMod         *gov_services.Module
 	devPortalMod   *developer_portal.DeveloperPortalModule
 	contactsMod    *contacts.Module
 	productsMod    *products.Module
@@ -137,6 +139,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	inventoryMod := inventory.New(db, false) // false = prevent negative stock
 	billingMod := billing.New(db)
 	documentsMod := documents.New(db)
+	govMod := gov_services.New(db)
 
 	// Instantiate Async Mailer Queue
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
@@ -162,6 +165,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		integrationMgr: integration.NewManager(),
 		billingMod:     billingMod,
 		documentsMod:   documentsMod,
+		govMod:         govMod,
 		devPortalMod:   devPortalMod,
 		contactsMod:    contactsMod,
 		productsMod:    productsMod,
@@ -281,6 +285,7 @@ func (s *Server) registerAppModuleRoutes() {
 	s.inventoryMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.inventory"))
 	s.billingMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.billing"))
 	s.documentsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.documents"))
+	s.govMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.gov_services"))
 	s.devPortalMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.developer_portal"))
 }
 
