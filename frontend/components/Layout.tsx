@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; icon:string; order:number }
 interface AppNav { id:string; name:string; icon:string; path:string; menus:MenuItem[] }
@@ -23,14 +23,14 @@ const APP_ORDER=["io.example.contacts","io.example.products","io.example.invento
 
 export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);
-  const [mobileOpen,setMobileOpen]=useState(false),[panelOpen,setPanelOpen]=useState(true);
+  const [mobileOpen,setMobileOpen]=useState(false),[mobileMoreOpen,setMobileMoreOpen]=useState(false),[panelOpen,setPanelOpen]=useState(true);
   const [query,setQuery]=useState("");
   const pathname=usePathname(),router=useRouter(),{t,locale}=useI18n(),theme=useTheme();
   const isPublic=PUBLIC_ROUTES.includes(pathname);
 
   useEffect(()=>setPanelOpen(localStorage.getItem("gerege_sidebar_open")!=="false"),[]);
   useEffect(()=>{if(isPublic){setLoading(false);return}void(async()=>{try{const [u,m]=await Promise.all([api.getMe(),api.getMenus()]);setUser(u);setMenus(m||[])}catch{router.push("/login")}finally{setLoading(false)}})()},[pathname,router,isPublic,locale]);
-  useEffect(()=>setMobileOpen(false),[pathname]);
+  useEffect(()=>{setMobileOpen(false);setMobileMoreOpen(false)},[pathname]);
 
   const apps=useMemo<AppNav[]>(()=>{
     const groups=new Map<string,MenuItem[]>();
@@ -50,6 +50,13 @@ export default function Layout({children}:{children:React.ReactNode}){
   function togglePanel(){if(window.matchMedia("(min-width:901px)").matches){setPanelOpen(v=>{localStorage.setItem("gerege_sidebar_open",String(!v));return !v})}else setMobileOpen(v=>!v)}
   async function logout(){try{await api.logout()}catch{}localStorage.removeItem("session_token");router.push("/login")}
   const brandTitle=selected?.name||(locale==="en"?"Platform":"Платформ");
+  const mobileAppTabs=[
+    {id:"platform",href:"/apps",active:platformActive,label:locale==="en"?"Platform":"Платформ",icon:<LayoutGrid className="w-5 h-5"/>},
+    ...apps.map(app=>({id:app.id,href:app.path,active:selected?.id===app.id,label:app.name,icon:iconMap[app.icon]||<Package className="w-5 h-5"/>})),
+  ];
+  const hasMobileMore=mobileAppTabs.length>5;
+  const primaryMobileTabs=hasMobileMore?mobileAppTabs.slice(0,4):mobileAppTabs;
+  const remainingMobileTabs=hasMobileMore?mobileAppTabs.slice(4):[];
 
   if(pathname==="/login")return <main className="min-h-screen bg-slate-100 flex items-center justify-center">{children}</main>;
   if(pathname==="/")return <>{children}</>;
@@ -95,9 +102,10 @@ export default function Layout({children}:{children:React.ReactNode}){
       </div>
       <main className="gerege-main flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
     </div>
+    {mobileMoreOpen&&<><button className="gerege-mobile-more-backdrop" aria-label={locale==="en"?"Close more apps":"Бусад аппыг хаах"} onClick={()=>setMobileMoreOpen(false)}/><section className="gerege-mobile-more-sheet" role="dialog" aria-modal="true" aria-label={locale==="en"?"More apps":"Бусад апп"}><div className="gerege-mobile-more-handle"/><h2>{locale==="en"?"More apps":"Бусад апп"}</h2><div className="gerege-mobile-more-grid">{remainingMobileTabs.map(tab=><MobileMoreApp key={tab.id} {...tab}/>)}</div></section></>}
     <nav className="gerege-mobile-tabs" aria-label={locale==="en"?"Apps":"Аппууд"}>
-      <MobileAppTab href="/apps" active={platformActive} label={locale==="en"?"Platform":"Платформ"} icon={<LayoutGrid className="w-5 h-5"/>}/>
-      {apps.map(app=><MobileAppTab key={app.id} href={app.path} active={selected?.id===app.id} label={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+      {primaryMobileTabs.map(tab=><MobileAppTab key={tab.id} {...tab}/>)}
+      {hasMobileMore&&<button type="button" onClick={()=>setMobileMoreOpen(v=>!v)} aria-expanded={mobileMoreOpen} className={`gerege-mobile-tab ${remainingMobileTabs.some(tab=>tab.active)||mobileMoreOpen?"is-active":""}`}><span><Ellipsis className="w-5 h-5"/></span><small>{locale==="en"?"More":"Бусад"}</small></button>}
     </nav>
     <AICopilot/>
   </div>;
@@ -105,6 +113,7 @@ export default function Layout({children}:{children:React.ReactNode}){
 
 function AppRailLink({href,active,title,icon}:{href:string;active:boolean;title:string;icon:React.ReactNode}){return <Link href={href} title={title} aria-label={title} className={`w-11 h-11 rounded-xl grid place-items-center transition ${active?"bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] shadow-sm":"text-slate-500 hover:bg-[var(--gerege-surface-2)] hover:text-slate-800"}`}>{icon}</Link>}
 function MobileAppTab({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-label={label} aria-current={active?"page":undefined} className={`gerege-mobile-tab ${active?"is-active":""}`}><span>{icon}</span><small>{label}</small></Link>}
+function MobileMoreApp({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-current={active?"page":undefined} className={`gerege-mobile-more-app ${active?"is-active":""}`}><span>{icon}</span><strong>{label}</strong></Link>}
 function NavLink({href,active,icon,label}:{href:string;active:boolean;icon:React.ReactNode;label:string}){return <Link href={href} className={`gerege-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition ${active?"gerege-nav-link-active font-semibold":""}`}><span className="gerege-nav-icon">{icon}</span><span>{label}</span></Link>}
 function MenuGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="mb-6"><h3 className="px-3 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">{title}</h3><div className="space-y-1">{children}</div></section>}
 function AppMenuGroups({menus,pathname}:{menus:MenuItem[];pathname:string}){const roots=menus.filter(item=>!item.parent_id).sort((a,b)=>a.order-b.order);return <>{roots.map(root=><MenuGroup key={root.id} title={root.label}>{menus.filter(item=>item.parent_id===root.id&&item.path).sort((a,b)=>a.order-b.order).map(item=><NavLink key={item.id} href={item.path!} active={pathname.startsWith(item.path!)} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
