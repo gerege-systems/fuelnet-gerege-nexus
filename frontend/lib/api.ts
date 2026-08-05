@@ -44,6 +44,12 @@ export const api = {
       body: JSON.stringify({ code, redirect_uri: redirectURI, reg_number: regNumber, otp_code: otpCode, auth_method: authMethod }),
     }),
 
+  loginWithDAN: (danToken?: string, regNumber?: string, otpCode?: string) =>
+    fetcher<{ token: string; user: any; dan_profile: any }>("/auth/dan/login", {
+      method: "POST",
+      body: JSON.stringify({ dan_token: danToken, reg_number: regNumber, otp_code: otpCode }),
+    }),
+
   logout: () => fetcher<{ status: string }>("/auth/logout", { method: "POST" }),
 
   getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean }>("/auth/me"),

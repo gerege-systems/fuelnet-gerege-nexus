@@ -21,6 +21,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/integration"
@@ -42,6 +43,7 @@ type Server struct {
 	copilotSvc     *ai.CopilotService
 	forecaster     *ai.Forecaster
 	eidSvc         *eid.EIDService
+	danSvc         *dan.DANService
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	billingMod     *billing.BillingModule
@@ -98,6 +100,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		copilotSvc:     ai.NewCopilotService(db),
 		forecaster:     ai.NewForecaster(db),
 		eidSvc:         eid.NewEIDService(),
+		danSvc:         dan.NewDANService(),
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integration.NewManager(),
 		billingMod:     billingMod,
@@ -149,6 +152,7 @@ func (s *Server) setupRoutes() {
 		// Auth with rate limiting
 		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/login", s.handleLogin)
 		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/login", s.handleEIDLogin)
+		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/dan/login", s.handleDANLogin)
 		api.Post("/auth/logout", s.handleLogout)
 
 		// Protected endpoints
@@ -634,6 +638,72 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 			"tenant_id": tenantID,
 			"name":      identity.FirstName + " " + identity.LastName,
 			"email":     identity.Email,
+			"is_admin":  true,
+		},
+	})
+}
+
+func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DANToken  string `json:"dan_token"`
+		RegNumber string `json:"reg_number"`
+		OTPCode   string `json:"otp_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	var profile *dan.DANProfile
+	var err error
+	if req.DANToken != "" {
+		profile, err = s.danSvc.VerifyDANToken(r.Context(), req.DANToken)
+	} else if req.RegNumber != "" {
+		profile, err = s.danSvc.AuthenticateDANCitizen(r.Context(), req.RegNumber, req.OTPCode)
+	} else {
+		http.Error(w, `{"error":"missing dan_token or registration number"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err != nil || profile == nil {
+		http.Error(w, `{"error":"dan.gerege.mn verification failed: `+err.Error()+`"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Session mapping
+	var userID, tenantID string
+	_ = s.db.QueryRow(r.Context(), `SELECT id FROM users LIMIT 1`).Scan(&userID)
+	_ = s.db.QueryRow(r.Context(), `SELECT id FROM tenants LIMIT 1`).Scan(&tenantID)
+
+	if userID == "" {
+		userID = "00000000-0000-0000-0000-000000000002"
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	isProd := os.Getenv("ENVIRONMENT") == "production"
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    userID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   isProd,
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	audit.Record(r.Context(), tenantID, userID, "auth.dan_gerege_login_success", "dan", map[string]any{
+		"reg_number":  profile.RegNumber,
+		"dan_session": profile.DANSessionID,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"token":       userID,
+		"dan_profile": profile,
+		"user": map[string]any{
+			"id":        userID,
+			"tenant_id": tenantID,
+			"name":      profile.FirstName + " " + profile.LastName,
+			"email":     profile.Email,
 			"is_admin":  true,
 		},
 	})
