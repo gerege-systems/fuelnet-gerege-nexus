@@ -111,6 +111,15 @@ npm run build
 
 ---
 
+## 🙏 Acknowledgements & Inspiration
+
+This open-source platform draws design inspiration and architectural patterns from two outstanding open-source projects:
+
+1. **[Odoo](https://github.com/odoo/odoo)** — Inspired our modular business application system, tenant-level App Store installer, dynamic menu composition, and topological module dependency resolution.
+2. **[go-zero (zeromicro/go-zero)](https://github.com/zeromicro/go-zero)** — Inspired our cloud-native resilience engine, including Google SRE adaptive circuit breaking (`resilience/breaker.go`), in-flight load shedding (`resilience/loadshedder.go`), singleflight query coalescing (`resilience/singleflight.go`), and exponential backoff retries (`resilience/retry.go`).
+
+---
+
 ## 📄 License
 
 Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for more information.
