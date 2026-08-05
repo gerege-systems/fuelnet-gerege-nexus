@@ -232,4 +232,38 @@ export const api = {
 
   registerIntegration: (data: { name: string; type: string; target_url: string; secret_key?: string }) =>
     fetcher("/integrations", { method: "POST", body: JSON.stringify(data) }),
+
+  // Billing App (io.example.billing)
+  getInvoices: () =>
+    fetcher<
+      Array<{
+        id: string;
+        invoice_number: string;
+        contact_name: string;
+        amount: number;
+        vat_amount: number;
+        ebarimt_status: string;
+        status: string;
+        created_at: string;
+      }>
+    >("/billing/invoices"),
+
+  createInvoice: (data: { contact_name: string; amount: number }) =>
+    fetcher("/billing/invoices", { method: "POST", body: JSON.stringify(data) }),
+
+  // Documents App (io.example.documents)
+  getDocuments: () =>
+    fetcher<
+      Array<{
+        id: string;
+        title: string;
+        doc_type: string;
+        status: string;
+        signed_by: string;
+        created_at: string;
+      }>
+    >("/documents"),
+
+  createDocument: (data: { title: string; doc_type: string }) =>
+    fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
 };

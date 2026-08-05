@@ -11,7 +11,9 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ai"
@@ -42,6 +44,8 @@ type Server struct {
 	eidSvc         *eid.EIDService
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
+	billingMod     *billing.BillingModule
+	documentsMod   *documents.DocumentsModule
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -78,22 +82,26 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	contacts.New(db)
 	products.New(db)
 	inventory.New(db, false) // false = prevent negative stock
+	billingMod := billing.New(db)
+	documentsMod := documents.New(db)
 
 	// Instantiate Async Mailer Queue
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
 	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
 
 	s := &Server{
-		db:           db,
-		installer:    installer,
-		router:       chi.NewRouter(),
-		loginLimiter: security.NewIPRateLimiter(rate.Limit(5.0/60.0), 5), // 5 logins per minute
-		asyncMailer:  asyncMailer,
-		copilotSvc:   ai.NewCopilotService(db),
-		forecaster:   ai.NewForecaster(db),
-		eidSvc:       eid.NewEIDService(),
-		geregeSvc:    gerege.NewGeregeService(),
+		db:             db,
+		installer:      installer,
+		router:         chi.NewRouter(),
+		loginLimiter:   security.NewIPRateLimiter(rate.Limit(5.0/60.0), 5), // 5 logins per minute
+		asyncMailer:    asyncMailer,
+		copilotSvc:     ai.NewCopilotService(db),
+		forecaster:     ai.NewForecaster(db),
+		eidSvc:         eid.NewEIDService(),
+		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integration.NewManager(),
+		billingMod:     billingMod,
+		documentsMod:   documentsMod,
 	}
 
 	s.setupRoutes()
@@ -161,6 +169,14 @@ func (s *Server) setupRoutes() {
 			// External Integrations Manager
 			pr.Get("/integrations", s.handleListIntegrations)
 			pr.Post("/integrations", s.handleRegisterIntegration)
+
+			// Billing App (io.example.billing)
+			pr.Get("/billing/invoices", s.handleListInvoices)
+			pr.Post("/billing/invoices", s.handleCreateInvoice)
+
+			// Documents App (io.example.documents)
+			pr.Get("/documents", s.handleListDocuments)
+			pr.Post("/documents", s.handleCreateDocument)
 
 			// Store
 			pr.Get("/store/apps", s.handleListStoreApps)
@@ -696,4 +712,94 @@ func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "registered", "integration": cfg})
+}
+
+func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	list, err := s.billingMod.ListInvoices(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, `{"error":"failed to fetch invoices"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(list)
+}
+
+func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		ContactName string  `json:"contact_name"`
+		Amount      float64 `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ContactName == "" || req.Amount <= 0 {
+		http.Error(w, `{"error":"invalid invoice parameters"}`, http.StatusBadRequest)
+		return
+	}
+
+	inv, err := s.billingMod.CreateInvoice(r.Context(), tenantID, req.ContactName, req.Amount)
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(inv)
+}
+
+func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	list, err := s.documentsMod.ListDocuments(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, `{"error":"failed to fetch documents"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(list)
+}
+
+func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Title   string `json:"title"`
+		DocType string `json:"doc_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Title == "" {
+		http.Error(w, `{"error":"invalid document parameters"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.DocType == "" {
+		req.DocType = "CONTRACT"
+	}
+
+	doc, err := s.documentsMod.CreateDocument(r.Context(), tenantID, req.Title, req.DocType)
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(doc)
 }

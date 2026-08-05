@@ -28,5 +28,25 @@
     "category": "Supply Chain",
     "visibility": "public",
     "version": "1.0.0"
+  },
+  {
+    "id": "io.example.billing",
+    "slug": "billing",
+    "name": "Public Billing & e-Barimt",
+    "description": "State fee invoicing, public service payments, and e-Barimt tax receipts.",
+    "icon_url": "/icons/billing.png",
+    "category": "Finance",
+    "visibility": "public",
+    "version": "1.0.0"
+  },
+  {
+    "id": "io.example.documents",
+    "slug": "documents",
+    "name": "Digital Documents & Signatures",
+    "description": "Enterprise document routing, digital signatures, and approval workflows.",
+    "icon_url": "/icons/documents.png",
+    "category": "Productivity",
+    "visibility": "public",
+    "version": "1.0.0"
   }
 ]

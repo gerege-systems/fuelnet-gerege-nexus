@@ -15,6 +15,8 @@ import {
   Building2,
   UserCheck,
   Share2,
+  CreditCard,
+  FileText,
 } from "lucide-react";
 
 interface Menu {
@@ -29,6 +31,8 @@ const iconMap: Record<string, React.ReactNode> = {
   users: <Users className="w-5 h-5" />,
   package: <Package className="w-5 h-5" />,
   boxes: <Boxes className="w-5 h-5" />,
+  "credit-card": <CreditCard className="w-5 h-5" />,
+  "file-text": <FileText className="w-5 h-5" />,
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
