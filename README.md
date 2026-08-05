@@ -5,17 +5,44 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-An open-source, production-oriented **Modular Monolith ERP & Business Application Platform** inspired by Odoo's app ecosystem. Built for enterprise scalability using **Go 1.24**, **Chi Router**, **PostgreSQL (pgx/v5)**, **Goose Migrations**, and **Next.js (App Router)**.
+An open-source, production-oriented **Modular Monolith ERP & Business Application Platform** inspired by Odoo's app ecosystem. Built for enterprise scalability, resilience, and national digital identity/data exchange integration using **Go 1.24**, **Chi Router**, **PostgreSQL (pgx/v5)**, **Goose Migrations**, and **Next.js (App Router)**.
 
 ---
 
 ## 👥 Authors & Contributors
 
 This open-source project is created and maintained by:
-- 🏛️ **Gerege Systems Development Team**
+- 🏛️ **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
 - 🎨 **[@craftzbay](https://github.com/craftzbay)**
 - 🤖 **Gemini AI**
 - 🧠 **Claude AI**
+
+---
+
+## 🌟 Unique Advantages & Core Features
+
+### 1. ⚡ High-Performance Modular Monolith Architecture
+- **Compile-Time Go App Modules**: Applications implement a unified `Module` Go contract and compile into a single binary for zero-latency in-process execution.
+- **Tenant-Level App Store Engine**: Per-tenant application gating, dynamic menu composition, and RBAC permissions managed dynamically via PostgreSQL (`app_installations`).
+- **Topological Dependency Resolution Engine**: Pure Go recursive dependency resolver using Directed Acyclic Graphs (DAG) and semver constraints.
+
+### 2. 🛡️ Cloud-Native Resilience Engine (go-zero Inspired)
+- **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Google SRE sliding window error-rate monitoring and rejection handling.
+- **Adaptive Load Shedding (`resilience/loadshedder.go`)**: In-flight HTTP request concurrency control returning `503 Service Unavailable` with `Retry-After` headers under high load.
+- **Singleflight Coalescing (`resilience/singleflight.go`)**: Thundering herd & cache stampede query suppression.
+- **Exponential Backoff Retry (`resilience/retry.go`)**: `DoWithRetry` execution helper for transient network/DB failures.
+
+### 3. 🇲🇳 National Digital Infrastructure Integration
+- **State Data Exchange (`xyp.gerege.mn` / `platform/gerege/xyp.go`)**: Official Mongolian State Data Exchange (ХУР Төрийн мэдээлэл солилцооны систем) for Citizen Civil Registration (`WS100101`) and Company Legal Entity verification (`WS100201`).
+- **National E-ID SSO (`eidmongolia.mn` & `developer.sso.mn`)**: OAuth2 / OpenID Connect (OIDC) authentication supporting PKI Digital Signature (Тоон гарын үсэг), Mobile OTP, Bank SSO, and Biometric Face Verification.
+- **Gerege DAN SSO Gateway (`dan.gerege.mn`)**: Dedicated SSO gateway token verification and citizen profile resolution.
+
+### 4. 🤖 AI Copilot & Smart Business Intelligence
+- **Gemini AI Assistant (`platform/ai/copilot.go`)**: Natural language ERP assistant connected to live tenant database state with intent classification and actionable UI suggestion chips.
+- **AI Inventory Demand Forecaster (`platform/ai/inventory_forecaster.go`)**: Historical stock movement analysis and safety stock reorder point recommendations.
+
+### 5. 🔌 External System Integrations & Webhooks
+- **Integration Manager (`platform/integration/integration.go`)**: HMAC-SHA256 signed event dispatcher and connector manager (`/settings/integrations`).
 
 ---
 
@@ -27,33 +54,13 @@ This open-source project is created and maintained by:
 
 ---
 
-## 🏛️ Architecture Overview
+## 📦 Production Business Application Suite
 
-The system is structured as a **Modular Monolith**:
-- **Compile-Time Go App Modules**: Business applications (`contacts`, `products`, `inventory`) implement a unified `Module` Go interface. Modules are compiled directly into the Go binary.
-- **Tenant-Level App Store Engine**: An app being in the binary does not mean it is enabled for a tenant. Installation, enablement, and menu visibility are dynamically controlled per tenant via PostgreSQL (`app_installations`).
-- **Dependency Resolution Engine**: Implements recursive dependency graph traversal and topological sorting. Installing `Inventory` automatically resolves and installs `Products` and `Contacts` in order.
-- **Shared-Schema Multi-Tenancy**: Every business table (`contacts`, `products`, `warehouses`, `stock_levels`, `stock_movements`) contains `tenant_id` and is strictly scoped to the authenticated tenant.
-- **Dynamic RBAC & Menus**: Backend endpoint access and frontend sidebar menus are filtered dynamically based on enabled tenant modules and user permissions.
-- **Observability & Async Workers**: Includes Prometheus metrics (`/metrics`), OpenTelemetry tracing, and an asynchronous OTP Mailer queue with worker pool.
-
----
-
-## 📦 Business Modules
-
-1. **Contacts (`io.example.contacts`)**:
-   - Customer and vendor management (name, email, phone, company, active state).
-   - Permissions: `contacts.read`, `contacts.manage`
-
-2. **Products (`io.example.products`)**:
-   - Product catalog with unique tenant-scoped SKUs and pricing.
-   - Permissions: `products.read`, `products.manage`
-
-3. **Inventory (`io.example.inventory`)**:
-   - Requires `Contacts` and `Products`.
-   - Warehouse management, live stock levels, append-only stock movement audit log, and transactional stock adjustments.
-   - Prevents negative stock levels.
-   - Permissions: `inventory.read`, `inventory.manage`
+1. 📇 **Contacts (`io.example.contacts`)**: Customer/vendor management with instant XYP (`xyp.gerege.mn`) civil registration auto-fill (`/contacts`).
+2. 📦 **Products (`io.example.products`)**: Product catalog, pricing, and tenant-scoped SKUs (`/products`).
+3. 🏭 **Inventory (`io.example.inventory`)**: Warehouse management, live stock levels, append-only stock movement audit log, and transactional adjustments (`/inventory`).
+4. 💳 **Public Billing & e-Barimt (`io.example.billing`)**: Public service fee invoicing, 10% VAT calculation, and e-Barimt tax receipt generation (`/billing`).
+5. 📄 **Digital Documents & E-Signatures (`io.example.documents`)**: Enterprise document routing, approval workflows, and E-ID / DAN digital signature verification (`/documents`).
 
 ---
 
@@ -105,6 +112,7 @@ npm run build
 
 ## 📚 Documentation Index
 
+- 🏛️ [Architecture Specification](docs/ARCHITECTURE_SPECIFICATION.md) - Deep-dive technical architecture & capabilities
 - 📘 [Module Authoring Guide](docs/MODULE_AUTHORING_GUIDE.md) - How to build custom business modules
 - 🤝 [Contributing Guidelines](CONTRIBUTING.md) - How to submit bug reports and PRs
 - 🛡️ [Security Policy](SECURITY.md) - Vulnerability reporting and security features
