@@ -26,6 +26,13 @@ jobs:
         with:
           version: v2.1.6
           working-directory: backend
+          # The published binaries are built with Go 1.24 and refuse to analyse
+          # a module targeting a newer language version:
+          #   "the Go language version (go1.24) used to build golangci-lint is
+          #    lower than the targeted Go version (1.25.x)".
+          # Compiling from source with the toolchain from setup-go keeps the two
+          # in step automatically.
+          install-mode: goinstall
 
   test:
     name: Test

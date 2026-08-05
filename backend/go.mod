@@ -1,6 +1,6 @@
 module github.com/gerege-systems/open-gerege-mn-erp/backend
 
-go 1.25.7
+go 1.25.12
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
