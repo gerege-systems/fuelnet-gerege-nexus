@@ -16,9 +16,12 @@ type InstalledAppStore interface {
 // A root is emitted only when at least one enabled module contributes a child,
 // preventing empty navigation branches for tenants with a small app set.
 var rootMenus = []internal.MenuDefinition{
-	{ID: "master_data", Label: "Master Data", Icon: "database", Order: 10, Labels: map[string]string{"mn": "Үндсэн бүртгэл"}},
-	{ID: "operations", Label: "Operations", Icon: "workflow", Order: 20, Labels: map[string]string{"mn": "Үйл ажиллагаа"}},
-	{ID: "platform_tools", Label: "Platform Tools", Icon: "layers", Order: 30, Labels: map[string]string{"mn": "Платформын хэрэгслүүд"}},
+	// Path is a rolling-deploy compatibility fallback. Older frontends render
+	// every API item as a Link and crash when href is absent; the hierarchy-aware
+	// frontend renders these records as accordion buttons and ignores Path.
+	{ID: "master_data", Label: "Master Data", Path: "/apps", Icon: "database", Order: 10, Labels: map[string]string{"mn": "Үндсэн бүртгэл"}},
+	{ID: "operations", Label: "Operations", Path: "/apps", Icon: "workflow", Order: 20, Labels: map[string]string{"mn": "Үйл ажиллагаа"}},
+	{ID: "platform_tools", Label: "Platform Tools", Path: "/apps", Icon: "layers", Order: 30, Labels: map[string]string{"mn": "Платформын хэрэгслүүд"}},
 }
 
 func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]internal.MenuDefinition, error) {

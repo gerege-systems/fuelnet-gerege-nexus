@@ -37,7 +37,7 @@ interface Menu {
   id: string;
   parent_id?: string;
   label: string;
-  path: string;
+  path?: string;
   icon: string;
   order: number;
 }
@@ -116,7 +116,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     setExpandedMenus((current) => {
       const next = new Set(current);
       for (const parent of menuTree) {
-        if (parent.children.some((child) => pathname.startsWith(child.path))) next.add(parent.id);
+        if (parent.children.some((child) => child.path && pathname.startsWith(child.path))) next.add(parent.id);
       }
       return next;
     });
@@ -228,20 +228,38 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <span>{t("shell.appStore")}</span>
                 </Link>
 
-                {menus.map((m) => (
-                  <Link
-                    key={m.id}
-                    href={m.path}
-                    className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
-                      pathname.startsWith(m.path)
-                        ? "gerege-nav-link-active font-semibold"
-                        : ""
-                    }`}
-                  >
-                    {iconMap[m.icon] || <Package className="w-5 h-5" />}
-                    <span>{m.label}</span>
-                  </Link>
-                ))}
+                {menuTree.map((parent) => {
+                  const expanded = expandedMenus.has(parent.id);
+                  const active = parent.children.some((child) => child.path && pathname.startsWith(child.path));
+                  return (
+                    <div key={parent.id} className="gerege-menu-group">
+                      <button
+                        type="button"
+                        onClick={() => toggleMenu(parent.id)}
+                        className={`gerege-nav-link gerege-parent-menu w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold transition ${active ? "text-[var(--gerege-blue)]" : ""}`}
+                        aria-expanded={expanded}
+                      >
+                        <span className="gerege-nav-icon">{iconMap[parent.icon] || <Layers3 className="w-5 h-5" />}</span>
+                        <span className="flex-1 text-left">{parent.label}</span>
+                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                      </button>
+                      {expanded && (
+                        <div className="gerege-submenu ml-5 pl-3 py-1 space-y-0.5">
+                          {parent.children.filter((child) => child.path).map((child) => (
+                            <Link
+                              key={child.id}
+                              href={child.path!}
+                              className={`gerege-nav-link flex items-center gap-3 px-3 py-2 text-[13px] font-medium transition ${pathname.startsWith(child.path!) ? "gerege-nav-link-active font-semibold" : ""}`}
+                            >
+                              <span className="gerege-nav-icon">{iconMap[child.icon] || <Package className="w-4 h-4" />}</span>
+                              <span>{child.label}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </nav>
             </div>
 

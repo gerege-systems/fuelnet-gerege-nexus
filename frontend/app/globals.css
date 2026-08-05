@@ -77,6 +77,18 @@
   }
   .gerege-nav-icon { color: #98a2b3; }
   .gerege-nav-link-active .gerege-nav-icon { color: var(--gerege-blue); }
+  .gerege-parent-menu { border: 0; background: transparent; }
+  .gerege-submenu { border-left: 1px solid var(--gerege-border); }
+  .gerege-submenu .gerege-nav-link-active { box-shadow: none; position: relative; }
+  .gerege-submenu .gerege-nav-link-active::before {
+    content: "";
+    position: absolute;
+    left: -13px;
+    width: 3px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--gerege-blue);
+  }
   .gerege-session-dot {
     background: var(--gerege-success);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--gerege-success) 16%, transparent);
