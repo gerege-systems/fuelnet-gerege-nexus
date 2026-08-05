@@ -1,13 +1,13 @@
-# 🏛️ Gerege Template ERP Platform — Technical Architecture & Capabilities Specification
+# 🏛️ Gerege Template Platform — Technical Architecture & Capabilities Specification
 
-Welcome to the comprehensive technical architecture specification for **Gerege Template ERP Platform**, an open-source, production-grade Modular Monolith ERP and business application engine built for enterprise scalability, resilience, and national digital infrastructure integration.
+Welcome to the comprehensive technical architecture specification for **Gerege Template Platform**, an open-source, production-grade Modular Monolith ERP and business application engine built for enterprise scalability, resilience, and national digital infrastructure integration.
 
 ---
 
 ## 🚀 Key Advantages & Architecture Highlights
 
 ### 1. ⚡ High-Performance Modular Monolith Architecture
-Unlike traditional microservice architectures that introduce network latency and operational complexity, or monolithic applications that suffer from tight coupling, **Gerege Template ERP Platform** implements a **Compile-Time Go Modular Monolith**:
+Unlike traditional microservice architectures that introduce network latency and operational complexity, or monolithic applications that suffer from tight coupling, **Gerege Template Platform** implements a **Compile-Time Go Modular Monolith**:
 - **Zero-Latency In-Process Invocations**: Business modules (`contacts`, `products`, `inventory`, `billing`, `documents`) implement a strictly defined Go `Module` interface and compile directly into the single binary.
 - **Dynamic Tenant-Level App Store Gating**: An application being present in the Go binary does **not** mean it is enabled for a tenant. Installation, enablement, dynamic menu composition, and RBAC permissions are evaluated dynamically at runtime per tenant in PostgreSQL (`app_installations`).
 - **Topological Dependency Resolution Engine**: Pure Go recursive dependency resolver using Directed Acyclic Graphs (DAG) and semver constraints. Installing `Inventory` automatically resolves and installs `Products` and `Contacts` in order, with full cycle detection.
@@ -45,7 +45,7 @@ Located in [`backend/internal/platform/ai`](../backend/internal/platform/ai):
 
 ```
 +-----------------------------------------------------------------------------------+
-|                            Gerege Template ERP Platform                           |
+|                            Gerege Template Platform                           |
 +-----------------------------------------------------------------------------------+
                                           |
                 +-------------------------+-------------------------+

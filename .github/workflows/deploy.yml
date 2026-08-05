@@ -31,7 +31,7 @@ jobs:
       - name: Run Backend Unit Tests
         run: |
           cd backend
-          go test -v -race -coverprofile=coverage.out ./...
+          go test -v -race ./...
 
   build-and-deploy:
     name: Build & Deploy to openerp.gerege.mn
