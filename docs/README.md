@@ -32,6 +32,7 @@
 | [`ARCHITECTURE_SPECIFICATION.md`](ARCHITECTURE_SPECIFICATION.md) | MN | Платформын давхаргууд, өгөгдлийн загвар, архитектурын шийдвэрүүд |
 | [`ARCHITECTURE_SPECIFICATION_EN.md`](ARCHITECTURE_SPECIFICATION_EN.md) | EN | Architecture specification |
 | [`MODULE_AUTHORING_GUIDE.md`](MODULE_AUTHORING_GUIDE.md) | EN | Шинэ апп модуль хөгжүүлэх алхам алхмаар заавар |
+| [`GOV_SERVICES_WORKFLOW.md`](GOV_SERVICES_WORKFLOW.md) | EN | Тохируулж болох төрийн үйлчилгээний урсгал, шилжүүлэлт, баталгаажуулалт |
 
 ## Төслийн журам — Project governance
 

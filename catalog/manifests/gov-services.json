@@ -1,0 +1,58 @@
+{
+  "id": "io.example.gov_services",
+  "name": "State Services",
+  "version": "1.1.0",
+  "platform": ">=0.1.0 <2.0.0",
+  "dependencies": [
+    {
+      "id": "io.example.contacts",
+      "version_constraint": "^1.0.0"
+    }
+  ],
+  "permissions": [
+    {
+      "code": "gov.read",
+      "name": "Read State Services",
+      "description": "Allows viewing the service registry, requests and dashboards"
+    },
+    {
+      "code": "gov.apply",
+      "name": "Submit Requests",
+      "description": "Allows submitting, ingesting and cancelling service requests"
+    },
+    {
+      "code": "gov.process",
+      "name": "Process Requests",
+      "description": "Allows assigning, starting, completing and rejecting tasks"
+    },
+    {
+      "code": "gov.delegate",
+      "name": "Delegate Requests",
+      "description": "Allows forwarding a request to a lower organisational unit"
+    },
+    {
+      "code": "gov.verify",
+      "name": "Verify Fulfilment",
+      "description": "Allows verifying or returning work completed by a lower unit"
+    },
+    {
+      "code": "gov.configure",
+      "name": "Configure Workflows",
+      "description": "Allows managing units, workflows and service routing"
+    },
+    {
+      "code": "gov.report",
+      "name": "View Reports",
+      "description": "Allows reading supervisory dashboards across the authorised scope"
+    }
+  ],
+  "menus": [
+    {
+      "id": "gov_services",
+      "label": "State Services",
+      "path": "/gov-services",
+      "icon": "landmark",
+      "order": 35
+    }
+  ]
+}

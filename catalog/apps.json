@@ -100,5 +100,22 @@
         "category": "Хөгжүүлэгчийн хэрэгсэл"
       }
     }
+  },
+  {
+    "id": "io.example.gov_services",
+    "slug": "gov-services",
+    "name": "State Services",
+    "description": "Configurable government service requests: organizational hierarchy, versioned workflows, delegation and verification.",
+    "icon_url": "/icons/gov_services.png",
+    "category": "Public Service",
+    "visibility": "public",
+    "version": "1.1.0",
+    "translations": {
+      "mn": {
+        "name": "Төрийн үйлчилгээ",
+        "description": "Тохируулж болох төрийн үйлчилгээний хүсэлт: байгууллагын бүтэц, хувилбартай урсгал, шилжүүлэлт ба баталгаажуулалт.",
+        "category": "Төрийн үйлчилгээ"
+      }
+    }
   }
 ]

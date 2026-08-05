@@ -13,6 +13,7 @@ const modes: { value: ColorMode; label: { mn: string; en: string }; icon: typeof
 ];
 
 const accents: { value: Accent; label: { mn: string; en: string }; color: string }[] = [
+  { value: "neutral", label: { mn: "Цагаан саарал", en: "White & grey" }, color: "#64748b" },
   { value: "cobalt", label: { mn: "Gerege cobalt", en: "Gerege cobalt" }, color: "#0064e1" },
   { value: "teal", label: { mn: "Хөх ногоон", en: "Teal" }, color: "#008b99" },
   { value: "violet", label: { mn: "Нил ягаан", en: "Violet" }, color: "#7656d6" },
@@ -25,7 +26,7 @@ export default function AppearanceSettingsPage() {
   const theme = useTheme();
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="border-b border-slate-200 pb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
