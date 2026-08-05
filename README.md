@@ -1,139 +1,295 @@
-# Gerege Template Platform 🇲🇳
+# Gerege Template Platform
+
+**Gerege Template Platform** нь Odoo болон cloud-native экосистемээс санаа авсан,
+өндөр бүтээмжтэй, Монгол Улсын цахим дэд бүтэц (ДАН, E-ID, ХУР / XYP)-тэй шууд
+холбогдох боломжтой, **монгол хэлийг үндсэн хэл болгосон** нээлттэй эхийн
+**Modular Monolith ERP & бизнес аппликейшн платформ** юм.
+
+Нэг Go бинари дотор бизнесийн модулиуд компиллогдож, тенант бүрт аль апп
+идэвхтэйг PostgreSQL дээрх апп стор шийднэ — сүлжээний нэмэлт дуудлагагүй,
+микросервисийн нарийн төвөгтэй байдалгүйгээр модуль хуваарилалт хийнэ.
+
+<p>
+  <img src="docs/assets/icons/flag-mn.png" width="18" height="18" alt=""> <b>Монгол</b>
+  &nbsp;·&nbsp;
+  <a href="docs/README_EN.md"><img src="docs/assets/icons/flag-en.png" width="18" height="18" alt=""> English</a>
+  &nbsp;·&nbsp;
+  <a href="docs/README_ZH.md"><img src="docs/assets/icons/flag-zh.png" width="18" height="18" alt=""> 中文</a>
+  &nbsp;·&nbsp;
+  <a href="docs/README_RU.md"><img src="docs/assets/icons/flag-ru.png" width="18" height="18" alt=""> Русский</a>
+</p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8.svg)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
 [![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![CI](https://github.com/gerege-systems/open-gerege-mn-erp/actions/workflows/ci.yml/badge.svg)](https://github.com/gerege-systems/open-gerege-mn-erp/actions/workflows/ci.yml)
+[![Security](https://github.com/gerege-systems/open-gerege-mn-erp/actions/workflows/security.yml/badge.svg)](https://github.com/gerege-systems/open-gerege-mn-erp/actions/workflows/security.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Gerege Template Platform** нь Odoo болон cloud-native экосистемээс санаа авсан, өндөр бүтээмжтэй, Монгол улсын цахим дэд бүтэц (ДАН, E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой **Монгол Хэлний Үндсэн Сонголттой (Mongolian Default Language)** Нээлттэй Эх бүхий **Modular Monolith ERP & Бизнес Аппликейшн Платформ** юм.
+---
 
-*Read this in [English](README.en.md).*
+## Агуулга
+
+- [Хөгжүүлэгчид](#хөгжүүлэгчид)
+- [Үндсэн боломжууд](#үндсэн-боломжууд)
+- [Бэлэн бизнес аппликейшнүүд](#бэлэн-бизнес-аппликейшнүүд)
+- [Төслийн бүтэц](#төслийн-бүтэц)
+- [Ажиллуулах заавар](#ажиллуулах-заавар)
+- [Тохиргооны хувьсагчид](#тохиргооны-хувьсагчид)
+- [API-н тойм](#api-н-тойм)
+- [Тест ба чанарын хяналт](#тест-ба-чанарын-хяналт)
+- [Аюулгүй байдал](#аюулгүй-байдал)
+- [Баримт бичгийн индекс](#баримт-бичгийн-индекс)
 
 ---
 
-## 👥 Хөгжүүлэгчид ба Зохиогчид (Authors & Contributors)
+## Хөгжүүлэгчид
 
-Төслийг хамтран хөгжүүлэгчид:
-- 🏛️ **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
-- 🎨 **[@craftzbay](https://github.com/craftzbay)**
-- 🤖 **Gemini AI**
-- 🧠 **Claude AI**
-
----
-
-## 🌟 Үндсэн Боломжууд ба Давуу Талууд
-
-### 1. ⚡ Өндөр Бүтээмжтэй Модулиар Монолит Архитектур
-- **Compile-Time Go Апп Модулиуд**: Модулиуд (`contacts`, `products`, `inventory`, `billing`, `documents`, `developer_portal`) нь нэг бинари програмд компиллогдон ажиллах тул сүлжээний хоцрогдолгүй (zero-latency execution).
-- **Тенант Бүрийн Апп Стор Систем**: PostgreSQL дээр тенант бүрийн аппликейшний эрх, меню болон RBAC тохиргоо динамикаар удирлагдана (`app_installations`).
-- **Модулийн Хамаарал Шийдвэрлэх Модель**: DAG (Directed Acyclic Graph) болон semver ашигласан хамаарал шийдвэрлэх систем.
-
-### 2. 🛡️ Cloud-Native Resilience Engine (go-zero Сангаас Санаа Авсан)
-- **Adaptive Circuit Breaker (`resilience/breaker.go`)**: Google SRE стандартын алдааны харьцааг хянах систем.
-- **Adaptive Load Shedding (`resilience/loadshedder.go`)**: Сүлжээний хэт ачааллын үед `503 Service Unavailable` буцаан хамгаалах хөдөлгүүр.
-- **Singleflight Coalescing (`resilience/singleflight.go`)**: Давхардсан хүсэлтүүдийг 1 удаа ажиллуулж кэш дээр ачаалал бууруулах.
-- **Exponential Backoff Retry (`resilience/retry.go`)**: Сүлжээний саатлын үеийн давтан ажиллуулах функц.
-
-### 3. 🇲🇳 Төрийн Цахим Дэд Бүтцийн Интеграци
-- **Төрийн Мэдээлэл Солилцооны ХУР Систем**: Иргэний бүртгэл (`WS100101`) ба Хуулийн этгээд/ААН (`WS100201`) баталгаажуулалт.
-- **Төрийн ДАН & Үндэсний E-ID Системтэй Холбогдох Интеграци ([`developer.gerege.mn`](https://developer.gerege.mn) & [`eidmongolia.mn`](https://eidmongolia.mn))**:
-  1. 🖊️ **Тоон гарын үсэг (PKI Digital Signature)**
-  2. 📱 **Нэг удаагийн код (Mobile OTP)**
-  3. 🏦 **Банкны суваг (Bank SSO)**
-  4. 👤 **Царай танилт (Biometric Face Verification)**
-- **Платформын Өөрийн ORY Hydra Grade SSO Provider (`/.well-known/openid-configuration`)**: Байгууллага өөрөө гуравдагч системүүдэд OAuth2 / OpenID Connect OIDC танилт нэвтрэлт олгох бие даасан сервер.
-
-### 4. 🤖 AI Copilot & Бизнес Аналитик
-- **Gemini AI Туслах (`platform/ai/copilot.go`)**: Байгууллагын өгөгдлийн сантай холбогдсон AI Copilot туслах.
-- **AI Агуулахын Захиалга Таамаглагч (`platform/ai/inventory_forecaster.go`)**: Үлдэгдэл болон захиалгын хэмжээг AI-аар таамаглах.
+| Оролцогч | Үүрэг |
+| --- | --- |
+| **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | Архитектур, платформын цөм |
+| **[@craftzbay](https://github.com/craftzbay)** | Frontend ба UX |
+| **Gemini AI** | Код үүсгэлт, баримтжуулалт |
+| **Claude AI** | Код шинжилгээ, аюулгүй байдлын аудит |
 
 ---
 
-## 🚀 Туршилтын Нэвтрэх Эрх (Demo Credentials)
+## Үндсэн боломжууд
 
-- **И-мэйл хаяг**: `admin@example.com`
-- **Нууц үг**: `Password123!`
-- **Тенант**: `Demo Corporation` (`slug: demo`)
+### 1. Өндөр бүтээмжтэй модуль монолит архитектур
+
+- **Compile-time Go апп модулиуд** — модулиуд (`contacts`, `products`,
+  `inventory`, `billing`, `documents`, `developer_portal`) нэг бинарид
+  компиллогдож, процесс дотроо дуудагдана.
+- **Тенант бүрийн апп стор** — тенант тус бүрийн апп эрх, меню, RBAC тохиргоо
+  PostgreSQL (`app_installations`) дээр динамикаар удирдагдана.
+- **Хамаарал шийдвэрлэх хөдөлгүүр** — DAG (Directed Acyclic Graph) дээр
+  тулгуурласан рекурсив шийдвэрлэлт, мөчлөг илрүүлэлт, semver шалгалт.
+- **Каталог синк** — `catalog/apps.json` нь цорын ганц эх сурвалж; `apps`
+  хүснэгт ачаалал бүрт үүнээс шинэчлэгдэнэ.
+
+### 2. Cloud-native тэсвэрлэлтийн хөдөлгүүр
+
+| Модуль | Зориулалт |
+| --- | --- |
+| `resilience/breaker.go` | Google SRE загварын adaptive circuit breaker |
+| `resilience/loadshedder.go` | Ачаалал хэтэрсэн үед `503` + `Retry-After` |
+| `resilience/singleflight.go` | Давхардсан хүсэлтийг нэгтгэж кэшийн ачаалал бууруулах |
+| `resilience/retry.go` | Экспоненциал ухралттай давталт |
+
+### 3. Төрийн цахим дэд бүтцийн интеграци
+
+- **ХУР — Төрийн мэдээлэл солилцооны систем** (`platform/gerege/xyp.go`):
+  иргэний бүртгэл (`WS100101`), хуулийн этгээдийн баталгаажуулалт (`WS100201`).
+- **Үндэсний E-ID ба ДАН** ([`developer.sso.mn`](https://developer.sso.mn),
+  [`eidmongolia.mn`](https://eidmongolia.mn)) — тоон гарын үсэг (PKI), нэг
+  удаагийн код (Mobile OTP), банкны суваг (Bank SSO), царай танилт (Biometric).
+- **Платформын өөрийн OAuth2 / OIDC provider**
+  (`/.well-known/openid-configuration`) — гуравдагч системд client credentials
+  урсгалаар токен олгоно.
+
+> **Анхаар.** E-ID / ДАН / ХУР-ын mock горим зөвхөн хөгжүүлэлтийн орчинд
+> ажиллана. `ENVIRONMENT=production` үед mock горим автоматаар унтарч,
+> хуурамч иргэний мэдээллээр нэвтрэх боломжгүй болно.
+
+### 4. AI Copilot ба бизнес аналитик
+
+- **AI туслах** (`platform/ai/copilot.go`) — тенантын өгөгдлийн сангийн бодит
+  төлөвт холбогдсон, зорилго ангилдаг харилцан яриа.
+- **Агуулахын эрэлт таамаглагч** (`platform/ai/inventory_forecaster.go`) —
+  түүхэн хөдөлгөөнд тулгуурлан аюулгүйн үлдэгдэл ба дахин захиалгын цэгийг
+  санал болгоно.
 
 ---
 
-## 📦 Бэлэн Бизнес Аппликейшнүүд
+## Бэлэн бизнес аппликейшнүүд
 
-1. 📇 **Contacts (`io.example.contacts`)**: Харилцагчийн бүртгэл + ХУР авто-бөглөлт (`/contacts`).
-2. 📦 **Products (`io.example.products`)**: Бараа бүтээгдэхүүн, үнэ ба SKU бүртгэл (`/products`).
-3. 🏭 **Inventory (`io.example.inventory`)**: Агуулахын хөдөлгөөн ба аюулгүйн үлдэгдэл (`/inventory`).
-4. 💳 **Public Billing & e-Barimt (`io.example.billing`)**: Нийтийн нэхэмжлэх, 10% НӨАТ ба e-Barimt татварын баримт (`/billing`).
-5. 📄 **Digital Documents & E-Signatures (`io.example.documents`)**: Цахим баримт бичиг, тоон гарын үсэг ба баталгаажуулалт (`/documents`).
-6. 💻 **Developer Portal & OAuth2 SSO (`io.example.developer_portal`)**: Хөгжүүлэгчийн OAuth2 Client апп бүртгэл ба тохиргоо (`/developer/apps`).
+| # | Апп | ID | Зам | Тайлбар |
+| --- | --- | --- | --- | --- |
+| 1 | Contacts | `io.example.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
+| 2 | Products | `io.example.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
+| 3 | Inventory | `io.example.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
+| 4 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
+| 5 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
+| 6 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | OAuth2 client апп бүртгэл |
+
+Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрутууд нээгдэнэ. Суулгаагүй апп
+руу хандвал `403 Forbidden` буцна.
 
 ---
 
-## 🛠️ Төслийг Ажиллуулах Заавар
+## Төслийн бүтэц
 
-### Шаардлагатай Програмууд
-- Go 1.24+
+```
+backend/
+  cmd/api/            HTTP API сервер (+ demo seeder)
+  cmd/migrate/        Goose миграцийн ажиллуулагч
+  db/migrations/      SQL миграцууд
+  internal/
+    module.go         Модулийн Go гэрээ (Module interface)
+    apps/             Бизнес модулиуд
+    platform/         Платформын цөм үйлчилгээнүүд
+frontend/             Next.js 15 (App Router) вэб клиент
+catalog/              Апп сторын каталог ба manifest-ууд
+deploy/               Production Dockerfile, Nginx тохиргоо
+docs/                 Баримт бичиг ба орчуулгууд
+```
+
+---
+
+## Ажиллуулах заавар
+
+### Шаардлагатай програмууд
+
+- Go 1.25+
 - Node.js 20+
 - PostgreSQL 16+ (эсвэл Docker Compose)
 
-### 1. Docker Compose-оор ажиллуулах
+### 1. Docker Compose (хамгийн хялбар)
+
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
+
+Миграц нь тусдаа `migrate` service-ээр автоматаар ажиллаж дуусмагц API асна.
 
 ### 2. Гараар ажиллуулах
 
-#### Backend:
+**Backend:**
+
 ```bash
 cd backend
-go mod tidy
-DATABASE_URL="postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable" go run ./cmd/migrate up
+go mod download
+DATABASE_URL="postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable" \
+  go run ./cmd/migrate up
 go run ./cmd/api
 ```
 
-#### Frontend:
+**Frontend:**
+
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
-Вэб хөтөч дээрээ [http://localhost:3000](http://localhost:3000) хаягаар орон `admin@example.com` / `Password123!` эрхээр нэвтэрнэ үү.
+
+Вэб хөтөч дээрээ [http://localhost:3000](http://localhost:3000) хаягаар орно уу.
+
+### Туршилтын нэвтрэх эрх
+
+| Талбар | Утга |
+| --- | --- |
+| И-мэйл | `admin@example.com` |
+| Нууц үг | `Password123!` |
+| Тенант | `Demo Corporation` (`slug: demo`) |
+
+Энэ бүртгэл зөвхөн хөгжүүлэлтийн орчинд үүснэ. Production дээр
+`SEED_DEMO_DATA=true` гэж тодорхой заагаагүй бол огт үүсэхгүй.
 
 ---
 
-## 🧪 Тест Ажиллуулах
+## Тохиргооны хувьсагчид
+
+Бүрэн жагсаалтыг [`.env.example`](.env.example)-ээс үзнэ үү.
+
+| Хувьсагч | Анхдагч | Тайлбар |
+| --- | --- | --- |
+| `DATABASE_URL` | localhost | PostgreSQL холболтын мөр |
+| `PORT` | `8080` | API сонсох порт |
+| `ENVIRONMENT` | `development` | `production` үед аюулгүй байдлын хатуу горим |
+| `APP_CATALOG_PATH` | `catalog/apps.json` | Апп сторын каталогийн зам |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS зөвшөөрөгдсөн эх сурвалж |
+| `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
+| `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх |
+| `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
+| `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |
+
+---
+
+## API-н тойм
+
+| Аргачлал | Зам | Тайлбар |
+| --- | --- | --- |
+| `GET` | `/health`, `/ready` | Амьд ба бэлэн байдлын шалгалт |
+| `GET` | `/metrics` | Prometheus хэмжүүрүүд |
+| `POST` | `/api/v1/auth/login` | И-мэйл/нууц үгээр нэвтрэх |
+| `POST` | `/api/v1/auth/eid/login` | Үндэсний E-ID-аар нэвтрэх |
+| `POST` | `/api/v1/auth/dan/login` | ДАН гарцаар нэвтрэх |
+| `POST` | `/api/v1/auth/logout` | Session-ийг цуцлах |
+| `GET` | `/api/v1/menus` | Тенантад идэвхтэй цэсүүд |
+| `GET` | `/api/v1/store/apps` | Апп сторын жагсаалт |
+| `POST` | `/api/v1/store/apps/{slug}/install` | Апп суулгах (админ) |
+| `POST` | `/oauth2/token` | OAuth2 client credentials токен |
+
+Нэвтрэлтийн токен нь HttpOnly cookie эсвэл `Authorization: Bearer <token>`
+толгойгоор дамжина.
+
+---
+
+## Тест ба чанарын хяналт
 
 ```bash
-# Backend нэгж тестүүдийг ажиллуулах
-cd backend
-go test -v -race ./...
+# Backend нэгж тестүүд (race detector-тэй)
+cd backend && go test -race ./...
 
-# Frontend build шалгах
-cd frontend
-npm run build
+# Статик шинжилгээ
+cd backend && go vet ./... && golangci-lint run
+
+# Эмзэг байдлын шалгалт
+cd backend && govulncheck ./...
+
+# Frontend build
+cd frontend && npm run build
 ```
 
----
-
-## 📚 Баримт Бичгүүдийн Индекс
-
-- 🏛️ [Архитектурын Дэлгэрэнгүй Заавар (Mongolian / English)](docs/ARCHITECTURE_SPECIFICATION.md)
-- 📘 [Модуль Хөгжүүлэх Заавар](docs/MODULE_AUTHORING_GUIDE.md)
-- 🤝 [Хамтран Ажиллах Заавар](CONTRIBUTING.md)
-- 🛡️ [Аюулгүй Байдлын Бодлого](SECURITY.md)
-- 📋 [Өөрчлөлтийн Түүх (Changelog)](CHANGELOG.md)
-- 🇬🇧 [English Readme](README.en.md)
+CI нь push ба pull request бүр дээр lint, тест, frontend build, Docker образ
+угсралт, govulncheck ба gosec шалгалтыг ажиллуулна.
 
 ---
 
-## 🙏 Ашигласан & Санаа Авсан Төслүүд
+## Аюулгүй байдал
 
-1. **[snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)** by **[@snykk](https://github.com/snykk)** — Go REST API суурь архитектур.
-2. **[Odoo](https://github.com/odoo/odoo)** — Модулиар Апп Стор болон хамаарал шийдвэрлэх модель.
-3. **[go-zero (zeromicro/go-zero)](https://github.com/zeromicro/go-zero)** — Cloud-native resilience engine (Circuit Breaker, Load Shedder, Singleflight).
+- Session токен нь 256 бит санамсаргүй утга бөгөөд өгөгдлийн санд зөвхөн
+  SHA-256 хэш нь хадгалагдана.
+- Нууц үг bcrypt-ээр хэшлэгдэнэ; нэвтрэх хүсэлтэд IP-д суурилсан хурдны
+  хязгаарлалт үйлчилнэ.
+- Апп суулгах, идэвхжүүлэх, интеграц бүртгэх үйлдэл тенантын админ эрх шаардана.
+- OAuth2 client танилт тогтмол хугацааны харьцуулалтаар (constant-time)
+  шалгагдана.
+
+Эмзэг байдал мэдээлэх журмыг [`SECURITY.md`](SECURITY.md)-ээс үзнэ үү.
 
 ---
 
-## 📄 Лиценз
+## Баримт бичгийн индекс
 
-Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI**.
-Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for more information.
+| Баримт | Тайлбар |
+| --- | --- |
+| [Баримт бичгийн төв](docs/README.md) | Бүх баримтын индекс ба орчуулгууд |
+| [Архитектурын тодорхойлолт](docs/ARCHITECTURE_SPECIFICATION.md) | Платформын давхаргууд ба шийдвэрүүд |
+| [Модуль хөгжүүлэх заавар](docs/MODULE_AUTHORING_GUIDE.md) | Шинэ апп модуль бичих алхмууд |
+| [Хамтран ажиллах заавар](CONTRIBUTING.md) | Хувь нэмэр оруулах журам |
+| [Аюулгүй байдлын бодлого](SECURITY.md) | Эмзэг байдал мэдээлэх |
+| [Ёс зүйн дүрэм](CODE_OF_CONDUCT.md) | Хамт олны хэм хэмжээ |
+| [Өөрчлөлтийн түүх](CHANGELOG.md) | Хувилбар бүрийн өөрчлөлт |
+
+---
+
+## Ашигласан ба санаа авсан төслүүд
+
+1. **[snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)**
+   by **[@snykk](https://github.com/snykk)** — Go REST API суурь архитектур.
+2. **[Odoo](https://github.com/odoo/odoo)** — модуль апп стор ба хамаарал
+   шийдвэрлэх загвар.
+3. **[go-zero](https://github.com/zeromicro/go-zero)** — cloud-native
+   resilience хөдөлгүүр.
+
+---
+
+## Лиценз
+
+Copyright (c) 2026 **Gerege Systems Development Team, @craftzbay, Gemini AI &
+Claude AI**. Apache 2.0 лицензээр тараагдана — [`LICENSE`](LICENSE)-ийг үзнэ үү.
+
+Тугны дүрсийг [Flaticon](https://www.flaticon.com/)-оос авсан
+([оруулсан хувь нэмэр](docs/assets/icons/ATTRIBUTION.md)).
