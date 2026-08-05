@@ -56,7 +56,7 @@ export default function LoginPage() {
         <div className="p-3 bg-indigo-50 rounded-full mb-3 text-indigo-600">
           <Building2 className="w-8 h-8" />
         </div>
-        <h1 className="text-2xl font-bold text-slate-900">open-gerege-mn-erp</h1>
+        <h1 className="text-xl font-bold text-slate-900 text-center">Gerege Template ERP Platform v1.0</h1>
         <p className="text-sm text-slate-500 mt-1">Modular Enterprise Application Platform</p>
       </div>
 

@@ -85,9 +85,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Top Navbar */}
       <header className="h-14 bg-slate-900 text-white flex items-center justify-between px-4 border-b border-slate-800 sticky top-0 z-50">
         <div className="flex items-center space-x-3">
-          <Link href="/apps" className="flex items-center space-x-2 font-bold text-lg text-indigo-400 hover:text-indigo-300">
+          <Link href="/apps" className="flex items-center space-x-2 font-bold text-base text-indigo-400 hover:text-indigo-300">
             <Building2 className="w-6 h-6 text-indigo-500" />
-            <span>OdooMod ERP</span>
+            <span>Gerege Template ERP Platform v1.0</span>
           </Link>
           <span className="bg-slate-800 text-slate-300 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center space-x-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -181,8 +181,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="px-4 text-xs text-slate-400 border-t border-slate-100 pt-3">
-            OdooMod Platform v1.0.0
+          <div className="px-4 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
+            Gerege Template ERP Platform v1.0
           </div>
         </aside>
 
