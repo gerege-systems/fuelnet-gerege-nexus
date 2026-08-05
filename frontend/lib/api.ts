@@ -216,4 +216,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ company_reg: companyReg }),
     }),
+
+  // External Integrations Manager
+  getIntegrations: () =>
+    fetcher<
+      Array<{
+        id: string;
+        name: string;
+        type: string;
+        target_url: string;
+        status: string;
+        last_ping_at: string;
+      }>
+    >("/integrations"),
+
+  registerIntegration: (data: { name: string; type: string; target_url: string; secret_key?: string }) =>
+    fetcher("/integrations", { method: "POST", body: JSON.stringify(data) }),
 };

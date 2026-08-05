@@ -2,6 +2,7 @@ package platform
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/mailer"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
@@ -30,15 +32,16 @@ import (
 )
 
 type Server struct {
-	db           *pgxpool.Pool
-	installer    *appinstaller.AppInstaller
-	router       *chi.Mux
-	loginLimiter *security.IPRateLimiter
-	asyncMailer  *mailer.AsyncOTPMailer
-	copilotSvc   *ai.CopilotService
-	forecaster   *ai.Forecaster
-	eidSvc       *eid.EIDService
-	geregeSvc    *gerege.GeregeService
+	db             *pgxpool.Pool
+	installer      *appinstaller.AppInstaller
+	router         *chi.Mux
+	loginLimiter   *security.IPRateLimiter
+	asyncMailer    *mailer.AsyncOTPMailer
+	copilotSvc     *ai.CopilotService
+	forecaster     *ai.Forecaster
+	eidSvc         *eid.EIDService
+	geregeSvc      *gerege.GeregeService
+	integrationMgr *integration.Manager
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -90,6 +93,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		forecaster:   ai.NewForecaster(db),
 		eidSvc:       eid.NewEIDService(),
 		geregeSvc:    gerege.NewGeregeService(),
+		integrationMgr: integration.NewManager(),
 	}
 
 	s.setupRoutes()
@@ -153,6 +157,10 @@ func (s *Server) setupRoutes() {
 			// XYP State Information Exchange System (xyp.gerege.mn)
 			pr.Post("/xyp/citizen", s.handleXYPCitizenQuery)
 			pr.Post("/xyp/company", s.handleXYPCompanyQuery)
+
+			// External Integrations Manager
+			pr.Get("/integrations", s.handleListIntegrations)
+			pr.Post("/integrations", s.handleRegisterIntegration)
 
 			// Store
 			pr.Get("/store/apps", s.handleListStoreApps)
@@ -665,4 +673,27 @@ func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) handleListIntegrations(w http.ResponseWriter, r *http.Request) {
+	list := s.integrationMgr.List()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(list)
+}
+
+func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Request) {
+	var cfg integration.IntegrationConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil || cfg.Name == "" {
+		http.Error(w, `{"error":"invalid integration configuration"}`, http.StatusBadRequest)
+		return
+	}
+
+	if cfg.ID == "" {
+		cfg.ID = fmt.Sprintf("int_%d", time.Now().UnixNano())
+	}
+
+	s.integrationMgr.Register(&cfg)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "registered", "integration": cfg})
 }

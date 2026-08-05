@@ -1,0 +1,199 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { Share2, Plus, CheckCircle2, ShieldAlert, Activity, Globe, RefreshCw } from "lucide-react";
+
+export default function IntegrationsPage() {
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    type: "webhook",
+    target_url: "",
+    secret_key: "",
+  });
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getIntegrations();
+      setIntegrations(data || []);
+    } catch (err) {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.registerIntegration(form);
+      setShowModal(false);
+      setForm({ name: "", type: "webhook", target_url: "", secret_key: "" });
+      loadData();
+    } catch (err: any) {
+      alert("Failed to register integration: " + err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
+            <Share2 className="w-7 h-7 text-indigo-600" />
+            <span>External System Integrations & Webhooks</span>
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Manage government gateways, REST API connectors, and event webhooks
+          </p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={loadData}
+            className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Integration</span>
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-12 text-center text-slate-400">Loading integrations...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {integrations.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">{item.name}</h3>
+                      <span className="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                        {item.type}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center space-x-1 text-xs font-bold px-2.5 py-1 rounded-full ${
+                      item.status === "ACTIVE"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}
+                  >
+                    {item.status === "ACTIVE" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                    )}
+                    <span>{item.status}</span>
+                  </span>
+                </div>
+
+                <div className="text-xs text-slate-500 space-y-1 font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  <div className="truncate">URL: {item.target_url}</div>
+                  <div>Last Health Ping: {new Date(item.last_ping_at).toLocaleTimeString()}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Integration Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Register Integration Connector</h2>
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Integration Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sales Webhook"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Integration Type</label>
+                <select
+                  value={form.type}
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="webhook">Webhook Listener</option>
+                  <option value="government">Government Gateway</option>
+                  <option value="payment">Payment Gateway</option>
+                  <option value="custom_rest">Custom REST Endpoint</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Target Endpoint URL *</label>
+                <input
+                  type="url"
+                  placeholder="https://api.example.com/webhooks"
+                  value={form.target_url}
+                  onChange={(e) => setForm({ ...form, target_url: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Secret Key (Signing)</label>
+                <input
+                  type="password"
+                  placeholder="Optional HMAC secret"
+                  value={form.secret_key}
+                  onChange={(e) => setForm({ ...form, secret_key: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
+                >
+                  Register Connector
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
