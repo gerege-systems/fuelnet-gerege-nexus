@@ -572,9 +572,11 @@ func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SSOToken  string `json:"sso_token"`
-		RegNumber string `json:"reg_number"`
-		OTPCode   string `json:"otp_code"`
+		Code        string         `json:"code"`
+		RedirectURI string         `json:"redirect_uri"`
+		RegNumber   string         `json:"reg_number"`
+		OTPCode     string         `json:"otp_code"`
+		AuthMethod  eid.AuthMethod `json:"auth_method"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
@@ -583,12 +585,12 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 
 	var identity *eid.EIDIdentity
 	var err error
-	if req.SSOToken != "" {
-		identity, err = s.eidSvc.VerifyToken(r.Context(), req.SSOToken)
+	if req.Code != "" {
+		identity, err = s.eidSvc.ExchangeCode(r.Context(), req.Code, req.RedirectURI)
 	} else if req.RegNumber != "" {
-		identity, err = s.eidSvc.AuthenticateRegNumber(r.Context(), req.RegNumber, req.OTPCode)
+		identity, err = s.eidSvc.AuthenticateWithMethod(r.Context(), req.RegNumber, req.OTPCode, req.AuthMethod)
 	} else {
-		http.Error(w, `{"error":"missing E-ID token or registration number"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"missing authorization code or registration number"}`, http.StatusBadRequest)
 		return
 	}
 

@@ -38,10 +38,10 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  loginWithEID: (ssoToken?: string, regNumber?: string, otpCode?: string) =>
+  loginWithEID: (code?: string, redirectURI?: string, regNumber?: string, otpCode?: string, authMethod?: string) =>
     fetcher<{ token: string; user: any; identity: any }>("/auth/eid/login", {
       method: "POST",
-      body: JSON.stringify({ sso_token: ssoToken, reg_number: regNumber, otp_code: otpCode }),
+      body: JSON.stringify({ code, redirect_uri: redirectURI, reg_number: regNumber, otp_code: otpCode, auth_method: authMethod }),
     }),
 
   logout: () => fetcher<{ status: string }>("/auth/logout", { method: "POST" }),
