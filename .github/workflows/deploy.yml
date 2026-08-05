@@ -62,6 +62,7 @@ jobs:
             ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
 
       - name: Deploy to Production Server (openerp.gerege.mn) via SSH
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST || 'openerp.gerege.mn' }}
