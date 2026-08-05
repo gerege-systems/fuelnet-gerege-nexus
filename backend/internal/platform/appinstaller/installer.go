@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appcatalog"
@@ -142,6 +143,25 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 						`INSERT INTO role_permissions (role_id, permission_id)
 						 VALUES ($1, $2) ON CONFLICT DO NOTHING`, adminRoleID, pID)
 				}
+			}
+
+			// Odoo-style additive default groups: managers receive operational
+			// read/manage permissions; users receive read/self-service rights.
+			// Tenant administrators still bypass checks and their system role is
+			// kept complete above.
+			for _, grant := range []struct {
+				roleCode string
+				allowed  bool
+			}{
+				{roleCode: "manager", allowed: strings.HasSuffix(perm.Code, ".read") || strings.HasSuffix(perm.Code, ".manage") || perm.Code == "gov.process" || perm.Code == "gov.delegate" || perm.Code == "gov.verify" || perm.Code == "gov.report"},
+				{roleCode: "user", allowed: strings.HasSuffix(perm.Code, ".read") || perm.Code == "gov.apply"},
+			} {
+				if !grant.allowed {
+					continue
+				}
+				_, _ = tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id)
+					SELECT r.id,p.id FROM roles r JOIN permissions p ON p.code=$3
+					WHERE r.tenant_id=$1 AND r.code=$2 AND r.active ON CONFLICT DO NOTHING`, tenantID, grant.roleCode, perm.Code)
 			}
 		}
 

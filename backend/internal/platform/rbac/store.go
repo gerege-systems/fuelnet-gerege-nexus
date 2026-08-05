@@ -35,7 +35,7 @@ func (s *SQLPermissionStore) GetUserPermissions(ctx context.Context, tenantID, u
 		   JOIN membership_roles mr ON mr.membership_id = m.id
 		   JOIN role_permissions rp ON rp.role_id = mr.role_id
 		   JOIN permissions p ON p.id = rp.permission_id
-		   JOIN roles r ON r.id = mr.role_id AND r.tenant_id = m.tenant_id
+		   JOIN roles r ON r.id = mr.role_id AND r.tenant_id = m.tenant_id AND r.active
 		  WHERE m.tenant_id = $1 AND m.user_id = $2`, tenantID, userID)
 	if err != nil {
 		return nil, err

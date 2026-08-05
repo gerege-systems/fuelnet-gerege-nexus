@@ -42,6 +42,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/mailer"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
@@ -72,6 +73,7 @@ type Server struct {
 	ssoProvider    *ssoprovider.SSOProvider
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
+	permissions    *rbac.SQLPermissionStore
 	billingMod     *billing.BillingModule
 	documentsMod   *documents.DocumentsModule
 	govMod         *gov_services.Module
@@ -163,6 +165,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		ssoProvider:    ssoProvider,
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integration.NewManager(),
+		permissions:    rbac.NewSQLPermissionStore(db),
 		billingMod:     billingMod,
 		documentsMod:   documentsMod,
 		govMod:         govMod,
@@ -233,6 +236,18 @@ func (s *Server) setupRoutes() {
 
 			pr.Get("/auth/me", s.handleMe)
 			pr.Get("/menus", s.handleMenus)
+
+			// Tenant access control. Mutations are deliberately admin-only;
+			// authorization configuration can otherwise be used to self-elevate.
+			pr.Route("/admin/access", func(ac chi.Router) {
+				ac.Use(s.requireAdmin)
+				ac.Get("/overview", s.handleAccessOverview)
+				ac.Post("/roles", s.handleCreateRole)
+				ac.Put("/roles/{id}", s.handleUpdateRole)
+				ac.Delete("/roles/{id}", s.handleDeleteRole)
+				ac.Put("/roles/{id}/permissions", s.handleSetRolePermissions)
+				ac.Put("/memberships/{id}/roles", s.handleSetMembershipRoles)
+			})
 
 			// AI Copilot & Forecasting
 			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/copilot", s.handleAICopilot)
@@ -347,9 +362,32 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 				return
 			}
 
+			// Model-level access rights are additive across all assigned roles,
+			// matching Odoo's ir.model.access behaviour. Government workflow has
+			// its own action- and unit-aware permission checks.
+			if permission := appRequestPermission(appID, r.Method); permission != "" {
+				rbac.RequirePermission(s.permissions, permission)(next).ServeHTTP(w, r)
+				return
+			}
 			next.ServeHTTP(w, r)
 		}))
 	}
+}
+
+func appRequestPermission(appID, method string) string {
+	prefixes := map[string]string{
+		"io.example.contacts": "contacts", "io.example.products": "products",
+		"io.example.inventory": "inventory", "io.example.billing": "billing",
+		"io.example.documents": "documents", "io.example.developer_portal": "developer",
+	}
+	prefix := prefixes[appID]
+	if prefix == "" {
+		return ""
+	}
+	if method == http.MethodGet || method == http.MethodHead {
+		return prefix + ".read"
+	}
+	return prefix + ".manage"
 }
 
 // Handlers
@@ -366,7 +404,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var userID, passwordHash, tenantID, name string
 	var isAdmin bool
 	err := s.db.QueryRow(r.Context(),
-		`SELECT u.id, u.password_hash, u.name, u.is_admin, m.tenant_id
+		`SELECT u.id, u.password_hash, u.name,
+		        (u.is_admin OR EXISTS (
+		            SELECT 1 FROM membership_roles mr
+		            JOIN roles r ON r.id=mr.role_id
+		            WHERE mr.membership_id=m.id AND r.tenant_id=m.tenant_id
+		              AND r.code='admin' AND r.active
+		        )) AS is_admin,
+		        m.tenant_id
 		 FROM users u
 		 JOIN memberships m ON m.user_id = u.id
 		 WHERE u.email = $1 LIMIT 1`, req.Email).Scan(&userID, &passwordHash, &name, &isAdmin, &tenantID)
@@ -497,9 +542,46 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"failed to fetch menus"}`, http.StatusInternalServerError)
 		return
 	}
+	claims, _ := auth.UserFromContext(r.Context())
+	if !claims.IsAdmin {
+		permissions, permissionErr := s.permissions.GetUserPermissions(r.Context(), tenantID, claims.UserID)
+		if permissionErr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to resolve menu access")
+			return
+		}
+		visible := menus[:0]
+		for _, item := range menus {
+			permission := appReadPermission(item.AppID)
+			if permission == "" || permissions[permission] {
+				visible = append(visible, item)
+			}
+		}
+		menus = visible
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(menus)
+}
+
+func appReadPermission(appID string) string {
+	switch appID {
+	case "io.example.contacts":
+		return "contacts.read"
+	case "io.example.products":
+		return "products.read"
+	case "io.example.inventory":
+		return "inventory.read"
+	case "io.example.billing":
+		return "billing.read"
+	case "io.example.documents":
+		return "documents.read"
+	case "io.example.developer_portal":
+		return "developer.read"
+	case "io.example.gov_services":
+		return "gov.read"
+	default:
+		return ""
+	}
 }
 
 func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {

@@ -87,7 +87,14 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 
 	var claims UserClaims
 	err := s.db.QueryRow(ctx,
-		`SELECT s.user_id::text, s.tenant_id::text, u.email, u.is_admin
+		`SELECT s.user_id::text, s.tenant_id::text, u.email,
+		        (u.is_admin OR EXISTS (
+		            SELECT 1 FROM memberships m
+		            JOIN membership_roles mr ON mr.membership_id=m.id
+		            JOIN roles r ON r.id=mr.role_id
+		            WHERE m.tenant_id=s.tenant_id AND m.user_id=s.user_id
+		              AND r.tenant_id=s.tenant_id AND r.code='admin' AND r.active
+		        )) AS is_admin
 		   FROM sessions s
 		   JOIN users u ON u.id = s.user_id
 		  WHERE s.token_hash = $1

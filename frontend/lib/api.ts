@@ -60,6 +60,18 @@ export const api = {
 
   getMenus: () => fetcher<Array<{ id: string; app_id?: string; app_name?: string; parent_id?: string; label: string; path?: string; icon: string; order: number }>>("/menus"),
 
+  // Odoo-style tenant access control
+  getAccessOverview: () => fetcher<{
+    roles: Array<{ id:string; code:string; name:string; description:string; active:boolean; system:boolean; permissions:string[] }>;
+    permissions: Array<{ code:string; name:string; description:string; app:string }>;
+    members: Array<{ membership_id:string; user_id:string; name:string; email:string; is_admin:boolean; roles:string[] }>;
+  }>("/admin/access/overview"),
+  createRole: (data:{code:string;name:string;description:string}) => fetcher<{id:string}>("/admin/access/roles",{method:"POST",body:JSON.stringify(data)}),
+  updateRole: (id:string,data:{name:string;description:string;active:boolean}) => fetcher(`/admin/access/roles/${id}`,{method:"PUT",body:JSON.stringify(data)}),
+  deleteRole: (id:string) => fetcher<void>(`/admin/access/roles/${id}`,{method:"DELETE"}),
+  setRolePermissions: (id:string,permissions:string[]) => fetcher(`/admin/access/roles/${id}/permissions`,{method:"PUT",body:JSON.stringify({permissions})}),
+  setMembershipRoles: (id:string,roles:string[]) => fetcher(`/admin/access/memberships/${id}/roles`,{method:"PUT",body:JSON.stringify({roles})}),
+
   // Store
   getStoreApps: () =>
     fetcher<
