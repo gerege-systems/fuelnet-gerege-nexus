@@ -20,6 +20,9 @@ import {
   CreditCard,
   FileText,
   Code2,
+  Menu,
+  X,
+  ChevronDown,
 } from "lucide-react";
 
 interface Menu {
@@ -48,6 +51,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
@@ -75,6 +79,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     loadData();
   }, [pathname, router, isPublic]);
 
+  useEffect(() => setSidebarOpen(false), [pathname]);
+
   const handleLogout = async () => {
     try {
       await api.logout();
@@ -101,40 +107,59 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="gerege-shell min-h-screen flex flex-col">
       {/* Top Navbar */}
-      <header className="h-14 bg-slate-900 text-white flex items-center justify-between px-4 border-b border-slate-800 sticky top-0 z-50">
-        <div className="flex items-center space-x-3">
-          <Link href="/apps" className="flex items-center space-x-2 font-bold text-base text-indigo-400 hover:text-indigo-300">
-            <Building2 className="w-6 h-6 text-indigo-500" />
-            <span>Gerege Template Platform</span>
+      <header className="gerege-topbar h-16 flex items-center justify-between px-4 lg:px-6 border-b sticky top-0 z-50">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((open) => !open)}
+            className="lg:hidden grid place-items-center w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            aria-label={sidebarOpen ? "Цэс хаах" : "Цэс нээх"}
+            aria-expanded={sidebarOpen}
+          >
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+          <Link href="/apps" className="flex items-center gap-2.5 min-w-0 group">
+            <img src="/brand.webp" alt="Gerege" className="w-9 h-9 rounded-lg shadow-sm shrink-0" />
+            <span className="hidden sm:flex flex-col leading-tight min-w-0">
+              <span className="font-semibold text-[15px] text-slate-900 truncate">Gerege ERP</span>
+              <span className="text-[11px] text-slate-500 tracking-wide">BUSINESS PLATFORM</span>
+            </span>
           </Link>
-          <span className="bg-slate-800 text-slate-300 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center space-x-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>{user?.tenant_name || "Demo Tenant"}</span>
+          <span className="hidden md:flex items-center gap-2 text-xs text-slate-600 border-l border-slate-200 pl-4 ml-1">
+            <span className="gerege-session-dot w-1.5 h-1.5 rounded-full"></span>
+            <span className="truncate max-w-48"><strong className="text-slate-800 font-medium">{user?.tenant_name || "Demo Tenant"}</strong> · идэвхтэй</span>
           </span>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <LanguageSwitcher variant="dark" />
-          <div className="flex items-center space-x-2 text-sm text-slate-300">
-            <UserCheck className="w-4 h-4 text-emerald-400" />
-            <span className="font-medium">{user?.name}</span>
-            <span className="text-slate-500">({user?.email})</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <LanguageSwitcher />
+          <div className="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200">
+            <span className="w-8 h-8 rounded-full bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] grid place-items-center text-xs font-bold">
+              {(user?.name || user?.email || "G").slice(0, 1).toUpperCase()}
+            </span>
+            <span className="flex flex-col leading-tight max-w-40">
+              <span className="text-sm font-medium text-slate-800 truncate">{user?.name}</span>
+              <span className="text-[11px] text-slate-500 truncate">{user?.email}</span>
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center space-x-1 text-xs bg-slate-800 hover:bg-red-900/50 text-slate-300 hover:text-red-300 px-3 py-1.5 rounded-md border border-slate-700 transition"
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 px-2.5 py-2 rounded-lg hover:bg-red-50 transition"
+            title={t("shell.logout")}
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>{t("shell.logout")}</span>
+            <LogOut className="w-4 h-4" />
+            <span className="hidden xl:inline">{t("shell.logout")}</span>
           </button>
         </div>
       </header>
 
       <div className="flex flex-1">
         {/* Sidebar */}
-        <aside className="w-60 bg-white border-r border-slate-200 flex flex-col py-4 justify-between">
+        {sidebarOpen && <button className="fixed inset-0 top-16 bg-slate-950/25 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} aria-label="Цэс хаах" />}
+        <aside className={`gerege-sidebar fixed lg:static top-16 bottom-0 left-0 z-40 w-60 border-r flex flex-col py-5 justify-between transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
           <div className="space-y-6">
             <div>
               <div className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
@@ -143,13 +168,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <nav className="space-y-1 px-2">
                 <Link
                   href="/apps"
-                  className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition ${
+                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
                     pathname === "/apps"
-                      ? "bg-indigo-50 text-indigo-600 font-semibold"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "gerege-nav-link-active font-semibold"
+                      : ""
                   }`}
                 >
-                  <LayoutGrid className="w-5 h-5 text-indigo-500" />
+                  <LayoutGrid className="gerege-nav-icon w-5 h-5" />
                   <span>{t("shell.appStore")}</span>
                 </Link>
 
@@ -157,10 +182,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <Link
                     key={m.id}
                     href={m.path}
-                    className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition ${
+                    className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
                       pathname.startsWith(m.path)
-                        ? "bg-indigo-50 text-indigo-600 font-semibold"
-                        : "text-slate-700 hover:bg-slate-100"
+                        ? "gerege-nav-link-active font-semibold"
+                        : ""
                     }`}
                   >
                     {iconMap[m.icon] || <Package className="w-5 h-5" />}
@@ -177,37 +202,37 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <nav className="space-y-1 px-2">
                 <Link
                   href="/settings/apps"
-                  className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition ${
+                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
                     pathname === "/settings/apps"
-                      ? "bg-indigo-50 text-indigo-600 font-semibold"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "gerege-nav-link-active font-semibold"
+                      : ""
                   }`}
                 >
-                  <Settings className="w-5 h-5 text-slate-500" />
+                  <Settings className="gerege-nav-icon w-5 h-5" />
                   <span>{t("shell.installedApps")}</span>
                 </Link>
 
                 <Link
                   href="/settings/integrations"
-                  className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition ${
+                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
                     pathname === "/settings/integrations"
-                      ? "bg-indigo-50 text-indigo-600 font-semibold"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "gerege-nav-link-active font-semibold"
+                      : ""
                   }`}
                 >
-                  <Share2 className="w-5 h-5 text-slate-500" />
+                  <Share2 className="gerege-nav-icon w-5 h-5" />
                   <span>{t("shell.integrations")}</span>
                 </Link>
 
                 <Link
                   href="/developer/apps"
-                  className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition ${
+                  className={`gerege-nav-link flex items-center space-x-3 px-3 py-2.5 text-sm font-medium transition ${
                     pathname === "/developer/apps"
-                      ? "bg-indigo-50 text-indigo-600 font-semibold"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "gerege-nav-link-active font-semibold"
+                      : ""
                   }`}
                 >
-                  <Code2 className="w-5 h-5 text-slate-500" />
+                  <Code2 className="gerege-nav-icon w-5 h-5" />
                   <span>{t("shell.developerApps")}</span>
                 </Link>
               </nav>
@@ -215,12 +240,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="px-4 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
-            Gerege Template Platform
+            <span className="text-slate-500 font-medium">Gerege Theme</span><br />
+            <span>ERP Platform · 2026</span>
           </div>
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
       </div>
       <AICopilot />
     </div>

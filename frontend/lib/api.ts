@@ -2,8 +2,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v
 
 async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : null;
+  // Server-owned content (menu labels, app store copy) is translated by the
+  // API, so every request carries the locale the user picked.
+  const locale = typeof window !== "undefined" ? window.localStorage.getItem("locale") || "mn" : "mn";
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "Accept-Language": locale,
     ...(options.headers as Record<string, string>),
   };
   if (token) {

@@ -30,6 +30,37 @@ type CatalogApp struct {
 	Visibility  string   `json:"visibility"`
 	Version     string   `json:"version"`
 	Manifest    Manifest `json:"manifest"`
+
+	// Translations holds per-locale overrides keyed by ISO 639-1 code. The
+	// store API resolves them before responding, so clients never have to
+	// translate catalog content themselves.
+	Translations map[string]CatalogAppText `json:"translations,omitempty"`
+}
+
+// CatalogAppText is the translatable part of a catalog entry.
+type CatalogAppText struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Category    string `json:"category,omitempty"`
+}
+
+// Localized returns a copy with any translation for the locale applied. Fields
+// missing from the translation keep their default value.
+func (a CatalogApp) Localized(locale string) CatalogApp {
+	text, ok := a.Translations[locale]
+	if !ok {
+		return a
+	}
+	if text.Name != "" {
+		a.Name = text.Name
+	}
+	if text.Description != "" {
+		a.Description = text.Description
+	}
+	if text.Category != "" {
+		a.Category = text.Category
+	}
+	return a
 }
 
 // ValidateManifest validates semver and manifest rules.

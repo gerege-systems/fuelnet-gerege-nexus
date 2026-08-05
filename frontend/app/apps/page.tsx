@@ -112,7 +112,7 @@ export default function AppStorePage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t("apps.platformAppStore")}</h1>
-          <p className="text-sm text-slate-500">Install, enable, and manage compile-time business modules</p>
+          <p className="text-sm text-slate-500">{t("apps.installEnableAndManage")}</p>
         </div>
 
         {/* Search & Category */}
@@ -135,7 +135,7 @@ export default function AppStorePage() {
           >
             {categories.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {c === "All" ? t("apps.allCategories") : c}
               </option>
             ))}
           </select>
@@ -189,7 +189,7 @@ export default function AppStorePage() {
                             : "bg-amber-100 text-amber-700"
                         }`}
                       >
-                        {app.enabled ? "Installed & Enabled" : "Disabled"}
+                        {app.enabled ? t("apps.installedEnabled") : t("apps.disabled")}
                       </span>
                     )}
                   </div>
@@ -202,7 +202,7 @@ export default function AppStorePage() {
                 {/* Dependencies info */}
                 {app.manifest.dependencies && app.manifest.dependencies.length > 0 && (
                   <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    <span className="font-semibold text-slate-700">Requires: </span>
+                    <span className="font-semibold text-slate-700">{t("apps.requires")}</span>
                     {app.manifest.dependencies.map((d) => d.id.replace("io.example.", "")).join(", ")}
                   </div>
                 )}

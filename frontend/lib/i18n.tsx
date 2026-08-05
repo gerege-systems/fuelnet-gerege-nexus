@@ -371,6 +371,12 @@ const dictionary = {
   "developer.oidcDiscoveryEndpoint": { mn: "OIDC Discovery хаяг", en: "OIDC Discovery Endpoint" },
   "developer.registerNewOauth2ClientApp": { mn: "Шинэ OAuth2 client апп бүртгэх", en: "Register New OAuth2 Client App" },
   "developer.registerOauth2Client": { mn: "OAuth2 client бүртгэх", en: "Register OAuth2 Client" },
+  // ─── App store (follow-up) ─────────────────────────────────────────────────
+  "apps.installEnableAndManage": { mn: "Компиляцын үеийн бизнес модулиудыг суулгаж, идэвхжүүлж, удирдана", en: "Install, enable, and manage compile-time business modules" },
+  "apps.installedEnabled": { mn: "Суулгасан ба идэвхтэй", en: "Installed & Enabled" },
+  "apps.disabled": { mn: "Идэвхгүй", en: "Disabled" },
+  "apps.requires": { mn: "Шаардлага: ", en: "Requires:" },
+  "apps.allCategories": { mn: "Бүгд", en: "All" },
 } as const;
 
 export type TranslationKey = keyof typeof dictionary;

@@ -26,6 +26,20 @@ type MenuDefinition struct {
 	Path  string `json:"path"`
 	Icon  string `json:"icon"`
 	Order int    `json:"order"`
+
+	// Labels holds per-locale overrides keyed by ISO 639-1 code. The menu API
+	// resolves Label from the caller's locale before responding, so the client
+	// never has to translate server-owned content.
+	Labels map[string]string `json:"-"`
+}
+
+// LocalizedLabel returns the label for the requested locale, falling back to
+// the default Label when no translation exists.
+func (m MenuDefinition) LocalizedLabel(locale string) string {
+	if label, ok := m.Labels[locale]; ok && label != "" {
+		return label
+	}
+	return m.Label
 }
 
 // Module defines the contract every compile-time app module must implement.

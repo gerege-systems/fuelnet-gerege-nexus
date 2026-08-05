@@ -12,7 +12,7 @@ type InstalledAppStore interface {
 	GetEnabledAppIDsForTenant(ctx context.Context, tenantID string) ([]string, error)
 }
 
-func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID string) ([]internal.MenuDefinition, error) {
+func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]internal.MenuDefinition, error) {
 	enabledAppIDs, err := store.GetEnabledAppIDsForTenant(ctx, tenantID)
 	if err != nil {
 		return nil, err
@@ -23,10 +23,16 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID strin
 		enabledMap[id] = true
 	}
 
-	var menus []internal.MenuDefinition
+	// Serialise an empty menu set as [] rather than null.
+	menus := make([]internal.MenuDefinition, 0)
 	for _, mod := range appregistry.List() {
 		if enabledMap[mod.ID()] {
-			menus = append(menus, mod.Menus()...)
+			for _, item := range mod.Menus() {
+				// Resolve the label server-side so the client renders whatever
+				// the API hands it.
+				item.Label = item.LocalizedLabel(locale)
+				menus = append(menus, item)
+			}
 		}
 	}
 

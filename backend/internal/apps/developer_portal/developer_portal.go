@@ -47,7 +47,7 @@ func (m *DeveloperPortalModule) Permissions() []internal.PermissionDefinition {
 
 func (m *DeveloperPortalModule) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "developer_apps", Label: "Developer Apps", Path: "/developer/apps", Icon: "code", Order: 60},
+		{ID: "developer_apps", Label: "Developer Apps", Path: "/developer/apps", Icon: "code", Order: 60, Labels: map[string]string{"mn": "Хөгжүүлэгчийн аппууд"}},
 	}
 }
 

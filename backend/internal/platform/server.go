@@ -183,7 +183,7 @@ func (s *Server) setupRoutes() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   security.SafeCORSOrigins(),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Tenant-ID"},
+		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Tenant-ID"},
 		AllowCredentials: true,
 	}))
 
@@ -475,7 +475,7 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	menus, err := menu.GetTenantMenus(r.Context(), s.installer, tenantID)
+	menus, err := menu.GetTenantMenus(r.Context(), s.installer, tenantID, config.LocaleFromRequest(r))
 	if err != nil {
 		http.Error(w, `{"error":"failed to fetch menus"}`, http.StatusInternalServerError)
 		return
@@ -504,11 +504,12 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 		Enabled   bool `json:"enabled"`
 	}
 
+	locale := config.LocaleFromRequest(r)
 	res := make([]StoreAppResponse, 0, len(catalog))
 	for _, app := range catalog {
 		state, installed := installedStates[app.ID]
 		res = append(res, StoreAppResponse{
-			CatalogApp: app,
+			CatalogApp: app.Localized(locale),
 			Installed:  installed,
 			Enabled:    state,
 		})
@@ -531,7 +532,7 @@ func (s *Server) handleGetStoreApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(app)
+	_ = json.NewEncoder(w).Encode(app.Localized(config.LocaleFromRequest(r)))
 }
 
 func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request) {

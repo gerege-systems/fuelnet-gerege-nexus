@@ -70,7 +70,7 @@ func (m *BillingModule) Permissions() []internal.PermissionDefinition {
 
 func (m *BillingModule) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "billing", Label: "Public Billing", Path: "/billing", Icon: "credit-card", Order: 40},
+		{ID: "billing", Label: "Public Billing", Path: "/billing", Icon: "credit-card", Order: 40, Labels: map[string]string{"mn": "Нэхэмжлэх"}},
 	}
 }
 
