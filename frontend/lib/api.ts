@@ -38,6 +38,12 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
+  loginWithEID: (ssoToken?: string, regNumber?: string, otpCode?: string) =>
+    fetcher<{ token: string; user: any; identity: any }>("/auth/eid/login", {
+      method: "POST",
+      body: JSON.stringify({ sso_token: ssoToken, reg_number: regNumber, otp_code: otpCode }),
+    }),
+
   logout: () => fetcher<{ status: string }>("/auth/logout", { method: "POST" }),
 
   getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean }>("/auth/me"),

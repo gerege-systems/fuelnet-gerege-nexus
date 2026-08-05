@@ -18,6 +18,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/mailer"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
@@ -35,6 +36,7 @@ type Server struct {
 	asyncMailer  *mailer.AsyncOTPMailer
 	copilotSvc   *ai.CopilotService
 	forecaster   *ai.Forecaster
+	eidSvc       *eid.EIDService
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -84,6 +86,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		asyncMailer:  asyncMailer,
 		copilotSvc:   ai.NewCopilotService(db),
 		forecaster:   ai.NewForecaster(db),
+		eidSvc:       eid.NewEIDService(),
 	}
 
 	s.setupRoutes()
@@ -130,6 +133,7 @@ func (s *Server) setupRoutes() {
 	r.Route("/api/v1", func(api chi.Router) {
 		// Auth with rate limiting
 		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/login", s.handleLogin)
+		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/login", s.handleEIDLogin)
 		api.Post("/auth/logout", s.handleLogout)
 
 		// Protected endpoints
@@ -533,4 +537,71 @@ func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(forecast)
+}
+
+func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SSOToken  string `json:"sso_token"`
+		RegNumber string `json:"reg_number"`
+		OTPCode   string `json:"otp_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	var identity *eid.EIDIdentity
+	var err error
+	if req.SSOToken != "" {
+		identity, err = s.eidSvc.VerifyToken(r.Context(), req.SSOToken)
+	} else if req.RegNumber != "" {
+		identity, err = s.eidSvc.AuthenticateRegNumber(r.Context(), req.RegNumber, req.OTPCode)
+	} else {
+		http.Error(w, `{"error":"missing E-ID token or registration number"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err != nil || identity == nil {
+		http.Error(w, `{"error":"E-ID verification failed: `+err.Error()+`"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Fetch demo tenant & admin user for login session mapping
+	var userID, tenantID string
+	_ = s.db.QueryRow(r.Context(), `SELECT id FROM users LIMIT 1`).Scan(&userID)
+	_ = s.db.QueryRow(r.Context(), `SELECT id FROM tenants LIMIT 1`).Scan(&tenantID)
+
+	if userID == "" {
+		userID = "00000000-0000-0000-0000-000000000002"
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	// Set secure session cookie
+	isProd := os.Getenv("ENVIRONMENT") == "production"
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    userID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   isProd,
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	audit.Record(r.Context(), tenantID, userID, "auth.eid_login_success", "eid", map[string]any{
+		"reg_number": identity.RegNumber,
+		"civil_id":   identity.CivilID,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"token":    userID,
+		"identity": identity,
+		"user": map[string]any{
+			"id":        userID,
+			"tenant_id": tenantID,
+			"name":      identity.FirstName + " " + identity.LastName,
+			"email":     identity.Email,
+			"is_admin":  true,
+		},
+	})
 }
