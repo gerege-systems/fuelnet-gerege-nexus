@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Async OTP Mailer queue with worker pool, retry logic, and graceful shutdown (`internal/platform/mailer`).
 - **Public Billing & e-Barimt Module ([`io.example.billing`](backend/internal/apps/billing))**:
   - Public service fee invoices, 10% VAT calculation for Mongolia e-Barimt, and status tracking (`/billing`).
+- **Gerege DAN SSO Gateway System ([`dan.gerege.mn`](backend/internal/platform/dan))**:
+  - Official Gerege Systems DAN SSO Gateway integration service (`POST /api/v1/auth/dan/login`).
+  - Citizen identity verification and session token validation against `https://dan.gerege.mn/api/v1`.
 - **E-ID Digital Identity & DAN SSO Authentication ([`internal/platform/eid`](backend/internal/platform/eid))**:
   - Aligned 100% with official **[eidmongolia.mn](https://eidmongolia.mn)** & **[developer.sso.mn](https://developer.sso.mn)** OAuth2 and OpenID Connect (OIDC) specifications.
   - Supports 4 official Mongolian authentication channels: PKI Digital Signature (Тоон гарын үсэг), Mobile OTP, Bank SSO, and Biometric Face Verification.
