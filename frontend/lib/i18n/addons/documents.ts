@@ -48,6 +48,7 @@ export const documents = {
   "documents.action.reject": { mn: "Татгалзах", en: "Reject" },
   "documents.action.request_approval": { mn: "Батлах хүсэлт илгээх", en: "Send approval request" },
   "documents.action.view_history": { mn: "Гарын үсгийн түүх", en: "Signature history" },
+  "documents.action.route": { mn: "Батлахад илгээх", en: "Send for approval" },
 
   "documents.message.loading": { mn: "Баримтуудыг ачаалж байна...", en: "Loading documents..." },
   "documents.message.empty": {
@@ -118,6 +119,11 @@ export const documents = {
   "documents.message.reject_success": { mn: "\"{title}\"-г татгалзлаа.", en: "\"{title}\" was rejected." },
   "documents.message.reject_failed": { mn: "Татгалзаж чадсангүй", en: "Reject failed" },
   "documents.message.create_failed": { mn: "Баримт үүсгэж чадсангүй", en: "Failed to create document" },
+  "documents.message.route_success": {
+    mn: "\"{title}\" батлах дараалалд орлоо.",
+    en: "\"{title}\" was sent for approval.",
+  },
+  "documents.message.route_failed": { mn: "Батлахад илгээж чадсангүй", en: "Could not send it for approval" },
   "documents.message.signature_progress": {
     mn: "{required} гарын үсгээс {applied} зурагдсан",
     en: "{applied} of {required} signatures applied",

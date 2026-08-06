@@ -40,7 +40,7 @@ export default function DocumentsPage() {
     }
   };
 
-  const { busyId, message, setMessage, succeed, fail, reject } = useDocumentActions(loadData);
+  const { busyId, message, setMessage, succeed, fail, route, reject } = useDocumentActions(loadData);
 
   useEffect(() => {
     loadData();
@@ -123,8 +123,10 @@ export default function DocumentsPage() {
                       doc={doc}
                       busy={busyId === doc.id}
                       canSign={can("documents.sign")}
+                      canManage={can("documents.manage")}
                       onSign={setSignTarget}
                       onReject={reject}
+                      onRoute={route}
                     />
                   </td>
                 </tr>

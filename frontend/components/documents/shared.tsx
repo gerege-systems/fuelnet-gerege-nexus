@@ -12,6 +12,7 @@ import {
   History,
   Loader2,
   PenLine,
+  Send,
   ShieldCheck,
   Users,
   X,
@@ -221,6 +222,20 @@ export function useDocumentActions(onChanged: () => void | Promise<void>) {
 
   const fail = (text: string) => setMessage({ type: "error", text });
 
+  const route = async (doc: DocumentRecord) => {
+    setBusyId(doc.id);
+    setMessage(null);
+    try {
+      await api.routeDocument(doc.id);
+      setMessage({ type: "success", text: t("documents.message.route_success", { title: doc.title }) });
+      await onChanged();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || t("documents.message.route_failed") });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const reject = async (doc: DocumentRecord) => {
     if (!confirm(t("documents.message.reject_confirm", { title: doc.title }))) return;
     setBusyId(doc.id);
@@ -236,7 +251,7 @@ export function useDocumentActions(onChanged: () => void | Promise<void>) {
     }
   };
 
-  return { busyId, message, setMessage, succeed, fail, reject };
+  return { busyId, message, setMessage, succeed, fail, route, reject };
 }
 
 /** The Sign / Reject pair, shown only while a document is still pending. */
@@ -244,16 +259,36 @@ export function RowActions({
   doc,
   busy,
   canSign,
+  canManage,
   onSign,
   onReject,
+  onRoute,
 }: {
   doc: DocumentRecord;
   busy: boolean;
   canSign: boolean;
+  canManage?: boolean;
   onSign: (doc: DocumentRecord) => void;
   onReject: (doc: DocumentRecord) => void;
+  onRoute?: (doc: DocumentRecord) => void;
 }) {
   const { t } = useI18n();
+
+  // A draft is not awaiting anybody: it has to be sent for approval first, and
+  // that is a routing decision rather than a signing one.
+  if (doc.status === "DRAFT") {
+    if (!canManage || !onRoute) return <span className="text-slate-300 text-[11px]">—</span>;
+    return (
+      <button
+        onClick={() => onRoute(doc)}
+        disabled={busy}
+        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+      >
+        <Send className="w-3.5 h-3.5" />
+        <span>{t("documents.action.route")}</span>
+      </button>
+    );
+  }
 
   if (doc.status !== PENDING) return <span className="text-slate-300 text-[11px]">—</span>;
   if (!canSign) return <span className="text-slate-300 text-[11px]">—</span>;
