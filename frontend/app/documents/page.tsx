@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
@@ -40,6 +40,15 @@ export default function DocumentsPage() {
   const PAGE = 200;
   const [total, setTotal] = useState(0);
 
+  // What the operator is looking for. Mirrored in a ref because loadSpan is also called
+  // by the actions hook, which captured it at an earlier render: a refresh after signing
+  // must not silently drop the filter the rows on screen were fetched under.
+  const [search, setSearch] = useState("");
+  const [docType, setDocType] = useState("");
+  const [status, setStatus] = useState("");
+  const filterRef = useRef({ q: "", doc_type: "", status: "" });
+  filterRef.current = { q: search, doc_type: docType, status };
+
   const loadSpan = async (rows: number) => {
     setLoading(true);
     try {
@@ -47,7 +56,7 @@ export default function DocumentsPage() {
       const collected: DocumentRecord[] = [];
       let counted = 0;
       for (let offset = 0; offset < wanted; offset += PAGE) {
-        const page = await api.getDocuments({ limit: PAGE, offset });
+        const page = await api.getDocuments({ ...filterRef.current, limit: PAGE, offset });
         counted = page?.total ?? 0;
         collected.push(...(page?.documents || []));
         if (collected.length >= counted) break;
@@ -140,6 +149,53 @@ export default function DocumentsPage() {
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
+      {/* Paging reads the list; this is how a particular document is found. Each change
+          starts again from the first page, because the rows below have to be the answer
+          to what is in these controls and nothing else. */}
+      <section className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={search}
+          placeholder={t("documents.field.search_placeholder")}
+          maxLength={255}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") loadSpan(PAGE);
+          }}
+          onBlur={() => loadSpan(PAGE)}
+          className="flex-1 min-w-[12rem] px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+        />
+        <select
+          value={docType}
+          onChange={(e) => {
+            setDocType(e.target.value);
+            filterRef.current = { ...filterRef.current, doc_type: e.target.value };
+            loadSpan(PAGE);
+          }}
+          className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">{t("documents.field.any_type")}</option>
+          <option value="CONTRACT">{t("documents.category.legal_contract")}</option>
+          <option value="REQUEST">{t("documents.category.official_request")}</option>
+          <option value="APPROVAL">{t("documents.category.internal_approval")}</option>
+        </select>
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            filterRef.current = { ...filterRef.current, status: e.target.value };
+            loadSpan(PAGE);
+          }}
+          className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">{t("documents.field.any_status")}</option>
+          <option value="DRAFT">{t("documents.state.draft")}</option>
+          <option value="PENDING_APPROVAL">{t("documents.state.pending")}</option>
+          <option value="APPROVED">{t("documents.state.approved")}</option>
+          <option value="REJECTED">{t("documents.state.rejected")}</option>
+        </select>
+      </section>
+
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
       ) : documents.length === 0 ? (
@@ -147,7 +203,8 @@ export default function DocumentsPage() {
         // failed one says so in the banner and shows whatever it already had.
         loadFailed ? null : (
           <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
-            {t("documents.message.empty")}
+            {/* With a filter on, an empty answer says nothing about the tenant. */}
+            {search || docType || status ? t("documents.message.no_matches") : t("documents.message.empty")}
           </div>
         )
       ) : (

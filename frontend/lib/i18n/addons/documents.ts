@@ -53,6 +53,13 @@ export const documents = {
     en: "These rows may be out of date — the list could not be refreshed.",
   },
   "documents.action.retry": { mn: "Дахин оролдох", en: "Try again" },
+  "documents.field.search_placeholder": { mn: "Гарчгаар хайх", en: "Search by title" },
+  "documents.field.any_type": { mn: "Бүх төрөл", en: "Any type" },
+  "documents.field.any_status": { mn: "Бүх төлөв", en: "Any status" },
+  "documents.message.no_matches": {
+    mn: "Хайлтад тохирох баримт олдсонгүй. Хайлт эсвэл шүүлтийг сольж үзээрэй.",
+    en: "No documents match. Try a different search or filter.",
+  },
   "documents.stat.oldest_days": { mn: "Хамгийн урт хүлээлт (хоног)", en: "Longest wait (days)" },
 
   "documents.category.legal_contract": { mn: "Гэрээ", en: "Legal Contract" },

@@ -206,8 +206,13 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	page, err := m.ListDocuments(r.Context(), tenantID,
-		r.URL.Query().Get("status"), r.URL.Query().Get("order"), limit, offset)
+	query := r.URL.Query()
+	page, err := m.ListDocuments(r.Context(), tenantID, DocumentFilter{
+		Status:  query.Get("status"),
+		DocType: query.Get("doc_type"),
+		Search:  query.Get("q"),
+		Order:   query.Get("order"),
+	}, limit, offset)
 	if errors.Is(err, ErrInvalidDocument) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -768,18 +773,54 @@ const (
 // see it, and would report the longest wait as whatever happened to be on page one.
 const ListOrderOldest = "oldest"
 
-// ListDocuments returns one page of a tenant's documents, newest first unless asked
-// for ListOrderOldest.
+// DocumentFilter narrows a page of documents to what somebody is looking for. Paging
+// alone is not enough on a tenant with thousands of them: "Load more" is not a way to
+// find a particular contract, it is a way to read the whole list.
+type DocumentFilter struct {
+	// Status, when given, must be one of the statuses a document can hold.
+	Status string
+	// DocType, when given, must be one of DocTypes.
+	DocType string
+	// Search matches anywhere in the title, case-insensitively.
+	Search string
+	// Order is ListOrderOldest, or empty for newest first.
+	Order string
+}
+
+// ListDocuments returns one page of a tenant's documents matching the filter, newest
+// first unless asked for ListOrderOldest.
 //
-// status, when given, must be one of the statuses a document can hold; anything else
-// would silently answer with an empty page, which is worse than refusing. The approvals
-// queue passes PENDING_APPROVAL rather than filtering a capped page in the browser: a
-// document waiting for a signature must not fall off the end of a page full of approved
-// ones.
-func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID, status, order string, limit, offset int) (*DocumentPage, error) {
-	status = strings.ToUpper(strings.TrimSpace(status))
+// An unknown status or type is refused rather than answered with an empty page: a
+// screen cannot tell "nothing matches" from "you asked for something that does not
+// exist", and the second is a bug worth surfacing. The approvals queue passes
+// PENDING_APPROVAL rather than filtering a capped page in the browser: a document
+// waiting for a signature must not fall off the end of a page full of approved ones.
+func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string, filter DocumentFilter, limit, offset int) (*DocumentPage, error) {
+	status := strings.ToUpper(strings.TrimSpace(filter.Status))
 	if status != "" && !slices.Contains([]string{StatusDraft, StatusPending, StatusApproved, StatusRejected}, status) {
 		return nil, fmt.Errorf("%w: unknown status %q", ErrInvalidDocument, status)
+	}
+	docType := strings.ToUpper(strings.TrimSpace(filter.DocType))
+	if docType != "" && !slices.Contains(DocTypes, docType) {
+		return nil, fmt.Errorf("%w: unknown doc_type %q", ErrInvalidDocument, docType)
+	}
+	// The search is a substring of the title, so the two characters Postgres reads as
+	// wildcards are escaped: somebody typing "100%" is looking for a document called
+	// that, not for every document.
+	//
+	// The escape character is declared explicitly in the query (ESCAPE '!') rather than
+	// relying on the backslash default, because what a backslash means in a pattern
+	// depends on standard_conforming_strings and on how the driver sends the parameter.
+	// With '!' there is nothing to reason about: the escape character is escaped by
+	// doubling, and the reasoning cannot be broken by a setting somewhere else.
+	search := strings.TrimSpace(filter.Search)
+	if len([]rune(search)) > TitleLimit {
+		return nil, fmt.Errorf("%w: a search is at most %d characters", ErrInvalidDocument, TitleLimit)
+	}
+	pattern := ""
+	if search != "" {
+		escaped := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(search)
+		pattern = "%" + escaped + "%"
 	}
 	if limit <= 0 {
 		limit = ListLimitDefault
@@ -791,26 +832,30 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID, status, o
 		offset = 0
 	}
 
+	const where = `d.tenant_id = $1
+		   AND ($2 = '' OR d.status = $2)
+		   AND ($3 = '' OR d.doc_type = $3)
+		   AND ($4 = '' OR d.title ILIKE $4 ESCAPE '!')`
+
 	page := &DocumentPage{Documents: make([]Document, 0), Limit: limit, Offset: offset}
 	if err := m.db.QueryRow(ctx,
-		`SELECT count(*) FROM document_records d
-		  WHERE d.tenant_id = $1 AND ($2 = '' OR d.status = $2)`,
-		tenantID, status).Scan(&page.Total); err != nil {
+		`SELECT count(*) FROM document_records d WHERE `+where,
+		tenantID, status, docType, pattern).Scan(&page.Total); err != nil {
 		return nil, fmt.Errorf("count documents: %w", err)
 	}
 
 	// The id breaks ties, so paging cannot show one document twice and skip another
 	// when several share a timestamp.
 	sort := "d.created_at DESC, d.id DESC"
-	if strings.EqualFold(strings.TrimSpace(order), ListOrderOldest) {
+	if strings.EqualFold(strings.TrimSpace(filter.Order), ListOrderOldest) {
 		sort = "d.created_at ASC, d.id ASC"
 	}
 	rows, err := m.db.Query(ctx,
 		`SELECT `+documentColumns+`
 		   FROM document_records d
-		  WHERE d.tenant_id = $1 AND ($2 = '' OR d.status = $2)
+		  WHERE `+where+`
 		  ORDER BY `+sort+`
-		  LIMIT $3 OFFSET $4`, tenantID, status, limit, offset)
+		  LIMIT $5 OFFSET $6`, tenantID, status, docType, pattern, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list documents: %w", err)
 	}

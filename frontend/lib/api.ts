@@ -329,9 +329,18 @@ export const api = {
   // One page of a tenant's documents, newest first, with how many there are in total —
   // each row counts its own signatures and outstanding steps, so the list cannot be
   // unbounded, and a screen showing part of it has to be able to say so.
-  getDocuments: (params?: { status?: string; order?: "oldest"; limit?: number; offset?: number }) => {
+  getDocuments: (params?: {
+    status?: string;
+    doc_type?: string;
+    q?: string;
+    order?: "oldest";
+    limit?: number;
+    offset?: number;
+  }) => {
     const query = new URLSearchParams();
     if (params?.status) query.set("status", params.status);
+    if (params?.doc_type) query.set("doc_type", params.doc_type);
+    if (params?.q) query.set("q", params.q);
     if (params?.order) query.set("order", params.order);
     if (params?.limit) query.set("limit", String(params.limit));
     if (params?.offset) query.set("offset", String(params.offset));

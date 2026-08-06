@@ -1370,7 +1370,7 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 		}
 	}
 
-	page, err := f.m.ListDocuments(ctx, f.tenantID, "", "", 0, 0)
+	page, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{}, 0, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -1385,7 +1385,7 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 	}
 
 	// A caller cannot ask for the whole table by hand.
-	page, err = f.m.ListDocuments(ctx, f.tenantID, "", "", 10_000, 0)
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{}, 10_000, 0)
 	if err != nil {
 		t.Fatalf("list with a large limit: %v", err)
 	}
@@ -1397,7 +1397,7 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 	}
 
 	// The next page continues where the first left off.
-	page, err = f.m.ListDocuments(ctx, f.tenantID, "", "", 100, 100)
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{}, 100, 100)
 	if err != nil {
 		t.Fatalf("second page: %v", err)
 	}
@@ -1407,7 +1407,7 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 
 	// The queue asks the server for what is waiting, so a pending document cannot fall
 	// off the end of a page full of approved ones.
-	page, err = f.m.ListDocuments(ctx, f.tenantID, StatusPending, "", 0, 0)
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Status: StatusPending}, 0, 0)
 	if err != nil {
 		t.Fatalf("pending page: %v", err)
 	}
@@ -1424,7 +1424,7 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 	// the newest first the document that has waited longest is on the LAST page, so a
 	// screen showing one page would report the longest wait as whatever it happened to
 	// be holding.
-	page, err = f.m.ListDocuments(ctx, f.tenantID, StatusPending, ListOrderOldest, 10, 0)
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Status: StatusPending, Order: ListOrderOldest}, 10, 0)
 	if err != nil {
 		t.Fatalf("oldest first: %v", err)
 	}
@@ -1432,9 +1432,63 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 		t.Errorf("oldest page starts at %q, want the oldest document", page.Documents[0].Title)
 	}
 
-	// A status nothing can hold is refused rather than answered with an empty page.
-	if _, err := f.m.ListDocuments(ctx, f.tenantID, "WHATEVER", "", 0, 0); !errors.Is(err, ErrInvalidDocument) {
-		t.Errorf("got %v, want ErrInvalidDocument", err)
+	// A status or type nothing can hold is refused rather than answered with an empty
+	// page: a screen cannot tell "nothing matches" from "you asked for something that
+	// does not exist".
+	if _, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Status: "WHATEVER"}, 0, 0); !errors.Is(err, ErrInvalidDocument) {
+		t.Errorf("unknown status: got %v, want ErrInvalidDocument", err)
+	}
+	if _, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{DocType: "WHATEVER"}, 0, 0); !errors.Is(err, ErrInvalidDocument) {
+		t.Errorf("unknown type: got %v, want ErrInvalidDocument", err)
+	}
+
+	// Paging is not a way to FIND a document, so the list can be searched. The search is
+	// a substring of the title, case-insensitive.
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: "багц 04"}, 0, 0)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if page.Total != 10 {
+		t.Errorf("search total = %d, want the ten of Багц 040..049", page.Total)
+	}
+
+	// A title holding a LIKE wildcard is searched for literally, not as a pattern.
+	if _, err := f.m.db.Exec(ctx,
+		`INSERT INTO document_records (tenant_id, title, doc_type, status)
+		      VALUES ($1, '100% гэрээ', 'CONTRACT', $2)`, f.tenantID, StatusPending); err != nil {
+		t.Fatalf("insert the awkward title: %v", err)
+	}
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: "100%"}, 0, 0)
+	if err != nil {
+		t.Fatalf("search for a percent sign: %v", err)
+	}
+	if page.Total != 1 {
+		t.Errorf("searching for \"100%%\" matched %d, want the one document called that", page.Total)
+	}
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: "%"}, 0, 0)
+	if err != nil {
+		t.Fatalf("search for a bare percent: %v", err)
+	}
+	if page.Total != 1 {
+		t.Errorf("a bare %% matched %d documents, want the one whose title holds it", page.Total)
+	}
+
+	// The filters compose, and a search that matches nothing is an empty page rather
+	// than an error.
+	page, err = f.m.ListDocuments(ctx, f.tenantID,
+		DocumentFilter{Status: StatusApproved, DocType: "CONTRACT", Search: "багц 04"}, 0, 0)
+	if err != nil {
+		t.Fatalf("composed filter: %v", err)
+	}
+	if page.Total != 5 {
+		t.Errorf("approved of Багц 040..049 = %d, want 5", page.Total)
+	}
+	page, err = f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: "юу ч биш"}, 0, 0)
+	if err != nil {
+		t.Fatalf("a search that matches nothing: %v", err)
+	}
+	if page.Total != 0 || len(page.Documents) != 0 {
+		t.Errorf("got %d of %d, want an empty page", len(page.Documents), page.Total)
 	}
 }
 
@@ -1518,6 +1572,62 @@ func TestAnExpiredPollDoesNotBuryACompletedCeremony(t *testing.T) {
 	}
 	if alive {
 		t.Error("an expired session that produced nothing was left behind")
+	}
+}
+
+// A search is for a substring of the title, so the characters Postgres reads as
+// wildcards must not act as wildcards: somebody typing "100%" is looking for the
+// document called that, not for every document. The escape character is declared in the
+// query rather than assumed, so this cannot be broken by a setting somewhere else — and
+// it is itself searchable.
+func TestASearchIsForWhatWasTypedAndNothingElse(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	for _, title := range []string{"100% гэрээ", "plain гэрээ", `back\slash гэрээ`, "a_b гэрээ", "яах вэ! гэрээ"} {
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_records (tenant_id, title, doc_type, status)
+			      VALUES ($1, $2, 'CONTRACT', $3)`, f.tenantID, title, StatusPending); err != nil {
+			t.Fatalf("insert %q: %v", title, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		search string
+		want   string
+	}{
+		{"100%", "100% гэрээ"},
+		{"%", "100% гэрээ"},
+		{"_", "a_b гэрээ"},
+		{"a_b", "a_b гэрээ"},
+		{`back\slash`, `back\slash гэрээ`},
+		{"!", "яах вэ! гэрээ"},
+		{"яах вэ!", "яах вэ! гэрээ"},
+		{"ГЭРЭЭ", ""}, // case-insensitive, so this matches all five
+	} {
+		page, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: tc.search}, 0, 0)
+		if err != nil {
+			t.Fatalf("search %q: %v", tc.search, err)
+		}
+		if tc.want == "" {
+			if page.Total != 5 {
+				t.Errorf("search %q matched %d, want all five", tc.search, page.Total)
+			}
+			continue
+		}
+		if page.Total != 1 {
+			t.Errorf("search %q matched %d documents, want only %q", tc.search, page.Total, tc.want)
+			continue
+		}
+		if page.Documents[0].Title != tc.want {
+			t.Errorf("search %q matched %q, want %q", tc.search, page.Documents[0].Title, tc.want)
+		}
+	}
+
+	// And a search longer than a title could ever be is refused rather than run.
+	if _, err := f.m.ListDocuments(ctx, f.tenantID,
+		DocumentFilter{Search: strings.Repeat("х", TitleLimit+1)}, 0, 0); !errors.Is(err, ErrInvalidDocument) {
+		t.Errorf("an over-long search: got %v, want ErrInvalidDocument", err)
 	}
 }
 
@@ -1651,7 +1761,7 @@ func TestAnotherTenantsDocumentIsNotSignable(t *testing.T) {
 		t.Errorf("cross-tenant reject: got %v, want ErrNotSignable", err)
 	}
 
-	page, err := intruder.m.ListDocuments(ctx, intruder.tenantID, "", "", 0, 0)
+	page, err := intruder.m.ListDocuments(ctx, intruder.tenantID, DocumentFilter{}, 0, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
