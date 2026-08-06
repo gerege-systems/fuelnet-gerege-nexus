@@ -63,10 +63,16 @@ export default function DocumentsPage() {
   // the filter shown.
   const loadTicket = useRef(0);
 
-  const loadSpan = async (rows: number) => {
+  // A load asks ONE question, given to it explicitly.
+  //
+  // Refreshes and Load more pass nothing and get the filter the rows on screen were
+  // fetched under; only the controls themselves pass the live one. Reading the live
+  // filter for every load meant a half-typed search changed what the table showed the
+  // next time an action refreshed it — the operator signed a document and the list
+  // became the answer to a question they had not finished asking.
+  const loadSpan = async (rows: number, asked?: { q: string; doc_type: string; status: string }) => {
     const mine = ++loadTicket.current;
-    // Read once, at the start: every slice of this load has to be the same question.
-    const filter = { ...filterRef.current };
+    const filter = { ...(asked ?? loadedFilter.current) };
     setLoading(true);
     try {
       const wanted = Math.max(PAGE, rows);
@@ -131,7 +137,7 @@ export default function DocumentsPage() {
   const { isBusy, message, setMessage, succeed, fail, route, reject } = useDocumentActions(loadData);
 
   useEffect(() => {
-    loadSpan(PAGE);
+    loadSpan(PAGE, filterRef.current);
   }, []);
 
   // Nothing between the click and the POST changed any state, so a second click —
@@ -205,14 +211,14 @@ export default function DocumentsPage() {
           maxLength={255}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") loadSpan(PAGE);
+            if (e.key === "Enter") loadSpan(PAGE, filterRef.current);
           }}
           onBlur={() => {
             // Only when it actually changed. Reloading on every blur threw away the
             // pages the operator had loaded — and, because the table came down while
             // the load ran, the click that caused the blur (Sign, Reject, Load more)
             // was swallowed with it and the action never happened.
-            if (search.trim() !== loadedFilter.current.q) loadSpan(PAGE);
+            if (search.trim() !== loadedFilter.current.q) loadSpan(PAGE, filterRef.current);
           }}
           className="flex-1 min-w-[12rem] px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         />
@@ -221,7 +227,7 @@ export default function DocumentsPage() {
           onChange={(e) => {
             setDocType(e.target.value);
             filterRef.current = { ...filterRef.current, doc_type: e.target.value };
-            loadSpan(PAGE);
+            loadSpan(PAGE, filterRef.current);
           }}
           className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         >
@@ -235,7 +241,7 @@ export default function DocumentsPage() {
           onChange={(e) => {
             setStatus(e.target.value);
             filterRef.current = { ...filterRef.current, status: e.target.value };
-            loadSpan(PAGE);
+            loadSpan(PAGE, filterRef.current);
           }}
           className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         >
