@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -55,8 +56,17 @@ const (
 )
 
 // ErrNotSignable is returned when a sign/reject is attempted on a document that
-// is missing, belongs to another tenant, or is no longer pending.
+// is missing, belongs to another tenant, or is no longer pending. The three
+// cases are deliberately indistinguishable so the endpoint cannot be used to
+// discover which documents exist in someone else's tenant.
 var ErrNotSignable = errors.New("document not found or is not awaiting approval")
+
+// ErrSignatureRejected is returned when the signer could not be verified: a
+// registration number or one-time code the identity provider refused, or a
+// channel this module does not speak. It is the caller's problem to fix, so the
+// wrapped message is safe to show them — unlike a storage failure, which is
+// reported as a plain server error.
+var ErrSignatureRejected = errors.New("signature rejected")
 
 type Document struct {
 	ID              string     `json:"id"`
@@ -186,8 +196,13 @@ func (m *DocumentsModule) signDocumentHandler(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, ErrNotSignable):
 		writeError(w, http.StatusConflict, err.Error())
 		return
-	case err != nil:
+	case errors.Is(err, ErrSignatureRejected):
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	case err != nil:
+		// A storage failure is ours, not the caller's: report it as one and keep
+		// the driver's message out of the response.
+		writeError(w, http.StatusInternalServerError, "failed to sign document")
 		return
 	}
 
@@ -248,6 +263,12 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 // moves the document to APPROVED. The status guard in the UPDATE makes this
 // idempotent-safe: a document that is not pending is never re-signed.
 func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, method, regNumber, otpCode string) (*Document, error) {
+	// document_records.id is a uuid column, so a malformed path parameter would
+	// otherwise surface as a storage error. It is simply not a document we hold.
+	if uuid.Validate(docID) != nil {
+		return nil, ErrNotSignable
+	}
+
 	method = strings.ToUpper(strings.TrimSpace(method))
 	if method == "" {
 		method = SignerEID
@@ -258,7 +279,7 @@ func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, met
 	case SignerEID:
 		identity, err := m.eidSvc.AuthenticateWithMethod(ctx, regNumber, otpCode, eid.AuthMethodMobileOTP)
 		if err != nil {
-			return nil, fmt.Errorf("E-ID signature verification failed: %w", err)
+			return nil, fmt.Errorf("%w: E-ID verification failed: %w", ErrSignatureRejected, err)
 		}
 		signedBy = strings.TrimSpace(identity.FirstName+" "+identity.LastName) + " (E-ID баталгаажсан)"
 		sigHash = identity.SignatureHash
@@ -266,13 +287,13 @@ func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, met
 	case SignerDAN:
 		profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
 		if err != nil {
-			return nil, fmt.Errorf("DAN signature verification failed: %w", err)
+			return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
 		}
 		signedBy = strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)"
 		sigHash = "dan_sig_" + profile.DANSessionID
 		signerReg = profile.RegNumber
 	default:
-		return nil, fmt.Errorf("unsupported signer method %q (expected EID or DAN)", method)
+		return nil, fmt.Errorf("%w: unsupported signer method %q (expected EID or DAN)", ErrSignatureRejected, method)
 	}
 
 	signedAt := time.Now()
@@ -300,6 +321,10 @@ func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, met
 // RejectDocument moves a pending document to REJECTED. Like signing, it is a
 // no-op on anything that is not currently pending.
 func (m *DocumentsModule) RejectDocument(ctx context.Context, tenantID, docID string) (*Document, error) {
+	if uuid.Validate(docID) != nil {
+		return nil, ErrNotSignable
+	}
+
 	const query = `
 		UPDATE document_records
 		   SET status = 'REJECTED'
