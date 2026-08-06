@@ -11,6 +11,8 @@ import {
   RowActions,
   SectionHeader,
   SignatureDialog,
+  SignatureHistoryButton,
+  SignatureHistoryDialog,
   SignatureProgress,
   useDocumentActions,
 } from "@/components/documents/shared";
@@ -27,6 +29,7 @@ export default function DocumentApprovalsPage() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [signTarget, setSignTarget] = useState<DocumentRecord | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<DocumentRecord | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -119,6 +122,7 @@ export default function DocumentApprovalsPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span>{doc.doc_type}</span>
                       <SignatureProgress doc={doc} />
+                      <SignatureHistoryButton doc={doc} onOpen={setHistoryTarget} />
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-400">{new Date(doc.created_at).toLocaleDateString()}</td>
@@ -153,6 +157,10 @@ export default function DocumentApprovalsPage() {
           }}
           onError={fail}
         />
+      )}
+
+      {historyTarget && (
+        <SignatureHistoryDialog doc={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
     </div>
   );

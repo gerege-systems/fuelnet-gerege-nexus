@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
 
@@ -108,6 +109,11 @@ func (m *DocumentsModule) CreateTemplate(ctx context.Context, tenantID, name, do
 	if err != nil {
 		return nil, fmt.Errorf("insert template: %w", err)
 	}
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.template_created", tpl.ID, map[string]any{
+		"name": tpl.Name, "doc_type": tpl.DocType,
+	})
+
 	return tpl, nil
 }
 
@@ -123,6 +129,9 @@ func (m *DocumentsModule) DeleteTemplate(ctx context.Context, tenantID, template
 	if tag.RowsAffected() == 0 {
 		return ErrTemplateNotFound
 	}
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.template_deleted", templateID, nil)
+
 	return nil
 }
 

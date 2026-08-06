@@ -13,6 +13,7 @@ import (
 
 	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
 
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
 
@@ -111,6 +112,17 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 		return nil, fmt.Errorf("%w: E-ID could not reach the signer: %w", ErrSignatureRejected, err)
 	}
 
+	// An approval nobody ever answers is never polled again, so it would sit here
+	// for good. Clearing this document's stale attempts as a new one starts keeps
+	// the table bounded without a job to forget about.
+	if _, err := m.db.Exec(ctx,
+		`DELETE FROM document_eid_sign_sessions
+		  WHERE tenant_id = $1 AND document_id = $2
+		    AND consumed_at IS NULL AND created_at < NOW() - INTERVAL '1 hour'`,
+		tenantID, docID); err != nil {
+		return nil, fmt.Errorf("clear stale signature sessions: %w", err)
+	}
+
 	if _, err := m.db.Exec(ctx,
 		`INSERT INTO document_eid_sign_sessions
 		        (session_id, tenant_id, document_id, reg_number, display_text)
@@ -118,6 +130,13 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 		started.SessionID, tenantID, docID, regNumber, displayText); err != nil {
 		return nil, fmt.Errorf("record signature session: %w", err)
 	}
+
+	// Who asked for the signature is not who gave it, and the ledger only records
+	// the latter. This is the other half of the trail.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signature_requested", docID, map[string]any{
+		"signer_reg_number": regNumber,
+		"display_text":      displayText,
+	})
 
 	return &EIDSignSession{
 		SessionID:        started.SessionID,

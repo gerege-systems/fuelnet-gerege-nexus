@@ -9,6 +9,7 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  History,
   Loader2,
   PenLine,
   ShieldCheck,
@@ -35,13 +36,13 @@ export interface DocumentRecord {
 }
 
 /** The national identity channel the signature is applied through. */
-export type SignMethod = "EID" | "DAN";
+type SignMethod = "EID" | "DAN";
 
 /** The only state a document can be signed or rejected in. */
 export const PENDING = "PENDING_APPROVAL";
 
 /** What the citizen's device needs to be found, and what the operator reads out. */
-export interface EIDSignSession {
+interface EIDSignSession {
   session_id: string;
   verification_code: string;
   expires_at: string;
@@ -497,5 +498,130 @@ export function SignatureDialog({
         )}
       </div>
     </div>
+  );
+}
+
+/** One row of a document's signature ledger, as the API returns it. */
+export interface AppliedSignature {
+  signer_name: string;
+  signer_reg_number: string;
+  signer_method: string;
+  signature_hash: string;
+  signed_at: string;
+  certificate_serial?: string;
+  certificate_issuer?: string;
+}
+
+/**
+ * The document's signature history. The list can only show how many signatures a
+ * document carries; this is who gave them, through which channel, and on which
+ * certificate — the part a dispute actually turns on.
+ */
+export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; onClose: () => void }) {
+  const { t } = useI18n();
+  const [signatures, setSignatures] = useState<AppliedSignature[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .getDocumentSignatures(doc.id)
+      .then((rows) => alive && setSignatures(rows || []))
+      .catch((err: any) => alive && setError(err?.message || t("documents.message.history_failed")));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.id]);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl border border-slate-200">
+        <h2 className="text-xl font-bold text-slate-900 mb-1 flex items-center space-x-2">
+          <ShieldCheck className="w-5 h-5 text-indigo-600" />
+          <span>{t("documents.view.history_title")}</span>
+        </h2>
+        <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
+
+        {error ? (
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>
+        ) : signatures === null ? (
+          <div className="flex items-center gap-2 text-slate-500 text-sm py-6">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {t("documents.message.loading")}
+          </div>
+        ) : signatures.length === 0 ? (
+          <p className="text-sm text-slate-500 py-6">{t("documents.message.no_signatures")}</p>
+        ) : (
+          <ol className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {signatures.map((sig, index) => (
+              <li key={sig.signature_hash || index} className="border border-slate-200 rounded-lg p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{sig.signer_name}</p>
+                    <p className="font-mono text-[11px] text-slate-500">{sig.signer_reg_number}</p>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    {sig.signer_method === "EID" ? "E-ID" : sig.signer_method}
+                  </span>
+                </div>
+
+                <dl className="mt-2 space-y-1 text-[11px]">
+                  <div className="flex gap-2">
+                    <dt className="text-slate-500 shrink-0">{t("documents.field.signed_at")}:</dt>
+                    <dd className="text-slate-700">{new Date(sig.signed_at).toLocaleString()}</dd>
+                  </div>
+                  {sig.certificate_serial ? (
+                    <>
+                      <div className="flex gap-2">
+                        <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_serial")}:</dt>
+                        <dd className="font-mono text-slate-700 break-all">{sig.certificate_serial}</dd>
+                      </div>
+                      {sig.certificate_issuer && (
+                        <div className="flex gap-2">
+                          <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_issuer")}:</dt>
+                          <dd className="text-slate-700 break-all">{sig.certificate_issuer}</dd>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex gap-2">
+                      <dt className="text-slate-500 shrink-0">{t("documents.field.approval_reference")}:</dt>
+                      <dd className="font-mono text-slate-500 break-all">{sig.signature_hash}</dd>
+                    </div>
+                  )}
+                </dl>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
+        >
+          {t("base.action.close")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Opens the signature history, shown only once there is something to show. */
+export function SignatureHistoryButton({ doc, onOpen }: { doc: DocumentRecord; onOpen: (doc: DocumentRecord) => void }) {
+  const { t } = useI18n();
+  if (doc.signature_count === 0) return null;
+
+  return (
+    <button
+      onClick={() => onOpen(doc)}
+      title={t("documents.action.view_history")}
+      aria-label={t("documents.action.view_history")}
+      className="inline-flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 transition"
+    >
+      <History className="w-3.5 h-3.5" />
+      <span>{doc.signature_count}</span>
+    </button>
   );
 }

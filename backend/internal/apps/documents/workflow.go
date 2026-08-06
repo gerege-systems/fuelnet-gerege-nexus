@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
 
@@ -149,6 +150,13 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit workflow update: %w", err)
 	}
+
+	// Who must sign a document type is an authority decision, so a change to it
+	// is recorded alongside the signatures it will govern.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.approval_chain_changed", docType, map[string]any{
+		"steps": len(cleaned),
+	})
+
 	return &DocumentWorkflow{DocType: docType, Steps: cleaned}, nil
 }
 
@@ -202,6 +210,9 @@ func (m *DocumentsModule) RouteDocument(ctx context.Context, tenantID, docID str
 	if tag.RowsAffected() == 0 {
 		return nil, ErrNotRoutable
 	}
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.routed", docID, nil)
+
 	return m.getDocument(ctx, tenantID, docID)
 }
 

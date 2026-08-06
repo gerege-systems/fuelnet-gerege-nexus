@@ -10,6 +10,8 @@ import {
   RowActions,
   SignatureCell,
   SignatureDialog,
+  SignatureHistoryButton,
+  SignatureHistoryDialog,
   SignatureProgress,
   StatusBadge,
   useDocumentActions,
@@ -24,6 +26,7 @@ export default function DocumentsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: "", doc_type: "CONTRACT" });
   const [signTarget, setSignTarget] = useState<DocumentRecord | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<DocumentRecord | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -109,7 +112,10 @@ export default function DocumentsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <SignatureCell doc={doc} />
+                    <div className="flex items-start gap-2">
+                      <SignatureCell doc={doc} />
+                      <SignatureHistoryButton doc={doc} onOpen={setHistoryTarget} />
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-slate-400">{new Date(doc.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-right">
@@ -187,6 +193,10 @@ export default function DocumentsPage() {
           }}
           onError={fail}
         />
+      )}
+
+      {historyTarget && (
+        <SignatureHistoryDialog doc={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
     </div>
   );

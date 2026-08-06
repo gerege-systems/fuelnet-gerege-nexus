@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
 
@@ -151,6 +152,11 @@ func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docTy
 	}
 
 	saved.UpdatedAt = &updatedAt
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.retention_rule_changed", docType, map[string]any{
+		"retain_years": saved.RetainYears,
+	})
+
 	return &saved, nil
 }
 

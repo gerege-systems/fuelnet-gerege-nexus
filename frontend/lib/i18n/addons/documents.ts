@@ -5,6 +5,7 @@ export const documents = {
   "documents.view.title": { mn: "Цахим баримт ба тоон гарын үсэг", en: "Digital Documents & E-Signatures" },
   "documents.view.create_title": { mn: "Цахим баримт үүсгэх", en: "Create Digital Document" },
   "documents.view.sign_title": { mn: "Баримтад гарын үсэг зурах", en: "Sign Document" },
+  "documents.view.history_title": { mn: "Гарын үсгийн түүх", en: "Signature history" },
   "documents.view.approvals_hint": {
     mn: "Гарын үсэг хүлээж байгаа баримтууд — E-ID / ДАН-аар батлах эсвэл татгалзах.",
     en: "Documents awaiting a decision — approve with an E-ID / DAN signature, or reject.",
@@ -23,6 +24,10 @@ export const documents = {
   "documents.field.reg_number": { mn: "Регистрийн дугаар", en: "Registration Number" },
   "documents.field.otp_code": { mn: "Нэг удаагийн нууц код (OTP)", en: "One-Time Code (OTP)" },
   "documents.field.verification_code": { mn: "Баталгаажуулах код", en: "Verification code" },
+  "documents.field.signed_at": { mn: "Зурсан цаг", en: "Signed at" },
+  "documents.field.certificate_serial": { mn: "Гэрчилгээний дугаар", en: "Certificate serial" },
+  "documents.field.certificate_issuer": { mn: "Гэрчилгээ олгогч", en: "Certificate issuer" },
+  "documents.field.approval_reference": { mn: "Батламжийн сурвалж", en: "Approval reference" },
   "documents.field.waiting_days": { mn: "Хүлээсэн хоног", en: "Days waiting" },
 
   "documents.stat.awaiting": { mn: "Гарын үсэг хүлээж буй", en: "Awaiting signature" },
@@ -42,6 +47,7 @@ export const documents = {
   "documents.action.sign": { mn: "Гарын үсэг зурах", en: "Sign" },
   "documents.action.reject": { mn: "Татгалзах", en: "Reject" },
   "documents.action.request_approval": { mn: "Батлах хүсэлт илгээх", en: "Send approval request" },
+  "documents.action.view_history": { mn: "Гарын үсгийн түүх", en: "Signature history" },
 
   "documents.message.loading": { mn: "Баримтуудыг ачаалж байна...", en: "Loading documents..." },
   "documents.message.empty": {
@@ -66,6 +72,14 @@ export const documents = {
     en: "\"{title}\" was successfully signed via {method}.",
   },
   "documents.message.sign_failed": { mn: "Гарын үсэг зурж чадсангүй", en: "Signature failed" },
+  "documents.message.history_failed": {
+    mn: "Гарын үсгийн түүхийг ачаалж чадсангүй",
+    en: "Could not load the signature history",
+  },
+  "documents.message.no_signatures": {
+    mn: "Энэ баримтад гарын үсэг зураагүй байна.",
+    en: "Nothing has been signed on this document yet.",
+  },
 
   // The E-ID ceremony: the citizen approves on their own device, so the screen
   // explains what is happening on the other end of it.

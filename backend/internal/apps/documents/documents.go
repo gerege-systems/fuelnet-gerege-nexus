@@ -26,6 +26,8 @@ import (
 
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
@@ -457,6 +459,21 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit signature: %w", err)
 	}
+
+	// Both channels land here, so one record covers every signature the module
+	// applies. It carries what the signature was, not only that one happened:
+	// which citizen, through which channel, on whose certificate, and whether it
+	// completed the chain.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signed", docID, map[string]any{
+		"method":              method,
+		"signer_reg_number":   signature.RegNumber,
+		"certificate_serial":  signature.CertificateSerial,
+		"certificate_issuer":  signature.CertificateIssuer,
+		"signatures_applied":  applied,
+		"signatures_required": required,
+		"status":              status,
+	})
+
 	return m.getDocument(ctx, tenantID, docID)
 }
 
@@ -477,6 +494,9 @@ func (m *DocumentsModule) RejectDocument(ctx context.Context, tenantID, docID st
 	if tag.RowsAffected() == 0 {
 		return nil, ErrNotSignable
 	}
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.rejected", docID, nil)
+
 	return m.getDocument(ctx, tenantID, docID)
 }
 
@@ -546,6 +566,20 @@ func (m *DocumentsModule) scanDocument(row rowScanner) (*Document, error) {
 		return nil, err
 	}
 	return &doc, nil
+}
+
+// actorFor names who did it in the audit log, preferring the email an
+// administrator reading the log would recognise. Calls that arrive outside a
+// request — a migration, a test — have no claims and are recorded as the system.
+func actorFor(ctx context.Context) string {
+	claims, err := auth.UserFromContext(ctx)
+	if err != nil {
+		return "system"
+	}
+	if claims.Email != "" {
+		return claims.Email
+	}
+	return claims.UserID
 }
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }

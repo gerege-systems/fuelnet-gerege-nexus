@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
 
@@ -147,6 +148,13 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 	}
 
 	saved.UpdatedAt = &updatedAt
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signature_policy_changed", docType, map[string]any{
+		"allow_eid":            saved.AllowEID,
+		"allow_dan":            saved.AllowDAN,
+		"require_named_signer": saved.RequireNamedSigner,
+	})
+
 	return &saved, nil
 }
 
