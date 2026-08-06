@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Default signature placement, verified live against the eSign service on A4
@@ -30,17 +30,17 @@ const (
 )
 
 type Document struct {
-	ID           string     `json:"id"`
-	TenantID     string     `json:"tenant_id"`
-	Title        string     `json:"title"`
-	FileName     string     `json:"file_name"`
-	Status       string     `json:"status"` // PENDING, SIGNED
-	PageCount    uint       `json:"page_count"`
-	SignerName   string     `json:"signer_name,omitempty"`
-	SignerRegNo  string     `json:"signer_reg_no,omitempty"`
-	SignerPhone  string     `json:"signer_phone,omitempty"`
-	SignedAt     *time.Time `json:"signed_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID          string     `json:"id"`
+	TenantID    string     `json:"tenant_id"`
+	Title       string     `json:"title"`
+	FileName    string     `json:"file_name"`
+	Status      string     `json:"status"` // PENDING, SIGNED
+	PageCount   uint       `json:"page_count"`
+	SignerName  string     `json:"signer_name,omitempty"`
+	SignerRegNo string     `json:"signer_reg_no,omitempty"`
+	SignerPhone string     `json:"signer_phone,omitempty"`
+	SignedAt    *time.Time `json:"signed_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 type SignatureLog struct {
