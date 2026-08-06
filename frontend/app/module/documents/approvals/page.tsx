@@ -35,19 +35,30 @@ export default function DocumentApprovalsPage() {
   // closes the tab. A load that failed says so instead.
   const [loadFailed, setLoadFailed] = useState(false);
 
-  // How many the queue has asked for, and how many are waiting in total.
-  const [limit, setLimit] = useState(200);
   const [total, setTotal] = useState(0);
 
-  // The queue asks the SERVER for what is waiting. Filtering a capped page in the
-  // browser would let a document waiting for a signature fall off the end of a page
-  // full of approved ones — the one document this screen exists to show.
-  const loadData = async (want = limit) => {
+  // The queue asks the SERVER for what is waiting, oldest first. Filtering a capped
+  // page in the browser would let a document waiting for a signature fall off the end
+  // of a page full of approved ones — the one document this screen exists to show.
+  //
+  // More rows means walking OFFSET: the server clamps a limit at ListLimitMax, so
+  // asking for a bigger one stopped at 500 and left the rest of a long queue with no
+  // way to be signed or rejected from any screen.
+  const PAGE = 200;
+  const loadSpan = async (rows: number) => {
     setLoading(true);
     try {
-      const page = await api.getDocuments({ status: PENDING, order: "oldest", limit: want });
-      setDocuments(page?.documents || []);
-      setTotal(page?.total ?? 0);
+      const wanted = Math.max(PAGE, rows);
+      const collected: DocumentRecord[] = [];
+      let counted = 0;
+      for (let offset = 0; offset < wanted; offset += PAGE) {
+        const page = await api.getDocuments({ status: PENDING, order: "oldest", limit: PAGE, offset });
+        counted = page?.total ?? 0;
+        collected.push(...(page?.documents || []));
+        if (collected.length >= counted) break;
+      }
+      setDocuments(collected);
+      setTotal(counted);
       setLoadFailed(false);
     } catch (err: any) {
       setLoadFailed(true);
@@ -63,10 +74,15 @@ export default function DocumentApprovalsPage() {
     }
   };
 
+  // Refreshes exactly what is on screen, so approving the document at row 350 does not
+  // throw the approver back to the head of the queue.
+  const loadData = () => loadSpan(documents.length);
+  const loadMore = () => loadSpan(documents.length + PAGE);
+
   const { isBusy, message, setMessage, succeed, fail, reject } = useDocumentActions(loadData);
 
   useEffect(() => {
-    loadData();
+    loadSpan(PAGE);
   }, []);
 
   const pending = useMemo(() => documents.filter((doc) => doc.status === PENDING), [documents]);
@@ -192,16 +208,12 @@ export default function DocumentApprovalsPage() {
           {total > pending.length && (
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">
               <p className="text-[11px] text-slate-500">
-                {t("documents.message.showing_some", { shown: pending.length, total })}
+                {t("documents.message.showing_some_oldest", { shown: pending.length, total })}
               </p>
               <button
                 type="button"
                 disabled={loading}
-                onClick={() => {
-                  const want = limit + 200;
-                  setLimit(want);
-                  loadData(want);
-                }}
+                onClick={loadMore}
                 className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               >
                 {t("documents.action.load_more")}

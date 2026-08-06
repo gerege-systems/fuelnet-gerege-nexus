@@ -43,6 +43,10 @@ export const documents = {
     mn: "{total} баримтаас хамгийн шинэ {shown}-г харуулж байна.",
     en: "Showing the {shown} most recent of {total} documents.",
   },
+  "documents.message.showing_some_oldest": {
+    mn: "Хүлээж байгаа {total}-аас хамгийн урт хүлээсэн {shown}-г харуулж байна.",
+    en: "Showing the {shown} longest-waiting of {total}.",
+  },
   "documents.action.load_more": { mn: "Дараагийнхыг ачаалах", en: "Load more" },
   "documents.message.stale_rows": {
     mn: "Эдгээр мөр хоцрогдсон байж болно — жагсаалтыг шинэчилж чадсангүй.",

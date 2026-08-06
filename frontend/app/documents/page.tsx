@@ -33,17 +33,27 @@ export default function DocumentsPage() {
   const [loadFailed, setLoadFailed] = useState(false);
 
   // How many rows this screen has asked for. The list is answered one page at a time —
-  // each row counts its own signatures and outstanding steps — so "Load more" raises
-  // this rather than fetching everything.
-  const [limit, setLimit] = useState(200);
+  // each row counts its own signatures and outstanding steps — so more rows means
+  // walking OFFSET, not asking for a bigger limit: the server clamps a limit at
+  // ListLimitMax, so raising it stopped at 500 and left the last documents of a large
+  // tenant unreachable from any screen.
+  const PAGE = 200;
   const [total, setTotal] = useState(0);
 
-  const loadData = async (want = limit) => {
+  const loadSpan = async (rows: number) => {
     setLoading(true);
     try {
-      const page = await api.getDocuments({ limit: want });
-      setDocuments(page?.documents || []);
-      setTotal(page?.total ?? 0);
+      const wanted = Math.max(PAGE, rows);
+      const collected: DocumentRecord[] = [];
+      let counted = 0;
+      for (let offset = 0; offset < wanted; offset += PAGE) {
+        const page = await api.getDocuments({ limit: PAGE, offset });
+        counted = page?.total ?? 0;
+        collected.push(...(page?.documents || []));
+        if (collected.length >= counted) break;
+      }
+      setDocuments(collected);
+      setTotal(counted);
       setLoadFailed(false);
     } catch (err: any) {
       setLoadFailed(true);
@@ -59,10 +69,15 @@ export default function DocumentsPage() {
     }
   };
 
+  // Refreshes exactly what is on screen, so signing a document 350 rows down does not
+  // throw the operator back to the first page.
+  const loadData = () => loadSpan(documents.length);
+  const loadMore = () => loadSpan(documents.length + PAGE);
+
   const { isBusy, message, setMessage, succeed, fail, route, reject } = useDocumentActions(loadData);
 
   useEffect(() => {
-    loadData();
+    loadSpan(PAGE);
   }, []);
 
   // Nothing between the click and the POST changed any state, so a second click —
@@ -209,11 +224,7 @@ export default function DocumentsPage() {
               <button
                 type="button"
                 disabled={loading}
-                onClick={() => {
-                  const want = limit + 200;
-                  setLimit(want);
-                  loadData(want);
-                }}
+                onClick={loadMore}
                 className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               >
                 {t("documents.action.load_more")}
