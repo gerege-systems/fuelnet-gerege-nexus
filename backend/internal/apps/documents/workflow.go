@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -513,19 +514,22 @@ func (m *DocumentsModule) RouteDocument(ctx context.Context, tenantID, docID str
 		return nil, err
 	}
 
-	// Read inside the transaction that wrote it: this is the chain the document will
-	// be held to for the rest of its life, and the type's chain may be edited
-	// afterwards without reaching it. The record is where "which rules governed this
-	// document" is answerable from.
-	given, err := m.stepsForDocumentTx(ctx, tx, tenantID, docID)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit route document: %w", err)
 	}
 
+	// The chain the document was given is what it will be held to for the rest of its
+	// life — the type's chain may be edited afterwards without reaching it — so the
+	// record is where "which rules governed this document" is answerable from.
+	//
+	// Read after the commit, and best-effort. Nothing edits a document's own chain
+	// once it exists, so this reads exactly what was written; and failing the routing
+	// because a log line could not be filled in would be the wrong way round.
+	given, err := m.stepsForDocumentTx(ctx, m.db, tenantID, docID)
+	if err != nil {
+		slog.WarnContext(ctx, "routed the document but could not read back its chain for the record",
+			"document_id", docID, "error", err)
+	}
 	audit.Record(ctx, tenantID, actorFor(ctx), "documents.routed", docID, map[string]any{
 		"doc_type": docType, "chain": given,
 	})
