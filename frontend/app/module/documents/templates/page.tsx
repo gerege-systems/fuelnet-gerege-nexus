@@ -180,7 +180,17 @@ export default function DocumentTemplatesPage() {
       removedRef.current.add(tpl.id);
       setTemplates((current) => current.filter((row) => row.id !== tpl.id));
     } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+      // A 404 means somebody else already deleted it, which is the outcome this click
+      // was asking for. Reporting failure over a row that is genuinely gone left the
+      // table asserting a template the tenant no longer holds — with its Active tick
+      // and its buttons — and repeating Delete just repeated the 404.
+      if (err?.status === 404) {
+        setMessage({ type: "success", text: t("documents.message.template_deleted", { name: tpl.name }) });
+        removedRef.current.add(tpl.id);
+        setTemplates((current) => current.filter((row) => row.id !== tpl.id));
+      } else {
+        setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+      }
     } finally {
       setBusy(null);
     }
@@ -228,7 +238,7 @@ export default function DocumentTemplatesPage() {
             </label>
             <input
               type="text"
-              placeholder="Хамтран ажиллах гэрээ {year}"
+              placeholder={t("documents.field.title_pattern_placeholder")}
               value={form.title_pattern}
               onChange={(e) => setForm({ ...form, title_pattern: e.target.value })}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"

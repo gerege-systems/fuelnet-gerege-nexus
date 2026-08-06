@@ -4,6 +4,14 @@
 export const documents = {
   "documents.view.title": { mn: "Цахим баримт ба тоон гарын үсэг", en: "Digital Documents & E-Signatures" },
   "documents.view.create_title": { mn: "Цахим баримт үүсгэх", en: "Create Digital Document" },
+  "documents.view.subtitle": {
+    mn: "Байгууллагын баримтын урсгал, тоон гарын үсэг ба батламжийн процесс.",
+    en: "Enterprise document routing, digital signatures, and approval workflows.",
+  },
+  "documents.field.title_pattern_placeholder": {
+    mn: "Хамтран ажиллах гэрээ {year}",
+    en: "Partnership agreement {year}",
+  },
   "documents.view.sign_title": { mn: "Баримтад гарын үсэг зурах", en: "Sign Document" },
   "documents.view.history_title": { mn: "Гарын үсгийн түүх", en: "Signature history" },
   "documents.view.approvals_hint": {

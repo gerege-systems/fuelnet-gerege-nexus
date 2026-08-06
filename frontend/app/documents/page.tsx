@@ -97,9 +97,7 @@ export default function DocumentsPage() {
             <FileText className="w-7 h-7 text-indigo-600" />
             <span>{t("documents.view.title")}</span>
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Enterprise document routing, digital signatures, and approval workflows
-          </p>
+          <p className="text-sm text-slate-500 mt-1">{t("documents.view.subtitle")}</p>
         </div>
         {can("documents.manage") && (
           <button

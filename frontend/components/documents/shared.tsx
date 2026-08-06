@@ -628,7 +628,7 @@ export function SignatureDialog({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. 123456"
+                  placeholder="123456"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"

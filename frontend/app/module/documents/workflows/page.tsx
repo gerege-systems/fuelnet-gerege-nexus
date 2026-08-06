@@ -172,9 +172,13 @@ export default function DocumentWorkflowsPage() {
                         <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                           {t("documents.field.step_signer")}
                         </label>
+                        {/* The placeholder is the Cyrillic form, because that is what
+                            eID vouches for and what the step is compared against: an
+                            example in Latin letters guides an operator into a step no
+                            live signature can ever fill. Same example as the dialog. */}
                         <input
                           type="text"
-                          placeholder="AA90010111"
+                          placeholder="УБ99010111"
                           value={step.signer_reg_number}
                           disabled={!mayManage}
                           onChange={(e) => editStep(chain, index, { signer_reg_number: e.target.value })}
