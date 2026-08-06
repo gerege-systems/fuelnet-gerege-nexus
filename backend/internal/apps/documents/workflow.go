@@ -216,34 +216,40 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 		})
 	}
 
-	// The signature policy may insist that only a named signer approves this
-	// type. Saving a chain that names nobody would then lock the type out, so the
-	// two screens guard the same setting from both sides.
-	policy, err := m.SignaturePolicyFor(ctx, tenantID, docType)
-	if err != nil {
-		return nil, err
-	}
-	if policy.RequireNamedSigner {
-		if err := stepsCanRequireNamedSigners(docType, cleaned); err != nil {
-			return nil, err
-		}
-	}
-
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin workflow update: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Two admins saving the same chain would otherwise race: under READ COMMITTED
-	// the second DELETE cannot see the rows the first inserted, so it clears
-	// nothing and then either collides on step_order or silently discards the
-	// caller's chain while reporting success. One lock per (tenant, type) makes the
-	// second save wait and then see the first.
+	// One lock per (tenant, type), taken by this screen and by the signature-policy
+	// screen. It settles two races. Two admins saving the same chain: under READ
+	// COMMITTED the second DELETE cannot see the rows the first inserted, so it
+	// clears nothing and then either collides on step_order or silently discards the
+	// caller's chain while reporting success. And a chain saved against a policy
+	// read outside a transaction: this screen and the policy screen could each pass
+	// their guard on a stale view of the other and commit the state both forbid.
 	if _, err := tx.Exec(ctx,
 		`SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 0))`,
 		tenantID, docType); err != nil {
 		return nil, fmt.Errorf("lock approval chain: %w", err)
+	}
+
+	// The signature policy may insist that only named signers approve this type.
+	// Saving a chain that could not satisfy it would lock the type out.
+	var requireNamed bool
+	if err := tx.QueryRow(ctx,
+		`SELECT require_named_signer FROM document_signature_policies
+		  WHERE tenant_id = $1 AND doc_type = $2`, tenantID, docType).Scan(&requireNamed); err != nil {
+		if !isNoRows(err) {
+			return nil, fmt.Errorf("read signature policy: %w", err)
+		}
+		requireNamed = false // an unconfigured type allows open steps
+	}
+	if requireNamed {
+		if err := stepsCanRequireNamedSigners(docType, cleaned); err != nil {
+			return nil, err
+		}
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -298,18 +304,27 @@ func stepsCanRequireNamedSigners(docType string, steps []WorkflowStep) error {
 	return nil
 }
 
-// chainCanRequireNamedSigners runs the same rule against the chain as stored.
-func (m *DocumentsModule) chainCanRequireNamedSigners(ctx context.Context, tenantID, docType string) error {
-	chains, err := m.ListWorkflows(ctx, tenantID)
+// workflowStepsTx reads one type's chain inside somebody else's transaction, so a
+// guard and the write it protects see the same state.
+func (m *DocumentsModule) workflowStepsTx(ctx context.Context, q querier, tenantID, docType string) ([]WorkflowStep, error) {
+	rows, err := q.Query(ctx,
+		`SELECT step_order, name, signer_reg_number
+		   FROM document_workflow_steps
+		  WHERE tenant_id = $1 AND doc_type = $2 ORDER BY step_order`, tenantID, docType)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("query workflow steps: %w", err)
 	}
-	for _, chain := range chains {
-		if chain.DocType == docType {
-			return stepsCanRequireNamedSigners(docType, chain.Steps)
+	defer rows.Close()
+
+	steps := make([]WorkflowStep, 0)
+	for rows.Next() {
+		var step WorkflowStep
+		if err := rows.Scan(&step.Order, &step.Name, &step.SignerRegNumber); err != nil {
+			return nil, fmt.Errorf("scan workflow step: %w", err)
 		}
+		steps = append(steps, step)
 	}
-	return fmt.Errorf("%w: unknown doc_type %q", ErrInvalidConfiguration, docType)
+	return steps, rows.Err()
 }
 
 // RouteDocument sends a draft for approval. Nothing the app creates is a draft

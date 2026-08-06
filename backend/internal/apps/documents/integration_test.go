@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -482,6 +483,81 @@ func TestAChainEditDoesNotReachDocumentsAlreadyWaiting(t *testing.T) {
 	}
 	if decided.Status != StatusApproved {
 		t.Errorf("status = %q, want it to stay %q", decided.Status, StatusApproved)
+	}
+}
+
+// The policy screen and the chain screen edit one setting between them: a policy
+// that only accepts named signers needs a chain that names one per step. Saved
+// concurrently against each other's stale state, both guards used to pass and the
+// pair committed exactly what they exist to prevent — a type nobody could sign.
+// One of the two must lose.
+func TestThePolicyAndTheChainCannotLockATypeOutTogether(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// A chain that names its only signer, and a policy that does not yet insist.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "REQUEST", []WorkflowStep{
+		{Name: "Захирал", SignerRegNumber: "CC90010111"},
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	// One request opens the step; the other demands that no step be open.
+	start := make(chan struct{})
+	var chainErr, policyErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		_, chainErr = f.m.ReplaceWorkflow(ctx, f.tenantID, "REQUEST", []WorkflowStep{{Name: "Хэн ч"}})
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		_, policyErr = f.m.SaveSignaturePolicy(ctx, f.tenantID, SignaturePolicy{
+			DocType: "REQUEST", AllowEID: true, AllowDAN: true, RequireNamedSigner: true,
+		})
+	}()
+	close(start)
+	wg.Wait()
+
+	if chainErr == nil && policyErr == nil {
+		t.Error("both saves succeeded, so the type is now unsignable by anybody")
+	}
+
+	// Whatever won, the stored pair has to be one a citizen could satisfy.
+	policy, err := f.m.SignaturePolicyFor(ctx, f.tenantID, "REQUEST")
+	if err != nil {
+		t.Fatalf("read policy: %v", err)
+	}
+	chains, err := f.m.ListWorkflows(ctx, f.tenantID)
+	if err != nil {
+		t.Fatalf("read chains: %v", err)
+	}
+	var steps []WorkflowStep
+	for _, chain := range chains {
+		if chain.DocType == "REQUEST" {
+			steps = chain.Steps
+		}
+	}
+	if policy.RequireNamedSigner {
+		if err := stepsCanRequireNamedSigners("REQUEST", steps); err != nil {
+			t.Errorf("stored state cannot be satisfied by anyone: %v (chain %+v)", err, steps)
+		}
+	}
+
+	// And the type is still signable in practice.
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Албан хүсэлт", "REQUEST")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	signer := "CC90010111"
+	if !policy.RequireNamedSigner && len(steps) > 0 && steps[0].SignerRegNumber == "" {
+		signer = "AA90010111" // the open step lets anyone in
+	}
+	if _, err := signWithEID(t, f, doc.ID, signer); err != nil {
+		t.Errorf("nobody can sign a %s any more: %v", "REQUEST", err)
 	}
 }
 

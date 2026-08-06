@@ -115,20 +115,41 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 		return nil, fmt.Errorf("%w: a policy must allow at least one of E-ID or DAN, otherwise the type cannot be signed", ErrInvalidConfiguration)
 	}
 
-	// Requiring a named signer means every step has to name one, and name a
-	// different one: a step left open could never be filled, and two steps naming
-	// the same citizen could never both be, because one citizen signs a document
-	// once. Either way the type would become unapprovable by anybody. The two
-	// screens are one setting in practice, so the check lives on both sides of it.
+	// The policy and the chain are one setting in practice: requiring a named signer
+	// means every step has to name one, and name a different one — a step left open
+	// could never be filled, and two steps naming the same citizen could never both
+	// be, because one citizen signs a document once. Either way the type would
+	// become unapprovable by anybody.
+	//
+	// So the check and the write share a transaction holding the same lock the
+	// chain screen takes. Read outside one, the two screens could each pass their
+	// guard on a stale view of the other and commit exactly the state both forbid:
+	// one saving a chain that names nobody while the other turns the requirement on.
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin signature policy update: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 0))`,
+		tenantID, docType); err != nil {
+		return nil, fmt.Errorf("lock approval chain: %w", err)
+	}
+
 	if policy.RequireNamedSigner {
-		if err := m.chainCanRequireNamedSigners(ctx, tenantID, docType); err != nil {
+		steps, err := m.workflowStepsTx(ctx, tx, tenantID, docType)
+		if err != nil {
+			return nil, err
+		}
+		if err := stepsCanRequireNamedSigners(docType, steps); err != nil {
 			return nil, err
 		}
 	}
 
 	saved := SignaturePolicy{DocType: docType, Configured: true}
 	var updatedAt time.Time
-	err := m.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO document_signature_policies
 		        (tenant_id, doc_type, allow_eid, allow_dan, require_named_signer, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, NOW())
@@ -142,6 +163,10 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 		Scan(&saved.AllowEID, &saved.AllowDAN, &saved.RequireNamedSigner, &updatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("save signature policy: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit signature policy: %w", err)
 	}
 
 	saved.UpdatedAt = &updatedAt
