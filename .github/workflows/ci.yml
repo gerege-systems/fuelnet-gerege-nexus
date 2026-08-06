@@ -40,6 +40,27 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # The gov_services workflow invariants live partly in SQL — composite
+    # tenant foreign keys, the published-version immutability trigger,
+    # optimistic concurrency on row_version — so its integration tests need a
+    # real schema. Without a database they self-skip, which used to leave
+    # eleven tests green without ever running.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
+      GOV_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -48,8 +69,21 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: go vet
         run: go vet ./...
+      - name: Migrate the test database
+        run: go run ./cmd/migrate up
       - name: Run tests
         run: go test -race ./...
+      - name: Fail if the workflow integration tests were skipped
+        # A silent skip is indistinguishable from a pass in the summary. This
+        # keeps the database wiring honest: if it breaks, the job goes red
+        # instead of quietly testing nothing.
+        run: |
+          go test -run 'TestLocalFulfilmentHappyPath' -v ./internal/apps/gov_services/... \
+            | tee /tmp/gov.log
+          if grep -q -- '--- SKIP' /tmp/gov.log; then
+            echo "::error::gov_services integration tests skipped — GOV_TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
 
   frontend:
     name: Frontend Build
