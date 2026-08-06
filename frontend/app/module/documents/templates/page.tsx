@@ -30,7 +30,19 @@ export default function DocumentTemplatesPage() {
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
+  // One id per row, not one shared string. Two handlers overlapping — Use on one row
+  // while another row saves — had whichever finished first clear the flag for both, so
+  // a row's Use button came back to life with its own POST still in flight and a second
+  // click created a second document and routed it for approval.
+  const [busy, setBusyIds] = useState<Set<string>>(new Set());
+  const isBusy = (id: string) => busy.has(id);
+  const setBusy = (id: string, working: boolean) =>
+    setBusyIds((current) => {
+      const next = new Set(current);
+      if (working) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   const [message, setMessage] = useState<ActionMessage | null>(null);
   const [form, setForm] = useState({ name: "", doc_type: "CONTRACT", title_pattern: "" });
 
@@ -74,10 +86,13 @@ export default function DocumentTemplatesPage() {
       });
       setLoadFailed(false);
     } catch (err: any) {
-      // Always surfaced. A load that fails is not stale news, and swallowing it
-      // left whatever rows the page happened to hold looking authoritative.
+      // Always recorded, and the footer says it for as long as it is true. The banner
+      // is only used when there are no rows to carry the news — with rows showing it
+      // would overwrite what the action that triggered this refresh had just reported.
       setLoadFailed(true);
-      setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+      if (templates.length === 0) {
+        setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+      }
     } finally {
       setLoading(false);
     }
@@ -89,7 +104,7 @@ export default function DocumentTemplatesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy("create");
+    setBusy("create", true);
     setMessage(null);
     try {
       const created = (await api.createDocumentTemplate(form)) as Template | undefined;
@@ -106,7 +121,7 @@ export default function DocumentTemplatesPage() {
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
-      setBusy(null);
+      setBusy("create", false);
     }
   };
 
@@ -116,7 +131,7 @@ export default function DocumentTemplatesPage() {
   };
 
   const handleSave = async (tpl: Template) => {
-    setBusy(tpl.id);
+    setBusy(tpl.id, true);
     setMessage(null);
     try {
       const saved = (await api.updateDocumentTemplate(tpl.id, {
@@ -136,7 +151,7 @@ export default function DocumentTemplatesPage() {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
       if (err?.status === 404) reconcile(tpl, err);
     } finally {
-      setBusy(null);
+      setBusy(tpl.id, false);
     }
   };
 
@@ -154,7 +169,7 @@ export default function DocumentTemplatesPage() {
   };
 
   const handleUse = async (tpl: Template) => {
-    setBusy(tpl.id);
+    setBusy(tpl.id, true);
     setMessage(null);
     try {
       const doc: any = await api.useDocumentTemplate(tpl.id);
@@ -166,13 +181,13 @@ export default function DocumentTemplatesPage() {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
       reconcile(tpl, err);
     } finally {
-      setBusy(null);
+      setBusy(tpl.id, false);
     }
   };
 
   const handleDelete = async (tpl: Template) => {
     if (!confirm(t("documents.message.template_delete_confirm", { name: tpl.name }))) return;
-    setBusy(tpl.id);
+    setBusy(tpl.id, true);
     setMessage(null);
     try {
       await api.deleteDocumentTemplate(tpl.id);
@@ -192,7 +207,7 @@ export default function DocumentTemplatesPage() {
         setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
       }
     } finally {
-      setBusy(null);
+      setBusy(tpl.id, false);
     }
   };
 
@@ -248,7 +263,7 @@ export default function DocumentTemplatesPage() {
           <div className="md:col-span-1 flex items-end">
             <button
               type="submit"
-              disabled={busy === "create" || !form.name.trim() || !form.title_pattern.trim()}
+              disabled={isBusy("create") || !form.name.trim() || !form.title_pattern.trim()}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
@@ -332,7 +347,7 @@ export default function DocumentTemplatesPage() {
                       <div className="flex items-center justify-end space-x-2">
                         <button
                           onClick={() => handleSave(tpl)}
-                          disabled={busy === tpl.id || !tpl.name.trim() || !tpl.title_pattern.trim()}
+                          disabled={isBusy(tpl.id) || !tpl.name.trim() || !tpl.title_pattern.trim()}
                           className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                         >
                           <Save className="w-3.5 h-3.5" />
@@ -340,7 +355,7 @@ export default function DocumentTemplatesPage() {
                         </button>
                         <button
                           onClick={() => handleUse(tpl)}
-                          disabled={busy === tpl.id || !tpl.active || dirty[tpl.id]}
+                          disabled={isBusy(tpl.id) || !tpl.active || dirty[tpl.id]}
                           title={
                             dirty[tpl.id]
                               ? t("documents.message.template_unsaved")
@@ -355,7 +370,7 @@ export default function DocumentTemplatesPage() {
                         </button>
                         <button
                           onClick={() => handleDelete(tpl)}
-                          disabled={busy === tpl.id}
+                          disabled={isBusy(tpl.id)}
                           className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -370,6 +385,23 @@ export default function DocumentTemplatesPage() {
               ))}
             </tbody>
           </table>
+          {/* A stale list says so for as long as it is stale — the banner can be
+              dismissed, and a refresh that failed after an action must not be the only
+              thing that says the rows are old. */}
+          {loadFailed && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-amber-200 bg-amber-50">
+              <p className="text-[11px] text-amber-800">{t("documents.message.stale_rows")}</p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => loadData()}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {t("documents.action.retry")}
+              </button>
+            </div>
+          )}
+
         </div>
       )}
     </div>

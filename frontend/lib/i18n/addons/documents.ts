@@ -44,6 +44,11 @@ export const documents = {
     en: "Showing the {shown} most recent of {total} documents.",
   },
   "documents.action.load_more": { mn: "Дараагийнхыг ачаалах", en: "Load more" },
+  "documents.message.stale_rows": {
+    mn: "Эдгээр мөр хоцрогдсон байж болно — жагсаалтыг шинэчилж чадсангүй.",
+    en: "These rows may be out of date — the list could not be refreshed.",
+  },
+  "documents.action.retry": { mn: "Дахин оролдох", en: "Try again" },
   "documents.stat.oldest_days": { mn: "Хамгийн урт хүлээлт (хоног)", en: "Longest wait (days)" },
 
   "documents.category.legal_contract": { mn: "Гэрээ", en: "Legal Contract" },

@@ -51,13 +51,19 @@ export default function DocumentApprovalsPage() {
       setLoadFailed(false);
     } catch (err: any) {
       setLoadFailed(true);
-      setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
+      // Only when there is nothing on screen to carry the news. With rows showing, the
+      // footer says the list is stale and stays saying it — and a banner here would
+      // overwrite what the action that triggered this refresh had just reported, so a
+      // completed signature read as a failure.
+      if (documents.length === 0) {
+        setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const { busyId, message, setMessage, succeed, fail, reject } = useDocumentActions(loadData);
+  const { isBusy, message, setMessage, succeed, fail, reject } = useDocumentActions(loadData);
 
   useEffect(() => {
     loadData();
@@ -155,7 +161,7 @@ export default function DocumentApprovalsPage() {
                   <td className="px-4 py-3 text-right">
                     <RowActions
                       doc={doc}
-                      busy={busyId === doc.id}
+                      busy={isBusy(doc.id)}
                       canSign={can("documents.sign")}
                       onSign={setSignTarget}
                       onReject={reject}
@@ -165,6 +171,23 @@ export default function DocumentApprovalsPage() {
               ))}
             </tbody>
           </table>
+          {/* A stale list says so for as long as it is stale — the banner can be
+              dismissed, and a refresh that failed after an action must not be the only
+              thing that says the rows are old. */}
+          {loadFailed && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-amber-200 bg-amber-50">
+              <p className="text-[11px] text-amber-800">{t("documents.message.stale_rows")}</p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => loadData()}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {t("documents.action.retry")}
+              </button>
+            </div>
+          )}
+
           {/* A queue shown in part says so, and can be read to the end. */}
           {total > pending.length && (
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">

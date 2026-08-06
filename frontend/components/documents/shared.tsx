@@ -275,7 +275,17 @@ export function Banner({ message, onDismiss }: { message: ActionMessage; onDismi
  */
 export function useDocumentActions(onChanged: () => void | Promise<void>) {
   const { t } = useI18n();
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // One id per row, not one shared id: two overlapping actions had whichever finished
+  // first re-enable the other's buttons while its request was still in flight.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const isBusy = (id: string) => busyIds.has(id);
+  const setBusyId = (id: string, working: boolean) =>
+    setBusyIds((current) => {
+      const next = new Set(current);
+      if (working) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   const [message, setMessage] = useState<ActionMessage | null>(null);
 
   const succeed = async (text: string) => {
@@ -286,7 +296,7 @@ export function useDocumentActions(onChanged: () => void | Promise<void>) {
   const fail = (text: string) => setMessage({ type: "error", text });
 
   const route = async (doc: DocumentRecord) => {
-    setBusyId(doc.id);
+    setBusyId(doc.id, true);
     setMessage(null);
     try {
       await api.routeDocument(doc.id);
@@ -295,13 +305,13 @@ export function useDocumentActions(onChanged: () => void | Promise<void>) {
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.route_failed") });
     } finally {
-      setBusyId(null);
+      setBusyId(doc.id, false);
     }
   };
 
   const reject = async (doc: DocumentRecord) => {
     if (!confirm(t("documents.message.reject_confirm", { title: doc.title }))) return;
-    setBusyId(doc.id);
+    setBusyId(doc.id, true);
     setMessage(null);
     try {
       await api.rejectDocument(doc.id);
@@ -310,11 +320,11 @@ export function useDocumentActions(onChanged: () => void | Promise<void>) {
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.reject_failed") });
     } finally {
-      setBusyId(null);
+      setBusyId(doc.id, false);
     }
   };
 
-  return { busyId, message, setMessage, succeed, fail, route, reject };
+  return { isBusy, message, setMessage, succeed, fail, route, reject };
 }
 
 /** The Sign / Reject pair, shown only while a document is still pending. */
