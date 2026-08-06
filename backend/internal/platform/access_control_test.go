@@ -72,6 +72,30 @@ func TestSigningDocumentsNeedsItsOwnPermission(t *testing.T) {
 	}
 
 	// The PDF e-sign app runs its own checks and must not be caught by the
+	// Every other documents route, so the split stays where it was put. Routing a
+	// document and configuring a type are authoring, not approving: a clerk may draft
+	// and route what they cannot sign, and an approver may sign what they cannot
+	// configure. Reading a document's own chain is an ordinary read.
+	for _, tc := range []struct{ method, path, want string }{
+		{"POST", "/documents/" + docID + "/route", "documents.manage"},
+		{"GET", "/documents/" + docID + "/steps", "documents.read"},
+		{"GET", "/documents/templates", "documents.read"},
+		{"POST", "/documents/templates", "documents.manage"},
+		{"PUT", "/documents/templates/" + docID, "documents.manage"},
+		{"DELETE", "/documents/templates/" + docID, "documents.manage"},
+		{"POST", "/documents/templates/" + docID + "/use", "documents.manage"},
+		{"GET", "/documents/workflows", "documents.read"},
+		{"PUT", "/documents/workflows/CONTRACT", "documents.manage"},
+		{"GET", "/documents/policies", "documents.read"},
+		{"PUT", "/documents/policies/CONTRACT", "documents.manage"},
+		{"GET", "/documents/retention", "documents.read"},
+		{"PUT", "/documents/retention/CONTRACT", "documents.manage"},
+	} {
+		if got := appRequestPermission("io.example.documents", tc.method, tc.path); got != tc.want {
+			t.Errorf("%s %s: got %q, want %q", tc.method, tc.path, got, tc.want)
+		}
+	}
+
 	// documents rule even though its route also ends in /sign.
 	if got := appRequestPermission("io.example.esign", "POST", "/esign/documents/"+docID+"/sign"); got != "" {
 		t.Errorf("esign: got %q, want no central check", got)
