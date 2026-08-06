@@ -364,6 +364,28 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	// a dropped connection report a 500 for a signature that had in fact landed,
 	// and left the session redeemable a second time.
 	doc, err := m.recordSignature(ctx, tenantID, docID, SignerEID, signature, sessionID)
+	if errors.Is(err, ErrAlreadySigned) {
+		// Two polls of one session can reach this together — two tabs, or a retry that
+		// overlapped its predecessor. They queue on the document's row lock, so the
+		// loser arrives after the winner has committed both the signature and the
+		// spending of this session. That is not "you have already signed": the ceremony
+		// this session was for SUCCEEDED, and the answer is the document it produced.
+		//
+		// Only for THIS session, though. The same citizen having signed by another
+		// route leaves this session unspent, and there the refusal is the truth.
+		var consumed bool
+		if check := m.db.QueryRow(ctx,
+			`SELECT consumed_at IS NOT NULL FROM document_eid_sign_sessions
+			  WHERE session_id = $1 AND tenant_id = $2 AND document_id = $3`,
+			sessionID, tenantID, docID).Scan(&consumed); check == nil && consumed {
+			signed, load := m.getDocument(ctx, tenantID, docID)
+			if load != nil {
+				return nil, load
+			}
+			return &EIDSignProgress{State: ApprovalComplete, Document: signed}, nil
+		}
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}

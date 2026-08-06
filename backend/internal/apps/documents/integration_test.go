@@ -1295,6 +1295,57 @@ func TestASessionWithNoStatedDeadlineIsNotExpiredEarly(t *testing.T) {
 	}
 }
 
+// A poll that finds the citizen has already signed asks WHICH session produced that
+// signature. If it was this one — two tabs, or a retry that overlapped its predecessor,
+// both queued on the document's row lock — the ceremony succeeded and the answer is the
+// document. If the citizen signed by another route, this session produced nothing and
+// the refusal is the truth. This test pins the second half: the first is only reachable
+// in a real race, and was verified with four concurrent polls answering COMPLETE over
+// one signature.
+func TestAPollIsNotToldTheCeremonySucceededWhenItDidNot(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Order: 1, Name: "Нэг", SignerRegNumber: ""},
+		{Order: 2, Name: "Хоёр", SignerRegNumber: ""},
+	}); err != nil {
+		t.Fatalf("chain: %v", err)
+	}
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хоёр суваг", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// The citizen is asked through eID...
+	session, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	// ...and signs through DAN instead, so this session produces nothing.
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); err != nil {
+		t.Fatalf("DAN: %v", err)
+	}
+
+	// Polled until the citizen has actually approved on their device, or the poll only
+	// ever reports RUNNING and decides nothing.
+	_, err = pollUntilApproved(t, f, doc.ID, session.SessionID)
+	if !errors.Is(err, ErrAlreadySigned) {
+		t.Fatalf("got %v, want ErrAlreadySigned — this session signed nothing", err)
+	}
+
+	// And it stays unspent, so nothing can later claim it produced a signature.
+	var consumed bool
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT consumed_at IS NOT NULL FROM document_eid_sign_sessions WHERE session_id = $1`,
+		session.SessionID).Scan(&consumed); err != nil {
+		t.Fatalf("read the session: %v", err)
+	}
+	if consumed {
+		t.Error("a session that produced no signature was marked spent")
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
