@@ -13,6 +13,7 @@ import { billing } from "./addons/billing";
 import { contacts } from "./addons/contacts";
 import { developer } from "./addons/developer";
 import { documents } from "./addons/documents";
+import { esign } from "./addons/esign";
 import { gov } from "./addons/gov";
 import { integrations } from "./addons/integrations";
 import { inventory } from "./addons/inventory";
@@ -51,6 +52,7 @@ const dictionary = {
   ...contacts,
   ...developer,
   ...documents,
+  ...esign,
   ...gov,
   ...integrations,
   ...inventory,

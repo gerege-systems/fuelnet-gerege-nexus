@@ -16,7 +16,7 @@ frontend/lib/i18n/
   web.ts             Клиентийн бүрхүүл: цэс, толгой, хайлт (Odoo "web")
   addons/
     access.ts  ai.ts  app_store.ts  appearance.ts  auth.ts
-    billing.ts contacts.ts developer.ts documents.ts
+    billing.ts contacts.ts developer.ts documents.ts esign.ts
     gov.ts     integrations.ts inventory.ts products.ts website.ts
 ```
 

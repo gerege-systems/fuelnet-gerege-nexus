@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { PenTool, Plus, CheckCircle, Clock, Download, ShieldCheck, FileText } from "lucide-react";
 
 type EsignDocument = {
@@ -18,6 +19,7 @@ type EsignDocument = {
 };
 
 export default function EsignPage() {
+  const { t } = useI18n();
   const [documents, setDocuments] = useState<EsignDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
@@ -49,7 +51,7 @@ export default function EsignPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert("Татаж чадсангүй: " + err.message);
+      alert(t("esign.message.error_download", { error: err.message }));
     }
   };
 
@@ -59,10 +61,10 @@ export default function EsignPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <PenTool className="w-7 h-7 text-indigo-600" />
-            <span>PDF E-Sign (Тоон гарын үсэг)</span>
+            <span>{t("esign.view.title")}</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            PDF баримт бичгийг Gerege eSign HSM үйлчилгээгээр тоон гарын үсгээр баталгаажуулах
+            {t("esign.view.subtitle")}
           </p>
         </div>
         <button
@@ -70,30 +72,30 @@ export default function EsignPage() {
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
         >
           <Plus className="w-4 h-4" />
-          <span>PDF оруулах</span>
+          <span>{t("esign.action.upload")}</span>
         </button>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">Баримт бичгүүдийг ачаалж байна...</div>
+        <div className="py-12 text-center text-slate-400">{t("esign.message.loading")}</div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase">
               <tr>
-                <th className="px-4 py-3">Баримт бичиг</th>
-                <th className="px-4 py-3">Хуудас</th>
-                <th className="px-4 py-3">Төлөв</th>
-                <th className="px-4 py-3">Гарын үсэг зурсан</th>
-                <th className="px-4 py-3">Огноо</th>
-                <th className="px-4 py-3 text-right">Үйлдэл</th>
+                <th className="px-4 py-3">{t("esign.field.document")}</th>
+                <th className="px-4 py-3">{t("esign.field.pages")}</th>
+                <th className="px-4 py-3">{t("base.field.status")}</th>
+                <th className="px-4 py-3">{t("esign.field.signer")}</th>
+                <th className="px-4 py-3">{t("base.field.date")}</th>
+                <th className="px-4 py-3 text-right">{t("base.field.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {documents.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-slate-400 italic">
-                    Баримт бичиг алга. "PDF оруулах" товчоор эхлүүлнэ үү.
+                    {t("esign.message.empty")}
                   </td>
                 </tr>
               )}
@@ -120,7 +122,7 @@ export default function EsignPage() {
                       ) : (
                         <Clock className="w-3 h-3 text-amber-500" />
                       )}
-                      <span>{doc.status === "SIGNED" ? "БАТАЛГААЖСАН" : "ХҮЛЭЭГДЭЖ БУЙ"}</span>
+                      <span>{t(doc.status === "SIGNED" ? "esign.state.signed" : "esign.state.pending")}</span>
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -144,25 +146,25 @@ export default function EsignPage() {
                           className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1"
                         >
                           <PenTool className="w-3 h-3" />
-                          <span>Гарын үсэг зурах</span>
+                          <span>{t("esign.action.sign")}</span>
                         </button>
                       )}
                       <button
                         onClick={() => handleDownload(doc, "original")}
                         className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1"
-                        title="Эх хувь татах"
+                        title={t("esign.action.download_original")}
                       >
                         <Download className="w-3 h-3" />
-                        <span>Эх</span>
+                        <span>{t("esign.action.original_short")}</span>
                       </button>
                       {doc.status === "SIGNED" && (
                         <button
                           onClick={() => handleDownload(doc, "signed")}
                           className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1"
-                          title="Баталгаажсан хувь татах"
+                          title={t("esign.action.download_signed")}
                         >
                           <Download className="w-3 h-3" />
-                          <span>Signed</span>
+                          <span>{t("esign.action.signed_short")}</span>
                         </button>
                       )}
                     </div>
@@ -199,6 +201,7 @@ export default function EsignPage() {
 }
 
 function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -222,7 +225,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
       });
       onUploaded();
     } catch (err: any) {
-      alert("Оруулж чадсангүй: " + err.message);
+      alert(t("esign.message.error_upload", { error: err.message }));
     } finally {
       setBusy(false);
     }
@@ -231,13 +234,13 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-        <h2 className="text-xl font-bold text-slate-900 mb-4">PDF баримт бичиг оруулах</h2>
+        <h2 className="text-xl font-bold text-slate-900 mb-4">{t("esign.view.upload_title")}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Баримт бичгийн нэр *</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">{t("esign.field.title")} *</label>
             <input
               type="text"
-              placeholder="ж: Хамтран ажиллах гэрээ 2026"
+              placeholder={t("esign.field.title_placeholder")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -246,7 +249,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">PDF файл * (макс 15MB)</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">{t("esign.field.file")} *</label>
             <input
               type="file"
               accept="application/pdf"
@@ -262,14 +265,14 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
               onClick={onClose}
               className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
             >
-              Болих
+              {t("base.action.cancel")}
             </button>
             <button
               type="submit"
               disabled={busy}
               className="w-1/2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-xs"
             >
-              {busy ? "Оруулж байна..." : "Оруулах"}
+              {busy ? t("esign.message.uploading") : t("esign.action.submit_upload")}
             </button>
           </div>
         </form>
@@ -287,6 +290,7 @@ function SignModal({
   onClose: () => void;
   onSigned: () => void;
 }) {
+  const { t } = useI18n();
   const [phone, setPhone] = useState("");
   const [regNo, setRegNo] = useState("");
   const [cert, setCert] = useState<{ given_name: string; surname: string; common_name: string } | null>(null);
@@ -340,7 +344,7 @@ function SignModal({
       const res = await api.checkEsignCert({ phone_no: phone, civil_id: regNo });
       setCert(res);
     } catch (err: any) {
-      alert("Сертификат шалгалт амжилтгүй: " + err.message);
+      alert(t("esign.message.error_certificate", { error: err.message }));
     } finally {
       setBusy(false);
     }
@@ -360,7 +364,7 @@ function SignModal({
       });
       onSigned();
     } catch (err: any) {
-      alert("Гарын үсэг зурж чадсангүй: " + err.message);
+      alert(t("esign.message.error_sign", { error: err.message }));
     } finally {
       setBusy(false);
     }
@@ -369,18 +373,18 @@ function SignModal({
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl border border-slate-200">
-        <h2 className="text-xl font-bold text-slate-900 mb-1">Тоон гарын үсгээр баталгаажуулах</h2>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">{t("esign.view.sign_title")}</h2>
         <p className="text-xs text-slate-500 mb-4">
-          {doc.title} — гарын үсэг сүүлийн хуудсанд ({doc.page_count}-р хуудас) байрлана
+          {t("esign.view.sign_placement", { title: doc.title, page: doc.page_count })}
         </p>
 
         <div className="space-y-4">
           {/* Step 1: certificate check */}
           <div className="border border-slate-200 rounded-lg p-4 space-y-3">
-            <div className="text-xs font-bold text-slate-700 uppercase">1. Сертификат шалгах</div>
+            <div className="text-xs font-bold text-slate-700 uppercase">{t("esign.view.step_certificate")}</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Утасны дугаар *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("esign.field.phone")} *</label>
                 <input
                   type="tel"
                   placeholder="88001234"
@@ -391,7 +395,7 @@ function SignModal({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Регистр / Civil ID *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("esign.field.civil_id")} *</label>
                 <input
                   type="text"
                   placeholder="УА00112233"
@@ -405,9 +409,7 @@ function SignModal({
             {cert ? (
               <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg flex items-center space-x-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span>
-                  Сертификат хүчинтэй: {cert.surname} {cert.given_name}
-                </span>
+                <span>{t("esign.message.certificate_valid", { name: `${cert.surname} ${cert.given_name}` })}</span>
               </div>
             ) : (
               <button
@@ -415,7 +417,7 @@ function SignModal({
                 disabled={busy || !phone || !regNo}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg"
               >
-                {busy ? "Шалгаж байна..." : "Сертификат шалгах"}
+                {busy ? t("esign.message.checking") : t("esign.action.check_certificate")}
               </button>
             )}
           </div>
@@ -423,9 +425,9 @@ function SignModal({
           {/* Step 2: signature pad */}
           <div className={`border border-slate-200 rounded-lg p-4 space-y-2 ${!cert ? "opacity-40 pointer-events-none" : ""}`}>
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-700 uppercase">2. Гарын үсгээ зурна уу</div>
+              <div className="text-xs font-bold text-slate-700 uppercase">{t("esign.view.step_signature")}</div>
               <button onClick={clearCanvas} className="text-xs text-slate-500 hover:text-slate-700 underline">
-                Арилгах
+                {t("esign.action.clear")}
               </button>
             </div>
             <canvas
@@ -445,7 +447,7 @@ function SignModal({
               onClick={onClose}
               className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
             >
-              Болих
+              {t("base.action.cancel")}
             </button>
             <button
               onClick={handleSign}
@@ -453,7 +455,7 @@ function SignModal({
               className="w-1/2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-xs flex items-center justify-center space-x-1.5"
             >
               <PenTool className="w-3.5 h-3.5" />
-              <span>{busy ? "Баталгаажуулж байна..." : "Тоон гарын үсгээр баталгаажуулах"}</span>
+              <span>{busy ? t("esign.message.signing") : t("esign.view.sign_title")}</span>
             </button>
           </div>
         </div>

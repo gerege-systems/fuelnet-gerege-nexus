@@ -9,6 +9,7 @@ export const base = {
   "base.field.company": { mn: "Байгууллага", en: "Company" },
   "base.field.status": { mn: "Төлөв", en: "Status" },
   "base.field.type": { mn: "Төрөл", en: "Type" },
+  "base.field.date": { mn: "Огноо", en: "Date" },
   "base.field.language": { mn: "Хэл", en: "Language" },
   "base.field.actions": { mn: "Үйлдэл", en: "Actions" },
 
