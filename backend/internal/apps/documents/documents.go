@@ -349,7 +349,22 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit create document: %w", err)
 	}
-	return m.getDocument(ctx, tenantID, id)
+
+	doc, err := m.getDocument(ctx, tenantID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Creating a document is what puts it into the approval queue and pins the chain
+	// it will be approved under, and document_records holds no created_by — so
+	// without this record, "who drafted this contract" has no answer anywhere. Every
+	// other mutation in the module is recorded; this one was not.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.created", id, map[string]any{
+		"doc_type": docType, "title": title,
+		"status": doc.Status, "signatures_required": doc.RequiredSignatures,
+	})
+
+	return doc, nil
 }
 
 // verifiedSignature is what a national identity channel hands back once it has
@@ -554,9 +569,26 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 	// The signature fills the step it was checked against — not "the next number",
 	// which is not the same thing once a signature can sit on a later step than an
 	// unfilled earlier one.
-	step := position.Applied + 1
+	//
+	// With no step left to fill, the signature is parked PAST THE END of the chain,
+	// the way migration 00014 §4 parks a legacy one. Counting instead — applied + 1 —
+	// collides with a real step number as soon as a chain is not numbered 1..n: on a
+	// hand-numbered chain of steps 2 and 3, both filled, the third signature would be
+	// written as step 3 as well, and the trail would show somebody the chain never
+	// named as having given the director's approval.
+	var step int
 	if position.Next != nil {
 		step = position.Next.Order
+	} else {
+		if err := tx.QueryRow(ctx,
+			`SELECT GREATEST(
+			          COALESCE((SELECT max(s.step_order) FROM document_signatures s
+			                     WHERE s.document_id = $1), 0),
+			          COALESCE((SELECT max(st.step_order) FROM document_approval_steps st
+			                     WHERE st.document_id = $1), 0)) + 1`,
+			docID).Scan(&step); err != nil {
+			return nil, fmt.Errorf("find a step number past the chain: %w", err)
+		}
 	}
 	signedAt := time.Now()
 	_, err = tx.Exec(ctx,

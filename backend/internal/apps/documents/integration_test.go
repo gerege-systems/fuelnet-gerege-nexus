@@ -1106,6 +1106,70 @@ func TestARetiredTemplateSaysSoRatherThanVanishing(t *testing.T) {
 	}
 }
 
+// A signature that fills no step is parked past the END of the chain, not at its
+// size. On a hand-numbered chain the two are different numbers, and using the size
+// writes the parked signature on top of a real step — the trail would then show
+// somebody the chain never named as having given that step's approval.
+func TestASignatureThatFillsNoStepIsParkedPastTheChain(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	for order, reg := range map[int]string{2: "AA90010111", 3: "BB90010111"} {
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_workflow_steps (tenant_id, doc_type, step_order, name, signer_reg_number)
+			      VALUES ($1, 'CONTRACT', $2, 'Шат', $3)`,
+			f.tenantID, order, reg); err != nil {
+			t.Fatalf("insert step %d: %v", order, err)
+		}
+	}
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Цоорхойтой, нэмэлттэй", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Stand in for what migration 00014 leaves on a document that held a parked
+	// signature: it owes one approval more than its chain has steps.
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_records SET required_signatures = 3 WHERE id = $1`, doc.ID); err != nil {
+		t.Fatalf("pin the requirement: %v", err)
+	}
+
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("step 2's citizen: %v", err)
+	}
+	if _, err := signWithEID(t, f, doc.ID, "BB90010111"); err != nil {
+		t.Fatalf("step 3's citizen: %v", err)
+	}
+	// Every step is filled, and the document still owes one. Whoever gives it fills
+	// no step, so their signature must not be written onto one.
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("the extra approval: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+
+	sigs, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	held := map[int]string{}
+	for _, sig := range sigs {
+		if first, clash := held[sig.StepOrder]; clash {
+			t.Errorf("step %d holds both %s and %s — one approval, two signers",
+				sig.StepOrder, first, sig.SignerRegNumber)
+		}
+		held[sig.StepOrder] = sig.SignerRegNumber
+	}
+	if held[2] != "AA90010111" || held[3] != "BB90010111" {
+		t.Errorf("the chain's steps = %v, want each filled by the citizen it names", held)
+	}
+	if held[4] != "ZZ99999999" {
+		t.Errorf("the parked signature sits at %v, want step 4 — past the chain's end", held)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

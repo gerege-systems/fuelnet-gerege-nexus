@@ -167,9 +167,17 @@ BEGIN
 
     -- 4. Anything left over — a document with more signatures than steps, or none
     --    at all — is numbered past the end of the chain rather than dropped.
+    --
+    --    Past the HIGHEST number, not past the count. Nothing this module writes
+    --    produces a chain numbered other than 1..n, but the table asks only for
+    --    positive distinct numbers, so a chain edited by hand can hold steps 2 and 3.
+    --    Offsetting by the count would then park a signature at 2 + 1 = 3 — on top of
+    --    a step that NAMES somebody, marking it filled by a citizen the chain never
+    --    named, which is exactly what §3 refuses to do.
     WITH leftover AS (
         SELECT s.id,
-               (SELECT count(*) FROM document_approval_steps st WHERE st.document_id = s.document_id)
+               COALESCE((SELECT max(st.step_order) FROM document_approval_steps st
+                          WHERE st.document_id = s.document_id), 0)
                  + row_number() OVER (PARTITION BY s.document_id ORDER BY s.signed_at, s.id) AS n
           FROM document_signatures s
          WHERE s.step_order IS NULL
@@ -197,14 +205,19 @@ BEGIN
     --    toward what the document holds but satisfies none of what it owes, so the
     --    requirement is the chain PLUS those, not the greater of the two. Taking the
     --    maximum let a document read "2 of 2" while a named step was still owed.
+    --
+    --    "Past the end" is the highest number here too, for the same reason as §4:
+    --    against a chain numbered 2 and 3, counting would treat a signature on step 3
+    --    as parked and ask for one approval more than the document owes.
     UPDATE document_records d
        SET required_signatures = GREATEST(
              1,
              (SELECT count(*) FROM document_approval_steps s WHERE s.document_id = d.id)
                + (SELECT count(*) FROM document_signatures s
                    WHERE s.document_id = d.id
-                     AND s.step_order > (SELECT count(*) FROM document_approval_steps st
-                                          WHERE st.document_id = d.id)),
+                     AND s.step_order > COALESCE((SELECT max(st.step_order)
+                                                    FROM document_approval_steps st
+                                                   WHERE st.document_id = d.id), 0)),
              (SELECT count(*) FROM document_workflow_steps w
                WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type))
      WHERE d.status = 'PENDING_APPROVAL';
