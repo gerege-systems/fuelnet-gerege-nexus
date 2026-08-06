@@ -33,11 +33,18 @@ export default function DocumentWorkflowsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<ActionMessage | null>(null);
 
+  // The server answers with a row for every document type, so an empty list can only
+  // mean the load failed. Rendering the table anyway left a blank page that reads as
+  // "this tenant has no document types" the moment the error banner is dismissed.
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
       setChains((await api.getDocumentWorkflows()) || []);
+      setLoadFailed(false);
     } catch (err: any) {
+      setLoadFailed(true);
       setMessage({ type: "error", text: err?.message || t("documents.message.workflows_failed") });
     } finally {
       setLoading(false);
@@ -101,6 +108,10 @@ export default function DocumentWorkflowsPage() {
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
+      ) : loadFailed ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+          {t("documents.message.workflows_failed")}
+        </div>
       ) : (
         <div className="space-y-4">
           {chains.map((chain) => (

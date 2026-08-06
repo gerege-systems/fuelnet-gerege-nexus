@@ -83,14 +83,17 @@ export default function DocumentApprovalsPage() {
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
+      {/* A tile is as much a claim as a sentence. "Awaiting signature: 0" over a
+          queue the page could not read is the same falsehood the prose below is
+          careful not to tell, so a failed load shows a dash in both places. */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <div className="text-2xl font-bold text-amber-600">{pending.length}</div>
+          <div className="text-2xl font-bold text-amber-600">{loadFailed ? "—" : pending.length}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.awaiting")}</div>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
           <div className="text-2xl font-bold text-slate-700">
-            {waitingSince ? days(waitingSince.created_at) : 0}
+            {loadFailed ? "—" : waitingSince ? days(waitingSince.created_at) : 0}
           </div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.oldest_days")}</div>
         </div>

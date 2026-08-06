@@ -37,11 +37,17 @@ export default function DocumentRetentionPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<ActionMessage | null>(null);
 
+  // A failed load left the three tiles saying "0 filed · 0 past their term · 0 rules
+  // set" — a claim about the tenant, made out of rows the page never received.
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
       setRules((await api.getRetentionRules()) || []);
+      setLoadFailed(false);
     } catch (err: any) {
+      setLoadFailed(true);
       setMessage({ type: "error", text: err?.message || t("documents.message.retention_failed") });
     } finally {
       setLoading(false);
@@ -102,7 +108,8 @@ export default function DocumentRetentionPage() {
   const filedTotal = rules.reduce((sum, rule) => sum + (rule.total ?? 0), 0);
   const expiredPartial = rules.some((rule) => rule.expired === undefined);
   const filedPartial = rules.some((rule) => rule.total === undefined);
-  const atLeast = (value: number, partial: boolean) => (partial ? `≥${value}` : `${value}`);
+  const atLeast = (value: number, partial: boolean) =>
+    loadFailed ? "—" : partial ? `≥${value}` : `${value}`;
 
   return (
     <div className="space-y-6">
@@ -126,7 +133,9 @@ export default function DocumentRetentionPage() {
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.past_term")}</div>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <div className="text-2xl font-bold text-indigo-600">{rules.filter((r) => r.configured).length}</div>
+          <div className="text-2xl font-bold text-indigo-600">
+            {loadFailed ? "—" : rules.filter((r) => r.configured).length}
+          </div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.rules_set")}</div>
         </div>
       </section>

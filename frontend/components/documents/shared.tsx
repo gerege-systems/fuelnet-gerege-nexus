@@ -511,13 +511,7 @@ export function SignatureDialog({
           <PenLine className="w-5 h-5 text-indigo-600" />
           <span>{t("documents.view.sign_title")}</span>
         </h2>
-        <div className="flex items-center gap-2 mb-4 min-w-0">
-          <p className="text-xs text-slate-500 truncate">{doc.title}</p>
-          {/* The trail covers the list, so the status has to travel with it: the
-              same steps mean "still to come" on a pending document and "never
-              given" on one that has been decided. */}
-          <StatusBadge status={doc.status} />
-        </div>
+        <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
 
         {failure && (
           <div className="mb-4 p-3 rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs flex items-start gap-2">
@@ -714,7 +708,14 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
           <ShieldCheck className="w-5 h-5 text-indigo-600" />
           <span>{t("documents.view.history_title")}</span>
         </h2>
-        <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
+        <div className="flex items-center gap-2 mb-4 min-w-0">
+          <p className="text-xs text-slate-500 truncate">{doc.title}</p>
+          {/* The trail covers the list, so the status has to travel with it: the same
+              unfilled steps mean "still to come" on a pending document and "never
+              given" on one that has been decided, and the dialog says nothing else
+              about which this is. */}
+          <StatusBadge status={doc.status} />
+        </div>
 
         {error ? (
           <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>

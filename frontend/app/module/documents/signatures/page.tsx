@@ -32,11 +32,18 @@ export default function SignaturePoliciesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<ActionMessage | null>(null);
 
+  // The server answers with a row for every document type, so an empty list can only
+  // mean the load failed. Rendering the table anyway left a blank page that reads as
+  // "this tenant has no document types" the moment the error banner is dismissed.
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
       setPolicies((await api.getSignaturePolicies()) || []);
+      setLoadFailed(false);
     } catch (err: any) {
+      setLoadFailed(true);
       setMessage({ type: "error", text: err?.message || t("documents.message.policies_failed") });
     } finally {
       setLoading(false);
@@ -93,6 +100,10 @@ export default function SignaturePoliciesPage() {
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
+      ) : loadFailed ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+          {t("documents.message.policies_failed")}
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">
