@@ -201,6 +201,68 @@ func TestAShortRegistrationNumberIsRefusedLocally(t *testing.T) {
 	}
 }
 
+// A Mongolian registration number is Cyrillic — "УБ99010111" is ten characters in
+// twenty bytes — and every bound on it is a bound on CHARACTERS: the column counts
+// characters, the SQL that repairs stored chains counts characters, and a citizen
+// reading their own number counts characters. Measuring bytes in Go made the three
+// places that enforce "a named step must be fillable" disagree: "УБ9901" is eight
+// bytes but six characters, so the save accepted it as a named step and the snapshot
+// then opened it, leaving the workflows screen naming a citizen the document's own
+// chain did not.
+func TestARegistrationNumberIsBoundedInCharactersNotBytes(t *testing.T) {
+	for _, tc := range []struct {
+		reg       string
+		plausible bool
+		why       string
+	}{
+		{"AA90010111", true, "the transliterated form the mock uses"},
+		{"УБ99010111", true, "the real Cyrillic form, 10 characters in 20 bytes"},
+		{"уб99010111", true, "the same, normalised on the way in"},
+		{"УБ9901", false, "6 characters — 8 bytes, which once passed"},
+		{"AA1", false, "3 characters"},
+		{"", false, "an open step names nobody"},
+		{strings.Repeat("У", RegNumberMax), true, "64 characters is what the column holds"},
+		{strings.Repeat("У", RegNumberMax+1), false, "65 would not survive being stored"},
+	} {
+		if got := plausibleRegNumber(normaliseRegNumber(tc.reg)); got != tc.plausible {
+			t.Errorf("plausibleRegNumber(%q) = %v, want %v — %s", tc.reg, got, tc.plausible, tc.why)
+		}
+	}
+
+	// And the shortest Cyrillic number that passes must be exactly the limit in
+	// characters, not in bytes.
+	if !plausibleRegNumber(strings.Repeat("Ү", RegNumberLimit)) {
+		t.Error("a number of exactly the limit in characters must be accepted")
+	}
+	if plausibleRegNumber(strings.Repeat("Ү", RegNumberLimit-1)) {
+		t.Error("a number one character short must be refused")
+	}
+}
+
+// The same rule, applied where a document's chain is decided: what cannot be saved
+// must not be copied, and what can be saved must be copied intact.
+func TestFillableChainOpensOnlyWhatNobodyCouldFill(t *testing.T) {
+	got := fillableChain([]WorkflowStep{
+		{Order: 1, Name: "Ня-бо", SignerRegNumber: "  уб99010111 "}, // normalised, kept
+		{Order: 2, Name: "Дахилт", SignerRegNumber: "УБ99010111"},   // the same citizen
+		{Order: 3, Name: "Алдаа", SignerRegNumber: "УБ9901"},        // 6 characters
+		{Order: 4, Name: "Хэн ч", SignerRegNumber: ""},              // open already
+		{Order: 5, Name: "Захирал", SignerRegNumber: "cc90010111"},  // fine, normalised
+	})
+	want := []string{"УБ99010111", "", "", "", "CC90010111"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d steps, want %d — the tenant asked for that many approvals", len(got), len(want))
+	}
+	for i, step := range got {
+		if step.SignerRegNumber != want[i] {
+			t.Errorf("step %d = %q, want %q", i+1, step.SignerRegNumber, want[i])
+		}
+		if step.Order != i+1 {
+			t.Errorf("step %d carries order %d", i+1, step.Order)
+		}
+	}
+}
+
 func TestResolveTitlePattern(t *testing.T) {
 	at := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
 

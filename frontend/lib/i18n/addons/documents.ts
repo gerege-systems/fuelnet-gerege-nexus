@@ -44,6 +44,7 @@ export const documents = {
   "documents.state.rejected": { mn: "Татгалзсан", en: "Rejected" },
   "documents.state.awaiting_now": { mn: "Одоо хүлээж байна", en: "Awaiting now" },
   "documents.state.awaiting_later": { mn: "Дараа", en: "Later" },
+  "documents.state.never_given": { mn: "Аваагүй", en: "Never given" },
 
   "documents.action.create": { mn: "Баримт үүсгэх", en: "Create Document" },
   "documents.action.sign": { mn: "Гарын үсэг зурах", en: "Sign" },
@@ -129,6 +130,10 @@ export const documents = {
   "documents.message.reject_success": { mn: "\"{title}\"-г татгалзлаа.", en: "\"{title}\" was rejected." },
   "documents.message.reject_failed": { mn: "Татгалзаж чадсангүй", en: "Reject failed" },
   "documents.message.create_failed": { mn: "Баримт үүсгэж чадсангүй", en: "Failed to create document" },
+  "documents.message.create_success": {
+    mn: "\"{title}\" үүсгэж, батлах дараалалд оруулав.",
+    en: "\"{title}\" was created and sent for approval.",
+  },
   "documents.message.route_success": {
     mn: "\"{title}\" батлах дараалалд орлоо.",
     en: "\"{title}\" was sent for approval.",

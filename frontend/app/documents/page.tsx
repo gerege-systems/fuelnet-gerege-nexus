@@ -60,11 +60,19 @@ export default function DocumentsPage() {
     e.preventDefault();
     if (creating) return;
     setCreating(true);
+    // Cleared before the attempt, and replaced after it. A refused create left its
+    // red banner up; when the operator corrected the title and succeeded, that
+    // banner was still the only thing the screen said about the operation — and a
+    // document read as "failed" is submitted again, which lands a duplicate in the
+    // approval queue, since a new document is routed for approval on creation.
+    setMessage(null);
+    const title = form.title;
     try {
       await api.createDocument(form);
       setShowModal(false);
       setForm({ title: "", doc_type: "CONTRACT" });
-      await loadData();
+      await succeed(t("documents.message.create_success", { title }));
+      return;
     } catch (err: any) {
       setMessage({ type: "error", text: `${t("documents.message.create_failed")}: ${err.message}` });
     } finally {

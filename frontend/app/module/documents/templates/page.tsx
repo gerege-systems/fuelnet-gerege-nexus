@@ -34,28 +34,45 @@ export default function DocumentTemplatesPage() {
   const [message, setMessage] = useState<ActionMessage | null>(null);
   const [form, setForm] = useState({ name: "", doc_type: "CONTRACT", title_pattern: "" });
 
-  // A failed load must not be reported as an empty list, and a load that resolves
-  // late must not overwrite a row the operator has since created or edited: each
-  // load takes a ticket and only the newest one may write.
+  // Rows with edits that have not been saved. The Use button acts on what the server
+  // holds, so it must not be enabled by a tick the server has not seen.
+  //
+  // Mirrored in a ref because a load that started before an edit has to see the
+  // edit when it resolves, and a closure captured at render time would not.
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  const dirtyRef = useRef<Record<string, boolean>>({});
+  const markDirty = (id: string, unsaved: boolean) => {
+    dirtyRef.current = { ...dirtyRef.current, [id]: unsaved };
+    setDirty(dirtyRef.current);
+  };
+
+  // A failed load must not be reported as an empty list.
   const [loadFailed, setLoadFailed] = useState(false);
-  const loadTicket = useRef(0);
 
   const loadData = async () => {
-    const mine = ++loadTicket.current;
     setLoading(true);
     try {
       const rows = (await api.getDocumentTemplates()) || [];
-      if (loadTicket.current !== mine) return;
-      setTemplates(rows);
+      // Reconciled, not replaced. A load that resolves after the operator has
+      // created or edited a row must not throw their work away — and discarding
+      // the whole response instead threw the server's OTHER rows away: a tenant
+      // holding nine templates was shown the one row it had just created, with no
+      // spinner and no error, as though that were the list.
+      setTemplates((current) => {
+        const served = new Set(rows.map((row) => row.id));
+        const kept = rows.map((row) =>
+          dirtyRef.current[row.id] ? current.find((row2) => row2.id === row.id) ?? row : row,
+        );
+        // A row created while this load was in flight is not in its answer yet.
+        return [...kept, ...current.filter((row) => !served.has(row.id))];
+      });
       setLoadFailed(false);
     } catch (err: any) {
-      if (loadTicket.current !== mine) return;
+      // Always surfaced. A load that fails is not stale news, and swallowing it
+      // left whatever rows the page happened to hold looking authoritative.
       setLoadFailed(true);
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
-      // Unconditionally. The ticket exists to stop a stale load WRITING, not to
-      // decide who clears the spinner — gating this left the page saying "Loading"
-      // for ever whenever a create superseded the load that was still in flight.
       setLoading(false);
     }
   };
@@ -73,9 +90,9 @@ export default function DocumentTemplatesPage() {
       setForm({ name: "", doc_type: "CONTRACT", title_pattern: "" });
       setMessage({ type: "success", text: t("documents.message.template_saved") });
       // Appending keeps whatever the operator has typed into the other rows; a
-      // reload here threw it away.
+      // reload here threw it away. A load still in flight will reconcile around
+      // this row rather than overwrite it.
       if (created && created.id) {
-        loadTicket.current++; // a load still in flight must not overwrite this
         setTemplates((current) => [...current, created]);
       } else {
         await loadData();
@@ -87,13 +104,9 @@ export default function DocumentTemplatesPage() {
     }
   };
 
-  // Rows with edits that have not been saved. The Use button acts on what the server
-  // holds, so it must not be enabled by a tick the server has not seen.
-  const [dirty, setDirty] = useState<Record<string, boolean>>({});
-
   const edit = (id: string, patch: Partial<Template>, saved = false) => {
     setTemplates((current) => current.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-    setDirty((current) => ({ ...current, [id]: !saved }));
+    markDirty(id, !saved);
   };
 
   const handleSave = async (tpl: Template) => {

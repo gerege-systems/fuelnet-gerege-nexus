@@ -142,8 +142,8 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// caller's behalf — and so that anything the provider refuses later can be
 	// treated as the provider's trouble, which a polling client must retry rather
 	// than abandon a ceremony over.
-	regNumber = strings.ToUpper(strings.TrimSpace(regNumber))
-	if len(regNumber) < RegNumberLimit {
+	regNumber = normaliseRegNumber(regNumber)
+	if !plausibleRegNumber(regNumber) {
 		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
 	}
 
@@ -300,7 +300,7 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	}
 
 	// The approval has to come from the citizen the request was addressed to.
-	approved := strings.ToUpper(strings.TrimSpace(result.Identity.RegNumber))
+	approved := normaliseRegNumber(result.Identity.RegNumber)
 	if approved != regNumber {
 		return nil, fmt.Errorf("%w: the request was sent to %s but %s approved it",
 			ErrSignatureRejected, regNumber, approved)

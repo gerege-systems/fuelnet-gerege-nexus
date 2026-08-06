@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -57,6 +58,69 @@ type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// normaliseRegNumber is the one shape a registration number is compared in. Every
+// decision that pairs a number with another number — whether a named step is this
+// citizen's, whether they have signed already, the ledger's one-per-signer
+// constraint — rests on both sides having been through here.
+//
+// It is deliberately Go rather than SQL. Postgres upper() is governed by the
+// database's ctype: on a cluster initialised with LC_CTYPE=C, upper('уб99010111')
+// is 'уб99010111' unchanged, while Go upper-cases Cyrillic wherever it runs. Since
+// Mongolian registration numbers are Cyrillic, letting SQL decide would make the
+// feature's central comparison depend on how somebody ran initdb.
+func normaliseRegNumber(reg string) string {
+	return strings.ToUpper(strings.TrimSpace(reg))
+}
+
+// plausibleRegNumber reports whether a normalised number could be presented by a
+// citizen at all. Anything shorter than the limit is refused by both providers, and
+// anything longer than the column would not survive being stored.
+//
+// Counted in RUNES, not bytes. A Mongolian registration number is Cyrillic —
+// 'УБ99010111' is 10 characters in 20 bytes — and the column is VARCHAR(64), which
+// Postgres also counts in characters. Measuring bytes here made this check disagree
+// with both the column and the SQL that repairs stored chains: 'УБ9901' is 8 bytes
+// but 6 characters, so it was stored as a named step and then copied onto every
+// document as an open one, leaving the screen naming a citizen the document's own
+// chain did not.
+func plausibleRegNumber(reg string) bool {
+	n := utf8.RuneCountInString(reg)
+	return n >= RegNumberLimit && n <= RegNumberMax
+}
+
+// RegNumberMax is what document_workflow_steps.signer_reg_number holds, in the
+// characters Postgres counts.
+const RegNumberMax = 64
+
+// fillableChain is the chain a document may actually be approved by: numbers
+// normalised, and every step nobody could fill left open.
+//
+// A step is unfillable in two ways. It may name something that is not a
+// registration number, which no provider would vouch for. Or it may name a citizen
+// an earlier step already names — one citizen signs a document once, so the later
+// step would be owed to somebody who has already signed, and the document could
+// never be approved by anybody.
+//
+// Opening such a step is the only reading that leaves the chain completable: the
+// tenant asked for that many approvals and still gets them, the step is simply
+// fillable by whoever can actually sign. ReplaceWorkflow refuses to SAVE either
+// shape; this is what the path that decides who may sign does with the chains
+// stored before it did.
+func fillableChain(steps []WorkflowStep) []WorkflowStep {
+	out := make([]WorkflowStep, 0, len(steps))
+	namedAt := map[string]bool{}
+	for _, step := range steps {
+		reg := normaliseRegNumber(step.SignerRegNumber)
+		if !plausibleRegNumber(reg) || namedAt[reg] {
+			reg = ""
+		} else {
+			namedAt[reg] = true
+		}
+		out = append(out, WorkflowStep{Order: step.Order, Name: step.Name, SignerRegNumber: reg})
+	}
+	return out
+}
+
 // snapshotApprovalChain copies the type's chain onto the document and records how
 // many signatures that comes to. A type with no chain leaves no steps and a
 // requirement of one, which is how a document of such a type has always behaved.
@@ -65,31 +129,22 @@ type querier interface {
 // document can never exist in a state where its requirement and its steps
 // disagree.
 func (m *DocumentsModule) snapshotApprovalChain(ctx context.Context, tx pgx.Tx, tenantID, docID, docType string) error {
-	// A step nobody could fill is copied open. Three ways a stored chain can carry one:
-	// a citizen named twice, who signs a document once; a name too short to be a
-	// registration number any provider would accept; and a number in a shape no signer
-	// will ever present, since both providers' answers are upper-cased and trimmed
-	// before they are compared. ReplaceWorkflow refuses all three now, but chains saved
-	// before it did still exist — and the path that decides who may sign must never
-	// snapshot a chain the path that saves them would reject.
-	//
-	// The comparison is on the normalised number for the same reason: 'AA90010111' and
-	// 'aa90010111' in one chain are one citizen named twice, and the raw strings would
-	// not notice. An empty number normalises to empty, which is shorter than the limit,
-	// so an open step stays open.
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
-		 SELECT $1, $2, w.step_order, w.name,
-		        CASE WHEN length(upper(btrim(w.signer_reg_number))) < $4 THEN ''
-		             WHEN w.step_order = min(w.step_order)
-		                    OVER (PARTITION BY upper(btrim(w.signer_reg_number)))
-		                  THEN upper(btrim(w.signer_reg_number))
-		             ELSE '' END
-		   FROM document_workflow_steps w
-		  WHERE w.tenant_id = $1 AND w.doc_type = $3
-		     ON CONFLICT (document_id, step_order) DO NOTHING`,
-		tenantID, docID, docType, RegNumberLimit); err != nil {
-		return fmt.Errorf("copy approval chain onto document: %w", err)
+	// Read, then put through the same Go rule the save path enforces, then written.
+	// The chain a document carries is what decides who may sign it, so it must never
+	// be a chain ReplaceWorkflow would have refused — and the decision cannot be left
+	// to SQL, whose idea of upper case depends on the cluster's ctype.
+	stored, err := m.workflowStepsTx(ctx, tx, tenantID, docType)
+	if err != nil {
+		return fmt.Errorf("read approval chain to copy: %w", err)
+	}
+	for _, step := range fillableChain(stored) {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
+			      VALUES ($1, $2, $3, $4, $5)
+			 ON CONFLICT (document_id, step_order) DO NOTHING`,
+			tenantID, docID, step.Order, step.Name, step.SignerRegNumber); err != nil {
+			return fmt.Errorf("copy approval step %d onto document: %w", step.Order, err)
+		}
 	}
 
 	if _, err := tx.Exec(ctx,
@@ -115,8 +170,6 @@ type approvalPosition struct {
 	// signature early would leave their own step unfillable and the document
 	// unapprovable.
 	Reserved []string
-	// Unfilled is how many steps of the chain no signature has filled.
-	Unfilled int
 }
 
 // nextApprovalStep reads a document's position in its own chain: the next step is
@@ -165,10 +218,6 @@ func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenan
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
-	}
-	pos.Unfilled = len(pos.Reserved)
-	if pos.Next != nil {
-		pos.Unfilled++ // Reserved only counts the named ones after Next
 	}
 	return pos, nil
 }
@@ -288,17 +337,15 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 		if name == "" {
 			return nil, fmt.Errorf("%w: step %d needs a name", ErrInvalidConfiguration, i+1)
 		}
-		reg := strings.ToUpper(strings.TrimSpace(step.SignerRegNumber))
+		reg := normaliseRegNumber(step.SignerRegNumber)
 		// A step naming something no citizen could present is a step nobody can
 		// fill: signing checks the identity a provider vouched for, and both
-		// providers refuse a registration number under eight characters.
-		if reg != "" && len(reg) < RegNumberLimit {
-			return nil, fmt.Errorf("%w: step %d names %q, which is not a registration number",
-				ErrInvalidConfiguration, i+1, reg)
-		}
-		if len(reg) > 64 {
-			return nil, fmt.Errorf("%w: step %d names a registration number of %d characters",
-				ErrInvalidConfiguration, i+1, len(reg))
+		// providers refuse a registration number under eight characters. Refused
+		// here, so a chain is never stored in a shape the snapshot would have to
+		// open — the screen would name a citizen the document's chain did not.
+		if reg != "" && !plausibleRegNumber(reg) {
+			return nil, fmt.Errorf("%w: step %d names %q, which is %d characters — a registration number is %d to %d",
+				ErrInvalidConfiguration, i+1, reg, utf8.RuneCountInString(reg), RegNumberLimit, RegNumberMax)
 		}
 		// One citizen signs a document once, so naming the same person at two
 		// steps builds a chain that can never be completed — whatever the

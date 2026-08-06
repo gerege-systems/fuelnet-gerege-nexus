@@ -511,7 +511,13 @@ export function SignatureDialog({
           <PenLine className="w-5 h-5 text-indigo-600" />
           <span>{t("documents.view.sign_title")}</span>
         </h2>
-        <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
+        <div className="flex items-center gap-2 mb-4 min-w-0">
+          <p className="text-xs text-slate-500 truncate">{doc.title}</p>
+          {/* The trail covers the list, so the status has to travel with it: the
+              same steps mean "still to come" on a pending document and "never
+              given" on one that has been decided. */}
+          <StatusBadge status={doc.status} />
+        </div>
 
         {failure && (
           <div className="mb-4 p-3 rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs flex items-start gap-2">
@@ -723,9 +729,12 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
           <ol className="space-y-3 max-h-[60vh] overflow-y-auto">
             {rows.map(({ step, signature }, index) => {
               const filled = Boolean(signature);
-              // The next approval is the first unfilled step of a pending document.
-              const isNext =
-                !filled && doc.status === PENDING && rows.findIndex((r) => !r.signature) === index;
+              // Only a pending document is still waiting for anything. On a decided
+              // one — rejected, or approved before its type had a chain — an unfilled
+              // step is an approval that was never given, and calling it "Later" told
+              // an operator that a closed document was still moving.
+              const open = doc.status === PENDING;
+              const isNext = !filled && open && rows.findIndex((r) => !r.signature) === index;
 
               return (
                 <li
@@ -775,7 +784,11 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
                             : "bg-slate-50 text-slate-500 border-slate-200"
                         }`}
                       >
-                        {isNext ? t("documents.state.awaiting_now") : t("documents.state.awaiting_later")}
+                        {isNext
+                          ? t("documents.state.awaiting_now")
+                          : open
+                            ? t("documents.state.awaiting_later")
+                            : t("documents.state.never_given")}
                       </span>
                     )}
                   </div>

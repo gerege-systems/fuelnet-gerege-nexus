@@ -69,10 +69,23 @@ export default function DocumentRetentionPage() {
       })) as Rule | undefined;
       setMessage({ type: "success", text: t("documents.message.retention_saved", { type: rule.doc_type }) });
       if (saved && saved.doc_type) {
-        // A save cannot change the counts, so absent ones keep the row's.
+        // `total` counts every document of the type, so a save cannot change it and
+        // the row's own is still good if the server sent none.
+        //
+        // `expired` is counted AGAINST THE TERM, which is exactly what this save
+        // changed — so the row's own belongs to a term that no longer applies, and
+        // the direction is always the dangerous one: shortening a term can only
+        // increase what is past it, and shortening is the common edit. Left absent,
+        // the cell reads "—" instead of stating a stale zero over a type where
+        // hundreds are now past their term.
+        //
+        // `expired` is NAMED in the patch even though it may be undefined: the server
+        // omits the key entirely when it could not count, and `edit` merges, so a key
+        // that is merely absent leaves the row's old number sitting there. Naming it
+        // is what actually clears it.
         edit(rule.doc_type, {
           ...saved,
-          expired: saved.expired ?? rule.expired,
+          expired: saved.expired,
           total: saved.total ?? rule.total,
         });
       }
@@ -83,7 +96,13 @@ export default function DocumentRetentionPage() {
     }
   };
 
+  // A tile that adds up rows the server could not count states a total it does not
+  // know. It is prefixed with "≥" then, because the number can only be short.
   const expiredTotal = rules.reduce((sum, rule) => sum + (rule.expired ?? 0), 0);
+  const filedTotal = rules.reduce((sum, rule) => sum + (rule.total ?? 0), 0);
+  const expiredPartial = rules.some((rule) => rule.expired === undefined);
+  const filedPartial = rules.some((rule) => rule.total === undefined);
+  const atLeast = (value: number, partial: boolean) => (partial ? `≥${value}` : `${value}`);
 
   return (
     <div className="space-y-6">
@@ -97,12 +116,12 @@ export default function DocumentRetentionPage() {
 
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <div className="text-2xl font-bold text-slate-700">{rules.reduce((sum, r) => sum + (r.total ?? 0), 0)}</div>
+          <div className="text-2xl font-bold text-slate-700">{atLeast(filedTotal, filedPartial)}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.filed")}</div>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
           <div className={`text-2xl font-bold ${expiredTotal > 0 ? "text-amber-600" : "text-slate-700"}`}>
-            {expiredTotal}
+            {atLeast(expiredTotal, expiredPartial)}
           </div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.past_term")}</div>
         </div>

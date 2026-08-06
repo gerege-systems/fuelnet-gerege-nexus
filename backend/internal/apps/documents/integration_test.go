@@ -959,6 +959,71 @@ func TestARegistrationNumbersShapeDoesNotDecideWhoSigned(t *testing.T) {
 	}
 }
 
+// The end of the same story, through the real tables: a Mongolian chain, in the
+// Cyrillic the numbers are actually issued in, must reach a document's own chain
+// NAMED and be fillable by the citizen it names. Measuring the bound in bytes let
+// such a chain be saved and then quietly opened, so the workflows screen promised an
+// approver the document did not have.
+func TestACyrillicChainReachesTheDocumentNamed(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Order: 1, Name: "Ня-бо", SignerRegNumber: "уб99010111"},
+		{Order: 2, Name: "Захирал", SignerRegNumber: "УХ88070202"},
+	}); err != nil {
+		t.Fatalf("a Cyrillic chain must be storable: %v", err)
+	}
+
+	// Six characters is not a registration number, whatever its byte count.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "REQUEST", []WorkflowStep{
+		{Order: 1, Name: "Хагас", SignerRegNumber: "УБ9901"},
+	}); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Fatalf("got %v, want a refusal — УБ9901 is 6 characters", err)
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Кирилл хэлхээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	steps, err := f.m.DocumentSteps(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if len(steps) != 2 {
+		t.Fatalf("got %d steps, want 2", len(steps))
+	}
+	if steps[0].SignerRegNumber != "УБ99010111" || steps[1].SignerRegNumber != "УХ88070202" {
+		t.Fatalf("the document's chain = %q/%q, want both citizens named in upper case",
+			steps[0].SignerRegNumber, steps[1].SignerRegNumber)
+	}
+
+	// And it can be completed by the citizens it names, and nobody else.
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ЗЗ99999999", "123456"); err == nil {
+		t.Error("a stranger filled a named step")
+	}
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "уб99010111", "123456"); err != nil {
+		t.Fatalf("the citizen the step names: %v", err)
+	}
+	done, err := signWithEID(t, f, doc.ID, "ух88070202")
+	if err != nil {
+		t.Fatalf("the second citizen: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+
+	sigs, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	for _, sig := range sigs {
+		if sig.SignerRegNumber != strings.ToUpper(sig.SignerRegNumber) {
+			t.Errorf("the ledger holds %q, want it normalised", sig.SignerRegNumber)
+		}
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

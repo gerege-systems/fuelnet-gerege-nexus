@@ -462,6 +462,13 @@ func checkSigner(pos *approvalPosition, docType, regNumber string) error {
 // is still a single call — and it only succeeds while DAN_MOCK_MODE is on, because
 // the live DAN client has no implementation for it.
 func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regNumber, otpCode string) (*Document, error) {
+	// Refused before the gateway is troubled, on the same terms as the E-ID path: a
+	// number this module knows cannot name a step is not worth a round trip, and the
+	// caller gets told what is wrong with it rather than what DAN thought of it.
+	if !plausibleRegNumber(normaliseRegNumber(regNumber)) {
+		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
+	}
+
 	pre, err := m.preflightSignature(ctx, tenantID, docID, SignerDAN)
 	if err != nil {
 		return nil, err
@@ -479,7 +486,7 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 	// and let them sign a second time in the other case.
 	signature := &verifiedSignature{
 		SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
-		RegNumber:  strings.ToUpper(strings.TrimSpace(profile.RegNumber)),
+		RegNumber:  normaliseRegNumber(profile.RegNumber),
 		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 

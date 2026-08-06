@@ -79,6 +79,16 @@ BEGIN
        SET signer_reg_number = upper(btrim(signer_reg_number))
      WHERE signer_reg_number <> upper(btrim(signer_reg_number));
 
+    --    One honest limit here: upper() answers to the cluster's ctype. On a database
+    --    initialised with LC_CTYPE=C, upper('уб99010111') is 'уб99010111' unchanged, so
+    --    a Cyrillic number stored in lower case survives this statement as it was —
+    --    and, being ten characters and not a duplicate of anything the statement can
+    --    see, is kept named. The runtime does not depend on that: snapshotApprovalChain
+    --    normalises in Go, so every document minted after this migration carries a
+    --    canonical chain whatever the locale. A chain already copied onto a waiting
+    --    document below is what this cannot reach; on such a cluster it has to be saved
+    --    again from the workflows screen, which normalises it properly.
+
     WITH unfillable AS (
         SELECT id
           FROM (SELECT id, signer_reg_number,
