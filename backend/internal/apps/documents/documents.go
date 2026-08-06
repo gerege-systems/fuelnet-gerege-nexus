@@ -880,6 +880,11 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string, fi
 		   AND ($3 = '' OR d.doc_type = $3)
 		   AND ($4 = '' OR ` + m.titleMatch(ctx) + `)`
 
+	// The count and the rows are two statements, so a document created or deleted
+	// between them can leave the total off by one or two. That is deliberate: both ask
+	// the same question of the same filter, and a read-only snapshot to make them agree
+	// would buy nothing an operator can see — the total exists to say "there is more
+	// than this page", not to be reconciled against the rows.
 	page := &DocumentPage{Documents: make([]Document, 0), Limit: limit, Offset: offset}
 	if err := m.db.QueryRow(ctx,
 		`SELECT count(*) FROM document_records d WHERE `+where,
