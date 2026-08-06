@@ -1,0 +1,187 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { useAccess } from "@/lib/access";
+import { useI18n } from "@/lib/i18n";
+import { ActionMessage, Banner, SectionHeader } from "@/components/documents/shared";
+import { Plus, Save, Trash2, Workflow as WorkflowIcon } from "lucide-react";
+
+interface Step {
+  order?: number;
+  name: string;
+  signer_reg_number: string;
+}
+
+interface Chain {
+  doc_type: string;
+  steps: Step[];
+}
+
+/**
+ * Document workflows: the ordered approval chain each document type needs. One
+ * step per signature; a type with no steps is approved by a single signature,
+ * which is how the app behaved before chains existed.
+ */
+export default function DocumentWorkflowsPage() {
+  const { t } = useI18n();
+  const { can } = useAccess();
+  const mayManage = can("documents.manage");
+
+  const [chains, setChains] = useState<Chain[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<ActionMessage | null>(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      setChains((await api.getDocumentWorkflows()) || []);
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || t("documents.message.workflows_failed") });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const editChain = (docType: string, steps: Step[]) =>
+    setChains((current) => current.map((c) => (c.doc_type === docType ? { ...c, steps } : c)));
+
+  const addStep = (chain: Chain) => editChain(chain.doc_type, [...chain.steps, { name: "", signer_reg_number: "" }]);
+
+  const removeStep = (chain: Chain, index: number) =>
+    editChain(
+      chain.doc_type,
+      chain.steps.filter((_, i) => i !== index)
+    );
+
+  const editStep = (chain: Chain, index: number, patch: Partial<Step>) =>
+    editChain(
+      chain.doc_type,
+      chain.steps.map((step, i) => (i === index ? { ...step, ...patch } : step))
+    );
+
+  const save = async (chain: Chain) => {
+    setBusy(chain.doc_type);
+    setMessage(null);
+    try {
+      await api.saveDocumentWorkflow(
+        chain.doc_type,
+        chain.steps.map((step) => ({ name: step.name, signer_reg_number: step.signer_reg_number }))
+      );
+      setMessage({ type: "success", text: t("documents.message.workflow_saved", { type: chain.doc_type }) });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || t("documents.message.workflows_failed") });
+    } finally {
+      setBusy(null);
+      // Either way, show what is actually stored.
+      await loadData();
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        icon={<WorkflowIcon className="w-7 h-7 text-indigo-600" />}
+        title={t("documents.menu.workflows")}
+        subtitle={t("documents.view.workflows_hint")}
+      />
+
+      {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
+
+      {loading ? (
+        <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
+      ) : (
+        <div className="space-y-4">
+          {chains.map((chain) => (
+            <section key={chain.doc_type} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <header className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold text-slate-900 text-sm">{chain.doc_type}</span>
+                  <span className="text-[11px] text-slate-500">
+                    {chain.steps.length === 0
+                      ? t("documents.message.chain_single_signature")
+                      : t("documents.message.chain_signature_count", { count: chain.steps.length })}
+                  </span>
+                </div>
+                {mayManage && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => addStep(chain)}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-300 text-slate-700 hover:bg-white"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{t("documents.action.add_step")}</span>
+                    </button>
+                    <button
+                      onClick={() => save(chain)}
+                      disabled={busy === chain.doc_type}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{t("base.action.save")}</span>
+                    </button>
+                  </div>
+                )}
+              </header>
+
+              {chain.steps.length === 0 ? (
+                <p className="px-4 py-5 text-xs text-slate-500">{t("documents.message.no_steps")}</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {chain.steps.map((step, index) => (
+                    <li key={index} className="px-4 py-3 flex flex-wrap items-end gap-3">
+                      <span className="w-6 h-6 shrink-0 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold grid place-items-center">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1 min-w-[180px]">
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          {t("documents.field.step_name")}
+                        </label>
+                        <input
+                          type="text"
+                          value={step.name}
+                          disabled={!mayManage}
+                          onChange={(e) => editStep(chain, index, { name: e.target.value })}
+                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-[180px]">
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          {t("documents.field.step_signer")}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="AA90010111"
+                          value={step.signer_reg_number}
+                          disabled={!mayManage}
+                          onChange={(e) => editStep(chain, index, { signer_reg_number: e.target.value })}
+                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                        />
+                      </div>
+                      {mayManage && (
+                        <button
+                          onClick={() => removeStep(chain, index)}
+                          className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                          aria-label={t("base.action.delete")}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-slate-500">{t("documents.message.step_signer_hint")}</p>
+    </div>
+  );
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
@@ -34,14 +35,13 @@ import (
 // CHECK constraint, so validation happens here.
 var DocTypes = []string{"CONTRACT", "REQUEST", "APPROVAL"}
 
-// Document status lifecycle: PENDING_APPROVAL -> APPROVED (via e-signature) or
-// REJECTED. A document can only be signed or rejected while it is pending.
+// Document status lifecycle: DRAFT -> PENDING_APPROVAL (RouteDocument) ->
+// APPROVED once the approval chain is complete, or REJECTED. A document can only
+// be signed or rejected while it is pending.
 //
-// document_records.status still defaults to DRAFT at the column level, but
-// CreateDocument always writes PENDING_APPROVAL, so nothing this app creates is
-// ever a draft. Whoever builds the "Document workflows" screen owns the
-// DRAFT -> PENDING_APPROVAL transition; until then DRAFT only reaches the table
-// through direct SQL.
+// CreateDocument writes PENDING_APPROVAL directly, so nothing the app creates is
+// a draft; DRAFT is the column default and RouteDocument is what moves a row that
+// arrived any other way.
 const (
 	StatusDraft    = "DRAFT"
 	StatusPending  = "PENDING_APPROVAL"
@@ -61,25 +61,31 @@ const (
 // discover which documents exist in someone else's tenant.
 var ErrNotSignable = errors.New("document not found or is not awaiting approval")
 
-// ErrSignatureRejected is returned when the signer could not be verified: a
-// registration number or one-time code the identity provider refused, or a
-// channel this module does not speak. It is the caller's problem to fix, so the
-// wrapped message is safe to show them — unlike a storage failure, which is
+// ErrSignatureRejected is returned when the signature was refused: an identity
+// the provider would not verify, a channel the type's policy does not allow, or a
+// signer its approval chain does not name. It is the caller's problem to fix, so
+// the wrapped message is safe to show them — unlike a storage failure, which is
 // reported as a plain server error.
 var ErrSignatureRejected = errors.New("signature rejected")
 
 type Document struct {
-	ID              string     `json:"id"`
-	TenantID        string     `json:"tenant_id"`
-	Title           string     `json:"title"`
-	DocType         string     `json:"doc_type"` // CONTRACT, REQUEST, APPROVAL
-	Status          string     `json:"status"`   // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Title    string `json:"title"`
+	DocType  string `json:"doc_type"` // CONTRACT, REQUEST, APPROVAL
+	Status   string `json:"status"`   // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED
+	// The newest signature, mirrored onto the record so the list stays one query.
+	// The full history is in document_signatures.
 	SignedBy        string     `json:"signed_by,omitempty"`
 	SignatureHash   string     `json:"signature_hash,omitempty"`
 	SignerRegNumber string     `json:"signer_reg_number,omitempty"`
 	SignerMethod    string     `json:"signer_method,omitempty"`
 	SignedAt        *time.Time `json:"signed_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	// Progress through the approval chain: how many signatures are on the
+	// document and how many its type needs.
+	SignatureCount     int       `json:"signature_count"`
+	RequiredSignatures int       `json:"required_signatures"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 type DocumentsModule struct {
@@ -111,7 +117,7 @@ func (m *DocumentsModule) Dependencies() []internal.Dependency { return nil }
 func (m *DocumentsModule) Permissions() []internal.PermissionDefinition {
 	return []internal.PermissionDefinition{
 		{Code: "documents.read", Name: "Read Documents", Description: "View documents and signature status"},
-		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents and route them for approval"},
+		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents, route them for approval, and configure templates, approval chains, signature policies and retention rules"},
 		{Code: "documents.sign", Name: "Sign Documents", Description: "Apply an E-ID / DAN digital signature or reject a document"},
 	}
 }
@@ -127,6 +133,29 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		dr.Use(tenantAuthMiddleware)
 		dr.Get("/", m.listDocumentsHandler)
 		dr.Post("/", m.createDocumentHandler)
+
+		// Templates a document is started from.
+		dr.Get("/templates", m.listTemplatesHandler)
+		dr.Post("/templates", m.createTemplateHandler)
+		dr.Delete("/templates/{id}", m.deleteTemplateHandler)
+		dr.Post("/templates/{id}/use", m.useTemplateHandler)
+
+		// How a document type may be signed.
+		dr.Get("/policies", m.listSignaturePoliciesHandler)
+		dr.Put("/policies/{docType}", m.saveSignaturePolicyHandler)
+
+		// Who must sign it, in order.
+		dr.Get("/workflows", m.listWorkflowsHandler)
+		dr.Put("/workflows/{docType}", m.saveWorkflowHandler)
+
+		// How long it is kept.
+		dr.Get("/retention", m.listRetentionRulesHandler)
+		dr.Put("/retention/{docType}", m.saveRetentionRuleHandler)
+
+		// A single document. Static segments above win over {id} in chi's trie,
+		// so "templates" and "policies" are never read as document ids.
+		dr.Get("/{id}/signatures", m.listSignaturesHandler)
+		dr.Post("/{id}/route", m.routeDocumentHandler)
 		dr.Post("/{id}/sign", m.signDocumentHandler)
 		dr.Post("/{id}/reject", m.rejectDocumentHandler)
 	})
@@ -196,6 +225,9 @@ func (m *DocumentsModule) signDocumentHandler(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, ErrNotSignable):
 		writeError(w, http.StatusConflict, err.Error())
 		return
+	case errors.Is(err, ErrAlreadySigned):
+		writeError(w, http.StatusConflict, err.Error())
+		return
 	case errors.Is(err, ErrSignatureRejected):
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -235,33 +267,81 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 		return nil, fmt.Errorf("title cannot be empty")
 	}
 	if docType == "" {
-		docType = "CONTRACT"
+		docType = DocTypes[0]
 	}
 	if !slices.Contains(DocTypes, docType) {
 		return nil, fmt.Errorf("unsupported doc_type %q", docType)
 	}
 
-	var doc Document
-	const query = `
-		INSERT INTO document_records (tenant_id, title, doc_type, status)
-		VALUES ($1, $2, $3, 'PENDING_APPROVAL')
-		RETURNING id, tenant_id, title, doc_type, status, created_at
-	`
 	// The old code answered a failed INSERT with a canned "doc_demo_200"
 	// record, reporting success for a document that was never stored.
-	err := m.db.QueryRow(ctx, query, tenantID, title, docType).Scan(
-		&doc.ID, &doc.TenantID, &doc.Title, &doc.DocType, &doc.Status, &doc.CreatedAt,
-	)
+	var id string
+	err := m.db.QueryRow(ctx,
+		`INSERT INTO document_records (tenant_id, title, doc_type, status)
+		      VALUES ($1, $2, $3, $4) RETURNING id`,
+		tenantID, title, docType, StatusPending).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("create document: %w", err)
 	}
-	return &doc, nil
+	return m.getDocument(ctx, tenantID, id)
+}
+
+// normalizeSignerMethod resolves the requested channel. An empty request means
+// E-ID, which is the default channel; anything this module does not speak is the
+// caller's mistake rather than a server fault.
+func normalizeSignerMethod(method string) (string, error) {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == "" {
+		method = SignerEID
+	}
+	if method != SignerEID && method != SignerDAN {
+		return "", fmt.Errorf("%w: unsupported signer method %q (expected EID or DAN)", ErrSignatureRejected, method)
+	}
+	return method, nil
+}
+
+// verifiedSignature is what a national identity channel hands back once it has
+// vouched for the signer.
+type verifiedSignature struct {
+	SignerName string
+	RegNumber  string
+	Hash       string
+}
+
+// verifySigner puts the caller in front of the requested channel. Neither channel
+// has a live implementation for this flow yet: with EID_MOCK_MODE / DAN_MOCK_MODE
+// off, both refuse, and the refusal reaches the caller as ErrSignatureRejected.
+func (m *DocumentsModule) verifySigner(ctx context.Context, method, regNumber, otpCode string) (*verifiedSignature, error) {
+	switch method {
+	case SignerEID:
+		identity, err := m.eidSvc.AuthenticateWithMethod(ctx, regNumber, otpCode, eid.AuthMethodMobileOTP)
+		if err != nil {
+			return nil, fmt.Errorf("%w: E-ID verification failed: %w", ErrSignatureRejected, err)
+		}
+		return &verifiedSignature{
+			SignerName: strings.TrimSpace(identity.FirstName+" "+identity.LastName) + " (E-ID баталгаажсан)",
+			RegNumber:  identity.RegNumber,
+			Hash:       identity.SignatureHash,
+		}, nil
+	case SignerDAN:
+		profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
+		if err != nil {
+			return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
+		}
+		return &verifiedSignature{
+			SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
+			RegNumber:  profile.RegNumber,
+			Hash:       "dan_sig_" + profile.DANSessionID,
+		}, nil
+	default:
+		return nil, fmt.Errorf("%w: unsupported signer method %q (expected EID or DAN)", ErrSignatureRejected, method)
+	}
 }
 
 // SignDocument verifies the signer through the requested national identity
-// channel (E-ID or DAN) and, on success, records the digital signature and
-// moves the document to APPROVED. The status guard in the UPDATE makes this
-// idempotent-safe: a document that is not pending is never re-signed.
+// channel, records the signature in the document's ledger, and approves the
+// document once its type's approval chain is satisfied. A type with no chain
+// needs one signature, which is how the app behaved before chains existed.
 func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, method, regNumber, otpCode string) (*Document, error) {
 	// document_records.id is a uuid column, so a malformed path parameter would
 	// otherwise surface as a storage error. It is simply not a document we hold.
@@ -269,53 +349,116 @@ func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, met
 		return nil, ErrNotSignable
 	}
 
-	method = strings.ToUpper(strings.TrimSpace(method))
-	if method == "" {
-		method = SignerEID
+	method, err := normalizeSignerMethod(method)
+	if err != nil {
+		return nil, err
 	}
 
-	var signedBy, sigHash, signerReg string
-	switch method {
-	case SignerEID:
-		identity, err := m.eidSvc.AuthenticateWithMethod(ctx, regNumber, otpCode, eid.AuthMethodMobileOTP)
-		if err != nil {
-			return nil, fmt.Errorf("%w: E-ID verification failed: %w", ErrSignatureRejected, err)
-		}
-		signedBy = strings.TrimSpace(identity.FirstName+" "+identity.LastName) + " (E-ID баталгаажсан)"
-		sigHash = identity.SignatureHash
-		signerReg = identity.RegNumber
-	case SignerDAN:
-		profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
-		if err != nil {
-			return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
-		}
-		signedBy = strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)"
-		sigHash = "dan_sig_" + profile.DANSessionID
-		signerReg = profile.RegNumber
-	default:
-		return nil, fmt.Errorf("%w: unsupported signer method %q (expected EID or DAN)", ErrSignatureRejected, method)
-	}
-
-	signedAt := time.Now()
-	const query = `
-		UPDATE document_records
-		   SET status = 'APPROVED', signed_by = $1, signature_hash = $2,
-		       signer_reg_number = $3, signer_method = $4, signed_at = $5
-		 WHERE id = $6 AND tenant_id = $7 AND status = 'PENDING_APPROVAL'
-		RETURNING id, tenant_id, title, doc_type, status,
-		          COALESCE(signed_by, ''), COALESCE(signature_hash, ''),
-		          COALESCE(signer_reg_number, ''), COALESCE(signer_method, ''),
-		          signed_at, created_at
-	`
-	doc, err := m.scanDocument(m.db.QueryRow(ctx, query,
-		signedBy, sigHash, signerReg, method, signedAt, docID, tenantID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	// The policy and the chain are per document type, so the type has to be read
+	// before the signer is put in front of a provider. The lock comes later: a
+	// live E-ID call must not be made while holding a row lock.
+	var docType string
+	err = m.db.QueryRow(ctx,
+		`SELECT doc_type FROM document_records
+		  WHERE id = $1 AND tenant_id = $2 AND status = $3`,
+		docID, tenantID, StatusPending).Scan(&docType)
+	if isNoRows(err) {
 		return nil, ErrNotSignable
 	}
 	if err != nil {
-		return nil, fmt.Errorf("sign document: %w", err)
+		return nil, fmt.Errorf("load document for signing: %w", err)
 	}
-	return doc, nil
+
+	policy, err := m.SignaturePolicyFor(ctx, tenantID, docType)
+	if err != nil {
+		return nil, err
+	}
+	if !policy.allows(method) {
+		return nil, fmt.Errorf("%w: %s documents may not be signed through %s under this tenant's policy",
+			ErrSignatureRejected, docType, method)
+	}
+
+	required, named, err := m.approvalChain(ctx, tenantID, docType)
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := m.verifySigner(ctx, method, regNumber, otpCode)
+	if err != nil {
+		return nil, err
+	}
+
+	if policy.RequireNamedSigner && !slices.Contains(named, signature.RegNumber) {
+		return nil, fmt.Errorf("%w: %s is not named by the approval chain for %s documents",
+			ErrSignatureRejected, signature.RegNumber, docType)
+	}
+
+	return m.recordSignature(ctx, tenantID, docID, method, required, signature)
+}
+
+// recordSignature writes the signature and decides whether the chain is complete.
+// It runs in one transaction with the document row locked: the count that decides
+// completion must not be read from a snapshot missing a concurrent signature.
+func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, method string, required int, signature *verifiedSignature) (*Document, error) {
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin signature: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var locked string
+	err = tx.QueryRow(ctx,
+		`SELECT id FROM document_records
+		  WHERE id = $1 AND tenant_id = $2 AND status = $3 FOR UPDATE`,
+		docID, tenantID, StatusPending).Scan(&locked)
+	if isNoRows(err) {
+		return nil, ErrNotSignable
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock document for signing: %w", err)
+	}
+
+	signedAt := time.Now()
+	_, err = tx.Exec(ctx,
+		`INSERT INTO document_signatures
+		        (tenant_id, document_id, signer_name, signer_reg_number,
+		         signer_method, signature_hash, signed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		tenantID, docID, signature.SignerName, signature.RegNumber,
+		method, signature.Hash, signedAt)
+	if isUniqueViolation(err) {
+		return nil, ErrAlreadySigned
+	}
+	if err != nil {
+		return nil, fmt.Errorf("record signature: %w", err)
+	}
+
+	var applied int
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM document_signatures WHERE document_id = $1`, docID).
+		Scan(&applied); err != nil {
+		return nil, fmt.Errorf("count signatures: %w", err)
+	}
+
+	status := StatusPending
+	if applied >= required {
+		status = StatusApproved
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE document_records
+		    SET status = $1, signed_by = $2, signature_hash = $3,
+		        signer_reg_number = $4, signer_method = $5, signed_at = $6
+		  WHERE id = $7 AND tenant_id = $8`,
+		status, signature.SignerName, signature.Hash,
+		signature.RegNumber, method, signedAt, docID, tenantID); err != nil {
+		return nil, fmt.Errorf("apply signature to document: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit signature: %w", err)
+	}
+	return m.getDocument(ctx, tenantID, docID)
 }
 
 // RejectDocument moves a pending document to REJECTED. Like signing, it is a
@@ -325,32 +468,36 @@ func (m *DocumentsModule) RejectDocument(ctx context.Context, tenantID, docID st
 		return nil, ErrNotSignable
 	}
 
-	const query = `
-		UPDATE document_records
-		   SET status = 'REJECTED'
-		 WHERE id = $1 AND tenant_id = $2 AND status = 'PENDING_APPROVAL'
-		RETURNING id, tenant_id, title, doc_type, status,
-		          COALESCE(signed_by, ''), COALESCE(signature_hash, ''),
-		          COALESCE(signer_reg_number, ''), COALESCE(signer_method, ''),
-		          signed_at, created_at
-	`
-	doc, err := m.scanDocument(m.db.QueryRow(ctx, query, docID, tenantID))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotSignable
-	}
+	tag, err := m.db.Exec(ctx,
+		`UPDATE document_records SET status = $1
+		  WHERE id = $2 AND tenant_id = $3 AND status = $4`,
+		StatusRejected, docID, tenantID, StatusPending)
 	if err != nil {
 		return nil, fmt.Errorf("reject document: %w", err)
 	}
-	return doc, nil
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotSignable
+	}
+	return m.getDocument(ctx, tenantID, docID)
 }
 
+// documentColumns is the shape every document read returns. The two counts are
+// the document's progress: how many signatures it carries, and how many its type
+// needs — one when its type has no approval chain.
+const documentColumns = `
+	d.id, d.tenant_id, d.title, d.doc_type, d.status,
+	COALESCE(d.signed_by, ''), COALESCE(d.signature_hash, ''),
+	COALESCE(d.signer_reg_number, ''), COALESCE(d.signer_method, ''),
+	d.signed_at, d.created_at,
+	(SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id),
+	GREATEST(1, (SELECT count(*) FROM document_workflow_steps w
+	              WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type))`
+
 func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string) ([]Document, error) {
-	const query = `SELECT id, tenant_id, title, doc_type, status,
-	                      COALESCE(signed_by, ''), COALESCE(signature_hash, ''),
-	                      COALESCE(signer_reg_number, ''), COALESCE(signer_method, ''),
-	                      signed_at, created_at
-	                 FROM document_records WHERE tenant_id = $1 ORDER BY created_at DESC`
-	rows, err := m.db.Query(ctx, query, tenantID)
+	rows, err := m.db.Query(ctx,
+		`SELECT `+documentColumns+`
+		   FROM document_records d
+		  WHERE d.tenant_id = $1 ORDER BY d.created_at DESC`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list documents: %w", err)
 	}
@@ -367,6 +514,22 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string) ([
 	return list, rows.Err()
 }
 
+// getDocument re-reads one document through the same column list as the list, so
+// a write endpoint answers with exactly what a later refresh will show.
+func (m *DocumentsModule) getDocument(ctx context.Context, tenantID, docID string) (*Document, error) {
+	doc, err := m.scanDocument(m.db.QueryRow(ctx,
+		`SELECT `+documentColumns+`
+		   FROM document_records d
+		  WHERE d.tenant_id = $1 AND d.id = $2`, tenantID, docID))
+	if isNoRows(err) {
+		return nil, ErrNotSignable
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read document: %w", err)
+	}
+	return doc, nil
+}
+
 // rowScanner is satisfied by both pgx.Row (QueryRow) and pgx.Rows (Query), so
 // the column layout lives in exactly one place.
 type rowScanner interface {
@@ -378,12 +541,20 @@ func (m *DocumentsModule) scanDocument(row rowScanner) (*Document, error) {
 	err := row.Scan(
 		&doc.ID, &doc.TenantID, &doc.Title, &doc.DocType, &doc.Status,
 		&doc.SignedBy, &doc.SignatureHash, &doc.SignerRegNumber, &doc.SignerMethod,
-		&doc.SignedAt, &doc.CreatedAt,
+		&doc.SignedAt, &doc.CreatedAt, &doc.SignatureCount, &doc.RequiredSignatures,
 	)
 	if err != nil {
 		return nil, err
 	}
 	return &doc, nil
+}
+
+func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
+
+// isUniqueViolation reports a Postgres 23505, which is how a duplicate reaches Go.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

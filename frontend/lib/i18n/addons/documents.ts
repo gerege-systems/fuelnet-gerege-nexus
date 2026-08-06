@@ -71,4 +71,100 @@ export const documents = {
   "documents.message.reject_success": { mn: "\"{title}\"-г татгалзлаа.", en: "\"{title}\" was rejected." },
   "documents.message.reject_failed": { mn: "Татгалзаж чадсангүй", en: "Reject failed" },
   "documents.message.create_failed": { mn: "Баримт үүсгэж чадсангүй", en: "Failed to create document" },
+  "documents.message.signature_progress": {
+    mn: "{required} гарын үсгээс {applied} зурагдсан",
+    en: "{applied} of {required} signatures applied",
+  },
+
+  // Templates
+  "documents.menu.templates": { mn: "Баримтын загвар", en: "Document templates" },
+  "documents.view.templates_hint": {
+    mn: "Баримт үүсгэхэд хэрэглэх бэлдэц: гарчгийн загвар ба ангилал.",
+    en: "Presets a document is started from: a title pattern and a category.",
+  },
+  "documents.field.template_name": { mn: "Загварын нэр", en: "Template name" },
+  "documents.field.title_pattern": { mn: "Гарчгийн загвар", en: "Title pattern" },
+  "documents.action.add_template": { mn: "Загвар нэмэх", en: "Add template" },
+  "documents.action.use_template": { mn: "Баримт үүсгэх", en: "Create document" },
+  "documents.message.title_pattern_hint": {
+    mn: "Гарчигт {year}, {month}, {date} гэж бичвэл загварыг хэрэглэх үед орлуулагдана. Танихгүй хэсэг хөндөгдөхгүй.",
+    en: "A title may hold {year}, {month} or {date}; they are filled in when the template is used. Anything else is left as written.",
+  },
+  "documents.message.no_templates": {
+    mn: "Загвар байхгүй. Дээрээс нэгийг нэмнэ үү.",
+    en: "No templates yet. Add one above.",
+  },
+  "documents.message.templates_failed": { mn: "Загваруудыг ачаалж чадсангүй", en: "Could not load templates" },
+  "documents.message.template_saved": { mn: "Загвар хадгалагдлаа.", en: "Template saved." },
+  "documents.message.template_used": {
+    mn: "\"{title}\" баримт үүсч, батлах дараалалд орлоо.",
+    en: "\"{title}\" was created and is waiting for approval.",
+  },
+  "documents.message.template_delete_confirm": {
+    mn: "\"{name}\" загварыг устгах уу?",
+    en: "Delete the template \"{name}\"?",
+  },
+  "documents.message.template_deleted": { mn: "\"{name}\" загварыг устгалаа.", en: "Template \"{name}\" was deleted." },
+
+  // Signature policies
+  "documents.menu.signature_policies": { mn: "Гарын үсгийн бодлого", en: "Signature policies" },
+  "documents.view.signature_policies_hint": {
+    mn: "Баримтын төрөл тус бүрийг ямар сувгаар гарын үсэг зурж болохыг тогтооно.",
+    en: "Which national channel may sign each document type, and who is allowed to.",
+  },
+  "documents.field.require_named_signer": { mn: "Зөвхөн нэрлэсэн хүн", en: "Named signer only" },
+  "documents.state.policy_configured": { mn: "Тохируулсан", en: "Configured" },
+  "documents.state.policy_default": { mn: "Үндсэн", en: "Default" },
+  "documents.message.policies_failed": { mn: "Бодлогуудыг ачаалж чадсангүй", en: "Could not load policies" },
+  "documents.message.policy_saved": { mn: "{type}-ийн бодлого хадгалагдлаа.", en: "The {type} policy was saved." },
+  "documents.message.policy_named_signer_hint": {
+    mn: "\"Зөвхөн нэрлэсэн хүн\" гэдэг нь баримтын урсгалд регистрийн дугаараар нэрлэгдсэн хүн л гарын үсэг зурна гэсэн үг. Урсгалд хэн ч нэрлэгдээгүй бол энэ тохиргоо хадгалагдахгүй — тэр төрөл гарын үсэг зурах боломжгүй болох тул.",
+    en: "\"Named signer only\" means the signature must come from a registration number the type's approval chain names. It cannot be saved while the chain names nobody, because that would leave the type unsignable.",
+  },
+
+  // Approval chains
+  "documents.menu.workflows": { mn: "Баримтын урсгал", en: "Document workflows" },
+  "documents.view.workflows_hint": {
+    mn: "Баримтын төрөл тус бүр хэдэн хүний гарын үсгийг ямар дараалалтай шаардахыг тогтооно.",
+    en: "How many signatures each document type needs, and in what order.",
+  },
+  "documents.action.add_step": { mn: "Шат нэмэх", en: "Add step" },
+  "documents.field.step_name": { mn: "Шатны нэр", en: "Step name" },
+  "documents.field.step_signer": { mn: "Гарын үсэг зурагчийн регистр", en: "Signer's registration number" },
+  "documents.message.workflows_failed": { mn: "Урсгалуудыг ачаалж чадсангүй", en: "Could not load approval chains" },
+  "documents.message.workflow_saved": { mn: "{type}-ийн урсгал хадгалагдлаа.", en: "The {type} approval chain was saved." },
+  "documents.message.chain_single_signature": {
+    mn: "Шат тохируулаагүй — нэг гарын үсэг батална",
+    en: "No steps — a single signature approves",
+  },
+  "documents.message.chain_signature_count": {
+    mn: "{count} гарын үсэг шаардана",
+    en: "{count} signatures required",
+  },
+  "documents.message.no_steps": {
+    mn: "Шат байхгүй. Ингэснээр нэг гарын үсэг баримтыг батална.",
+    en: "No steps. One signature approves the document.",
+  },
+  "documents.message.step_signer_hint": {
+    mn: "Регистрийн дугаарыг хоосон орхивол шат тоологдох ч тодорхой хүн нэрлэгдэхгүй — гарын үсэг зурах эрхтэй хэн ч зурж болно.",
+    en: "Leave a registration number empty and the step still counts, but names nobody: anyone who may sign can take it.",
+  },
+
+  // Retention
+  "documents.menu.retention": { mn: "Хадгалалтын дүрэм", en: "Retention rules" },
+  "documents.view.retention_hint": {
+    mn: "Баримтын төрөл тус бүрийг хэдэн жил хадгалахыг тогтооно.",
+    en: "How many years a document of each type is kept.",
+  },
+  "documents.field.retain_years": { mn: "Хадгалах жил", en: "Retain (years)" },
+  "documents.field.retention_note": { mn: "Тайлбар", en: "Note" },
+  "documents.stat.filed": { mn: "Бүртгэсэн баримт", en: "Documents filed" },
+  "documents.stat.past_term": { mn: "Хугацаа дууссан", en: "Past their term" },
+  "documents.stat.rules_set": { mn: "Тохируулсан дүрэм", en: "Rules set" },
+  "documents.message.retention_failed": { mn: "Дүрмүүдийг ачаалж чадсангүй", en: "Could not load retention rules" },
+  "documents.message.retention_saved": { mn: "{type}-ийн дүрэм хадгалагдлаа.", en: "The {type} retention rule was saved." },
+  "documents.message.retention_no_deletion": {
+    mn: "Энэ хуваарь ямар ч баримтыг устгахгүй. Хугацаа дууссаныг л харуулна — шийдвэрийг хүн гаргана.",
+    en: "Nothing is deleted on this schedule. The screen only reports what is past its term; a person decides.",
+  },
 } as const;

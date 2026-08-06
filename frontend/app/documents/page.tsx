@@ -10,6 +10,7 @@ import {
   RowActions,
   SignatureCell,
   SignatureDialog,
+  SignatureProgress,
   StatusBadge,
   useDocumentActions,
 } from "@/components/documents/shared";
@@ -102,7 +103,10 @@ export default function DocumentsPage() {
                   <td className="px-4 py-3 font-semibold text-slate-900">{doc.title}</td>
                   <td className="px-4 py-3 font-mono text-slate-600">{doc.doc_type}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={doc.status} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StatusBadge status={doc.status} />
+                      <SignatureProgress doc={doc} />
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <SignatureCell doc={doc} />

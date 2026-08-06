@@ -9,7 +9,9 @@ import {
   DocumentRecord,
   PENDING,
   RowActions,
+  SectionHeader,
   SignatureDialog,
+  SignatureProgress,
   useDocumentActions,
 } from "@/components/documents/shared";
 import { ListChecks } from "lucide-react";
@@ -64,15 +66,11 @@ export default function DocumentApprovalsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <ListChecks className="w-7 h-7 text-indigo-600" />
-            {t("documents.menu.approvals")}
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">{t("documents.view.approvals_hint")}</p>
-        </div>
-      </header>
+      <SectionHeader
+        icon={<ListChecks className="w-7 h-7 text-indigo-600" />}
+        title={t("documents.menu.approvals")}
+        subtitle={t("documents.view.approvals_hint")}
+      />
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
@@ -117,7 +115,12 @@ export default function DocumentApprovalsPage() {
               {pending.map((doc) => (
                 <tr key={doc.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-semibold text-slate-900">{doc.title}</td>
-                  <td className="px-4 py-3 font-mono text-slate-600">{doc.doc_type}</td>
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span>{doc.doc_type}</span>
+                      <SignatureProgress doc={doc} />
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-slate-400">{new Date(doc.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-slate-500">{days(doc.created_at)}</td>
                   <td className="px-4 py-3 text-right">

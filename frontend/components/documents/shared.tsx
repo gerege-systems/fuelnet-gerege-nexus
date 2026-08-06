@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { AlertTriangle, Ban, CheckCircle, Clock, FileText, PenLine, ShieldCheck, X, XCircle } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, Clock, FileText, PenLine, ShieldCheck, Users, X, XCircle } from "lucide-react";
 
 /** A document_records row as the documents API returns it. */
 export interface DocumentRecord {
@@ -16,6 +16,9 @@ export interface DocumentRecord {
   signer_reg_number?: string;
   signer_method?: string;
   signed_at?: string;
+  /** How many signatures the document carries, and how many its type needs. */
+  signature_count: number;
+  required_signatures: number;
   created_at: string;
 }
 
@@ -76,6 +79,35 @@ export function StatusBadge({ status }: { status: string }) {
   return <span className={`${shell} bg-slate-100 text-slate-600 border border-slate-200`}>{status}</span>;
 }
 
+/**
+ * How far a document is through its approval chain. A type that needs one
+ * signature says nothing: the status badge already carries that.
+ */
+export function SignatureProgress({ doc }: { doc: DocumentRecord }) {
+  const { t } = useI18n();
+  if (doc.required_signatures <= 1) return null;
+
+  const complete = doc.signature_count >= doc.required_signatures;
+  return (
+    <span
+      className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+        complete
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : "bg-indigo-50 text-indigo-700 border-indigo-200"
+      }`}
+      title={t("documents.message.signature_progress", {
+        applied: doc.signature_count,
+        required: doc.required_signatures,
+      })}
+    >
+      <Users className="w-3 h-3" />
+      <span>
+        {doc.signature_count}/{doc.required_signatures}
+      </span>
+    </span>
+  );
+}
+
 /** Who signed, plus the reg number and hash the identity provider returned. */
 export function SignatureCell({ doc }: { doc: DocumentRecord }) {
   const { t } = useI18n();
@@ -100,6 +132,32 @@ export function SignatureCell({ doc }: { doc: DocumentRecord }) {
     return <span className="text-red-400 italic">{t("documents.message.rejected_not_signed")}</span>;
   }
   return <span className="text-slate-400 italic">{t("documents.state.pending_signature")}</span>;
+}
+
+/** The heading every Documents screen opens with. */
+export function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  actions,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          {icon}
+          {title}
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
+      </div>
+      {actions}
+    </header>
+  );
 }
 
 export interface ActionMessage {

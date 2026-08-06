@@ -31,6 +31,11 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
     throw new Error(errMessage);
   }
 
+  // 204 carries no body by definition, so parsing one would throw on success.
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
   return res.json();
 }
 
@@ -329,6 +334,8 @@ export const api = {
         signer_reg_number?: string;
         signer_method?: string;
         signed_at?: string;
+        signature_count: number;
+        required_signatures: number;
         created_at: string;
       }>
     >("/documents"),
@@ -336,9 +343,92 @@ export const api = {
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
 
-  // Apply an E-ID / DAN digital signature — moves the document to APPROVED.
+  // Apply an E-ID / DAN digital signature. The document is APPROVED once its
+  // type's approval chain is satisfied; until then it stays pending.
   signDocument: (id: string, data: { method: "EID" | "DAN"; reg_number: string; otp_code: string }) =>
     fetcher(`/documents/${id}/sign`, { method: "POST", body: JSON.stringify(data) }),
+
+  // Send a draft for approval.
+  routeDocument: (id: string) => fetcher(`/documents/${id}/route`, { method: "POST" }),
+
+  // A document's signature ledger, oldest first.
+  getDocumentSignatures: (id: string) =>
+    fetcher<
+      Array<{
+        signer_name: string;
+        signer_reg_number: string;
+        signer_method: string;
+        signature_hash: string;
+        signed_at: string;
+      }>
+    >(`/documents/${id}/signatures`),
+
+  // Templates a document is started from
+  getDocumentTemplates: () =>
+    fetcher<
+      Array<{
+        id: string;
+        name: string;
+        doc_type: string;
+        title_pattern: string;
+        active: boolean;
+        created_at: string;
+      }>
+    >("/documents/templates"),
+
+  createDocumentTemplate: (data: { name: string; doc_type: string; title_pattern: string }) =>
+    fetcher("/documents/templates", { method: "POST", body: JSON.stringify(data) }),
+
+  deleteDocumentTemplate: (id: string) => fetcher<void>(`/documents/templates/${id}`, { method: "DELETE" }),
+
+  useDocumentTemplate: (id: string) => fetcher(`/documents/templates/${id}/use`, { method: "POST" }),
+
+  // How each document type may be signed
+  getSignaturePolicies: () =>
+    fetcher<
+      Array<{
+        doc_type: string;
+        allow_eid: boolean;
+        allow_dan: boolean;
+        require_named_signer: boolean;
+        configured: boolean;
+        updated_at?: string;
+      }>
+    >("/documents/policies"),
+
+  saveSignaturePolicy: (
+    docType: string,
+    data: { allow_eid: boolean; allow_dan: boolean; require_named_signer: boolean }
+  ) => fetcher(`/documents/policies/${docType}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Who must sign each document type, in order
+  getDocumentWorkflows: () =>
+    fetcher<
+      Array<{
+        doc_type: string;
+        steps: Array<{ order: number; name: string; signer_reg_number: string }>;
+      }>
+    >("/documents/workflows"),
+
+  saveDocumentWorkflow: (docType: string, steps: Array<{ name: string; signer_reg_number: string }>) =>
+    fetcher(`/documents/workflows/${docType}`, { method: "PUT", body: JSON.stringify({ steps }) }),
+
+  // How long each document type is kept
+  getRetentionRules: () =>
+    fetcher<
+      Array<{
+        doc_type: string;
+        retain_years: number;
+        note: string;
+        configured: boolean;
+        updated_at?: string;
+        expired: number;
+        total: number;
+      }>
+    >("/documents/retention"),
+
+  saveRetentionRule: (docType: string, data: { retain_years: number; note: string }) =>
+    fetcher(`/documents/retention/${docType}`, { method: "PUT", body: JSON.stringify(data) }),
 
   // Reject a pending document — moves it to REJECTED.
   rejectDocument: (id: string) =>
