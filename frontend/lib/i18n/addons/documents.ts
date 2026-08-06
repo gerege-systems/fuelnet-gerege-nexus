@@ -124,6 +124,14 @@ export const documents = {
     en: "\"{title}\" was sent for approval.",
   },
   "documents.message.route_failed": { mn: "Батлахад илгээж чадсангүй", en: "Could not send it for approval" },
+  "documents.message.load_failed": {
+    mn: "Баримтуудыг ачаалж чадсангүй. Дахин оролдоно уу.",
+    en: "The documents could not be loaded. Try again.",
+  },
+  "documents.message.step_needs_name": {
+    mn: "Шат бүрд нэр шаардлагатай.",
+    en: "Every step needs a name.",
+  },
   "documents.message.signature_progress": {
     mn: "{required} гарын үсгээс {applied} зурагдсан",
     en: "{applied} of {required} signatures applied",

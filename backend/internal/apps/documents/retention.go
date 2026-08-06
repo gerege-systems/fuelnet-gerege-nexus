@@ -129,10 +129,10 @@ func (m *DocumentsModule) retentionCounts(ctx context.Context, tenantID string, 
 func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docType string, retainYears int, note string) (*RetentionRule, error) {
 	docType = strings.ToUpper(strings.TrimSpace(docType))
 	if !slices.Contains(DocTypes, docType) {
-		return nil, fmt.Errorf("invalid doc_type %q", docType)
+		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
 	}
 	if retainYears < 1 || retainYears > 100 {
-		return nil, fmt.Errorf("retain_years must be between 1 and 100, got %d", retainYears)
+		return nil, fmt.Errorf("%w: retain_years must be between 1 and 100, got %d", ErrInvalidConfiguration, retainYears)
 	}
 
 	saved := RetentionRule{DocType: docType, Configured: true}
@@ -152,6 +152,17 @@ func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docTy
 	}
 
 	saved.UpdatedAt = &updatedAt
+
+	// The response is the same shape the list returns, so it carries the same
+	// counts rather than a pair of zeroes claiming nothing is filed.
+	counts, err := m.retentionCounts(ctx, tenantID, map[string]RetentionRule{docType: saved})
+	if err != nil {
+		return nil, err
+	}
+	if count, ok := counts[docType]; ok {
+		saved.Expired = count.expired
+		saved.Total = count.total
+	}
 
 	audit.Record(ctx, tenantID, actorFor(ctx), "documents.retention_rule_changed", docType, map[string]any{
 		"retain_years": saved.RetainYears,
@@ -193,7 +204,7 @@ func (m *DocumentsModule) saveRetentionRuleHandler(w http.ResponseWriter, r *htt
 
 	saved, err := m.SaveRetentionRule(r.Context(), tenantID, chi.URLParam(r, "docType"), req.RetainYears, req.Note)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeWriteFailure(r.Context(), w, err, "failed to save the retention rule")
 		return
 	}
 	writeJSON(w, http.StatusOK, saved)

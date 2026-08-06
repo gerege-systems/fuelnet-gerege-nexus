@@ -69,17 +69,23 @@ export default function DocumentWorkflowsPage() {
     setBusy(chain.doc_type);
     setMessage(null);
     try {
-      await api.saveDocumentWorkflow(
+      const saved = await api.saveDocumentWorkflow(
         chain.doc_type,
         chain.steps.map((step) => ({ name: step.name, signer_reg_number: step.signer_reg_number }))
       );
       setMessage({ type: "success", text: t("documents.message.workflow_saved", { type: chain.doc_type }) });
+      // Only the chain that was saved is replaced, with what the server stored.
+      // Reloading everything discarded steps the operator had typed into the other
+      // document types under a banner saying only this one was saved.
+      if (saved && Array.isArray((saved as Chain).steps)) {
+        editChain(chain.doc_type, (saved as Chain).steps);
+      }
     } catch (err: any) {
+      // The draft stays on screen: a refused save is usually one blank step name,
+      // and reloading here threw away everything the operator had typed.
       setMessage({ type: "error", text: err?.message || t("documents.message.workflows_failed") });
     } finally {
       setBusy(null);
-      // Either way, show what is actually stored.
-      await loadData();
     }
   };
 
@@ -119,7 +125,8 @@ export default function DocumentWorkflowsPage() {
                     </button>
                     <button
                       onClick={() => save(chain)}
-                      disabled={busy === chain.doc_type}
+                      disabled={busy === chain.doc_type || chain.steps.some((s) => !s.name.trim())}
+                      title={chain.steps.some((s) => !s.name.trim()) ? t("documents.message.step_needs_name") : undefined}
                       className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
                     >
                       <Save className="w-3.5 h-3.5" />

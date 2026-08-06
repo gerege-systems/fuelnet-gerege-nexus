@@ -43,29 +43,43 @@ func TestSigningRefusesAMalformedID(t *testing.T) {
 	}
 }
 
-// What the citizen reads on their phone is the only thing telling them what they
-// are approving, so it has to name the document — approving a sign-in prompt is
-// not consent to sign a contract.
-func TestSignatureDisplayTextNamesTheDocument(t *testing.T) {
-	got := signatureDisplayText("Хамтран ажиллах гэрээ 2026")
-	if !strings.Contains(got, "Хамтран ажиллах гэрээ 2026") {
-		t.Errorf("got %q, want the document title in it", got)
+// What the citizen reads on their own device is the only thing telling them what
+// they are approving, so the words saying a signature is being given have to
+// survive — and they only survive if we cut the text ourselves. eID's field is
+// displayText60 and the core client slices it to 60 BYTES, which for Cyrillic is
+// about 30 letters and can land mid-letter.
+func TestSignatureDisplayText(t *testing.T) {
+	short := signatureDisplayText("Гэрээ 2026")
+	if !strings.Contains(short, "Гэрээ 2026") {
+		t.Errorf("got %q, want a title that fits to be shown whole", short)
 	}
-	if !strings.Contains(got, "гарын үсэг") {
-		t.Errorf("got %q, want it to say what is being asked", got)
+	if !strings.Contains(short, "Гарын үсэг") {
+		t.Errorf("got %q, want it to say a signature is being asked for", short)
 	}
 
-	// eID limits the text, so a long title is cut rather than dropped — measured
-	// in runes, because a Cyrillic title would otherwise be sliced mid-character.
-	long := signatureDisplayText(strings.Repeat("Урт нэр ", 40))
-	if runes := []rune(long); len(runes) > 120 {
-		t.Errorf("display text is %d runes, want at most 120", len(runes))
+	// The case that used to break: a long Cyrillic title. The purpose has to
+	// survive it, because the purpose is the whole point of the prompt.
+	long := signatureDisplayText("Улаанбаатар хотын Захирагчийн ажлын албатай хамтран ажиллах гурван талт гэрээ, 2026 оны 1 дүгээр сарын 15-ны өдөр")
+	if !strings.Contains(long, "Гарын үсэг") {
+		t.Errorf("got %q, want the purpose to survive a long title", long)
 	}
 	if !strings.HasSuffix(long, "…") {
-		t.Errorf("got %q, want a cut title to be marked as cut", long)
+		t.Errorf("got %q, want a cut title marked as cut", long)
 	}
-	if !utf8.ValidString(long) {
-		t.Error("the cut left invalid UTF-8 behind")
+
+	for name, text := range map[string]string{"short": short, "long": long} {
+		if len(text) > eidDisplayTextBytes {
+			t.Errorf("%s: %d bytes, want at most %d — core would slice it mid-letter",
+				name, len(text), eidDisplayTextBytes)
+		}
+		if !utf8.ValidString(text) {
+			t.Errorf("%s: the cut left invalid UTF-8 behind: %q", name, text)
+		}
+	}
+
+	// A document with no title still has to say what is being approved.
+	if got := signatureDisplayText("   "); !strings.Contains(got, "гарын үсэг") {
+		t.Errorf("got %q, want an empty title to still state the purpose", got)
 	}
 }
 
@@ -91,28 +105,59 @@ func TestSignaturePolicyDefaultsToBothChannels(t *testing.T) {
 	}
 }
 
-// The named-signer rule is checked against the registration number a provider
-// vouched for, so the check itself has to be exact about what it accepts.
-func TestCheckNamedSigner(t *testing.T) {
-	open := &signaturePreflight{DocType: "CONTRACT", Policy: SignaturePolicy{AllowEID: true}}
-	if err := open.checkNamedSigner("AA90010111"); err != nil {
-		t.Errorf("a policy that names nobody must accept anyone: %v", err)
+// A signature is held to whoever the document's next step names. A step that
+// names nobody is open to anyone the permission already let through.
+func TestCheckSigner(t *testing.T) {
+	if err := checkSigner(nil, "CONTRACT", "AA90010111"); err != nil {
+		t.Errorf("a document with no chain must accept any authorised signer: %v", err)
 	}
 
-	strict := &signaturePreflight{
-		DocType: "CONTRACT",
-		Policy:  SignaturePolicy{AllowEID: true, RequireNamedSigner: true},
-		Named:   []string{"CC90010111"},
+	open := &ApprovalStep{Order: 1, Name: "Хэн ч"}
+	if err := checkSigner(open, "CONTRACT", "AA90010111"); err != nil {
+		t.Errorf("an open step must accept any authorised signer: %v", err)
 	}
-	if err := strict.checkNamedSigner("CC90010111"); err != nil {
+
+	named := &ApprovalStep{Order: 2, Name: "Захирал", SignerRegNumber: "CC90010111"}
+	if err := checkSigner(named, "CONTRACT", "CC90010111"); err != nil {
 		t.Errorf("the named signer must be accepted: %v", err)
 	}
-	err := strict.checkNamedSigner("AA90010111")
+
+	err := checkSigner(named, "CONTRACT", "AA90010111")
 	if !errors.Is(err, ErrSignatureRejected) {
-		t.Errorf("got %v, want ErrSignatureRejected", err)
+		t.Fatalf("got %v, want ErrSignatureRejected", err)
 	}
-	if !strings.Contains(err.Error(), "AA90010111") {
-		t.Errorf("got %q, want the refused signer named so an operator can tell why", err)
+	for _, want := range []string{"AA90010111", "CC90010111", "Захирал"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("got %q, want it to mention %q so an operator can tell why", err, want)
+		}
+	}
+}
+
+// A chain that could never be completed under a named-signer policy must be
+// refused when it is saved, not discovered when a document sticks.
+func TestStepsCanRequireNamedSigners(t *testing.T) {
+	ok := []WorkflowStep{
+		{Order: 1, Name: "Дарга", SignerRegNumber: "AA90010111"},
+		{Order: 2, Name: "Захирал", SignerRegNumber: "BB90010111"},
+	}
+	if err := stepsCanRequireNamedSigners("CONTRACT", ok); err != nil {
+		t.Errorf("a chain naming a distinct signer per step is fine: %v", err)
+	}
+
+	for name, steps := range map[string][]WorkflowStep{
+		"no steps at all": {},
+		"an open step nobody could fill": {
+			{Order: 1, Name: "Дарга", SignerRegNumber: "AA90010111"},
+			{Order: 2, Name: "Хэн ч"},
+		},
+		"one citizen named twice, who signs once": {
+			{Order: 1, Name: "Дарга", SignerRegNumber: "AA90010111"},
+			{Order: 2, Name: "Дарга дахин", SignerRegNumber: "AA90010111"},
+		},
+	} {
+		if err := stepsCanRequireNamedSigners("CONTRACT", steps); !errors.Is(err, ErrInvalidConfiguration) {
+			t.Errorf("%s: got %v, want ErrInvalidConfiguration", name, err)
+		}
 	}
 }
 

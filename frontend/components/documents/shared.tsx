@@ -39,6 +39,28 @@ export interface DocumentRecord {
 /** The national identity channel the signature is applied through. */
 type SignMethod = "EID" | "DAN";
 
+// The API holds a live poll open for up to 25s, so one check is already a wait —
+// this is only the breather between two of them. Without it a mock or a fast RP
+// answers at once and the dialog hammers the endpoint; the sign-in card records
+// where that led: stacked long-polls until the browser ran out of connections to
+// the host and the page stopped responding.
+const POLL_GAP = 1200;
+// A dropped long-poll is ordinary on a mobile network, and the citizen may be
+// about to approve, so a session survives a few failures before it is given up.
+const TOLERATED_POLL_FAILURES = 3;
+// Used when eID's expires_at cannot be read: an eID request is normally given
+// two minutes.
+const FALLBACK_APPROVAL_TTL = 120_000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function deadlineOf(expiresAt: string) {
+  const at = Date.parse(expiresAt);
+  return Number.isNaN(at) ? Date.now() + FALLBACK_APPROVAL_TTL : at;
+}
+
 /** The only state a document can be signed or rejected in. */
 export const PENDING = "PENDING_APPROVAL";
 
@@ -348,20 +370,32 @@ export function SignatureDialog({
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState<EIDSignSession | null>(null);
 
-  // Wait on the citizen for as long as the dialog is open, and stop the moment it
-  // is not: the poll is a request the API holds open, so leaving one running
-  // behind a closed dialog would keep asking about a signature nobody awaits.
+  // One check at a time, with a breather between them, a tolerance for the
+  // dropped long-polls a mobile network produces, and a deadline — a request that
+  // visibly runs out beats one that spins for ever. The eID app can go unanswered
+  // without the RP session ever reporting it.
   useEffect(() => {
     if (!session) return;
 
-    const controller = new AbortController();
+    const deadline = deadlineOf(session.expires_at);
     let cancelled = false;
+    let inflight: AbortController | null = null;
+    let failures = 0;
 
     const wait = async () => {
       while (!cancelled) {
+        if (Date.now() >= deadline) {
+          onError(t("documents.message.approval_expired"));
+          setSession(null);
+          return;
+        }
+
+        const controller = new AbortController();
+        inflight = controller;
         try {
           const progress = await api.pollEIDSignature(doc.id, session.session_id, controller.signal);
           if (cancelled) return;
+          failures = 0;
 
           if (progress.state === "COMPLETE") {
             await onDone(t("documents.message.sign_success", { title: doc.title, method: "E-ID" }));
@@ -378,23 +412,39 @@ export function SignatureDialog({
             return;
           }
         } catch (err: any) {
-          if (cancelled || controller.signal.aborted) return;
-          onError(err?.message || t("documents.message.sign_failed"));
-          setSession(null);
-          return;
+          if (cancelled) return;
+          if (++failures > TOLERATED_POLL_FAILURES) {
+            onError(err?.message || t("documents.message.sign_failed"));
+            setSession(null);
+            return;
+          }
         }
+        await sleep(POLL_GAP);
       }
     };
     void wait();
 
     return () => {
       cancelled = true;
-      controller.abort();
+      inflight?.abort();
     };
-    // onDone/onError are recreated every render by the caller; re-running this on
-    // their identity would restart the wait on every keystroke elsewhere.
+    // onDone/onError are rebuilt by the caller on every render; re-running this on
+    // their identity would restart the wait — and push nothing, but drop the
+    // in-flight poll — on every unrelated keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, doc.id, doc.title]);
+
+  // The dialog counts the request down itself, so an operator can see it die
+  // rather than wonder whether it is still alive.
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  useEffect(() => {
+    if (!session) return;
+    const deadline = deadlineOf(session.expires_at);
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -436,7 +486,12 @@ export function SignatureDialog({
 
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-              <span>{t("documents.message.awaiting_approval", { reg: regNumber.toUpperCase() })}</span>
+              <span className="flex-1">
+                {t("documents.message.awaiting_approval", { reg: regNumber.toUpperCase() })}
+              </span>
+              <span className="font-mono text-xs text-slate-500 tabular-nums">
+                {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
+              </span>
             </div>
 
             <p className="text-[11px] text-slate-500">

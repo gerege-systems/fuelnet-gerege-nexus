@@ -28,13 +28,19 @@ export default function DocumentsPage() {
   const [signTarget, setSignTarget] = useState<DocumentRecord | null>(null);
   const [historyTarget, setHistoryTarget] = useState<DocumentRecord | null>(null);
 
+  // A failed load must never be reported as an empty list: "No documents yet" is a
+  // claim about the tenant, and twelve contracts may be sitting in the queue.
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const data = await api.getDocuments();
       setDocuments(data || []);
-    } catch (err) {
-      // ignore
+      setLoadFailed(false);
+    } catch (err: any) {
+      setLoadFailed(true);
+      setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
     } finally {
       setLoading(false);
     }
@@ -70,20 +76,22 @@ export default function DocumentsPage() {
             Enterprise document routing, digital signatures, and approval workflows
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t("documents.action.create")}</span>
-        </button>
+        {can("documents.manage") && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{t("documents.action.create")}</span>
+          </button>
+        )}
       </div>
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
-      ) : documents.length === 0 ? (
+      ) : loadFailed ? null : documents.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
           {t("documents.message.empty")}
         </div>
@@ -187,6 +195,7 @@ export default function DocumentsPage() {
 
       {signTarget && (
         <SignatureDialog
+          key={signTarget.id}
           doc={signTarget}
           onClose={() => setSignTarget(null)}
           onDone={async (text) => {

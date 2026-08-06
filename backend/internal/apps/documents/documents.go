@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -69,6 +70,17 @@ var ErrNotSignable = errors.New("document not found or is not awaiting approval"
 // the wrapped message is safe to show them — unlike a storage failure, which is
 // reported as a plain server error.
 var ErrSignatureRejected = errors.New("signature rejected")
+
+// ErrInvalidDocument is returned when what the caller sent cannot make a
+// document: an empty or over-long title, an unknown type. It is theirs to fix, so
+// the message is safe to show them — a storage failure is not, and is reported as
+// a plain server error instead.
+var ErrInvalidDocument = errors.New("invalid document")
+
+// ErrInvalidConfiguration is returned when a template, approval chain, signature
+// policy or retention rule the caller sent cannot be stored as asked. Like
+// ErrInvalidDocument its message is meant to be read by whoever sent it.
+var ErrInvalidConfiguration = errors.New("invalid configuration")
 
 type Document struct {
 	ID       string `json:"id"`
@@ -203,7 +215,7 @@ func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.R
 
 	doc, err := m.CreateDocument(r.Context(), tenantID, req.Title, req.DocType)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeWriteFailure(r.Context(), w, err, "failed to create document")
 		return
 	}
 
@@ -269,26 +281,53 @@ func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, doc)
 }
 
+// TitleLimit is what document_records.title holds. Checking it here turns a
+// storage error the caller cannot read into one they can act on.
+const TitleLimit = 255
+
 func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, docType string) (*Document, error) {
+	title = strings.TrimSpace(title)
+	docType = strings.ToUpper(strings.TrimSpace(docType))
+
 	if title == "" {
-		return nil, fmt.Errorf("title cannot be empty")
+		return nil, fmt.Errorf("%w: title cannot be empty", ErrInvalidDocument)
+	}
+	if len([]rune(title)) > TitleLimit {
+		return nil, fmt.Errorf("%w: a title is at most %d characters, this one is %d",
+			ErrInvalidDocument, TitleLimit, len([]rune(title)))
 	}
 	if docType == "" {
 		docType = DocTypes[0]
 	}
 	if !slices.Contains(DocTypes, docType) {
-		return nil, fmt.Errorf("unsupported doc_type %q", docType)
+		return nil, fmt.Errorf("%w: unsupported doc_type %q", ErrInvalidDocument, docType)
 	}
+
+	// A document and the chain it will be approved under are created together: a
+	// document that started waiting keeps the rules it started under, whatever the
+	// type's chain becomes later.
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin create document: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// The old code answered a failed INSERT with a canned "doc_demo_200"
 	// record, reporting success for a document that was never stored.
 	var id string
-	err := m.db.QueryRow(ctx,
+	if err := tx.QueryRow(ctx,
 		`INSERT INTO document_records (tenant_id, title, doc_type, status)
 		      VALUES ($1, $2, $3, $4) RETURNING id`,
-		tenantID, title, docType, StatusPending).Scan(&id)
-	if err != nil {
+		tenantID, title, docType, StatusPending).Scan(&id); err != nil {
 		return nil, fmt.Errorf("create document: %w", err)
+	}
+
+	if err := m.snapshotApprovalChain(ctx, tx, tenantID, id, docType); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit create document: %w", err)
 	}
 	return m.getDocument(ctx, tenantID, id)
 }
@@ -308,19 +347,24 @@ type verifiedSignature struct {
 	CertificateIssuer string
 }
 
-// signaturePreflight is everything the type's configuration decides before a
+// signaturePreflight is what the document's own configuration decides before a
 // citizen is asked to approve anything.
 type signaturePreflight struct {
 	DocType  string
 	Policy   SignaturePolicy
 	Required int
-	Named    []string
+	Applied  int
+	// NextStep is the step this signature would fill: the lowest one the document's
+	// chain has not reached yet. Nil when the document carries no chain, which
+	// means one open signature approves it.
+	NextStep *ApprovalStep
 }
 
-// preflightSignature checks that the document is still awaiting approval and that
-// the tenant's policy allows this channel. Both signing paths run it: E-ID before
-// pushing a request to somebody's phone, DAN before asking for a code — there is
-// no point troubling a citizen for a document their signature cannot land on.
+// preflightSignature checks that the document is still awaiting approval, that
+// the tenant's policy allows this channel, and which step of the document's own
+// chain comes next. Both signing paths run it: E-ID before pushing a request to
+// somebody's phone, DAN before asking for a code — there is no point troubling a
+// citizen for a document their signature cannot land on.
 func (m *DocumentsModule) preflightSignature(ctx context.Context, tenantID, docID, method string) (*signaturePreflight, error) {
 	// document_records.id is a uuid column, so a malformed path parameter would
 	// otherwise surface as a storage error. It is simply not a document we hold.
@@ -329,10 +373,11 @@ func (m *DocumentsModule) preflightSignature(ctx context.Context, tenantID, docI
 	}
 
 	var docType string
+	var required int
 	err := m.db.QueryRow(ctx,
-		`SELECT doc_type FROM document_records
+		`SELECT doc_type, required_signatures FROM document_records
 		  WHERE id = $1 AND tenant_id = $2 AND status = $3`,
-		docID, tenantID, StatusPending).Scan(&docType)
+		docID, tenantID, StatusPending).Scan(&docType, &required)
 	if isNoRows(err) {
 		return nil, ErrNotSignable
 	}
@@ -349,24 +394,28 @@ func (m *DocumentsModule) preflightSignature(ctx context.Context, tenantID, docI
 			ErrSignatureRejected, docType, method)
 	}
 
-	required, named, err := m.approvalChain(ctx, tenantID, docType)
+	applied, next, err := m.nextApprovalStep(ctx, m.db, tenantID, docID)
 	if err != nil {
 		return nil, err
 	}
-	return &signaturePreflight{DocType: docType, Policy: policy, Required: required, Named: named}, nil
+	return &signaturePreflight{
+		DocType: docType, Policy: policy, Required: required, Applied: applied, NextStep: next,
+	}, nil
 }
 
-// checkNamedSigner enforces the policy's named-signer rule against the identity
-// the provider actually vouched for, never against what the caller typed.
-func (pre *signaturePreflight) checkNamedSigner(regNumber string) error {
-	if !pre.Policy.RequireNamedSigner {
+// checkSigner holds the signature to whoever the document's next step names. A
+// step that names nobody is open to anyone the permission already let through.
+// The check runs against the identity a provider vouched for, never against what
+// the caller typed.
+func checkSigner(next *ApprovalStep, docType, regNumber string) error {
+	if next == nil || next.SignerRegNumber == "" {
 		return nil
 	}
-	if slices.Contains(pre.Named, regNumber) {
+	if next.SignerRegNumber == regNumber {
 		return nil
 	}
-	return fmt.Errorf("%w: %s is not named by the approval chain for %s documents",
-		ErrSignatureRejected, regNumber, pre.DocType)
+	return fmt.Errorf("%w: step %d of the %s chain (%s) is reserved for %s, not %s",
+		ErrSignatureRejected, next.Order, docType, next.Name, next.SignerRegNumber, regNumber)
 }
 
 // SignWithDAN signs through dan.gerege.mn's registration-number and one-time-code
@@ -389,27 +438,36 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 
-	if err := pre.checkNamedSigner(signature.RegNumber); err != nil {
+	if err := checkSigner(pre.NextStep, pre.DocType, signature.RegNumber); err != nil {
 		return nil, err
 	}
-	return m.recordSignature(ctx, tenantID, docID, SignerDAN, pre.Required, signature)
+	return m.recordSignature(ctx, tenantID, docID, SignerDAN, signature, "")
 }
 
 // recordSignature writes the signature and decides whether the chain is complete.
-// It runs in one transaction with the document row locked: the count that decides
-// completion must not be read from a snapshot missing a concurrent signature.
-func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, method string, required int, signature *verifiedSignature) (*Document, error) {
+//
+// Everything the decision rests on is read inside one transaction with the
+// document row locked: the requirement from the row itself, the count of
+// signatures already applied, and which step comes next. An earlier version took
+// the requirement from a pool read before the lock, which let a chain edited in
+// between approve a document on fewer signatures than it asked for.
+//
+// sessionID, when given, is the eID session this signature came from; it is
+// marked spent in the same transaction so a recorded signature and an unspent
+// session can never disagree.
+func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, method string, signature *verifiedSignature, sessionID string) (*Document, error) {
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin signature: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var locked string
+	var docType string
+	var required int
 	err = tx.QueryRow(ctx,
-		`SELECT id FROM document_records
+		`SELECT doc_type, required_signatures FROM document_records
 		  WHERE id = $1 AND tenant_id = $2 AND status = $3 FOR UPDATE`,
-		docID, tenantID, StatusPending).Scan(&locked)
+		docID, tenantID, StatusPending).Scan(&docType, &required)
 	if isNoRows(err) {
 		return nil, ErrNotSignable
 	}
@@ -417,16 +475,27 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, fmt.Errorf("lock document for signing: %w", err)
 	}
 
+	applied, next, err := m.nextApprovalStep(ctx, tx, tenantID, docID)
+	if err != nil {
+		return nil, err
+	}
+	// The authority check that counts is this one: the preflight's was for a good
+	// error message before a citizen was troubled, this one is under the lock.
+	if err := checkSigner(next, docType, signature.RegNumber); err != nil {
+		return nil, err
+	}
+
+	step := applied + 1
 	signedAt := time.Now()
 	_, err = tx.Exec(ctx,
 		`INSERT INTO document_signatures
 		        (tenant_id, document_id, signer_name, signer_reg_number,
 		         signer_method, signature_hash, signed_at,
-		         certificate_serial, certificate_issuer)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''))`,
+		         certificate_serial, certificate_issuer, step_order)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10)`,
 		tenantID, docID, signature.SignerName, signature.RegNumber,
 		method, signature.Hash, signedAt,
-		signature.CertificateSerial, signature.CertificateIssuer)
+		signature.CertificateSerial, signature.CertificateIssuer, step)
 	if isUniqueViolation(err) {
 		return nil, ErrAlreadySigned
 	}
@@ -434,15 +503,8 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, fmt.Errorf("record signature: %w", err)
 	}
 
-	var applied int
-	if err := tx.QueryRow(ctx,
-		`SELECT count(*) FROM document_signatures WHERE document_id = $1`, docID).
-		Scan(&applied); err != nil {
-		return nil, fmt.Errorf("count signatures: %w", err)
-	}
-
 	status := StatusPending
-	if applied >= required {
+	if step >= required {
 		status = StatusApproved
 	}
 
@@ -456,25 +518,35 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, fmt.Errorf("apply signature to document: %w", err)
 	}
 
+	if sessionID != "" {
+		if _, err := tx.Exec(ctx,
+			`UPDATE document_eid_sign_sessions SET consumed_at = NOW()
+			  WHERE session_id = $1 AND tenant_id = $2`, sessionID, tenantID); err != nil {
+			return nil, fmt.Errorf("mark signature session spent: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit signature: %w", err)
 	}
 
 	// Both channels land here, so one record covers every signature the module
 	// applies. It carries what the signature was, not only that one happened:
-	// which citizen, through which channel, on whose certificate, and whether it
-	// completed the chain.
+	// which citizen, through which channel, on whose certificate, which step of
+	// the chain it filled, and whether it completed it.
 	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signed", docID, map[string]any{
 		"method":              method,
 		"signer_reg_number":   signature.RegNumber,
 		"certificate_serial":  signature.CertificateSerial,
 		"certificate_issuer":  signature.CertificateIssuer,
-		"signatures_applied":  applied,
+		"step_order":          step,
 		"signatures_required": required,
 		"status":              status,
 	})
 
-	return m.getDocument(ctx, tenantID, docID)
+	// The signature is committed, so the caller is told about it even if their
+	// connection went away while we were reading the row back.
+	return m.getDocument(context.WithoutCancel(ctx), tenantID, docID)
 }
 
 // RejectDocument moves a pending document to REJECTED. Like signing, it is a
@@ -500,17 +572,17 @@ func (m *DocumentsModule) RejectDocument(ctx context.Context, tenantID, docID st
 	return m.getDocument(ctx, tenantID, docID)
 }
 
-// documentColumns is the shape every document read returns. The two counts are
-// the document's progress: how many signatures it carries, and how many its type
-// needs — one when its type has no approval chain.
+// documentColumns is the shape every document read returns. The progress is how
+// many signatures the document carries against how many it asked for — read from
+// the document's own row, not counted from the type's current chain, so a later
+// configuration change cannot rewrite what a decided document required.
 const documentColumns = `
 	d.id, d.tenant_id, d.title, d.doc_type, d.status,
 	COALESCE(d.signed_by, ''), COALESCE(d.signature_hash, ''),
 	COALESCE(d.signer_reg_number, ''), COALESCE(d.signer_method, ''),
 	d.signed_at, d.created_at,
 	(SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id),
-	GREATEST(1, (SELECT count(*) FROM document_workflow_steps w
-	              WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type))`
+	GREATEST(1, d.required_signatures)`
 
 func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string) ([]Document, error) {
 	rows, err := m.db.Query(ctx,
@@ -598,4 +670,22 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// writeWriteFailure sorts a failed write into the class its caller can act on:
+// what they sent (400 with the reason), a collision with somebody else's change
+// (409, retryable), or ours (500 with a fixed message, the driver's own text
+// logged rather than returned). Answering everything with 400 and the wrapped
+// error told operators their request was invalid when the database was down, and
+// put connection strings and SQLSTATEs on screen.
+func writeWriteFailure(ctx context.Context, w http.ResponseWriter, err error, whatFailed string) {
+	switch {
+	case errors.Is(err, ErrInvalidDocument), errors.Is(err, ErrInvalidConfiguration):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case isUniqueViolation(err):
+		writeError(w, http.StatusConflict, "this was changed by someone else at the same time — reload and try again")
+	default:
+		slog.ErrorContext(ctx, whatFailed, "error", err)
+		writeError(w, http.StatusInternalServerError, whatFailed)
+	}
 }

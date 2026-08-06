@@ -3,7 +3,6 @@ package documents
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -110,22 +109,20 @@ func (m *DocumentsModule) ListSignaturePolicies(ctx context.Context, tenantID st
 func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID string, policy SignaturePolicy) (*SignaturePolicy, error) {
 	docType := strings.ToUpper(strings.TrimSpace(policy.DocType))
 	if !slices.Contains(DocTypes, docType) {
-		return nil, fmt.Errorf("invalid doc_type %q", docType)
+		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
 	}
 	if !policy.AllowEID && !policy.AllowDAN {
-		return nil, errors.New("a policy must allow at least one of E-ID or DAN, otherwise the type cannot be signed")
+		return nil, fmt.Errorf("%w: a policy must allow at least one of E-ID or DAN, otherwise the type cannot be signed", ErrInvalidConfiguration)
 	}
 
-	// Requiring a named signer while the approval chain names nobody would leave
-	// the type unsignable by anyone. The two screens are one setting in practice,
-	// so the check lives on both sides of it.
+	// Requiring a named signer means every step has to name one, and name a
+	// different one: a step left open could never be filled, and two steps naming
+	// the same citizen could never both be, because one citizen signs a document
+	// once. Either way the type would become unapprovable by anybody. The two
+	// screens are one setting in practice, so the check lives on both sides of it.
 	if policy.RequireNamedSigner {
-		_, named, err := m.approvalChain(ctx, tenantID, docType)
-		if err != nil {
+		if err := m.chainCanRequireNamedSigners(ctx, tenantID, docType); err != nil {
 			return nil, err
-		}
-		if len(named) == 0 {
-			return nil, fmt.Errorf("the approval chain for %s names no signer, so requiring a named signer would make the type unsignable", docType)
 		}
 	}
 
@@ -197,7 +194,7 @@ func (m *DocumentsModule) saveSignaturePolicyHandler(w http.ResponseWriter, r *h
 		RequireNamedSigner: req.RequireNamedSigner,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeWriteFailure(r.Context(), w, err, "failed to save the signature policy")
 		return
 	}
 	writeJSON(w, http.StatusOK, saved)

@@ -86,16 +86,16 @@ func (m *DocumentsModule) CreateTemplate(ctx context.Context, tenantID, name, do
 	docType = strings.ToUpper(strings.TrimSpace(docType))
 
 	if name == "" {
-		return nil, errors.New("template name cannot be empty")
+		return nil, fmt.Errorf("%w: template name cannot be empty", ErrInvalidConfiguration)
 	}
 	if titlePattern == "" {
-		return nil, errors.New("title pattern cannot be empty")
+		return nil, fmt.Errorf("%w: title pattern cannot be empty", ErrInvalidConfiguration)
 	}
 	if docType == "" {
 		docType = DocTypes[0]
 	}
 	if !slices.Contains(DocTypes, docType) {
-		return nil, fmt.Errorf("invalid doc_type %q", docType)
+		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
 	}
 
 	tpl, err := scanTemplate(m.db.QueryRow(ctx,
@@ -194,7 +194,7 @@ func (m *DocumentsModule) createTemplateHandler(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	case err != nil:
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeWriteFailure(r.Context(), w, err, "failed to save template")
 		return
 	}
 	writeJSON(w, http.StatusCreated, tpl)
@@ -231,7 +231,9 @@ func (m *DocumentsModule) useTemplateHandler(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	case err != nil:
-		writeError(w, http.StatusInternalServerError, "failed to create document from template")
+		// A pattern that resolves to an over-long title is the template's problem,
+		// and the operator can only fix it if they are told which it is.
+		writeWriteFailure(r.Context(), w, err, "failed to create document from template")
 		return
 	}
 	writeJSON(w, http.StatusCreated, doc)

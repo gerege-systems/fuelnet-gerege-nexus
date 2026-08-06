@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
@@ -40,6 +41,104 @@ type DocumentWorkflow struct {
 	Steps   []WorkflowStep `json:"steps"`
 }
 
+// ApprovalStep is one step of a document's OWN chain — the copy taken when it
+// started waiting for approval, which no later configuration change touches.
+type ApprovalStep struct {
+	Order int    `json:"order"`
+	Name  string `json:"name"`
+	// Empty means the step is open: anyone allowed to sign may take it.
+	SignerRegNumber string `json:"signer_reg_number"`
+}
+
+// querier is satisfied by both the pool and a transaction, so a read that has to
+// happen inside somebody else's transaction does not need its own copy.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// snapshotApprovalChain copies the type's chain onto the document and records how
+// many signatures that comes to. A type with no chain leaves no steps and a
+// requirement of one, which is how a document of such a type has always behaved.
+//
+// It must run inside the transaction that starts the document waiting, so a
+// document can never exist in a state where its requirement and its steps
+// disagree.
+func (m *DocumentsModule) snapshotApprovalChain(ctx context.Context, tx pgx.Tx, tenantID, docID, docType string) error {
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
+		 SELECT $1, $2, w.step_order, w.name, w.signer_reg_number
+		   FROM document_workflow_steps w
+		  WHERE w.tenant_id = $1 AND w.doc_type = $3
+		  ORDER BY w.step_order
+		     ON CONFLICT (document_id, step_order) DO NOTHING`,
+		tenantID, docID, docType); err != nil {
+		return fmt.Errorf("copy approval chain onto document: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE document_records
+		    SET required_signatures = GREATEST(1, (
+		          SELECT count(*) FROM document_approval_steps s WHERE s.document_id = $1))
+		  WHERE id = $1 AND tenant_id = $2`, docID, tenantID); err != nil {
+		return fmt.Errorf("pin approval requirement to document: %w", err)
+	}
+	return nil
+}
+
+// nextApprovalStep reports how many signatures a document already carries and
+// which step comes next. Signatures fill the chain in order, so the count is the
+// index: with two applied, step three is next. Nil means the document carries no
+// chain and one open signature approves it.
+func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenantID, docID string) (applied int, next *ApprovalStep, err error) {
+	if err := q.QueryRow(ctx,
+		`SELECT count(*) FROM document_signatures WHERE tenant_id = $1 AND document_id = $2`,
+		tenantID, docID).Scan(&applied); err != nil {
+		return 0, nil, fmt.Errorf("count applied signatures: %w", err)
+	}
+
+	var step ApprovalStep
+	err = q.QueryRow(ctx,
+		`SELECT step_order, name, signer_reg_number
+		   FROM document_approval_steps
+		  WHERE tenant_id = $1 AND document_id = $2 AND step_order = $3`,
+		tenantID, docID, applied+1).Scan(&step.Order, &step.Name, &step.SignerRegNumber)
+	if isNoRows(err) {
+		return applied, nil, nil
+	}
+	if err != nil {
+		return 0, nil, fmt.Errorf("read next approval step: %w", err)
+	}
+	return applied, &step, nil
+}
+
+// DocumentSteps returns a document's own chain, so a screen can show who each
+// remaining approval is waiting on.
+func (m *DocumentsModule) DocumentSteps(ctx context.Context, tenantID, docID string) ([]ApprovalStep, error) {
+	if uuid.Validate(docID) != nil {
+		return nil, ErrNotSignable
+	}
+
+	rows, err := m.db.Query(ctx,
+		`SELECT step_order, name, signer_reg_number
+		   FROM document_approval_steps
+		  WHERE tenant_id = $1 AND document_id = $2 ORDER BY step_order`, tenantID, docID)
+	if err != nil {
+		return nil, fmt.Errorf("query document approval steps: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ApprovalStep, 0)
+	for rows.Next() {
+		var step ApprovalStep
+		if err := rows.Scan(&step.Order, &step.Name, &step.SignerRegNumber); err != nil {
+			return nil, fmt.Errorf("scan document approval step: %w", err)
+		}
+		list = append(list, step)
+	}
+	return list, rows.Err()
+}
+
 // AppliedSignature is one row of a document's signature ledger.
 type AppliedSignature struct {
 	SignerName      string    `json:"signer_name"`
@@ -47,6 +146,8 @@ type AppliedSignature struct {
 	SignerMethod    string    `json:"signer_method"`
 	SignatureHash   string    `json:"signature_hash"`
 	SignedAt        time.Time `json:"signed_at"`
+	// StepOrder is which approval of the document's chain this signature filled.
+	StepOrder int `json:"step_order"`
 	// The eID certificate the citizen approved with, when the provider returned
 	// one. Empty for DAN, and for E-ID approvals whose certificate eID could not
 	// parse — a signature is still valid without it, it just carries less proof.
@@ -96,17 +197,17 @@ func (m *DocumentsModule) ListWorkflows(ctx context.Context, tenantID string) ([
 func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType string, steps []WorkflowStep) (*DocumentWorkflow, error) {
 	docType = strings.ToUpper(strings.TrimSpace(docType))
 	if !slices.Contains(DocTypes, docType) {
-		return nil, fmt.Errorf("invalid doc_type %q", docType)
+		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
 	}
 	if len(steps) > 10 {
-		return nil, errors.New("an approval chain is limited to 10 steps")
+		return nil, fmt.Errorf("%w: an approval chain is limited to 10 steps", ErrInvalidConfiguration)
 	}
 
 	cleaned := make([]WorkflowStep, 0, len(steps))
 	for i, step := range steps {
 		name := strings.TrimSpace(step.Name)
 		if name == "" {
-			return nil, fmt.Errorf("step %d needs a name", i+1)
+			return nil, fmt.Errorf("%w: step %d needs a name", ErrInvalidConfiguration, i+1)
 		}
 		cleaned = append(cleaned, WorkflowStep{
 			Order:           i + 1,
@@ -122,8 +223,10 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	if err != nil {
 		return nil, err
 	}
-	if policy.RequireNamedSigner && !slices.ContainsFunc(cleaned, func(s WorkflowStep) bool { return s.SignerRegNumber != "" }) {
-		return nil, fmt.Errorf("the signature policy for %s requires a named signer, so at least one step must carry a registration number", docType)
+	if policy.RequireNamedSigner {
+		if err := stepsCanRequireNamedSigners(docType, cleaned); err != nil {
+			return nil, err
+		}
 	}
 
 	tx, err := m.db.Begin(ctx)
@@ -131,6 +234,17 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 		return nil, fmt.Errorf("begin workflow update: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Two admins saving the same chain would otherwise race: under READ COMMITTED
+	// the second DELETE cannot see the rows the first inserted, so it clears
+	// nothing and then either collides on step_order or silently discards the
+	// caller's chain while reporting success. One lock per (tenant, type) makes the
+	// second save wait and then see the first.
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 0))`,
+		tenantID, docType); err != nil {
+		return nil, fmt.Errorf("lock approval chain: %w", err)
+	}
 
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM document_workflow_steps WHERE tenant_id = $1 AND doc_type = $2`,
@@ -160,36 +274,42 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	return &DocumentWorkflow{DocType: docType, Steps: cleaned}, nil
 }
 
-// approvalChain reports how many signatures a type needs and which registration
-// numbers its steps name. A type with no chain needs one signature and names
-// nobody, so signing keeps working for a tenant that never opens the screen.
-func (m *DocumentsModule) approvalChain(ctx context.Context, tenantID, docType string) (required int, named []string, err error) {
-	rows, err := m.db.Query(ctx,
-		`SELECT signer_reg_number FROM document_workflow_steps
-		  WHERE tenant_id = $1 AND doc_type = $2 ORDER BY step_order`, tenantID, docType)
+// stepsCanRequireNamedSigners reports whether a chain could ever be completed
+// under a policy that only accepts named signers: every step has to name one, and
+// no two steps may name the same citizen, because one citizen signs a document
+// once. A chain that fails this would leave the type unapprovable by anybody.
+func stepsCanRequireNamedSigners(docType string, steps []WorkflowStep) error {
+	if len(steps) == 0 {
+		return fmt.Errorf("%w: the %s chain has no steps, so requiring a named signer would leave nobody able to sign", ErrInvalidConfiguration, docType)
+	}
+
+	seen := map[string]int{}
+	for _, step := range steps {
+		if step.SignerRegNumber == "" {
+			return fmt.Errorf("%w: step %d of the %s chain (%s) names no signer, so requiring a named signer would leave it unfillable",
+				ErrInvalidConfiguration, step.Order, docType, step.Name)
+		}
+		if first, repeated := seen[step.SignerRegNumber]; repeated {
+			return fmt.Errorf("%w: steps %d and %d of the %s chain both name %s, and one citizen signs a document once",
+				ErrInvalidConfiguration, first, step.Order, docType, step.SignerRegNumber)
+		}
+		seen[step.SignerRegNumber] = step.Order
+	}
+	return nil
+}
+
+// chainCanRequireNamedSigners runs the same rule against the chain as stored.
+func (m *DocumentsModule) chainCanRequireNamedSigners(ctx context.Context, tenantID, docType string) error {
+	chains, err := m.ListWorkflows(ctx, tenantID)
 	if err != nil {
-		return 0, nil, fmt.Errorf("query approval chain: %w", err)
+		return err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var reg string
-		if err := rows.Scan(&reg); err != nil {
-			return 0, nil, fmt.Errorf("scan approval chain: %w", err)
-		}
-		required++
-		if reg != "" {
-			named = append(named, reg)
+	for _, chain := range chains {
+		if chain.DocType == docType {
+			return stepsCanRequireNamedSigners(docType, chain.Steps)
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return 0, nil, err
-	}
-
-	if required == 0 {
-		required = 1
-	}
-	return required, named, nil
+	return fmt.Errorf("%w: unknown doc_type %q", ErrInvalidConfiguration, docType)
 }
 
 // RouteDocument sends a draft for approval. Nothing the app creates is a draft
@@ -200,15 +320,32 @@ func (m *DocumentsModule) RouteDocument(ctx context.Context, tenantID, docID str
 		return nil, ErrNotRoutable
 	}
 
-	tag, err := m.db.Exec(ctx,
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin route document: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var docType string
+	err = tx.QueryRow(ctx,
 		`UPDATE document_records SET status = $1
-		  WHERE id = $2 AND tenant_id = $3 AND status = $4`,
-		StatusPending, docID, tenantID, StatusDraft)
+		  WHERE id = $2 AND tenant_id = $3 AND status = $4
+		  RETURNING doc_type`,
+		StatusPending, docID, tenantID, StatusDraft).Scan(&docType)
+	if isNoRows(err) {
+		return nil, ErrNotRoutable
+	}
 	if err != nil {
 		return nil, fmt.Errorf("route document: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return nil, ErrNotRoutable
+
+	// The document takes the chain as it stands at the moment it starts waiting.
+	if err := m.snapshotApprovalChain(ctx, tx, tenantID, docID, docType); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit route document: %w", err)
 	}
 
 	audit.Record(ctx, tenantID, actorFor(ctx), "documents.routed", docID, nil)
@@ -224,9 +361,11 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 
 	rows, err := m.db.Query(ctx,
 		`SELECT signer_name, signer_reg_number, signer_method, signature_hash, signed_at,
+		        COALESCE(step_order, 0),
 		        COALESCE(certificate_serial, ''), COALESCE(certificate_issuer, '')
 		   FROM document_signatures
-		  WHERE tenant_id = $1 AND document_id = $2 ORDER BY signed_at`, tenantID, docID)
+		  WHERE tenant_id = $1 AND document_id = $2
+		  ORDER BY COALESCE(step_order, 0), signed_at`, tenantID, docID)
 	if err != nil {
 		return nil, fmt.Errorf("query signatures: %w", err)
 	}
@@ -236,7 +375,7 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 	for rows.Next() {
 		var sig AppliedSignature
 		if err := rows.Scan(&sig.SignerName, &sig.SignerRegNumber, &sig.SignerMethod,
-			&sig.SignatureHash, &sig.SignedAt,
+			&sig.SignatureHash, &sig.SignedAt, &sig.StepOrder,
 			&sig.CertificateSerial, &sig.CertificateIssuer); err != nil {
 			return nil, fmt.Errorf("scan signature: %w", err)
 		}
@@ -277,7 +416,7 @@ func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Req
 
 	saved, err := m.ReplaceWorkflow(r.Context(), tenantID, chi.URLParam(r, "docType"), req.Steps)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeWriteFailure(r.Context(), w, err, "failed to save the approval chain")
 		return
 	}
 	writeJSON(w, http.StatusOK, saved)

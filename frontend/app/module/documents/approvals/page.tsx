@@ -31,13 +31,19 @@ export default function DocumentApprovalsPage() {
   const [signTarget, setSignTarget] = useState<DocumentRecord | null>(null);
   const [historyTarget, setHistoryTarget] = useState<DocumentRecord | null>(null);
 
+  // "Nothing is waiting for approval" is a claim, and an approver who reads it
+  // closes the tab. A load that failed says so instead.
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const data = await api.getDocuments();
       setDocuments(data || []);
-    } catch (err) {
-      // Layout redirects to /login when the session is the problem.
+      setLoadFailed(false);
+    } catch (err: any) {
+      setLoadFailed(true);
+      setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
     } finally {
       setLoading(false);
     }
@@ -77,7 +83,7 @@ export default function DocumentApprovalsPage() {
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${loadFailed ? "hidden" : ""}`}>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
           <div className="text-2xl font-bold text-amber-600">{pending.length}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.awaiting")}</div>
@@ -98,7 +104,7 @@ export default function DocumentApprovalsPage() {
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
-      ) : pending.length === 0 ? (
+      ) : loadFailed ? null : pending.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
           {t("documents.message.no_pending")}
         </div>
@@ -149,6 +155,7 @@ export default function DocumentApprovalsPage() {
 
       {signTarget && (
         <SignatureDialog
+          key={signTarget.id}
           doc={signTarget}
           onClose={() => setSignTarget(null)}
           onDone={async (text) => {

@@ -87,7 +87,7 @@ func signWithEID(t *testing.T, f *fixture, docID, regNumber string) (*Document, 
 	if session.VerificationCode == "" {
 		t.Error("the citizen has no code to check the request against")
 	}
-	if !strings.Contains(session.DisplayText, "гарын үсэг") {
+	if !strings.Contains(session.DisplayText, "Гарын үсэг") {
 		t.Errorf("display text %q does not say what is being approved", session.DisplayText)
 	}
 	return pollUntilApproved(t, f, docID, session.SessionID)
@@ -311,21 +311,12 @@ func TestPolicyRefusesAChannelAndAnUnnamedSigner(t *testing.T) {
 		t.Fatalf("save policy: %v", err)
 	}
 
-	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Дотоод батламж", "APPROVAL")
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); !errors.Is(err, ErrSignatureRejected) {
-		t.Errorf("DAN against an E-ID-only policy: got %v, want ErrSignatureRejected", err)
-	}
-
 	// Requiring a named signer cannot be saved while the chain names nobody: it
 	// would leave the type unsignable by anyone.
 	if _, err := f.m.SaveSignaturePolicy(ctx, f.tenantID, SignaturePolicy{
 		DocType: "APPROVAL", AllowEID: true, RequireNamedSigner: true,
-	}); err == nil {
-		t.Error("expected the policy to be refused while the chain names nobody")
+	}); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("policy with no named step: got %v, want ErrInvalidConfiguration", err)
 	}
 
 	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "APPROVAL", []WorkflowStep{
@@ -339,18 +330,158 @@ func TestPolicyRefusesAChannelAndAnUnnamedSigner(t *testing.T) {
 		t.Fatalf("save policy once a signer is named: %v", err)
 	}
 
+	// The document takes the chain as it stands now, so it is created after it.
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Дотоод батламж", "APPROVAL")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "CC90010111", "123456"); !errors.Is(err, ErrSignatureRejected) {
+		t.Errorf("DAN against an E-ID-only policy: got %v, want ErrSignatureRejected", err)
+	}
+
 	// The refusal lands at start: there is no reason to push a request to somebody
 	// whose approval could never be recorded.
 	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111"); !errors.Is(err, ErrSignatureRejected) {
-		t.Errorf("signer the chain does not name: got %v, want ErrSignatureRejected", err)
+		t.Errorf("signer the step does not name: got %v, want ErrSignatureRejected", err)
 	}
 	if _, err := signWithEID(t, f, doc.ID, "CC90010111"); err != nil {
 		t.Errorf("the named signer must be accepted: %v", err)
 	}
 
 	// And the chain cannot be emptied of named signers while the policy demands one.
-	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "APPROVAL", []WorkflowStep{{Name: "Хэн ч"}}); err == nil {
-		t.Error("expected the chain to be refused while the policy requires a named signer")
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "APPROVAL", []WorkflowStep{{Name: "Хэн ч"}}); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("chain dropping its named signer: got %v, want ErrInvalidConfiguration", err)
+	}
+}
+
+// A named step is binding on its own — the signature policy decides whether OPEN
+// steps are allowed at all, not whether a named one means anything. A tenant that
+// names its approvers and never opens the policy screen still gets them enforced.
+func TestANamedStepIsBindingWithoutThePolicyFlag(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "REQUEST", []WorkflowStep{
+		{Name: "Хэлтсийн дарга", SignerRegNumber: "AA90010111"},
+		{Name: "Захирал"}, // open on purpose: anyone may take the second approval
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Албан хүсэлт", "REQUEST")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Step one names the department head, and the policy was never touched.
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "ZZ99999999"); !errors.Is(err, ErrSignatureRejected) {
+		t.Errorf("a stranger taking a named step: got %v, want ErrSignatureRejected", err)
+	}
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("the named signer must be accepted: %v", err)
+	}
+
+	// Step two names nobody, so anyone allowed to sign may finish it.
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("open step: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	if len(ledger) != 2 || ledger[0].StepOrder != 1 || ledger[1].StepOrder != 2 {
+		t.Errorf("ledger = %+v, want the two signatures recorded against steps 1 and 2", ledger)
+	}
+	if ledger[0].SignerRegNumber != "AA90010111" {
+		t.Errorf("step 1 was filled by %q, want the citizen it names", ledger[0].SignerRegNumber)
+	}
+}
+
+// What a document needed is its own property. Editing the type's chain afterwards
+// must not change what an in-flight document is waiting for, nor rewrite what a
+// finished one required.
+func TestAChainEditDoesNotReachDocumentsAlreadyWaiting(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Нэг"}, {Name: "Хоёр"}, {Name: "Гурав"},
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	inFlight, err := f.m.CreateDocument(ctx, f.tenantID, "Гурван гарын үсэгтэй гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if inFlight.RequiredSignatures != 3 {
+		t.Fatalf("required = %d, want 3", inFlight.RequiredSignatures)
+	}
+	if _, err := signWithEID(t, f, inFlight.ID, "AA90010111"); err != nil {
+		t.Fatalf("first sign: %v", err)
+	}
+
+	// Shrinking the chain used to strand this document: its progress would read
+	// 1/1 "complete" while its status stayed PENDING, and no further signature
+	// could finish it.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{{Name: "Зөвхөн нэг"}}); err != nil {
+		t.Fatalf("shrink chain: %v", err)
+	}
+
+	still, err := f.m.getDocument(ctx, f.tenantID, inFlight.ID)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if still.RequiredSignatures != 3 {
+		t.Errorf("required = %d, want it to stay 3 — the document was routed under a three-step chain", still.RequiredSignatures)
+	}
+	if still.Status != StatusPending {
+		t.Errorf("status = %q, want %q", still.Status, StatusPending)
+	}
+
+	// And it can still be finished, on the terms it started with.
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, inFlight.ID, "BB90010111", "123456"); err != nil {
+		t.Fatalf("second sign: %v", err)
+	}
+	finished, err := signWithEID(t, f, inFlight.ID, "CC90010111")
+	if err != nil {
+		t.Fatalf("third sign: %v", err)
+	}
+	if finished.Status != StatusApproved {
+		t.Errorf("status = %q, want %q on the third of three", finished.Status, StatusApproved)
+	}
+
+	// A document created after the edit takes the new chain.
+	fresh, err := f.m.CreateDocument(ctx, f.tenantID, "Нэг гарын үсэгтэй гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create fresh: %v", err)
+	}
+	if fresh.RequiredSignatures != 1 {
+		t.Errorf("required = %d, want 1 from the chain as it now stands", fresh.RequiredSignatures)
+	}
+
+	// And the finished document's history stays what it was, whatever happens next.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "A"}, {Name: "B"}, {Name: "C"}, {Name: "D"}, {Name: "E"},
+	}); err != nil {
+		t.Fatalf("grow chain: %v", err)
+	}
+	decided, err := f.m.getDocument(ctx, f.tenantID, inFlight.ID)
+	if err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if decided.RequiredSignatures != 3 || decided.SignatureCount != 3 {
+		t.Errorf("decided document reads %d/%d, want 3/3 for ever",
+			decided.SignatureCount, decided.RequiredSignatures)
+	}
+	if decided.Status != StatusApproved {
+		t.Errorf("status = %q, want it to stay %q", decided.Status, StatusApproved)
 	}
 }
 
