@@ -296,11 +296,31 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	// An approval the citizen gave days ago is not one to turn into a signature
 	// dated today. eID's own deadline decides, with a little grace for clock skew.
 	if expired {
-		if _, err := m.db.Exec(ctx,
-			`DELETE FROM document_eid_sign_sessions WHERE session_id = $1 AND tenant_id = $2`,
-			sessionID, tenantID); err != nil {
+		// A session that produced a signature is never deleted, and never reported
+		// expired. Both used to be possible in the same breath: this poll reads the row
+		// as expired while another one, a second ahead of it, is committing the
+		// signature and the spending of that same row. The DELETE would then remove a
+		// row the other transaction was writing to — losing the record of the ceremony
+		// — and this poll would tell the operator the request expired over a document
+		// their citizen had just signed.
+		//
+		// So the delete asks for the row it means: unspent. If it finds none, the
+		// ceremony happened, and the answer is what it produced.
+		tag, err := m.db.Exec(ctx,
+			`DELETE FROM document_eid_sign_sessions
+			  WHERE session_id = $1 AND tenant_id = $2 AND consumed_at IS NULL`,
+			sessionID, tenantID)
+		if err != nil {
 			slog.WarnContext(ctx, "could not delete expired document signature session",
 				"session_id", sessionID, "error", err)
+			return &EIDSignProgress{State: ApprovalExpired}, nil
+		}
+		if tag.RowsAffected() == 0 {
+			signed, load := m.getDocument(ctx, tenantID, docID)
+			if load != nil {
+				return nil, load
+			}
+			return &EIDSignProgress{State: ApprovalComplete, Document: signed}, nil
 		}
 		return &EIDSignProgress{State: ApprovalExpired}, nil
 	}

@@ -1438,6 +1438,89 @@ func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
 	}
 }
 
+// A session that produced a signature is never deleted and never reported expired,
+// even when the poll that looks at it arrives past the deadline. The two used to be
+// possible together: one poll reading the row as expired while another, a second ahead
+// of it, was committing the signature and the spending of that same row.
+func TestAnExpiredPollDoesNotBuryACompletedCeremony(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хугацаа ба гарын үсэг", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	session, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	signed, err := pollUntilApproved(t, f, doc.ID, session.SessionID)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if signed.Status != StatusApproved {
+		t.Fatalf("status = %q, want %q", signed.Status, StatusApproved)
+	}
+
+	// Now age the spent session past every deadline and poll it again, which is what a
+	// straggler does.
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_eid_sign_sessions
+		    SET created_at = NOW() - INTERVAL '2 hours', expires_at = NOW() - INTERVAL '2 hours'
+		  WHERE session_id = $1`, session.SessionID); err != nil {
+		t.Fatalf("age the session: %v", err)
+	}
+
+	progress, err := f.m.PollEIDSignature(ctx, f.tenantID, doc.ID, session.SessionID)
+	if err != nil {
+		t.Fatalf("poll the aged session: %v", err)
+	}
+	if progress.State != ApprovalComplete {
+		t.Errorf("state = %q, want %q — this session produced the signature", progress.State, ApprovalComplete)
+	}
+
+	// And the row survives, because it is the record that this ceremony happened.
+	var alive bool
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM document_eid_sign_sessions WHERE session_id = $1)`,
+		session.SessionID).Scan(&alive); err != nil {
+		t.Fatalf("check the row: %v", err)
+	}
+	if !alive {
+		t.Error("the session that produced the signature was deleted as expired")
+	}
+
+	// A session that produced nothing is still cleared away and reported expired.
+	other, err := f.m.CreateDocument(ctx, f.tenantID, "Хэн ч зураагүй", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create the second: %v", err)
+	}
+	unused, err := f.m.StartEIDSignature(ctx, f.tenantID, other.ID, "BB90010111")
+	if err != nil {
+		t.Fatalf("start the second: %v", err)
+	}
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_eid_sign_sessions SET expires_at = NOW() - INTERVAL '2 hours'
+		  WHERE session_id = $1`, unused.SessionID); err != nil {
+		t.Fatalf("expire the second: %v", err)
+	}
+	progress, err = f.m.PollEIDSignature(ctx, f.tenantID, other.ID, unused.SessionID)
+	if err != nil {
+		t.Fatalf("poll the unused session: %v", err)
+	}
+	if progress.State != ApprovalExpired {
+		t.Errorf("state = %q, want %q", progress.State, ApprovalExpired)
+	}
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM document_eid_sign_sessions WHERE session_id = $1)`,
+		unused.SessionID).Scan(&alive); err != nil {
+		t.Fatalf("check the second row: %v", err)
+	}
+	if alive {
+		t.Error("an expired session that produced nothing was left behind")
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

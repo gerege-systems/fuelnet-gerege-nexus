@@ -650,10 +650,21 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 	}
 
 	if sessionID != "" {
-		if _, err := tx.Exec(ctx,
+		// Spend it, or do not sign. The session row is the pairing that makes this
+		// approval a signature on THIS document, so if it is not there to be spent the
+		// approval is not one to record: it means another poll declared the session past
+		// its deadline and removed it, or the stale sweep did, between the read that let
+		// this signature through and this write. The whole transaction goes back, the
+		// citizen keeps their signature, and they can be asked again.
+		tag, err := tx.Exec(ctx,
 			`UPDATE document_eid_sign_sessions SET consumed_at = NOW()
-			  WHERE session_id = $1 AND tenant_id = $2`, sessionID, tenantID); err != nil {
+			  WHERE session_id = $1 AND tenant_id = $2 AND consumed_at IS NULL`,
+			sessionID, tenantID)
+		if err != nil {
 			return nil, fmt.Errorf("mark signature session spent: %w", err)
+		}
+		if tag.RowsAffected() != 1 {
+			return nil, fmt.Errorf("%w: the approval session is no longer redeemable", ErrSignSessionUnknown)
 		}
 	}
 
