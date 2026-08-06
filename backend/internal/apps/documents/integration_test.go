@@ -1224,6 +1224,77 @@ func TestTheLedgerRefusesTwoSignaturesOnOneApproval(t *testing.T) {
 	}
 }
 
+// eID states no deadline for a push session — it decides when one dies and says so
+// with EXPIRED. Inventing one here would be a cutoff of our own making: a citizen who
+// takes longer than it to unlock a phone, find the notification and enter a PIN would
+// be told the request expired while eID was still waiting for them. Which is exactly
+// what the sign-in flow was doing until it stopped inventing one.
+func TestASessionWithNoStatedDeadlineIsNotExpiredEarly(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хугацаа хэлээгүй", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	session, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// What a live push session looks like once stored: no deadline, and the citizen
+	// has been looking for their phone for six minutes — well past the two the old
+	// code invented, and well inside anything eID would call expired.
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_eid_sign_sessions
+		    SET expires_at = NULL, created_at = NOW() - INTERVAL '6 minutes'
+		  WHERE session_id = $1`, session.SessionID); err != nil {
+		t.Fatalf("age the session: %v", err)
+	}
+
+	progress, err := f.m.PollEIDSignature(ctx, f.tenantID, doc.ID, session.SessionID)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if progress.State == ApprovalExpired {
+		t.Error("a session eID never put a deadline on was called expired")
+	}
+
+	// The backstop still holds: an approval id from an hour ago is not redeemable.
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_eid_sign_sessions
+		    SET created_at = NOW() - INTERVAL '1 hour'
+		  WHERE session_id = $1`, session.SessionID); err != nil {
+		t.Fatalf("age it further: %v", err)
+	}
+	progress, err = f.m.PollEIDSignature(ctx, f.tenantID, doc.ID, session.SessionID)
+	if err != nil {
+		t.Fatalf("poll again: %v", err)
+	}
+	if progress.State != ApprovalExpired {
+		t.Errorf("state = %q, want %q past the backstop", progress.State, ApprovalExpired)
+	}
+
+	// And a deadline eID DID state is still honoured, with the grace on top.
+	second, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("second start: %v", err)
+	}
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_eid_sign_sessions
+		    SET expires_at = NOW() - INTERVAL '10 minutes'
+		  WHERE session_id = $1`, second.SessionID); err != nil {
+		t.Fatalf("expire the second: %v", err)
+	}
+	progress, err = f.m.PollEIDSignature(ctx, f.tenantID, doc.ID, second.SessionID)
+	if err != nil {
+		t.Fatalf("poll the second: %v", err)
+	}
+	if progress.State != ApprovalExpired {
+		t.Errorf("state = %q, want %q — eID's own deadline is past", progress.State, ApprovalExpired)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

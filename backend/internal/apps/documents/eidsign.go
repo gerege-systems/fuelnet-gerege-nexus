@@ -42,14 +42,32 @@ import (
 // throw away an approval the citizen gave in time.
 const signSessionGrace = 2 * time.Minute
 
-// parseExpiry reads the provider's deadline. eID returns RFC3339; anything it
-// cannot parse falls back to the two minutes an eID request is normally given,
-// which is safer than storing nothing and never expiring the session.
+// signSessionBackstop bounds a session eID gave NO deadline for. eID states none
+// for a push session — it decides when one dies and says so with EXPIRED — so
+// there is nothing to count down, only a limit past which an approval id sitting
+// in a log must stop being redeemable.
+//
+// It is set well beyond any real ceremony on purpose. A push session was measured
+// still RUNNING nine minutes after it was created, and treating a shorter figure
+// as a deadline is what made the sign-in flow walk away from sessions eID was
+// still waiting on: a citizen who takes longer than that to unlock a phone, find
+// the notification and enter a PIN loses the approval they were about to give.
+// This is a backstop, not a deadline.
+const signSessionBackstop = 15 * time.Minute
+
+// parseExpiry reads the provider's deadline, and reports the zero time when the
+// provider states none.
+//
+// It used to invent "two minutes from now" in that case. eID gives no deadline
+// for a push session, so that figure was not a deadline but a cutoff of our own
+// making — and it would have thrown away an approval the citizen was still in the
+// middle of giving. A session with no stated deadline is bounded by
+// signSessionBackstop instead, and ended by eID's own EXPIRED.
 func parseExpiry(value string) time.Time {
 	if at, err := time.Parse(time.RFC3339, strings.TrimSpace(value)); err == nil {
 		return at
 	}
-	return time.Now().Add(2 * time.Minute)
+	return time.Time{}
 }
 
 // ErrSignSessionUnknown is returned for a session this tenant did not start for
@@ -71,8 +89,11 @@ const (
 type EIDSignSession struct {
 	SessionID        string `json:"session_id"`
 	VerificationCode string `json:"verification_code"`
-	ExpiresAt        string `json:"expires_at"`
-	DeviceLinkURL    string `json:"device_link_url,omitempty"`
+	// Empty when eID states no deadline, which is the normal case for a push
+	// session. Omitted rather than sent empty, so the screen reads it as "nobody
+	// said when this dies" instead of as a deadline it failed to parse.
+	ExpiresAt     string `json:"expires_at,omitempty"`
+	DeviceLinkURL string `json:"device_link_url,omitempty"`
 	// DisplayText is what the citizen is being shown. Returned so the screen can
 	// display the same words rather than a paraphrase of them.
 	DisplayText string `json:"display_text"`
@@ -181,10 +202,12 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// failure to tidy up must not cost a live approval prompt, which is what
 	// happened when this ran after the push and returned its error.
 	if _, err := m.db.Exec(ctx,
+		// Both halves: a session eID gave a deadline for, and one it did not — the
+		// second is the normal case for a push session, and keying only on
+		// expires_at would have left those rows for good.
 		`DELETE FROM document_eid_sign_sessions
 		  WHERE tenant_id = $1 AND document_id = $2 AND consumed_at IS NULL
-		    AND (expires_at < NOW() - INTERVAL '1 hour'
-		         OR created_at < NOW() - INTERVAL '1 hour')`,
+		    AND COALESCE(expires_at, created_at) < NOW() - INTERVAL '1 hour'`,
 		tenantID, docID); err != nil {
 		slog.WarnContext(ctx, "could not clear stale document signature sessions",
 			"tenant_id", tenantID, "document_id", docID, "error", err)
@@ -209,7 +232,12 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// The citizen's phone is now showing the request, so the pairing that makes it
 	// redeemable has to be written even if the caller has gone away — otherwise
 	// they could approve a document nothing can attach their signature to.
-	expiresAt := parseExpiry(started.ExpiresAt)
+	// NULL when eID stated no deadline, so nothing downstream mistakes our own
+	// arithmetic for the provider's.
+	var expiresAt *time.Time
+	if at := parseExpiry(started.ExpiresAt); !at.IsZero() {
+		expiresAt = &at
+	}
 	if _, err := m.db.Exec(context.WithoutCancel(ctx),
 		`INSERT INTO document_eid_sign_sessions
 		        (session_id, tenant_id, document_id, reg_number, display_text, expires_at)
@@ -240,10 +268,16 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	var consumed, expired bool
 	err := m.db.QueryRow(ctx,
 		`SELECT reg_number, consumed_at IS NOT NULL,
-		        (expires_at IS NOT NULL AND expires_at < NOW() - $4::interval)
+		        CASE WHEN expires_at IS NOT NULL
+		             -- eID stated a deadline: it decides, plus a little for clock skew.
+		             THEN expires_at < NOW() - $4::interval
+		             -- It stated none. Not expired for as long as the backstop allows;
+		             -- eID's own EXPIRED is what ends the wait.
+		             ELSE created_at < NOW() - $5::interval END
 		   FROM document_eid_sign_sessions
 		  WHERE session_id = $1 AND tenant_id = $2 AND document_id = $3`,
-		sessionID, tenantID, docID, signSessionGrace.String()).Scan(&regNumber, &consumed, &expired)
+		sessionID, tenantID, docID,
+		signSessionGrace.String(), signSessionBackstop.String()).Scan(&regNumber, &consumed, &expired)
 	if isNoRows(err) {
 		return nil, ErrSignSessionUnknown
 	}

@@ -355,7 +355,9 @@ export const api = {
     fetcher<{
       session_id: string;
       verification_code: string;
-      expires_at: string;
+      // Absent when eID states no deadline — the normal case for a push session.
+      // Absent is not "expired"; it means nobody has said when this one dies.
+      expires_at?: string;
       device_link_url?: string;
       display_text: string;
     }>(`/documents/${id}/sign/eid/start`, { method: "POST", body: JSON.stringify({ reg_number: regNumber }) }),

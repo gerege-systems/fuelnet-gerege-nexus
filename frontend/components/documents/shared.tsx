@@ -50,9 +50,14 @@ const POLL_GAP = 1200;
 // A dropped long-poll is ordinary on a mobile network, and the citizen may be
 // about to approve, so a session survives a few failures before it is given up.
 const TOLERATED_POLL_FAILURES = 3;
-// Used when eID's expires_at cannot be read: an eID request is normally given
-// two minutes.
-const FALLBACK_APPROVAL_TTL = 120_000;
+// Used when eID states no deadline, which is the normal case for a push session:
+// eID decides when one dies and says so with EXPIRED, so there is nothing to count
+// down. This is a BACKSTOP against polling for ever, deliberately set well beyond
+// any real ceremony — a push session has been measured still RUNNING nine minutes
+// in, and treating a shorter figure as a deadline is what made the sign-in card
+// walk away from sessions eID was still waiting on. Keep in step with
+// signSessionBackstop in eidsign.go.
+const APPROVAL_BACKSTOP = 15 * 60_000;
 // The server accepts an approval for this long past eID's own deadline, so a
 // small clock difference does not throw one away. Giving up earlier here would
 // tell the operator the request expired while the server would still have taken
@@ -70,10 +75,15 @@ function sleep(ms: number) {
 // from cutting the ceremony off at the knees.
 const MIN_APPROVAL_WINDOW = 30_000;
 
-function deadlineOf(expiresAt: string) {
-  const at = Date.parse(expiresAt);
-  const stated = (Number.isNaN(at) ? Date.now() + FALLBACK_APPROVAL_TTL : at) + APPROVAL_GRACE;
-  return Math.max(stated, Date.now() + MIN_APPROVAL_WINDOW);
+function statedDeadline(expiresAt?: string) {
+  const at = Date.parse(expiresAt ?? "");
+  return Number.isNaN(at) ? null : at;
+}
+
+function deadlineOf(expiresAt?: string) {
+  const stated = statedDeadline(expiresAt);
+  if (stated === null) return Date.now() + APPROVAL_BACKSTOP;
+  return Math.max(stated + APPROVAL_GRACE, Date.now() + MIN_APPROVAL_WINDOW);
 }
 
 /** The only state a document can be signed or rejected in. */
@@ -83,7 +93,9 @@ export const PENDING = "PENDING_APPROVAL";
 interface EIDSignSession {
   session_id: string;
   verification_code: string;
-  expires_at: string;
+  // Absent when eID states no deadline, which is the normal case for a push
+  // session. Absent is not "expired": it means nobody has said when this dies.
+  expires_at?: string;
   device_link_url?: string;
   display_text: string;
 }
@@ -537,9 +549,14 @@ export function SignatureDialog({
               <span className="flex-1">
                 {t("documents.message.awaiting_approval", { reg: regNumber.toUpperCase() })}
               </span>
-              <span className="font-mono text-xs text-slate-500 tabular-nums">
-                {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
-              </span>
+              {/* Only when eID gave a deadline to count down. A countdown we made up
+                  is worse than none: it hurries the citizen and then says the
+                  request expired while eID is still waiting for them. */}
+              {statedDeadline(session.expires_at) !== null && (
+                <span className="font-mono text-xs text-slate-500 tabular-nums">
+                  {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
+                </span>
+              )}
             </div>
 
             <p className="text-[11px] text-slate-500">

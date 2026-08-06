@@ -30,6 +30,10 @@ import (
 // handler was still waiting, closed the connection without a response, and
 // nginx turned that into a 502 for every check the citizen did not answer
 // within 15 seconds — which read as a slow, flaky sign-in.
+//
+// It is not only sign-in any more: /documents/{id}/sign/eid/poll waits on the same
+// relying-party call for the same window, so a signature ceremony would have been
+// cut off in the same way and lost the approval a citizen had just given.
 var writeTimeout = eid.PollWindow + 15*time.Second
 
 // Slowloris is held off by the header deadline rather than by writeTimeout, so
