@@ -157,6 +157,8 @@ export const documents = {
   "documents.field.title_pattern": { mn: "Гарчгийн загвар", en: "Title pattern" },
   "documents.action.add_template": { mn: "Загвар нэмэх", en: "Add template" },
   "documents.action.use_template": { mn: "Баримт үүсгэх", en: "Create document" },
+  // The braces here are literal: this text teaches the syntax, so it is called
+  // without vars and t() leaves them alone. Do not "fix" them into placeholders.
   "documents.message.title_pattern_hint": {
     mn: "Гарчигт {year}, {month}, {date} гэж бичвэл загварыг хэрэглэх үед орлуулагдана. Танихгүй хэсэг хөндөгдөхгүй.",
     en: "A title may hold {year}, {month} or {date}; they are filled in when the template is used. Anything else is left as written.",
