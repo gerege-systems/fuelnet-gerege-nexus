@@ -81,12 +81,18 @@ BEGIN
       FROM matched
      WHERE matched.signature_id = s.id;
 
-    -- 3. The rest fill whatever step numbers are still free, oldest first.
+    -- 3. The rest fill whatever OPEN step numbers are still free, oldest first.
+    --
+    --    Only open ones. A step that names a citizen is owed to that citizen: giving
+    --    it to somebody the chain never named would lock the named signer out of
+    --    their own step for good, let the document complete without them, and leave
+    --    the ledger recording the wrong person as having given that approval.
     WITH free_slots AS (
         SELECT st.document_id, st.step_order,
                row_number() OVER (PARTITION BY st.document_id ORDER BY st.step_order) AS slot
           FROM document_approval_steps st
-         WHERE NOT EXISTS (
+         WHERE st.signer_reg_number = ''
+           AND NOT EXISTS (
                  SELECT 1 FROM document_signatures s
                   WHERE s.document_id = st.document_id AND s.step_order = st.step_order)
     ),
@@ -140,11 +146,19 @@ BEGIN
 
     -- 6. A document the old code left pending-but-complete — its chain was shortened
     --    under it — is finished here rather than left needing one more signature than
-    --    it asks for.
+    --    it asks for. The test is the one the runtime uses: every step filled AND at
+    --    least as many signatures as it asked for. Comparing the counts alone would
+    --    approve a document whose named step is still owed.
     UPDATE document_records d
        SET status = 'APPROVED'
      WHERE d.status = 'PENDING_APPROVAL'
-       AND (SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id) >= d.required_signatures;
+       AND (SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id) >= d.required_signatures
+       AND NOT EXISTS (
+             SELECT 1 FROM document_approval_steps st
+              WHERE st.document_id = d.id
+                AND NOT EXISTS (SELECT 1 FROM document_signatures s
+                                 WHERE s.document_id = st.document_id
+                                   AND s.step_order = st.step_order));
 END $$;
 -- +goose StatementEnd
 

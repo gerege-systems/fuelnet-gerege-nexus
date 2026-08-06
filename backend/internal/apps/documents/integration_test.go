@@ -795,6 +795,61 @@ func TestASignatureOnALaterStepLeavesTheEarlierOneOpen(t *testing.T) {
 	}
 }
 
+// A chain naming one citizen twice cannot be saved any more, but chains stored
+// before that rule existed still can be. The path that decides who may sign must
+// never copy one verbatim: the second step would be owed to somebody who has
+// already signed, and no document of that type could ever be approved.
+func TestASnapshotOpensARepeatedSigner(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Straight into the table, the way a chain stored under the old rules looks.
+	for order, name := range map[int]string{1: "Ня-бо", 2: "Захирал"} {
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_workflow_steps (tenant_id, doc_type, step_order, name, signer_reg_number)
+			      VALUES ($1, 'CONTRACT', $2, $3, 'AA90010111')`,
+			f.tenantID, order, name); err != nil {
+			t.Fatalf("insert legacy step %d: %v", order, err)
+		}
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хуучин давхар хэлхээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if doc.RequiredSignatures != 2 {
+		t.Fatalf("required = %d, want 2 — the tenant asked for two approvals", doc.RequiredSignatures)
+	}
+
+	steps, err := f.m.DocumentSteps(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if len(steps) != 2 {
+		t.Fatalf("got %d steps, want 2", len(steps))
+	}
+	if steps[0].SignerRegNumber != "AA90010111" {
+		t.Errorf("step 1 = %q, want the citizen the chain names", steps[0].SignerRegNumber)
+	}
+	if steps[1].SignerRegNumber != "" {
+		t.Errorf("step 2 = %q, want it copied open — the same citizen cannot fill both",
+			steps[1].SignerRegNumber)
+	}
+
+	// And it can actually be finished: the named citizen, then anyone else.
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("the named signer: %v", err)
+	}
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("the open step: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q — a legacy chain must not strand its documents",
+			done.Status, StatusApproved)
+	}
+}
+
 func TestRejectIsFinal(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
