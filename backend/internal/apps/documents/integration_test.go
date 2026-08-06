@@ -1170,6 +1170,60 @@ func TestASignatureThatFillsNoStepIsParkedPastTheChain(t *testing.T) {
 	}
 }
 
+// The table itself refuses two signatures on one approval now. The numbering that
+// could produce them is fixed in both places it lived, but a constraint is worth more
+// than either fix: it turns a numbering mistake into a failed write, before anything
+// is attributed to the wrong person, rather than a ledger that reads plausibly and
+// credits a named step to a stranger.
+func TestTheLedgerRefusesTwoSignaturesOnOneApproval(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// A chain of two, so the document is still waiting after the first signature —
+	// otherwise it is APPROVED and every later attempt is refused for that reason
+	// instead, before the ledger is reached at all.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Order: 1, Name: "Ня-бо", SignerRegNumber: ""},
+		{Order: 2, Name: "Захирал", SignerRegNumber: ""},
+	}); err != nil {
+		t.Fatalf("chain: %v", err)
+	}
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хоёр гарын үсэг, нэг батламж", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); err != nil {
+		t.Fatalf("first signature: %v", err)
+	}
+
+	var step int
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT step_order FROM document_signatures WHERE document_id = $1
+		  ORDER BY step_order LIMIT 1`, doc.ID).Scan(&step); err != nil {
+		t.Fatalf("read the step it filled: %v", err)
+	}
+
+	// Straight at the table, the way a numbering mistake would arrive.
+	_, err = f.m.db.Exec(ctx,
+		`INSERT INTO document_signatures
+		        (tenant_id, document_id, signer_name, signer_reg_number, signer_method,
+		         signature_hash, signed_at, step_order)
+		 VALUES ($1, $2, 'Хэн нэгэн', 'ZZ99999999', 'DAN', 'h', NOW(), $3)`,
+		f.tenantID, doc.ID, step)
+	if err == nil {
+		t.Fatal("the ledger accepted a second signature on one approval")
+	}
+	if !isConstraintViolation(err, "document_signatures_one_per_approval") {
+		t.Errorf("got %v, want the one-per-approval constraint", err)
+	}
+
+	// And the message the module gives its caller depends on WHICH constraint was
+	// hit: only the one-per-signer constraint means "you have already signed".
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); !errors.Is(err, ErrAlreadySigned) {
+		t.Errorf("the same citizen twice: got %v, want ErrAlreadySigned", err)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

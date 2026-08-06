@@ -600,11 +600,16 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		tenantID, docID, signature.SignerName, signature.RegNumber,
 		method, signature.Hash, signedAt,
 		signature.CertificateSerial, signature.CertificateIssuer, step)
-	if isUniqueViolation(err) {
+	// Only the one-per-signer constraint means "you have already signed". The
+	// one-per-approval constraint means this module chose a step number another
+	// signature already holds, which is a bug in here, not something the caller did
+	// — and telling them they have already signed would send them away satisfied
+	// while an approval went unrecorded.
+	if isConstraintViolation(err, "document_signatures_once_per_signer") {
 		return nil, ErrAlreadySigned
 	}
 	if err != nil {
-		return nil, fmt.Errorf("record signature: %w", err)
+		return nil, fmt.Errorf("record signature on step %d: %w", step, err)
 	}
 
 	// Complete means every step of the document's own chain is filled AND it carries
@@ -785,6 +790,14 @@ func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// isConstraintViolation reports whether err is a violation of one NAMED constraint.
+// Which constraint was hit decides what the caller is told: "you have already signed"
+// is the truth for one of them and a lie for the others.
+func isConstraintViolation(err error, name string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == name
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
