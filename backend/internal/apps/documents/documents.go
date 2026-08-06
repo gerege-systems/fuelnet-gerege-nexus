@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -120,6 +121,13 @@ type DocumentsModule struct {
 	db     *pgxpool.Pool
 	eidSvc *eid.EIDService
 	danSvc *dan.DANService
+
+	// Whether this cluster has an ICU collation for the title search to lean on. See
+	// titleMatch: without one, a Cyrillic search is case-sensitive on a database
+	// initialised with LC_CTYPE=C, which is what the postgres:16-alpine image this
+	// stack deploys produces.
+	collationOnce sync.Once
+	hasICU        bool
 }
 
 // New builds the module and registers it in the compile-time app registry so
@@ -773,6 +781,41 @@ const (
 // see it, and would report the longest wait as whatever happened to be on page one.
 const ListOrderOldest = "oldest"
 
+// titleMatch is the case-insensitive title comparison, spelled so that it actually is
+// case-insensitive for Mongolian.
+//
+// ILIKE folds case according to the DATABASE's ctype. On a cluster initialised with
+// LC_CTYPE=C — which is what the postgres:16-alpine image this stack deploys produces,
+// because musl has no locales to initdb with — Latin still folds and Cyrillic does not:
+// 'ГЭРЭЭ 2026' ILIKE '%гэрээ%' is false. An operator searching for гэрээ would not find
+// their own contracts, on the half of the product that is written in Cyrillic.
+//
+// An explicit ICU collation folds it regardless of how the cluster was initialised
+// (measured: true on exactly that C-ctype database). ICU is not guaranteed to be built
+// in, though, and naming a collation that does not exist is an error rather than a
+// degraded search — so it is asked for once and only used if it is there.
+func (m *DocumentsModule) titleMatch(ctx context.Context) string {
+	m.collationOnce.Do(func() {
+		var present bool
+		if err := m.db.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM pg_collation WHERE collname = 'und-x-icu')`).Scan(&present); err != nil {
+			slog.WarnContext(ctx, "could not tell whether this database has an ICU collation; "+
+				"a Cyrillic title search will be case-sensitive if it does not", "error", err)
+			return
+		}
+		m.hasICU = present
+		if !present {
+			slog.WarnContext(ctx, "this database has no ICU collation, so a Cyrillic title "+
+				"search is case-sensitive; build Postgres with ICU or initialise the cluster "+
+				"with a UTF-8 ctype")
+		}
+	})
+	if m.hasICU {
+		return `d.title COLLATE "und-x-icu" ILIKE $4 ESCAPE '!'`
+	}
+	return `d.title ILIKE $4 ESCAPE '!'`
+}
+
 // DocumentFilter narrows a page of documents to what somebody is looking for. Paging
 // alone is not enough on a tenant with thousands of them: "Load more" is not a way to
 // find a particular contract, it is a way to read the whole list.
@@ -832,10 +875,10 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string, fi
 		offset = 0
 	}
 
-	const where = `d.tenant_id = $1
+	where := `d.tenant_id = $1
 		   AND ($2 = '' OR d.status = $2)
 		   AND ($3 = '' OR d.doc_type = $3)
-		   AND ($4 = '' OR d.title ILIKE $4 ESCAPE '!')`
+		   AND ($4 = '' OR ` + m.titleMatch(ctx) + `)`
 
 	page := &DocumentPage{Documents: make([]Document, 0), Limit: limit, Offset: offset}
 	if err := m.db.QueryRow(ctx,

@@ -1603,7 +1603,12 @@ func TestASearchIsForWhatWasTypedAndNothingElse(t *testing.T) {
 		{`back\slash`, `back\slash гэрээ`},
 		{"!", "яах вэ! гэрээ"},
 		{"яах вэ!", "яах вэ! гэрээ"},
-		{"ГЭРЭЭ", ""}, // case-insensitive, so this matches all five
+		// Case-insensitive — and this row is the one that matters for Mongolian. It
+		// passes on any cluster, but it is only DECISIVE on one initialised with
+		// LC_CTYPE=C (what postgres:16-alpine produces), where plain ILIKE folds Latin
+		// and leaves Cyrillic alone: without the ICU collation titleMatch asks for, this
+		// search matches nothing at all there.
+		{"ГЭРЭЭ", ""},
 	} {
 		page, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: tc.search}, 0, 0)
 		if err != nil {
