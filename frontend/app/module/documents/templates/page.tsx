@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { ActionMessage, Banner, SectionHeader } from "@/components/documents/shared";
-import { Files, Plus, Trash2, Wand2 } from "lucide-react";
+import { Files, Plus, Save, Trash2, Wand2 } from "lucide-react";
 
 interface Template {
   id: string;
@@ -56,6 +56,28 @@ export default function DocumentTemplatesPage() {
     try {
       await api.createDocumentTemplate(form);
       setForm({ name: "", doc_type: "CONTRACT", title_pattern: "" });
+      setMessage({ type: "success", text: t("documents.message.template_saved") });
+      await loadData();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const edit = (id: string, patch: Partial<Template>) =>
+    setTemplates((current) => current.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+
+  const handleSave = async (tpl: Template) => {
+    setBusy(tpl.id);
+    setMessage(null);
+    try {
+      await api.updateDocumentTemplate(tpl.id, {
+        name: tpl.name,
+        doc_type: tpl.doc_type,
+        title_pattern: tpl.title_pattern,
+        active: tpl.active,
+      });
       setMessage({ type: "success", text: t("documents.message.template_saved") });
       await loadData();
     } catch (err: any) {
@@ -173,21 +195,70 @@ export default function DocumentTemplatesPage() {
                 <th className="px-4 py-3">{t("documents.field.template_name")}</th>
                 <th className="px-4 py-3">{t("base.field.type")}</th>
                 <th className="px-4 py-3">{t("documents.field.title_pattern")}</th>
+                <th className="px-4 py-3">{t("base.state.active")}</th>
                 <th className="px-4 py-3 text-right">{t("base.field.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {templates.map((tpl) => (
-                <tr key={tpl.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{tpl.name}</td>
-                  <td className="px-4 py-3 font-mono text-slate-600">{tpl.doc_type}</td>
-                  <td className="px-4 py-3 font-mono text-slate-500">{tpl.title_pattern}</td>
+                <tr key={tpl.id} className={`hover:bg-slate-50 ${tpl.active ? "" : "opacity-60"}`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={tpl.name}
+                      disabled={!mayManage}
+                      onChange={(e) => edit(tpl.id, { name: e.target.value })}
+                      className="w-full px-2 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:border-transparent disabled:bg-transparent"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={tpl.doc_type}
+                      disabled={!mayManage}
+                      onChange={(e) => edit(tpl.id, { doc_type: e.target.value })}
+                      className="px-2 py-1.5 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:border-transparent disabled:bg-transparent"
+                    >
+                      {DOC_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={tpl.title_pattern}
+                      disabled={!mayManage}
+                      onChange={(e) => edit(tpl.id, { title_pattern: e.target.value })}
+                      className="w-full px-2 py-1.5 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:border-transparent disabled:bg-transparent"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={tpl.active}
+                      disabled={!mayManage}
+                      onChange={(e) => edit(tpl.id, { active: e.target.checked })}
+                      title={t("documents.message.template_active_hint")}
+                      className="w-4 h-4 accent-indigo-600"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     {mayManage ? (
                       <div className="flex items-center justify-end space-x-2">
                         <button
+                          onClick={() => handleSave(tpl)}
+                          disabled={busy === tpl.id || !tpl.name.trim() || !tpl.title_pattern.trim()}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>{t("base.action.save")}</span>
+                        </button>
+                        <button
                           onClick={() => handleUse(tpl)}
-                          disabled={busy === tpl.id}
+                          disabled={busy === tpl.id || !tpl.active}
+                          title={tpl.active ? undefined : t("documents.message.template_inactive")}
                           className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
                         >
                           <Wand2 className="w-3.5 h-3.5" />

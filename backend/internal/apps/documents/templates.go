@@ -117,6 +117,51 @@ func (m *DocumentsModule) CreateTemplate(ctx context.Context, tenantID, name, do
 	return tpl, nil
 }
 
+// UpdateTemplate changes a template in place. A template that has produced
+// documents cannot simply be replaced — the documents keep their titles — so
+// editing one is about what it will produce next; `active` retires it from the list
+// without deleting the record of what it was.
+func (m *DocumentsModule) UpdateTemplate(ctx context.Context, tenantID, templateID, name, docType, titlePattern string, active bool) (*DocumentTemplate, error) {
+	if uuid.Validate(templateID) != nil {
+		return nil, ErrTemplateNotFound
+	}
+
+	name = strings.TrimSpace(name)
+	titlePattern = strings.TrimSpace(titlePattern)
+	docType = strings.ToUpper(strings.TrimSpace(docType))
+
+	if name == "" {
+		return nil, fmt.Errorf("%w: template name cannot be empty", ErrInvalidConfiguration)
+	}
+	if titlePattern == "" {
+		return nil, fmt.Errorf("%w: title pattern cannot be empty", ErrInvalidConfiguration)
+	}
+	if !slices.Contains(DocTypes, docType) {
+		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
+	}
+
+	tpl, err := scanTemplate(m.db.QueryRow(ctx,
+		`UPDATE document_templates
+		    SET name = $1, doc_type = $2, title_pattern = $3, active = $4
+		  WHERE id = $5 AND tenant_id = $6
+		  RETURNING `+templateColumns,
+		name, docType, titlePattern, active, templateID, tenantID))
+	if isUniqueViolation(err) {
+		return nil, ErrTemplateNameTaken
+	}
+	if isNoRows(err) {
+		return nil, ErrTemplateNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("update template: %w", err)
+	}
+
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.template_changed", tpl.ID, map[string]any{
+		"name": tpl.Name, "doc_type": tpl.DocType, "active": tpl.Active,
+	})
+	return tpl, nil
+}
+
 func (m *DocumentsModule) DeleteTemplate(ctx context.Context, tenantID, templateID string) error {
 	if uuid.Validate(templateID) != nil {
 		return ErrTemplateNotFound
@@ -198,6 +243,40 @@ func (m *DocumentsModule) createTemplateHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeJSON(w, http.StatusCreated, tpl)
+}
+
+func (m *DocumentsModule) updateTemplateHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Name         string `json:"name"`
+		DocType      string `json:"doc_type"`
+		TitlePattern string `json:"title_pattern"`
+		Active       bool   `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid template payload")
+		return
+	}
+
+	tpl, err := m.UpdateTemplate(r.Context(), tenantID, chi.URLParam(r, "id"),
+		req.Name, req.DocType, req.TitlePattern, req.Active)
+	switch {
+	case errors.Is(err, ErrTemplateNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	case errors.Is(err, ErrTemplateNameTaken):
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	case err != nil:
+		writeWriteFailure(r.Context(), w, err, "failed to save template")
+		return
+	}
+	writeJSON(w, http.StatusOK, tpl)
 }
 
 func (m *DocumentsModule) deleteTemplateHandler(w http.ResponseWriter, r *http.Request) {

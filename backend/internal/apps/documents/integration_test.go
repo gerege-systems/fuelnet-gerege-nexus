@@ -873,6 +873,39 @@ func TestTemplatesCreateDocumentsAndKeepNamesUnique(t *testing.T) {
 		t.Errorf("a templated document must be routed like any other, got %q", doc.Status)
 	}
 
+	// Editing one changes what it will produce next, and retiring it stops it
+	// producing anything without destroying the record of what it was.
+	renamed, err := f.m.UpdateTemplate(ctx, f.tenantID, tpl.ID, "  Гэрээ 2027  ", "request", "Албан хүсэлт {year}", true)
+	if err != nil {
+		t.Fatalf("update template: %v", err)
+	}
+	if renamed.Name != "Гэрээ 2027" || renamed.DocType != "REQUEST" {
+		t.Errorf("update = %+v, want the trimmed name and the normalised type", renamed)
+	}
+	if _, err := f.m.UpdateTemplate(ctx, f.tenantID, tpl.ID, "", "REQUEST", "x", true); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("empty name: got %v, want ErrInvalidConfiguration", err)
+	}
+
+	retired, err := f.m.UpdateTemplate(ctx, f.tenantID, tpl.ID, "Гэрээ 2027", "REQUEST", "Албан хүсэлт {year}", false)
+	if err != nil {
+		t.Fatalf("retire template: %v", err)
+	}
+	if retired.Active {
+		t.Error("the template was not retired")
+	}
+	if _, err := f.m.CreateDocumentFromTemplate(ctx, f.tenantID, tpl.ID); !errors.Is(err, ErrTemplateNotFound) {
+		t.Errorf("using a retired template: got %v, want ErrTemplateNotFound", err)
+	}
+
+	// A name another template already holds is a conflict, not a validation error.
+	other, err := f.m.CreateTemplate(ctx, f.tenantID, "Өөр загвар", "CONTRACT", "Өөр {year}")
+	if err != nil {
+		t.Fatalf("create second template: %v", err)
+	}
+	if _, err := f.m.UpdateTemplate(ctx, f.tenantID, other.ID, "Гэрээ 2027", "CONTRACT", "Өөр {year}", true); !errors.Is(err, ErrTemplateNameTaken) {
+		t.Errorf("duplicate name on update: got %v, want ErrTemplateNameTaken", err)
+	}
+
 	if err := f.m.DeleteTemplate(ctx, f.tenantID, tpl.ID); err != nil {
 		t.Fatalf("delete template: %v", err)
 	}

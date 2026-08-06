@@ -411,6 +411,11 @@ export const api = {
   createDocumentTemplate: (data: { name: string; doc_type: string; title_pattern: string }) =>
     fetcher("/documents/templates", { method: "POST", body: JSON.stringify(data) }),
 
+  updateDocumentTemplate: (
+    id: string,
+    data: { name: string; doc_type: string; title_pattern: string; active: boolean }
+  ) => fetcher(`/documents/templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
   deleteDocumentTemplate: (id: string) => fetcher<void>(`/documents/templates/${id}`, { method: "DELETE" }),
 
   useDocumentTemplate: (id: string) => fetcher(`/documents/templates/${id}/use`, { method: "POST" }),

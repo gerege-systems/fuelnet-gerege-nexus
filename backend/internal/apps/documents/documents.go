@@ -151,6 +151,7 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// Templates a document is started from.
 		dr.Get("/templates", m.listTemplatesHandler)
 		dr.Post("/templates", m.createTemplateHandler)
+		dr.Put("/templates/{id}", m.updateTemplateHandler)
 		dr.Delete("/templates/{id}", m.deleteTemplateHandler)
 		dr.Post("/templates/{id}/use", m.useTemplateHandler)
 

@@ -167,6 +167,14 @@ export const documents = {
   },
   "documents.message.templates_failed": { mn: "Загваруудыг ачаалж чадсангүй", en: "Could not load templates" },
   "documents.message.template_saved": { mn: "Загвар хадгалагдлаа.", en: "Template saved." },
+  "documents.message.template_active_hint": {
+    mn: "Идэвхгүй загвараас баримт үүсгэхгүй, гэхдээ бүртгэл хадгалагдана.",
+    en: "An inactive template produces no documents, but its record is kept.",
+  },
+  "documents.message.template_inactive": {
+    mn: "Идэвхгүй загвар — эхлээд идэвхжүүлнэ үү.",
+    en: "This template is inactive — activate it first.",
+  },
   "documents.message.template_used": {
     mn: "\"{title}\" баримт үүсч, батлах дараалалд орлоо.",
     en: "\"{title}\" was created and is waiting for approval.",
