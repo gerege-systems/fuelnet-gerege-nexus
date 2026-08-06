@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -203,13 +204,21 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	list, err := m.ListDocuments(r.Context(), tenantID)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	page, err := m.ListDocuments(r.Context(), tenantID,
+		r.URL.Query().Get("status"), r.URL.Query().Get("order"), limit, offset)
+	if errors.Is(err, ErrInvalidDocument) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to fetch documents", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch documents")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, list)
+	writeJSON(w, http.StatusOK, page)
 }
 
 func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -718,25 +727,92 @@ const documentColumns = `
 	                     WHERE s.document_id = st.document_id
 	                       AND s.step_order = st.step_order))`
 
-func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string) ([]Document, error) {
+// DocumentPage is what the list endpoint answers with: a bounded slice of a tenant's
+// documents, and how many there are in total.
+//
+// The total is not decoration. A screen that shows the most recent two hundred of four
+// thousand documents and does not say so is a screen an operator searches in vain — and
+// this list is per-row expensive (each row counts its signatures and its outstanding
+// steps), so it cannot simply be unbounded either. Twenty thousand documents came to
+// 5.9 MB on every page load before this.
+type DocumentPage struct {
+	Documents []Document `json:"documents"`
+	// Total counts every document the filter matches, not just the ones returned.
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
+// ListLimitDefault and ListLimitMax bound one page of documents. The default is
+// generous enough that most tenants never see a partial list, and the maximum keeps a
+// caller from asking for the whole table by hand.
+const (
+	ListLimitDefault = 200
+	ListLimitMax     = 500
+)
+
+// ListOrderOldest asks for the oldest documents first. The approval queue wants it:
+// a queue is worked from its oldest end, and with the newest first the document that
+// has waited longest sits on the last page — where a screen showing one page cannot
+// see it, and would report the longest wait as whatever happened to be on page one.
+const ListOrderOldest = "oldest"
+
+// ListDocuments returns one page of a tenant's documents, newest first unless asked
+// for ListOrderOldest.
+//
+// status, when given, must be one of the statuses a document can hold; anything else
+// would silently answer with an empty page, which is worse than refusing. The approvals
+// queue passes PENDING_APPROVAL rather than filtering a capped page in the browser: a
+// document waiting for a signature must not fall off the end of a page full of approved
+// ones.
+func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID, status, order string, limit, offset int) (*DocumentPage, error) {
+	status = strings.ToUpper(strings.TrimSpace(status))
+	if status != "" && !slices.Contains([]string{StatusDraft, StatusPending, StatusApproved, StatusRejected}, status) {
+		return nil, fmt.Errorf("%w: unknown status %q", ErrInvalidDocument, status)
+	}
+	if limit <= 0 {
+		limit = ListLimitDefault
+	}
+	if limit > ListLimitMax {
+		limit = ListLimitMax
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	page := &DocumentPage{Documents: make([]Document, 0), Limit: limit, Offset: offset}
+	if err := m.db.QueryRow(ctx,
+		`SELECT count(*) FROM document_records d
+		  WHERE d.tenant_id = $1 AND ($2 = '' OR d.status = $2)`,
+		tenantID, status).Scan(&page.Total); err != nil {
+		return nil, fmt.Errorf("count documents: %w", err)
+	}
+
+	// The id breaks ties, so paging cannot show one document twice and skip another
+	// when several share a timestamp.
+	sort := "d.created_at DESC, d.id DESC"
+	if strings.EqualFold(strings.TrimSpace(order), ListOrderOldest) {
+		sort = "d.created_at ASC, d.id ASC"
+	}
 	rows, err := m.db.Query(ctx,
 		`SELECT `+documentColumns+`
 		   FROM document_records d
-		  WHERE d.tenant_id = $1 ORDER BY d.created_at DESC`, tenantID)
+		  WHERE d.tenant_id = $1 AND ($2 = '' OR d.status = $2)
+		  ORDER BY `+sort+`
+		  LIMIT $3 OFFSET $4`, tenantID, status, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list documents: %w", err)
 	}
 	defer rows.Close()
 
-	list := make([]Document, 0)
 	for rows.Next() {
 		doc, err := m.scanDocument(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan document: %w", err)
 		}
-		list = append(list, *doc)
+		page.Documents = append(page.Documents, *doc)
 	}
-	return list, rows.Err()
+	return page, rows.Err()
 }
 
 // getDocument re-reads one document through the same column list as the list, so

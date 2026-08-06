@@ -1346,6 +1346,98 @@ func TestAPollIsNotToldTheCeremonySucceededWhenItDidNot(t *testing.T) {
 	}
 }
 
+// The list is one page of a tenant's documents, and it says how many there are. Each
+// row counts its own signatures and outstanding steps, so an unbounded list was
+// expensive as well as unreadable — twenty thousand documents came to 5.9 MB on every
+// page load — and a screen that shows the newest two hundred of four thousand without
+// saying so is one an operator searches in vain.
+func TestTheListIsOnePageAndSaysHowManyThereAre(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Straight into the table: the fixture's own signing paths are not what is under
+	// test here, and 250 ceremonies would take minutes.
+	for i := 0; i < 250; i++ {
+		status := StatusPending
+		if i%2 == 0 {
+			status = StatusApproved
+		}
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_records (tenant_id, title, doc_type, status, created_at)
+			      VALUES ($1, $2, 'CONTRACT', $3, NOW() - make_interval(mins => $4))`,
+			f.tenantID, fmt.Sprintf("Багц %03d", i), status, i); err != nil {
+			t.Fatalf("insert %d: %v", i, err)
+		}
+	}
+
+	page, err := f.m.ListDocuments(ctx, f.tenantID, "", "", 0, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(page.Documents) != ListLimitDefault {
+		t.Errorf("got %d rows, want the default limit of %d", len(page.Documents), ListLimitDefault)
+	}
+	if page.Total != 250 {
+		t.Errorf("total = %d, want 250 — the screen has to be able to say what it is not showing", page.Total)
+	}
+	if page.Documents[0].Title != "Багц 000" {
+		t.Errorf("first row = %q, want the newest", page.Documents[0].Title)
+	}
+
+	// A caller cannot ask for the whole table by hand.
+	page, err = f.m.ListDocuments(ctx, f.tenantID, "", "", 10_000, 0)
+	if err != nil {
+		t.Fatalf("list with a large limit: %v", err)
+	}
+	if page.Limit != ListLimitMax {
+		t.Errorf("limit = %d, want it clamped to %d", page.Limit, ListLimitMax)
+	}
+	if len(page.Documents) != 250 {
+		t.Errorf("got %d rows, want all 250 — the clamp is above what this tenant holds", len(page.Documents))
+	}
+
+	// The next page continues where the first left off.
+	page, err = f.m.ListDocuments(ctx, f.tenantID, "", "", 100, 100)
+	if err != nil {
+		t.Fatalf("second page: %v", err)
+	}
+	if len(page.Documents) != 100 || page.Documents[0].Title != "Багц 100" {
+		t.Errorf("second page starts at %q with %d rows", page.Documents[0].Title, len(page.Documents))
+	}
+
+	// The queue asks the server for what is waiting, so a pending document cannot fall
+	// off the end of a page full of approved ones.
+	page, err = f.m.ListDocuments(ctx, f.tenantID, StatusPending, "", 0, 0)
+	if err != nil {
+		t.Fatalf("pending page: %v", err)
+	}
+	if page.Total != 125 {
+		t.Errorf("pending total = %d, want 125", page.Total)
+	}
+	for _, doc := range page.Documents {
+		if doc.Status != StatusPending {
+			t.Fatalf("the pending page carries a %s document", doc.Status)
+		}
+	}
+
+	// Oldest first, which is how a queue is worked — and the reason it matters: with
+	// the newest first the document that has waited longest is on the LAST page, so a
+	// screen showing one page would report the longest wait as whatever it happened to
+	// be holding.
+	page, err = f.m.ListDocuments(ctx, f.tenantID, StatusPending, ListOrderOldest, 10, 0)
+	if err != nil {
+		t.Fatalf("oldest first: %v", err)
+	}
+	if len(page.Documents) != 10 || page.Documents[0].Title != "Багц 249" {
+		t.Errorf("oldest page starts at %q, want the oldest document", page.Documents[0].Title)
+	}
+
+	// A status nothing can hold is refused rather than answered with an empty page.
+	if _, err := f.m.ListDocuments(ctx, f.tenantID, "WHATEVER", "", 0, 0); !errors.Is(err, ErrInvalidDocument) {
+		t.Errorf("got %v, want ErrInvalidDocument", err)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
@@ -1476,12 +1568,12 @@ func TestAnotherTenantsDocumentIsNotSignable(t *testing.T) {
 		t.Errorf("cross-tenant reject: got %v, want ErrNotSignable", err)
 	}
 
-	list, err := intruder.m.ListDocuments(ctx, intruder.tenantID)
+	page, err := intruder.m.ListDocuments(ctx, intruder.tenantID, "", "", 0, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(list) != 0 {
-		t.Errorf("intruder sees %d documents, want 0", len(list))
+	if len(page.Documents) != 0 || page.Total != 0 {
+		t.Errorf("intruder sees %d of %d documents, want none of none", len(page.Documents), page.Total)
 	}
 }
 

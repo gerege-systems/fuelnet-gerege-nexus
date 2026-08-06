@@ -32,11 +32,18 @@ export default function DocumentsPage() {
   // claim about the tenant, and twelve contracts may be sitting in the queue.
   const [loadFailed, setLoadFailed] = useState(false);
 
-  const loadData = async () => {
+  // How many rows this screen has asked for. The list is answered one page at a time —
+  // each row counts its own signatures and outstanding steps — so "Load more" raises
+  // this rather than fetching everything.
+  const [limit, setLimit] = useState(200);
+  const [total, setTotal] = useState(0);
+
+  const loadData = async (want = limit) => {
     setLoading(true);
     try {
-      const data = await api.getDocuments();
-      setDocuments(data || []);
+      const page = await api.getDocuments({ limit: want });
+      setDocuments(page?.documents || []);
+      setTotal(page?.total ?? 0);
       setLoadFailed(false);
     } catch (err: any) {
       setLoadFailed(true);
@@ -168,6 +175,28 @@ export default function DocumentsPage() {
               ))}
             </tbody>
           </table>
+
+          {/* A partial list says so. Silence here is what makes an operator search for
+              a contract that is simply on the next page. */}
+          {total > documents.length && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">
+              <p className="text-[11px] text-slate-500">
+                {t("documents.message.showing_some", { shown: documents.length, total })}
+              </p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  const want = limit + 200;
+                  setLimit(want);
+                  loadData(want);
+                }}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                {t("documents.action.load_more")}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

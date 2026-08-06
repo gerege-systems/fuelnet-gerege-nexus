@@ -35,11 +35,19 @@ export default function DocumentApprovalsPage() {
   // closes the tab. A load that failed says so instead.
   const [loadFailed, setLoadFailed] = useState(false);
 
-  const loadData = async () => {
+  // How many the queue has asked for, and how many are waiting in total.
+  const [limit, setLimit] = useState(200);
+  const [total, setTotal] = useState(0);
+
+  // The queue asks the SERVER for what is waiting. Filtering a capped page in the
+  // browser would let a document waiting for a signature fall off the end of a page
+  // full of approved ones — the one document this screen exists to show.
+  const loadData = async (want = limit) => {
     setLoading(true);
     try {
-      const data = await api.getDocuments();
-      setDocuments(data || []);
+      const page = await api.getDocuments({ status: PENDING, order: "oldest", limit: want });
+      setDocuments(page?.documents || []);
+      setTotal(page?.total ?? 0);
       setLoadFailed(false);
     } catch (err: any) {
       setLoadFailed(true);
@@ -65,11 +73,10 @@ export default function DocumentApprovalsPage() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [pending]);
 
-  // The oldest document in the queue is the one an approver should worry about.
-  const waitingSince = useMemo(() => {
-    if (pending.length === 0) return null;
-    return pending.reduce((oldest, doc) => (doc.created_at < oldest.created_at ? doc : oldest));
-  }, [pending]);
+  // The oldest document in the queue is the one an approver should worry about — and
+  // the server sends this page oldest first, so it is the first row rather than the
+  // oldest of whatever this page happens to hold.
+  const waitingSince = useMemo(() => pending[0] ?? null, [pending]);
 
   const days = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 
@@ -88,7 +95,8 @@ export default function DocumentApprovalsPage() {
           careful not to tell, so a failed load shows a dash in both places. */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <div className="text-2xl font-bold text-amber-600">{loadFailed ? "—" : pending.length}</div>
+          {/* The queue's real size, not this page's — the server counted it. */}
+          <div className="text-2xl font-bold text-amber-600">{loadFailed ? "—" : total}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.awaiting")}</div>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
@@ -97,9 +105,13 @@ export default function DocumentApprovalsPage() {
           </div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.oldest_days")}</div>
         </div>
+        {/* Counted over the rows this page holds, so a partial queue is marked: the
+            server counts the queue as a whole but not its breakdown by type. */}
         {byType.slice(0, 2).map(([docType, count]) => (
           <div key={docType} className="p-4 bg-white border border-slate-200 rounded-xl">
-            <div className="text-2xl font-bold text-indigo-600">{count}</div>
+            <div className="text-2xl font-bold text-indigo-600">
+              {total > pending.length ? `≥${count}` : count}
+            </div>
             <div className="text-[11px] text-slate-500 leading-snug mt-1 font-mono">{docType}</div>
           </div>
         ))}
@@ -153,6 +165,27 @@ export default function DocumentApprovalsPage() {
               ))}
             </tbody>
           </table>
+          {/* A queue shown in part says so, and can be read to the end. */}
+          {total > pending.length && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">
+              <p className="text-[11px] text-slate-500">
+                {t("documents.message.showing_some", { shown: pending.length, total })}
+              </p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  const want = limit + 200;
+                  setLimit(want);
+                  loadData(want);
+                }}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                {t("documents.action.load_more")}
+              </button>
+            </div>
+          )}
+
         </div>
       )}
 

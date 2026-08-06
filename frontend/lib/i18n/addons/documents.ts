@@ -39,6 +39,11 @@ export const documents = {
   "documents.field.waiting_days": { mn: "Хүлээсэн хоног", en: "Days waiting" },
 
   "documents.stat.awaiting": { mn: "Гарын үсэг хүлээж буй", en: "Awaiting signature" },
+  "documents.message.showing_some": {
+    mn: "{total} баримтаас хамгийн шинэ {shown}-г харуулж байна.",
+    en: "Showing the {shown} most recent of {total} documents.",
+  },
+  "documents.action.load_more": { mn: "Дараагийнхыг ачаалах", en: "Load more" },
   "documents.stat.oldest_days": { mn: "Хамгийн урт хүлээлт (хоног)", en: "Longest wait (days)" },
 
   "documents.category.legal_contract": { mn: "Гэрээ", en: "Legal Contract" },

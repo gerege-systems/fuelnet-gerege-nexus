@@ -326,9 +326,18 @@ export const api = {
     fetcher("/billing/invoices", { method: "POST", body: JSON.stringify(data) }),
 
   // Documents App (io.example.documents)
-  getDocuments: () =>
-    fetcher<
-      Array<{
+  // One page of a tenant's documents, newest first, with how many there are in total —
+  // each row counts its own signatures and outstanding steps, so the list cannot be
+  // unbounded, and a screen showing part of it has to be able to say so.
+  getDocuments: (params?: { status?: string; order?: "oldest"; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.order) query.set("order", params.order);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const suffix = query.toString() ? `?${query}` : "";
+    return fetcher<{
+      documents: Array<{
         id: string;
         title: string;
         doc_type: string;
@@ -342,8 +351,12 @@ export const api = {
         required_signatures: number;
         outstanding_steps: number;
         created_at: string;
-      }>
-    >("/documents"),
+      }>;
+      total: number;
+      limit: number;
+      offset: number;
+    }>(`/documents${suffix}`);
+  },
 
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
