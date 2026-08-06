@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -153,20 +154,26 @@ func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docTy
 
 	saved.UpdatedAt = &updatedAt
 
+	// The rule is stored by this point, so the change is recorded before anything
+	// else can fail. Reporting a 500 for a rule that IS saved — and skipping its
+	// audit entry — is worse than answering without the counts.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.retention_rule_changed", docType, map[string]any{
+		"retain_years": saved.RetainYears,
+	})
+
 	// The response is the same shape the list returns, so it carries the same
-	// counts rather than a pair of zeroes claiming nothing is filed.
+	// counts rather than a pair of zeroes claiming nothing is filed. They are
+	// presentation only: a failure here is logged and the saved rule still returned.
 	counts, err := m.retentionCounts(ctx, tenantID, map[string]RetentionRule{docType: saved})
 	if err != nil {
-		return nil, err
+		slog.WarnContext(ctx, "saved the retention rule but could not count its documents",
+			"doc_type", docType, "error", err)
+		return &saved, nil
 	}
 	if count, ok := counts[docType]; ok {
 		saved.Expired = count.expired
 		saved.Total = count.total
 	}
-
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.retention_rule_changed", docType, map[string]any{
-		"retain_years": saved.RetainYears,
-	})
 
 	return &saved, nil
 }

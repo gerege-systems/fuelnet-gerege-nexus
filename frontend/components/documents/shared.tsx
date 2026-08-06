@@ -61,9 +61,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// The deadline is a foreign absolute timestamp compared against this browser's
+// clock, so a workstation running fast could otherwise declare the request expired
+// before the first poll went out — while the citizen's phone was showing the
+// prompt. The grace absorbs ordinary skew, and the floor keeps a badly wrong clock
+// from cutting the ceremony off at the knees.
+const MIN_APPROVAL_WINDOW = 30_000;
+
 function deadlineOf(expiresAt: string) {
   const at = Date.parse(expiresAt);
-  return (Number.isNaN(at) ? Date.now() + FALLBACK_APPROVAL_TTL : at) + APPROVAL_GRACE;
+  const stated = (Number.isNaN(at) ? Date.now() + FALLBACK_APPROVAL_TTL : at) + APPROVAL_GRACE;
+  return Math.max(stated, Date.now() + MIN_APPROVAL_WINDOW);
 }
 
 /** The only state a document can be signed or rejected in. */
