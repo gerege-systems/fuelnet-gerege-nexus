@@ -587,12 +587,17 @@ export function SignatureDialog({
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {t("documents.field.reg_number")} *
               </label>
+              {/* The same bounds the server holds (RegNumberLimit..RegNumberMax), so a
+                  number that could never be a registration number is caught in the
+                  field rather than as a 400 after the operator has committed to it. */}
               <input
                 type="text"
-                placeholder="e.g. AA90010111"
+                placeholder="УБ99010111"
                 value={regNumber}
                 onChange={(e) => setRegNumber(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                minLength={8}
+                maxLength={64}
                 required
               />
             </div>
