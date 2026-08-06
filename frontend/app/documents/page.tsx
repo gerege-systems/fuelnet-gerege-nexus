@@ -124,8 +124,11 @@ export default function DocumentsPage() {
         setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
       }
     } finally {
-      // Unconditionally: the ticket decides who WRITES, not who stops the spinner.
-      setLoading(false);
+      // The spinner belongs to the load that is still running. A superseded one clearing
+      // it let the screen fall through to "no documents yet" while the newest load was
+      // still in flight — a claim about the tenant, made in the gap. The newest load
+      // always clears it in its own finally, so nothing can be left spinning.
+      if (loadTicket.current === mine) setLoading(false);
     }
   };
 
@@ -199,6 +202,23 @@ export default function DocumentsPage() {
       </div>
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
+
+      {/* With no rows there is no table footer to carry this, and a refresh that failed
+          after an action is exactly when there are none: the news that the list is stale
+          — and the way to try again — must not live only inside the table. */}
+      {loadFailed && documents.length === 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border border-amber-200 rounded-xl bg-amber-50">
+          <p className="text-[11px] text-amber-800">{t("documents.message.stale_rows")}</p>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => loadData()}
+            className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+          >
+            {t("documents.action.retry")}
+          </button>
+        </div>
+      )}
 
       {/* Paging reads the list; this is how a particular document is found. Each change
           starts again from the first page, because the rows below have to be the answer

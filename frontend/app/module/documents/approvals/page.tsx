@@ -39,6 +39,9 @@ export default function DocumentApprovalsPage() {
   // Whether a further page may exist. Kept separately from the total, which other
   // people can change between two of this walk's requests.
   const [hasMore, setHasMore] = useState(false);
+  // Whether the queue has been read at all yet. Until it has, the tiles have nothing to
+  // state and say so with a dash instead of standing at zero.
+  const [answered, setAnswered] = useState(false);
 
   // The queue asks the SERVER for what is waiting, oldest first. Filtering a capped
   // page in the browser would let a document waiting for a signature fall off the end
@@ -89,6 +92,7 @@ export default function DocumentApprovalsPage() {
       setHasMore(!ranOut);
       setDocuments(collected);
       setTotal(counted);
+      setAnswered(true);
       setLoadFailed(false);
     } catch (err: any) {
       // A superseded load says nothing: the newer one speaks for the screen.
@@ -102,7 +106,11 @@ export default function DocumentApprovalsPage() {
         setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
       }
     } finally {
-      setLoading(false);
+      // The spinner belongs to the load that is still running. A superseded one clearing
+      // it let the screen fall through to "no documents yet" while the newest load was
+      // still in flight — a claim about the tenant, made in the gap. The newest load
+      // always clears it in its own finally, so nothing can be left spinning.
+      if (loadTicket.current === mine) setLoading(false);
     }
   };
 
@@ -144,18 +152,37 @@ export default function DocumentApprovalsPage() {
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
+      {/* With no rows there is no table footer to carry this, and a refresh that failed
+          after an action is exactly when there are none: the news that the list is stale
+          — and the way to try again — must not live only inside the table. */}
+      {loadFailed && pending.length === 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border border-amber-200 rounded-xl bg-amber-50">
+          <p className="text-[11px] text-amber-800">{t("documents.message.stale_rows")}</p>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => loadData()}
+            className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+          >
+            {t("documents.action.retry")}
+          </button>
+        </div>
+      )}
+
       {/* A tile is as much a claim as a sentence. "Awaiting signature: 0" over a
           queue the page could not read is the same falsehood the prose below is
           careful not to tell, so a failed load shows a dash in both places. */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
           {/* The queue's real size, not this page's — the server counted it. */}
-          <div className="text-2xl font-bold text-amber-600">{loadFailed ? "—" : total}</div>
+          {/* A dash until there is something to state: during the first load these read
+              0, which is the same falsehood the dash exists to prevent. */}
+          <div className="text-2xl font-bold text-amber-600">{loadFailed || !answered ? "—" : total}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.awaiting")}</div>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
           <div className="text-2xl font-bold text-slate-700">
-            {loadFailed ? "—" : waitingSince ? days(waitingSince.created_at) : 0}
+            {loadFailed || !answered ? "—" : waitingSince ? days(waitingSince.created_at) : 0}
           </div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.oldest_days")}</div>
         </div>

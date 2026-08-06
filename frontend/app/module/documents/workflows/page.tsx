@@ -84,8 +84,20 @@ export default function DocumentWorkflowsPage() {
       // Only the chain that was saved is replaced, with what the server stored.
       // Reloading everything discarded steps the operator had typed into the other
       // document types under a banner saying only this one was saved.
+      //
+      // And only if this row still holds what was sent. The inputs stay editable while
+      // the request is in flight, so a step typed after clicking Save would otherwise be
+      // replaced by the server's answer to the older chain — work discarded under a
+      // banner saying the save succeeded.
       if (saved && Array.isArray((saved as Chain).steps)) {
-        editChain(chain.doc_type, (saved as Chain).steps);
+        const sent = JSON.stringify(chain.steps);
+        setChains((current) =>
+          current.map((row) =>
+            row.doc_type === chain.doc_type && JSON.stringify(row.steps) === sent
+              ? { ...row, steps: (saved as Chain).steps }
+              : row
+          )
+        );
       }
     } catch (err: any) {
       // The draft stays on screen: a refused save is usually one blank step name,
