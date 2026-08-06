@@ -1636,6 +1636,36 @@ func TestASearchIsForWhatWasTypedAndNothingElse(t *testing.T) {
 	}
 }
 
+// The search's case-insensitivity for Cyrillic rests on the database being able to fold
+// it, one way or the other. CI runs against the Debian postgres image, whose UTF-8 ctype
+// folds it directly, so a regression that only shows on a C-ctype cluster — which is what
+// the postgres:16-alpine image this stack deploys produces — would pass there unnoticed.
+//
+// So this asserts the assumption rather than the behaviour: whichever database the suite
+// is pointed at, EITHER its ctype folds Cyrillic or an ICU collation is available for
+// titleMatch to lean on. A cluster where neither is true is one where a Mongolian
+// operator cannot search, and it should say so here rather than in production.
+func TestThisDatabaseCanFoldCyrillicOneWayOrTheOther(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	var ctypeFolds, icu bool
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT 'ГЭРЭЭ 2026' ILIKE '%гэрээ%',
+		        EXISTS (SELECT 1 FROM pg_collation WHERE collname = 'und-x-icu')`).Scan(&ctypeFolds, &icu); err != nil {
+		t.Fatalf("ask the database: %v", err)
+	}
+	if !ctypeFolds && !icu {
+		var ctype string
+		_ = f.m.db.QueryRow(ctx,
+			`SELECT datctype FROM pg_database WHERE datname = current_database()`).Scan(&ctype)
+		t.Fatalf("this database (ctype %q) folds neither: ILIKE leaves Cyrillic alone and "+
+			"there is no ICU collation to use instead, so a Mongolian title search cannot be "+
+			"case-insensitive here", ctype)
+	}
+	t.Logf("ctype folds Cyrillic: %v; ICU collation available: %v", ctypeFolds, icu)
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
