@@ -46,6 +46,11 @@ type AppliedSignature struct {
 	SignerMethod    string    `json:"signer_method"`
 	SignatureHash   string    `json:"signature_hash"`
 	SignedAt        time.Time `json:"signed_at"`
+	// The eID certificate the citizen approved with, when the provider returned
+	// one. Empty for DAN, and for E-ID approvals whose certificate eID could not
+	// parse — a signature is still valid without it, it just carries less proof.
+	CertificateSerial string `json:"certificate_serial,omitempty"`
+	CertificateIssuer string `json:"certificate_issuer,omitempty"`
 }
 
 // ListWorkflows returns the chain for every document type, including the types
@@ -207,7 +212,8 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 	}
 
 	rows, err := m.db.Query(ctx,
-		`SELECT signer_name, signer_reg_number, signer_method, signature_hash, signed_at
+		`SELECT signer_name, signer_reg_number, signer_method, signature_hash, signed_at,
+		        COALESCE(certificate_serial, ''), COALESCE(certificate_issuer, '')
 		   FROM document_signatures
 		  WHERE tenant_id = $1 AND document_id = $2 ORDER BY signed_at`, tenantID, docID)
 	if err != nil {
@@ -219,7 +225,8 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 	for rows.Next() {
 		var sig AppliedSignature
 		if err := rows.Scan(&sig.SignerName, &sig.SignerRegNumber, &sig.SignerMethod,
-			&sig.SignatureHash, &sig.SignedAt); err != nil {
+			&sig.SignatureHash, &sig.SignedAt,
+			&sig.CertificateSerial, &sig.CertificateIssuer); err != nil {
 			return nil, fmt.Errorf("scan signature: %w", err)
 		}
 		list = append(list, sig)

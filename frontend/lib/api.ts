@@ -343,10 +343,30 @@ export const api = {
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
 
-  // Apply an E-ID / DAN digital signature. The document is APPROVED once its
-  // type's approval chain is satisfied; until then it stays pending.
-  signDocument: (id: string, data: { method: "EID" | "DAN"; reg_number: string; otp_code: string }) =>
-    fetcher(`/documents/${id}/sign`, { method: "POST", body: JSON.stringify(data) }),
+  // E-ID signing is an approval the citizen gives on their own device: start
+  // pushes the request — naming the document — and poll waits for them to answer.
+  // eID has no document-signing endpoint; that approval is the signature.
+  startEIDSignature: (id: string, regNumber: string) =>
+    fetcher<{
+      session_id: string;
+      verification_code: string;
+      expires_at: string;
+      device_link_url?: string;
+      display_text: string;
+    }>(`/documents/${id}/sign/eid/start`, { method: "POST", body: JSON.stringify({ reg_number: regNumber }) }),
+
+  // The API holds this open for up to 25s, so the caller passes a signal to drop
+  // it the moment the operator closes the dialog.
+  pollEIDSignature: (id: string, sessionId: string, signal?: AbortSignal) =>
+    fetcher<{ state: string; document?: any }>(`/documents/${id}/sign/eid/poll`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+      signal,
+    }),
+
+  // DAN exposes no approval push, so it stays a registration number and a code.
+  signDocumentWithDAN: (id: string, data: { reg_number: string; otp_code: string }) =>
+    fetcher(`/documents/${id}/sign/dan`, { method: "POST", body: JSON.stringify(data) }),
 
   // Send a draft for approval.
   routeDocument: (id: string) => fetcher(`/documents/${id}/route`, { method: "POST" }),
@@ -360,6 +380,8 @@ export const api = {
         signer_method: string;
         signature_hash: string;
         signed_at: string;
+        certificate_serial?: string;
+        certificate_issuer?: string;
       }>
     >(`/documents/${id}/signatures`),
 

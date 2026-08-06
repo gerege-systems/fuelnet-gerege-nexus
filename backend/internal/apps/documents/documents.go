@@ -156,8 +156,14 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// so "templates" and "policies" are never read as document ids.
 		dr.Get("/{id}/signatures", m.listSignaturesHandler)
 		dr.Post("/{id}/route", m.routeDocumentHandler)
-		dr.Post("/{id}/sign", m.signDocumentHandler)
 		dr.Post("/{id}/reject", m.rejectDocumentHandler)
+
+		// Signing is per channel, because the channels are not the same shape.
+		// E-ID is an approval the citizen gives on their own device, so it takes
+		// two calls; DAN is a code they read out, so it takes one.
+		dr.Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
+		dr.Post("/{id}/sign/eid/poll", m.pollEIDSignatureHandler)
+		dr.Post("/{id}/sign/dan", m.signWithDANHandler)
 	})
 }
 
@@ -202,7 +208,7 @@ func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusCreated, doc)
 }
 
-func (m *DocumentsModule) signDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -211,7 +217,6 @@ func (m *DocumentsModule) signDocumentHandler(w http.ResponseWriter, r *http.Req
 
 	docID := chi.URLParam(r, "id")
 	var req struct {
-		Method    string `json:"method"`     // "EID" or "DAN"
 		RegNumber string `json:"reg_number"` // Регистрийн дугаар
 		OTPCode   string `json:"otp_code"`   // Нэг удаагийн нууц код
 	}
@@ -220,7 +225,7 @@ func (m *DocumentsModule) signDocumentHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	doc, err := m.SignDocument(r.Context(), tenantID, docID, req.Method, req.RegNumber, req.OTPCode)
+	doc, err := m.SignWithDAN(r.Context(), tenantID, docID, req.RegNumber, req.OTPCode)
 	switch {
 	case errors.Is(err, ErrNotSignable):
 		writeError(w, http.StatusConflict, err.Error())
@@ -286,79 +291,43 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 	return m.getDocument(ctx, tenantID, id)
 }
 
-// normalizeSignerMethod resolves the requested channel. An empty request means
-// E-ID, which is the default channel; anything this module does not speak is the
-// caller's mistake rather than a server fault.
-func normalizeSignerMethod(method string) (string, error) {
-	method = strings.ToUpper(strings.TrimSpace(method))
-	if method == "" {
-		method = SignerEID
-	}
-	if method != SignerEID && method != SignerDAN {
-		return "", fmt.Errorf("%w: unsupported signer method %q (expected EID or DAN)", ErrSignatureRejected, method)
-	}
-	return method, nil
-}
-
 // verifiedSignature is what a national identity channel hands back once it has
 // vouched for the signer.
 type verifiedSignature struct {
 	SignerName string
 	RegNumber  string
-	Hash       string
+	// Hash references the act of approval: the DAN session for DAN, the eID
+	// session for E-ID.
+	Hash string
+	// CertificateSerial and CertificateIssuer are the citizen's eID certificate,
+	// when the provider returned one. They say whose key gave the approval, which
+	// is what a dispute turns on; a session id alone only says one happened.
+	CertificateSerial string
+	CertificateIssuer string
 }
 
-// verifySigner puts the caller in front of the requested channel. Neither channel
-// has a live implementation for this flow yet: with EID_MOCK_MODE / DAN_MOCK_MODE
-// off, both refuse, and the refusal reaches the caller as ErrSignatureRejected.
-func (m *DocumentsModule) verifySigner(ctx context.Context, method, regNumber, otpCode string) (*verifiedSignature, error) {
-	switch method {
-	case SignerEID:
-		identity, err := m.eidSvc.AuthenticateWithMethod(ctx, regNumber, otpCode, eid.AuthMethodMobileOTP)
-		if err != nil {
-			return nil, fmt.Errorf("%w: E-ID verification failed: %w", ErrSignatureRejected, err)
-		}
-		return &verifiedSignature{
-			SignerName: strings.TrimSpace(identity.FirstName+" "+identity.LastName) + " (E-ID баталгаажсан)",
-			RegNumber:  identity.RegNumber,
-			Hash:       identity.SignatureHash,
-		}, nil
-	case SignerDAN:
-		profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
-		if err != nil {
-			return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
-		}
-		return &verifiedSignature{
-			SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
-			RegNumber:  profile.RegNumber,
-			Hash:       "dan_sig_" + profile.DANSessionID,
-		}, nil
-	default:
-		return nil, fmt.Errorf("%w: unsupported signer method %q (expected EID or DAN)", ErrSignatureRejected, method)
-	}
+// signaturePreflight is everything the type's configuration decides before a
+// citizen is asked to approve anything.
+type signaturePreflight struct {
+	DocType  string
+	Policy   SignaturePolicy
+	Required int
+	Named    []string
 }
 
-// SignDocument verifies the signer through the requested national identity
-// channel, records the signature in the document's ledger, and approves the
-// document once its type's approval chain is satisfied. A type with no chain
-// needs one signature, which is how the app behaved before chains existed.
-func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, method, regNumber, otpCode string) (*Document, error) {
+// preflightSignature checks that the document is still awaiting approval and that
+// the tenant's policy allows this channel. Both signing paths run it: E-ID before
+// pushing a request to somebody's phone, DAN before asking for a code — there is
+// no point troubling a citizen for a document their signature cannot land on.
+func (m *DocumentsModule) preflightSignature(ctx context.Context, tenantID, docID, method string) (*signaturePreflight, error) {
 	// document_records.id is a uuid column, so a malformed path parameter would
 	// otherwise surface as a storage error. It is simply not a document we hold.
 	if uuid.Validate(docID) != nil {
 		return nil, ErrNotSignable
 	}
 
-	method, err := normalizeSignerMethod(method)
-	if err != nil {
-		return nil, err
-	}
-
-	// The policy and the chain are per document type, so the type has to be read
-	// before the signer is put in front of a provider. The lock comes later: a
-	// live E-ID call must not be made while holding a row lock.
 	var docType string
-	err = m.db.QueryRow(ctx,
+	err := m.db.QueryRow(ctx,
 		`SELECT doc_type FROM document_records
 		  WHERE id = $1 AND tenant_id = $2 AND status = $3`,
 		docID, tenantID, StatusPending).Scan(&docType)
@@ -382,18 +351,46 @@ func (m *DocumentsModule) SignDocument(ctx context.Context, tenantID, docID, met
 	if err != nil {
 		return nil, err
 	}
+	return &signaturePreflight{DocType: docType, Policy: policy, Required: required, Named: named}, nil
+}
 
-	signature, err := m.verifySigner(ctx, method, regNumber, otpCode)
+// checkNamedSigner enforces the policy's named-signer rule against the identity
+// the provider actually vouched for, never against what the caller typed.
+func (pre *signaturePreflight) checkNamedSigner(regNumber string) error {
+	if !pre.Policy.RequireNamedSigner {
+		return nil
+	}
+	if slices.Contains(pre.Named, regNumber) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s is not named by the approval chain for %s documents",
+		ErrSignatureRejected, regNumber, pre.DocType)
+}
+
+// SignWithDAN signs through dan.gerege.mn's registration-number and one-time-code
+// gateway. DAN exposes no approval-push flow in this platform, so unlike E-ID it
+// is still a single call — and it only succeeds while DAN_MOCK_MODE is on, because
+// the live DAN client has no implementation for it.
+func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regNumber, otpCode string) (*Document, error) {
+	pre, err := m.preflightSignature(ctx, tenantID, docID, SignerDAN)
 	if err != nil {
 		return nil, err
 	}
 
-	if policy.RequireNamedSigner && !slices.Contains(named, signature.RegNumber) {
-		return nil, fmt.Errorf("%w: %s is not named by the approval chain for %s documents",
-			ErrSignatureRejected, signature.RegNumber, docType)
+	profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
+	if err != nil {
+		return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
+	}
+	signature := &verifiedSignature{
+		SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
+		RegNumber:  profile.RegNumber,
+		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 
-	return m.recordSignature(ctx, tenantID, docID, method, required, signature)
+	if err := pre.checkNamedSigner(signature.RegNumber); err != nil {
+		return nil, err
+	}
+	return m.recordSignature(ctx, tenantID, docID, SignerDAN, pre.Required, signature)
 }
 
 // recordSignature writes the signature and decides whether the chain is complete.
@@ -422,10 +419,12 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO document_signatures
 		        (tenant_id, document_id, signer_name, signer_reg_number,
-		         signer_method, signature_hash, signed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		         signer_method, signature_hash, signed_at,
+		         certificate_serial, certificate_issuer)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''))`,
 		tenantID, docID, signature.SignerName, signature.RegNumber,
-		method, signature.Hash, signedAt)
+		method, signature.Hash, signedAt,
+		signature.CertificateSerial, signature.CertificateIssuer)
 	if isUniqueViolation(err) {
 		return nil, ErrAlreadySigned
 	}

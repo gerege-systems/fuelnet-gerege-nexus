@@ -404,10 +404,16 @@ func appRequestPermission(appID, method, path string) string {
 	// Applying a signature is a different authority from routing a document: an
 	// approver may sign what they cannot draft, and a clerk may draft what they
 	// cannot sign. The documents module declares documents.sign for exactly that
-	// split, so the two decision routes are checked against it rather than
-	// against the blanket .manage right.
-	if prefix == "documents" && (strings.HasSuffix(path, "/sign") || strings.HasSuffix(path, "/reject")) {
-		return "documents.sign"
+	// split, so the decision routes are checked against it rather than against
+	// the blanket .manage right.
+	//
+	// The match is on a "/sign/" segment or a trailing "/sign", which covers
+	// /sign/eid/start, /sign/eid/poll and /sign/dan without catching
+	// /signatures — reading the ledger is an ordinary read.
+	if prefix == "documents" {
+		if strings.Contains(path, "/sign/") || strings.HasSuffix(path, "/sign") || strings.HasSuffix(path, "/reject") {
+			return "documents.sign"
+		}
 	}
 	if method == http.MethodGet || method == http.MethodHead {
 		return prefix + ".read"

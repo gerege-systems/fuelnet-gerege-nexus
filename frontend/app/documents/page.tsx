@@ -37,7 +37,7 @@ export default function DocumentsPage() {
     }
   };
 
-  const { busyId, message, setMessage, sign, reject } = useDocumentActions(loadData);
+  const { busyId, message, setMessage, succeed, fail, reject } = useDocumentActions(loadData);
 
   useEffect(() => {
     loadData();
@@ -180,12 +180,12 @@ export default function DocumentsPage() {
       {signTarget && (
         <SignatureDialog
           doc={signTarget}
-          busy={busyId === signTarget.id}
-          onCancel={() => setSignTarget(null)}
-          onSubmit={async (form) => {
-            const ok = await sign(signTarget, form);
-            if (ok) setSignTarget(null);
+          onClose={() => setSignTarget(null)}
+          onDone={async (text) => {
+            setSignTarget(null);
+            await succeed(text);
           }}
+          onError={fail}
         />
       )}
     </div>

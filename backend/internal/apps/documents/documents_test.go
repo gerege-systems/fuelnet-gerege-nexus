@@ -6,19 +6,25 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
+	"unicode/utf8"
 )
 
-// The HTTP handlers turn these error classes into 409, 400 and 500, so the class
-// a failure lands in decides whether the caller is told to fix something or told
-// the server broke. A nil pool is safe here: every case is settled before a query.
-func TestSignAndRejectRefuseAMalformedID(t *testing.T) {
+// The HTTP handlers turn these error classes into 409, 404, 400 and 500, so the
+// class a failure lands in decides whether the caller is told to fix something or
+// told the server broke. A nil pool is safe here: every case is settled before a
+// query, and before any citizen is troubled.
+func TestSigningRefusesAMalformedID(t *testing.T) {
 	ctx := context.Background()
 	module := &DocumentsModule{}
 
-	if _, err := module.SignDocument(ctx, "tenant", "not-a-uuid", SignerEID, "AA90010111", "123456"); !errors.Is(err, ErrNotSignable) {
-		t.Errorf("sign: got %v, want ErrNotSignable", err)
+	if _, err := module.SignWithDAN(ctx, "tenant", "not-a-uuid", "AA90010111", "123456"); !errors.Is(err, ErrNotSignable) {
+		t.Errorf("dan: got %v, want ErrNotSignable", err)
+	}
+	if _, err := module.StartEIDSignature(ctx, "tenant", "not-a-uuid", "AA90010111"); !errors.Is(err, ErrNotSignable) {
+		t.Errorf("eid start: got %v, want ErrNotSignable", err)
+	}
+	if _, err := module.PollEIDSignature(ctx, "tenant", "not-a-uuid", "some-session"); !errors.Is(err, ErrSignSessionUnknown) {
+		t.Errorf("eid poll: got %v, want ErrSignSessionUnknown", err)
 	}
 	if _, err := module.RejectDocument(ctx, "tenant", "not-a-uuid"); !errors.Is(err, ErrNotSignable) {
 		t.Errorf("reject: got %v, want ErrNotSignable", err)
@@ -37,52 +43,29 @@ func TestSignAndRejectRefuseAMalformedID(t *testing.T) {
 	}
 }
 
-func TestNormalizeSignerMethod(t *testing.T) {
-	for _, tc := range []struct {
-		in   string
-		want string
-	}{
-		{"", SignerEID}, // an unstated channel means E-ID
-		{"  ", SignerEID},
-		{"eid", SignerEID},
-		{" DAN ", SignerDAN},
-		{"dan", SignerDAN},
-	} {
-		got, err := normalizeSignerMethod(tc.in)
-		if err != nil {
-			t.Errorf("%q: unexpected error %v", tc.in, err)
-			continue
-		}
-		if got != tc.want {
-			t.Errorf("%q: got %q, want %q", tc.in, got, tc.want)
-		}
+// What the citizen reads on their phone is the only thing telling them what they
+// are approving, so it has to name the document — approving a sign-in prompt is
+// not consent to sign a contract.
+func TestSignatureDisplayTextNamesTheDocument(t *testing.T) {
+	got := signatureDisplayText("Хамтран ажиллах гэрээ 2026")
+	if !strings.Contains(got, "Хамтран ажиллах гэрээ 2026") {
+		t.Errorf("got %q, want the document title in it", got)
+	}
+	if !strings.Contains(got, "гарын үсэг") {
+		t.Errorf("got %q, want it to say what is being asked", got)
 	}
 
-	for _, in := range []string{"SMARTCARD", "pki", "e-id"} {
-		if _, err := normalizeSignerMethod(in); !errors.Is(err, ErrSignatureRejected) {
-			t.Errorf("%q: got %v, want ErrSignatureRejected", in, err)
-		}
+	// eID limits the text, so a long title is cut rather than dropped — measured
+	// in runes, because a Cyrillic title would otherwise be sliced mid-character.
+	long := signatureDisplayText(strings.Repeat("Урт нэр ", 40))
+	if runes := []rune(long); len(runes) > 120 {
+		t.Errorf("display text is %d runes, want at most 120", len(runes))
 	}
-}
-
-// An identity the provider will not vouch for is the caller's problem, not a
-// server fault, whichever channel refused it.
-func TestVerifySignerReportsARefusalAsRejected(t *testing.T) {
-	module := &DocumentsModule{eidSvc: eid.NewEIDService()}
-	ctx := context.Background()
-
-	// The E-ID client refuses a registration number under eight characters
-	// before it chooses between live and mock mode, so this holds either way.
-	_, err := module.verifySigner(ctx, SignerEID, "AA1", "123456")
-	if !errors.Is(err, ErrSignatureRejected) {
-		t.Fatalf("got %v, want ErrSignatureRejected", err)
+	if !strings.HasSuffix(long, "…") {
+		t.Errorf("got %q, want a cut title to be marked as cut", long)
 	}
-	if got := err.Error(); !strings.Contains(got, "E-ID") {
-		t.Errorf("got %q, want the message to name the channel that refused", got)
-	}
-
-	if _, err := module.verifySigner(ctx, "SMARTCARD", "AA90010111", ""); !errors.Is(err, ErrSignatureRejected) {
-		t.Errorf("unsupported channel: got %v, want ErrSignatureRejected", err)
+	if !utf8.ValidString(long) {
+		t.Error("the cut left invalid UTF-8 behind")
 	}
 }
 
@@ -105,6 +88,31 @@ func TestSignaturePolicyDefaultsToBothChannels(t *testing.T) {
 	only := SignaturePolicy{DocType: "CONTRACT", AllowEID: true}
 	if only.allows(SignerDAN) {
 		t.Error("DAN must be refused when the policy allows E-ID only")
+	}
+}
+
+// The named-signer rule is checked against the registration number a provider
+// vouched for, so the check itself has to be exact about what it accepts.
+func TestCheckNamedSigner(t *testing.T) {
+	open := &signaturePreflight{DocType: "CONTRACT", Policy: SignaturePolicy{AllowEID: true}}
+	if err := open.checkNamedSigner("AA90010111"); err != nil {
+		t.Errorf("a policy that names nobody must accept anyone: %v", err)
+	}
+
+	strict := &signaturePreflight{
+		DocType: "CONTRACT",
+		Policy:  SignaturePolicy{AllowEID: true, RequireNamedSigner: true},
+		Named:   []string{"CC90010111"},
+	}
+	if err := strict.checkNamedSigner("CC90010111"); err != nil {
+		t.Errorf("the named signer must be accepted: %v", err)
+	}
+	err := strict.checkNamedSigner("AA90010111")
+	if !errors.Is(err, ErrSignatureRejected) {
+		t.Errorf("got %v, want ErrSignatureRejected", err)
+	}
+	if !strings.Contains(err.Error(), "AA90010111") {
+		t.Errorf("got %q, want the refused signer named so an operator can tell why", err)
 	}
 }
 

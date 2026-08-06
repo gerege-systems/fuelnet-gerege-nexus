@@ -1,9 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { AlertTriangle, Ban, CheckCircle, Clock, FileText, PenLine, ShieldCheck, Users, X, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle,
+  Clock,
+  FileText,
+  Loader2,
+  PenLine,
+  ShieldCheck,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react";
 
 /** A document_records row as the documents API returns it. */
 export interface DocumentRecord {
@@ -28,10 +40,13 @@ export type SignMethod = "EID" | "DAN";
 /** The only state a document can be signed or rejected in. */
 export const PENDING = "PENDING_APPROVAL";
 
-export interface SignForm {
-  method: SignMethod;
-  reg_number: string;
-  otp_code: string;
+/** What the citizen's device needs to be found, and what the operator reads out. */
+export interface EIDSignSession {
+  session_id: string;
+  verification_code: string;
+  expires_at: string;
+  device_link_url?: string;
+  display_text: string;
 }
 
 /**
@@ -188,35 +203,22 @@ export function Banner({ message, onDismiss }: { message: ActionMessage; onDismi
 }
 
 /**
- * Sign and reject, shared by the documents list and the approval queue so both
- * screens report the same outcomes. `onChanged` reloads the caller's rows.
+ * Reject and outcome reporting, shared by the documents list and the approval
+ * queue so both screens say the same things. Signing itself lives in
+ * SignatureDialog, because E-ID signing is a conversation with the citizen's
+ * device rather than one call. `onChanged` reloads the caller's rows.
  */
 export function useDocumentActions(onChanged: () => void | Promise<void>) {
   const { t } = useI18n();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<ActionMessage | null>(null);
 
-  const sign = async (doc: DocumentRecord, form: SignForm) => {
-    setBusyId(doc.id);
-    setMessage(null);
-    try {
-      await api.signDocument(doc.id, form);
-      setMessage({
-        type: "success",
-        text: t("documents.message.sign_success", {
-          title: doc.title,
-          method: form.method === "EID" ? "E-ID" : "DAN",
-        }),
-      });
-      await onChanged();
-      return true;
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || t("documents.message.sign_failed") });
-      return false;
-    } finally {
-      setBusyId(null);
-    }
+  const succeed = async (text: string) => {
+    setMessage({ type: "success", text });
+    await onChanged();
   };
+
+  const fail = (text: string) => setMessage({ type: "error", text });
 
   const reject = async (doc: DocumentRecord) => {
     if (!confirm(t("documents.message.reject_confirm", { title: doc.title }))) return;
@@ -233,7 +235,7 @@ export function useDocumentActions(onChanged: () => void | Promise<void>) {
     }
   };
 
-  return { busyId, message, setMessage, sign, reject };
+  return { busyId, message, setMessage, succeed, fail, reject };
 }
 
 /** The Sign / Reject pair, shown only while a document is still pending. */
@@ -277,23 +279,103 @@ export function RowActions({
   );
 }
 
+
 /**
- * Collects the signer's credentials. Presentational: the caller owns the API
- * call so the list and the queue can report the result their own way.
+ * The signing ceremony, which is not the same shape for the two channels.
+ *
+ * E-ID has no document-signing endpoint. What it has is an approval the citizen
+ * gives on their own registered device, against a display text that names the
+ * document — and that approval *is* the signature. So the dialog pushes the
+ * request, shows the operator the verification code to read out, and waits.
+ *
+ * DAN exposes no approval push, so it stays a registration number and a code.
+ *
+ * The dialog owns these calls rather than the caller: a conversation with
+ * somebody's phone has states of its own, and they belong next to the screen
+ * showing them.
  */
 export function SignatureDialog({
   doc,
-  busy,
-  onCancel,
-  onSubmit,
+  onClose,
+  onDone,
+  onError,
 }: {
   doc: DocumentRecord;
-  busy: boolean;
-  onCancel: () => void;
-  onSubmit: (form: SignForm) => void;
+  onClose: () => void;
+  onDone: (message: string) => void | Promise<void>;
+  onError: (message: string) => void;
 }) {
   const { t } = useI18n();
-  const [form, setForm] = useState<SignForm>({ method: "EID", reg_number: "", otp_code: "" });
+  const [method, setMethod] = useState<SignMethod>("EID");
+  const [regNumber, setRegNumber] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [session, setSession] = useState<EIDSignSession | null>(null);
+
+  // Wait on the citizen for as long as the dialog is open, and stop the moment it
+  // is not: the poll is a request the API holds open, so leaving one running
+  // behind a closed dialog would keep asking about a signature nobody awaits.
+  useEffect(() => {
+    if (!session) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const wait = async () => {
+      while (!cancelled) {
+        try {
+          const progress = await api.pollEIDSignature(doc.id, session.session_id, controller.signal);
+          if (cancelled) return;
+
+          if (progress.state === "COMPLETE") {
+            await onDone(t("documents.message.sign_success", { title: doc.title, method: "E-ID" }));
+            return;
+          }
+          if (progress.state === "REFUSED") {
+            onError(t("documents.message.approval_refused"));
+            setSession(null);
+            return;
+          }
+          if (progress.state === "EXPIRED") {
+            onError(t("documents.message.approval_expired"));
+            setSession(null);
+            return;
+          }
+        } catch (err: any) {
+          if (cancelled || controller.signal.aborted) return;
+          onError(err?.message || t("documents.message.sign_failed"));
+          setSession(null);
+          return;
+        }
+      }
+    };
+    void wait();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // onDone/onError are recreated every render by the caller; re-running this on
+    // their identity would restart the wait on every keystroke elsewhere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, doc.id, doc.title]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (method === "DAN") {
+        await api.signDocumentWithDAN(doc.id, { reg_number: regNumber, otp_code: otpCode });
+        await onDone(t("documents.message.sign_success", { title: doc.title, method: "DAN" }));
+        return;
+      }
+      setSession(await api.startEIDSignature(doc.id, regNumber));
+    } catch (err: any) {
+      onError(err?.message || t("documents.message.sign_failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
@@ -304,77 +386,115 @@ export function SignatureDialog({
         </h2>
         <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmit(form);
-          }}
-          className="space-y-4"
-        >
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              {t("documents.field.signature_method")}
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["EID", "DAN"] as SignMethod[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setForm({ ...form, method: m })}
-                  className={`py-2 rounded-lg text-xs font-semibold border transition ${
-                    form.method === m
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  {m === "EID" ? "E-ID (eidmongolia.mn)" : "DAN (dan.gerege.mn)"}
-                </button>
-              ))}
+        {session ? (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-center">
+              <p className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wide">
+                {t("documents.field.verification_code")}
+              </p>
+              <p className="text-3xl font-bold tracking-[0.2em] text-indigo-900 mt-1">
+                {session.verification_code}
+              </p>
+              <p className="text-[11px] text-indigo-700 mt-2">{t("documents.message.verification_code_hint")}</p>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {t("documents.field.reg_number")} *
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. AA90010111"
-              value={form.reg_number}
-              onChange={(e) => setForm({ ...form, reg_number: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
-              required
-            />
-          </div>
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <span>{t("documents.message.awaiting_approval", { reg: regNumber.toUpperCase() })}</span>
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">{t("documents.field.otp_code")}</label>
-            <input
-              type="text"
-              placeholder="e.g. 123456"
-              value={form.otp_code}
-              onChange={(e) => setForm({ ...form, otp_code: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
-            />
-          </div>
+            <p className="text-[11px] text-slate-500">
+              {t("documents.message.approval_display_text")}: <span className="italic">{session.display_text}</span>
+            </p>
 
-          <div className="flex items-center space-x-2 pt-2">
             <button
               type="button"
-              onClick={onCancel}
-              className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
+              onClick={onClose}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
             >
               {t("base.action.cancel")}
             </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs disabled:opacity-50"
-            >
-              {busy ? t("documents.message.signing") : t("documents.action.sign")}
-            </button>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                {t("documents.field.signature_method")}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["EID", "DAN"] as SignMethod[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMethod(m)}
+                    className={`py-2 rounded-lg text-xs font-semibold border transition ${
+                      method === m
+                        ? "bg-indigo-600 text-white border-indigo-600"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {m === "EID" ? "E-ID (eidmongolia.mn)" : "DAN (dan.gerege.mn)"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                {method === "EID"
+                  ? t("documents.message.eid_method_hint")
+                  : t("documents.message.dan_method_hint")}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t("documents.field.reg_number")} *
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. AA90010111"
+                value={regNumber}
+                onChange={(e) => setRegNumber(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                required
+              />
+            </div>
+
+            {method === "DAN" && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {t("documents.field.otp_code")}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 123456"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
+              >
+                {t("base.action.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs disabled:opacity-50"
+              >
+                {busy
+                  ? t("documents.message.signing")
+                  : method === "EID"
+                    ? t("documents.action.request_approval")
+                    : t("documents.action.sign")}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -71,6 +73,48 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{m: m, tenantID: tenantID}
 }
 
+// signWithEID runs the whole approval ceremony: push the request to the citizen,
+// then poll until they approve. In mock mode the citizen approves after a moment,
+// which is exactly the shape a live approval has.
+func signWithEID(t *testing.T, f *fixture, docID, regNumber string) (*Document, error) {
+	t.Helper()
+	ctx := context.Background()
+
+	session, err := f.m.StartEIDSignature(ctx, f.tenantID, docID, regNumber)
+	if err != nil {
+		return nil, err
+	}
+	if session.VerificationCode == "" {
+		t.Error("the citizen has no code to check the request against")
+	}
+	if !strings.Contains(session.DisplayText, "гарын үсэг") {
+		t.Errorf("display text %q does not say what is being approved", session.DisplayText)
+	}
+	return pollUntilApproved(t, f, docID, session.SessionID)
+}
+
+// pollUntilApproved waits on one already-started session, the way a screen does.
+func pollUntilApproved(t *testing.T, f *fixture, docID, sessionID string) (*Document, error) {
+	t.Helper()
+	ctx := context.Background()
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		progress, err := f.m.PollEIDSignature(ctx, f.tenantID, docID, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if progress.State == ApprovalComplete {
+			return progress.Document, nil
+		}
+		if progress.State != ApprovalRunning {
+			return nil, fmt.Errorf("approval ended as %s", progress.State)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return nil, errors.New("the approval never completed")
+}
+
 // randomSuffix borrows the database's uuid generator rather than math/rand, so a
 // test never has to seed anything to get an unused tenant slug.
 func randomSuffix(t *testing.T) string {
@@ -98,7 +142,7 @@ func TestSigningApprovesWhenNoChainIsConfigured(t *testing.T) {
 		t.Errorf("new document progress = %d/%d, want 0/1", doc.SignatureCount, doc.RequiredSignatures)
 	}
 
-	signed, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "AA90010111", "123456")
+	signed, err := signWithEID(t, f, doc.ID, "AA90010111")
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -123,12 +167,86 @@ func TestSigningApprovesWhenNoChainIsConfigured(t *testing.T) {
 		t.Fatalf("ledger has %d rows, want 1", len(ledger))
 	}
 	if ledger[0].SignerMethod != SignerEID || ledger[0].SignatureHash == "" {
-		t.Errorf("ledger row = %+v, want an E-ID row carrying a hash", ledger[0])
+		t.Errorf("ledger row = %+v, want an E-ID row referencing the approval", ledger[0])
 	}
 
-	// A decided document is not signable again.
-	if _, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "BB90010111", "123456"); !errors.Is(err, ErrNotSignable) {
+	// A decided document is not signable again — the refusal comes before anybody
+	// is asked to approve anything.
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "BB90010111"); !errors.Is(err, ErrNotSignable) {
 		t.Errorf("second sign: got %v, want ErrNotSignable", err)
+	}
+}
+
+// An approval is given for one document, against a display text naming it. It
+// must not be redeemable against another, or the citizen's consent has been moved
+// to something they never read.
+func TestAnApprovalCannotBeMovedToAnotherDocument(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	signMe, err := f.m.CreateDocument(ctx, f.tenantID, "Иргэн харсан гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	other, err := f.m.CreateDocument(ctx, f.tenantID, "Иргэн хараагүй гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	session, err := f.m.StartEIDSignature(ctx, f.tenantID, signMe.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	if _, err := f.m.PollEIDSignature(ctx, f.tenantID, other.ID, session.SessionID); !errors.Is(err, ErrSignSessionUnknown) {
+		t.Errorf("polling another document with this session: got %v, want ErrSignSessionUnknown", err)
+	}
+	// And the document the citizen never saw stays unsigned.
+	untouched, err := f.m.getDocument(ctx, f.tenantID, other.ID)
+	if err != nil {
+		t.Fatalf("read other: %v", err)
+	}
+	if untouched.SignatureCount != 0 || untouched.Status != StatusPending {
+		t.Errorf("other document = %d signature(s), status %q; want it untouched", untouched.SignatureCount, untouched.Status)
+	}
+
+	// This same session, polled against the document it was started for, signs it.
+	signed, err := pollUntilApproved(t, f, signMe.ID, session.SessionID)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	// And it is spent: polling again reports the document it already signed rather
+	// than signing a second time.
+	again, err := f.m.PollEIDSignature(ctx, f.tenantID, signMe.ID, session.SessionID)
+	if err != nil {
+		t.Fatalf("re-poll: %v", err)
+	}
+	if again.State != ApprovalComplete || again.Document == nil {
+		t.Fatalf("re-poll = %+v, want the signature it already produced", again)
+	}
+	if again.Document.SignatureCount != signed.SignatureCount {
+		t.Errorf("re-poll changed the count to %d, want %d", again.Document.SignatureCount, signed.SignatureCount)
+	}
+}
+
+// Another tenant cannot poll a session even holding its id.
+func TestASignSessionIsScopedToItsTenant(t *testing.T) {
+	owner := newFixture(t)
+	intruder := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := owner.m.CreateDocument(ctx, owner.tenantID, "Бусдын гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	session, err := owner.m.StartEIDSignature(ctx, owner.tenantID, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	if _, err := intruder.m.PollEIDSignature(ctx, intruder.tenantID, doc.ID, session.SessionID); !errors.Is(err, ErrSignSessionUnknown) {
+		t.Errorf("cross-tenant poll: got %v, want ErrSignSessionUnknown", err)
 	}
 }
 
@@ -151,7 +269,7 @@ func TestAChainOfTwoNeedsTwoDifferentSigners(t *testing.T) {
 		t.Fatalf("required = %d, want 2", doc.RequiredSignatures)
 	}
 
-	first, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "AA90010111", "123456")
+	first, err := signWithEID(t, f, doc.ID, "AA90010111")
 	if err != nil {
 		t.Fatalf("first sign: %v", err)
 	}
@@ -162,12 +280,12 @@ func TestAChainOfTwoNeedsTwoDifferentSigners(t *testing.T) {
 		t.Errorf("progress = %d/2, want 1/2", first.SignatureCount)
 	}
 
-	// The same citizen signing again is the same approval, not the second one.
-	if _, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "AA90010111", "123456"); !errors.Is(err, ErrAlreadySigned) {
+	// The same citizen approving again is the same approval, not the second one.
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); !errors.Is(err, ErrAlreadySigned) {
 		t.Errorf("same signer twice: got %v, want ErrAlreadySigned", err)
 	}
 
-	second, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerDAN, "BB90010111", "123456")
+	second, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "BB90010111", "123456")
 	if err != nil {
 		t.Fatalf("second sign: %v", err)
 	}
@@ -198,7 +316,7 @@ func TestPolicyRefusesAChannelAndAnUnnamedSigner(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerDAN, "AA90010111", "123456"); !errors.Is(err, ErrSignatureRejected) {
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); !errors.Is(err, ErrSignatureRejected) {
 		t.Errorf("DAN against an E-ID-only policy: got %v, want ErrSignatureRejected", err)
 	}
 
@@ -221,10 +339,12 @@ func TestPolicyRefusesAChannelAndAnUnnamedSigner(t *testing.T) {
 		t.Fatalf("save policy once a signer is named: %v", err)
 	}
 
-	if _, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "AA90010111", "123456"); !errors.Is(err, ErrSignatureRejected) {
+	// The refusal lands at start: there is no reason to push a request to somebody
+	// whose approval could never be recorded.
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111"); !errors.Is(err, ErrSignatureRejected) {
 		t.Errorf("signer the chain does not name: got %v, want ErrSignatureRejected", err)
 	}
-	if _, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "CC90010111", "123456"); err != nil {
+	if _, err := signWithEID(t, f, doc.ID, "CC90010111"); err != nil {
 		t.Errorf("the named signer must be accepted: %v", err)
 	}
 
@@ -254,7 +374,7 @@ func TestRejectIsFinal(t *testing.T) {
 	if _, err := f.m.RejectDocument(ctx, f.tenantID, doc.ID); !errors.Is(err, ErrNotSignable) {
 		t.Errorf("second reject: got %v, want ErrNotSignable", err)
 	}
-	if _, err := f.m.SignDocument(ctx, f.tenantID, doc.ID, SignerEID, "AA90010111", "123456"); !errors.Is(err, ErrNotSignable) {
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111"); !errors.Is(err, ErrNotSignable) {
 		t.Errorf("signing a rejected document: got %v, want ErrNotSignable", err)
 	}
 }
@@ -269,7 +389,7 @@ func TestAnotherTenantsDocumentIsNotSignable(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := intruder.m.SignDocument(ctx, intruder.tenantID, doc.ID, SignerEID, "AA90010111", "123456"); !errors.Is(err, ErrNotSignable) {
+	if _, err := intruder.m.StartEIDSignature(ctx, intruder.tenantID, doc.ID, "AA90010111"); !errors.Is(err, ErrNotSignable) {
 		t.Errorf("cross-tenant sign: got %v, want ErrNotSignable", err)
 	}
 	if _, err := intruder.m.RejectDocument(ctx, intruder.tenantID, doc.ID); !errors.Is(err, ErrNotSignable) {
@@ -346,7 +466,7 @@ func TestRouteMovesADraftAndOnlyADraft(t *testing.T) {
 	}
 
 	// A draft is not signable until it has been routed.
-	if _, err := f.m.SignDocument(ctx, f.tenantID, draftID, SignerEID, "AA90010111", "123456"); !errors.Is(err, ErrNotSignable) {
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, draftID, "AA90010111"); !errors.Is(err, ErrNotSignable) {
 		t.Errorf("signing a draft: got %v, want ErrNotSignable", err)
 	}
 
@@ -360,7 +480,7 @@ func TestRouteMovesADraftAndOnlyADraft(t *testing.T) {
 	if _, err := f.m.RouteDocument(ctx, f.tenantID, draftID); !errors.Is(err, ErrNotRoutable) {
 		t.Errorf("routing twice: got %v, want ErrNotRoutable", err)
 	}
-	if _, err := f.m.SignDocument(ctx, f.tenantID, draftID, SignerEID, "AA90010111", "123456"); err != nil {
+	if _, err := signWithEID(t, f, draftID, "AA90010111"); err != nil {
 		t.Errorf("a routed draft must be signable: %v", err)
 	}
 }

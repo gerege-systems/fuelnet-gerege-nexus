@@ -45,10 +45,22 @@ func TestValidEIDCallback(t *testing.T) {
 func TestSigningDocumentsNeedsItsOwnPermission(t *testing.T) {
 	const docID = "3f1b9c62-2f1a-4a1c-9d3e-8b7a5c4e1d20"
 
-	for _, path := range []string{"/documents/" + docID + "/sign", "/documents/" + docID + "/reject"} {
+	for _, path := range []string{
+		"/documents/" + docID + "/sign",
+		"/documents/" + docID + "/sign/dan",
+		"/documents/" + docID + "/sign/eid/start",
+		"/documents/" + docID + "/sign/eid/poll",
+		"/documents/" + docID + "/reject",
+	} {
 		if got := appRequestPermission("io.example.documents", "POST", path); got != "documents.sign" {
 			t.Errorf("%s: got %q, want documents.sign", path, got)
 		}
+	}
+
+	// Reading the ledger is an ordinary read, even though the path starts with
+	// the same five letters as the decision routes.
+	if got := appRequestPermission("io.example.documents", "GET", "/documents/"+docID+"/signatures"); got != "documents.read" {
+		t.Errorf("signatures: got %q, want documents.read", got)
 	}
 
 	// Creating and listing keep the ordinary model-level rights.

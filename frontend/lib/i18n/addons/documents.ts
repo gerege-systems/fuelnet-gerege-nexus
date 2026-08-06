@@ -22,6 +22,7 @@ export const documents = {
   "documents.field.signature_method": { mn: "Гарын үсгийн арга", en: "Signature Method" },
   "documents.field.reg_number": { mn: "Регистрийн дугаар", en: "Registration Number" },
   "documents.field.otp_code": { mn: "Нэг удаагийн нууц код (OTP)", en: "One-Time Code (OTP)" },
+  "documents.field.verification_code": { mn: "Баталгаажуулах код", en: "Verification code" },
   "documents.field.waiting_days": { mn: "Хүлээсэн хоног", en: "Days waiting" },
 
   "documents.stat.awaiting": { mn: "Гарын үсэг хүлээж буй", en: "Awaiting signature" },
@@ -40,6 +41,7 @@ export const documents = {
   "documents.action.create": { mn: "Баримт үүсгэх", en: "Create Document" },
   "documents.action.sign": { mn: "Гарын үсэг зурах", en: "Sign" },
   "documents.action.reject": { mn: "Татгалзах", en: "Reject" },
+  "documents.action.request_approval": { mn: "Батлах хүсэлт илгээх", en: "Send approval request" },
 
   "documents.message.loading": { mn: "Баримтуудыг ачаалж байна...", en: "Loading documents..." },
   "documents.message.empty": {
@@ -64,6 +66,37 @@ export const documents = {
     en: "\"{title}\" was successfully signed via {method}.",
   },
   "documents.message.sign_failed": { mn: "Гарын үсэг зурж чадсангүй", en: "Signature failed" },
+
+  // The E-ID ceremony: the citizen approves on their own device, so the screen
+  // explains what is happening on the other end of it.
+  "documents.message.eid_method_hint": {
+    mn: "Иргэний eID апп руу батлах хүсэлт илгээгдэнэ. Тэр өөрийн төхөөрөмж дээрээ баримтын нэрийг харж, өөрийн гэрчилгээгээр батална.",
+    en: "An approval request is pushed to the citizen's eID app. They see the document's name on their own device and approve it with their own certificate.",
+  },
+  "documents.message.dan_method_hint": {
+    mn: "ДАН нь батлах хүсэлт түлхдэггүй тул регистр ба нэг удаагийн код хэрэгтэй.",
+    en: "DAN pushes no approval request, so it needs a registration number and a one-time code.",
+  },
+  "documents.message.verification_code_hint": {
+    mn: "Иргэний төхөөрөмж дээр яг ижил код харагдах ёстой. Зөрвөл батлахгүй.",
+    en: "The citizen's device must show exactly this code. If it differs, they should not approve.",
+  },
+  "documents.message.awaiting_approval": {
+    mn: "{reg}-ийн батламжийг хүлээж байна...",
+    en: "Waiting for {reg} to approve...",
+  },
+  "documents.message.approval_display_text": {
+    mn: "Иргэнд харагдах текст",
+    en: "What the citizen sees",
+  },
+  "documents.message.approval_refused": {
+    mn: "Иргэн батлахаас татгалзсан — гарын үсэг зурагдаагүй.",
+    en: "The citizen declined the request — nothing was signed.",
+  },
+  "documents.message.approval_expired": {
+    mn: "Батлах хүсэлтийн хугацаа дууссан — гарын үсэг зурагдаагүй. Дахин илгээнэ үү.",
+    en: "The approval request expired — nothing was signed. Send it again.",
+  },
   "documents.message.reject_confirm": {
     mn: "\"{title}\"-г татгалзах уу? Үүнийг буцаах боломжгүй.",
     en: "Reject \"{title}\"? This cannot be undone.",
