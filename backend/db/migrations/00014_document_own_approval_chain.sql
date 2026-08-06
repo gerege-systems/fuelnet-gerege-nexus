@@ -47,43 +47,115 @@ ALTER TABLE document_signatures
 -- +goose StatementBegin
 DO $$
 BEGIN
-    -- A decided document asked for exactly what it got: its requirement is the
-    -- number of signatures it carries, at least one. Anything else would make
-    -- history read wrong the moment a chain changes.
-    UPDATE document_records d
-       SET required_signatures = GREATEST(1, (
-             SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id))
-     WHERE d.status IN ('APPROVED', 'REJECTED');
-
-    -- A document still waiting takes its type's chain as it stands now, which is
-    -- the best evidence available for what it was routed under.
-    UPDATE document_records d
-       SET required_signatures = GREATEST(1, (
-             SELECT count(*) FROM document_workflow_steps w
-              WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type))
-     WHERE d.status = 'PENDING_APPROVAL';
-
+    -- 1. Give every document still waiting a copy of its type's chain, unless it
+    --    already carries one. That guard is what makes a partial re-run safe.
     INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
     SELECT d.tenant_id, d.id, w.step_order, w.name, w.signer_reg_number
       FROM document_records d
       JOIN document_workflow_steps w
         ON w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type
      WHERE d.status = 'PENDING_APPROVAL'
-        ON CONFLICT DO NOTHING;
+       AND NOT EXISTS (SELECT 1 FROM document_approval_steps s WHERE s.document_id = d.id);
 
-    -- Existing signatures filled the chain in the order they were given.
-    WITH ordered AS (
-        SELECT id, row_number() OVER (PARTITION BY document_id ORDER BY signed_at, id) AS n
-          FROM document_signatures
+    -- 2. Work out which step each existing signature filled.
+    --
+    --    Time order is NOT good enough. Before this migration the order signatures
+    --    arrived in did not matter — a signer was accepted if the chain named them
+    --    anywhere, and only when the policy demanded it — so a chain
+    --    [1 Захирал=AA, 2 Ня-бо=BB] may well hold BB's signature first. Crediting it
+    --    to step 1 by time would leave step 2 naming BB, who cannot sign twice: the
+    --    document could never be approved by anybody.
+    --
+    --    So a signature is matched to the step that NAMES its signer first.
+    WITH matched AS (
+        SELECT DISTINCT ON (s.id) s.id AS signature_id, st.step_order
+          FROM document_signatures s
+          JOIN document_approval_steps st
+            ON st.document_id = s.document_id
+           AND st.signer_reg_number = s.signer_reg_number
+         WHERE s.step_order IS NULL AND s.signer_reg_number <> ''
+         ORDER BY s.id, st.step_order
     )
     UPDATE document_signatures s
-       SET step_order = ordered.n
-      FROM ordered
-     WHERE ordered.id = s.id AND s.step_order IS NULL;
+       SET step_order = matched.step_order
+      FROM matched
+     WHERE matched.signature_id = s.id;
+
+    -- 3. The rest fill whatever step numbers are still free, oldest first.
+    WITH free_slots AS (
+        SELECT st.document_id, st.step_order,
+               row_number() OVER (PARTITION BY st.document_id ORDER BY st.step_order) AS slot
+          FROM document_approval_steps st
+         WHERE NOT EXISTS (
+                 SELECT 1 FROM document_signatures s
+                  WHERE s.document_id = st.document_id AND s.step_order = st.step_order)
+    ),
+    unplaced AS (
+        SELECT s.id, s.document_id,
+               row_number() OVER (PARTITION BY s.document_id ORDER BY s.signed_at, s.id) AS n
+          FROM document_signatures s
+         WHERE s.step_order IS NULL
+    )
+    UPDATE document_signatures s
+       SET step_order = f.step_order
+      FROM unplaced u
+      JOIN free_slots f ON f.document_id = u.document_id AND f.slot = u.n
+     WHERE s.id = u.id;
+
+    -- 4. Anything left over — a document with more signatures than steps, or none
+    --    at all — is numbered past the end of the chain rather than dropped.
+    WITH leftover AS (
+        SELECT s.id,
+               (SELECT count(*) FROM document_approval_steps st WHERE st.document_id = s.document_id)
+                 + row_number() OVER (PARTITION BY s.document_id ORDER BY s.signed_at, s.id) AS n
+          FROM document_signatures s
+         WHERE s.step_order IS NULL
+    )
+    UPDATE document_signatures s
+       SET step_order = leftover.n
+      FROM leftover
+     WHERE leftover.id = s.id;
+
+    -- 5. Pin the requirement.
+    --
+    --    An APPROVED document asked for exactly what it got: its requirement is its
+    --    signature count. A PENDING or REJECTED one did not finish, so its
+    --    requirement is the longest of its chain and what it already holds —
+    --    clamping it to the count would make a shortened-chain document read
+    --    "2/1 complete" beside an amber Pending badge, and a rejected one read as
+    --    though its chain had been satisfied.
+    UPDATE document_records d
+       SET required_signatures = GREATEST(1, (
+             SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id))
+     WHERE d.status = 'APPROVED';
+
+    UPDATE document_records d
+       SET required_signatures = GREATEST(
+             1,
+             (SELECT count(*) FROM document_approval_steps s WHERE s.document_id = d.id),
+             (SELECT count(*) FROM document_workflow_steps w
+               WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type),
+             (SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id))
+     WHERE d.status IN ('PENDING_APPROVAL', 'REJECTED');
+
+    -- 6. A document the old code left pending-but-complete — its chain was shortened
+    --    under it — is finished here rather than left needing one more signature than
+    --    it asks for.
+    UPDATE document_records d
+       SET status = 'APPROVED'
+     WHERE d.status = 'PENDING_APPROVAL'
+       AND (SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id) >= d.required_signatures;
 END $$;
 -- +goose StatementEnd
 
 -- +goose Down
+
+-- Rolling this back DISCARDS each document's pinned chain and requirement — the
+-- only record of what a document was actually routed under. Rolling forward again
+-- re-derives them from the configuration as it stands then, which is the very
+-- retroactive redefinition this migration exists to stop. Down is here so the
+-- schema can be unwound on a throwaway database; do not roll it back on one that
+-- has routed documents.
 ALTER TABLE document_signatures DROP COLUMN IF EXISTS step_order;
 DROP TABLE IF EXISTS document_approval_steps;
 ALTER TABLE document_records DROP COLUMN IF EXISTS required_signatures;

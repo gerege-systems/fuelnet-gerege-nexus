@@ -722,6 +722,79 @@ func TestASignatureSurvivesTheCallerHangingUp(t *testing.T) {
 	}
 }
 
+// A document may hold a signature on a LATER step while an earlier one is still
+// open: migration 00014 credits a pre-existing signature to the step that names its
+// signer, not to its place in time, because order did not matter before. The next
+// approval is therefore the lowest unfilled step — not "one more than the count",
+// which would ask a citizen who has already signed and stick for ever.
+func TestASignatureOnALaterStepLeavesTheEarlierOneOpen(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Захирал", SignerRegNumber: "AA90010111"},
+		{Name: "Ня-бо", SignerRegNumber: "BB90010111"},
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Дараалал зөрсөн гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Stand in for what the migration leaves behind: the accountant signed first,
+	// credited to the step that names them.
+	if _, err := f.m.db.Exec(ctx,
+		`INSERT INTO document_signatures
+		        (tenant_id, document_id, signer_name, signer_reg_number, signer_method,
+		         signature_hash, signed_at, step_order)
+		 VALUES ($1, $2, 'Ня-бо', 'BB90010111', 'EID', 'legacy', NOW() - INTERVAL '2 days', 2)`,
+		f.tenantID, doc.ID); err != nil {
+		t.Fatalf("insert legacy signature: %v", err)
+	}
+
+	// One signature, but step 1 is what is missing — and it belongs to the director.
+	// Anyone else is turned away by whose step it is, which is the more useful thing
+	// to be told: the accountant is not asked to sign twice, they are told it is the
+	// director's turn.
+	for _, who := range []string{"BB90010111", "ZZ99999999"} {
+		err := func() error {
+			_, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, who)
+			return err
+		}()
+		if !errors.Is(err, ErrSignatureRejected) {
+			t.Errorf("%s taking the director's step: got %v, want ErrSignatureRejected", who, err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "AA90010111") {
+			t.Errorf("%s: got %q, want it to say whose step it is", who, err)
+		}
+	}
+
+	done, err := signWithEID(t, f, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("the director must be able to finish it: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q once both steps are filled", done.Status, StatusApproved)
+	}
+	if done.SignatureCount != 2 || done.RequiredSignatures != 2 {
+		t.Errorf("progress = %d/%d, want 2/2", done.SignatureCount, done.RequiredSignatures)
+	}
+
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	if len(ledger) != 2 || ledger[0].StepOrder != 1 || ledger[1].StepOrder != 2 {
+		t.Errorf("ledger = %+v, want step 1 then step 2", ledger)
+	}
+	if ledger[0].SignerRegNumber != "AA90010111" || ledger[1].SignerRegNumber != "BB90010111" {
+		t.Errorf("each step must be filled by the citizen it names, got %q then %q",
+			ledger[0].SignerRegNumber, ledger[1].SignerRegNumber)
+	}
+}
+
 func TestRejectIsFinal(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

@@ -28,7 +28,11 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
     } catch {
       // ignore
     }
-    throw new Error(errMessage);
+    // The status rides along so a caller can tell a transient failure from an
+    // answer: a polling loop should retry a dropped connection and stop on a 409.
+    const failure = new Error(errMessage) as Error & { status?: number };
+    failure.status = res.status;
+    throw failure;
   }
 
   // 204 carries no body by definition, so parsing one would throw on success.

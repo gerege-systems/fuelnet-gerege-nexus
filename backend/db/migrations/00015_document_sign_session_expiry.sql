@@ -11,8 +11,9 @@ ALTER TABLE document_eid_sign_sessions
 
 -- Rows that predate the column have no provider deadline to fall back on, so they
 -- get the two minutes an eID request is normally given, measured from when they
--- were created. That is in the past for all of them, which is the right answer:
--- an approval nobody collected is not collectable now.
+-- were created. The poll allows a further two minutes of grace for clock skew, so
+-- a session started in the last four minutes stays collectable — anything older
+-- does not, which is the right answer for an approval nobody came back for.
 UPDATE document_eid_sign_sessions
    SET expires_at = created_at + INTERVAL '2 minutes'
  WHERE expires_at IS NULL;

@@ -418,7 +418,12 @@ export function SignatureDialog({
           }
         } catch (err: any) {
           if (cancelled) return;
-          if (++failures > TOLERATED_POLL_FAILURES) {
+          // A 4xx is an answer, not a blip: the document is no longer pending, the
+          // session is unknown, the signer is not the one this step names. Retrying
+          // it three times only delays telling the operator.
+          const status: number | undefined = err?.status;
+          const answered = typeof status === "number" && status >= 400 && status < 500;
+          if (answered || ++failures > TOLERATED_POLL_FAILURES) {
             onError(err?.message || t("documents.message.sign_failed"));
             setSession(null);
             return;
@@ -644,15 +649,19 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id]);
 
-  const byStep = new Map<number, AppliedSignature>();
-  (signatures || []).forEach((sig) => byStep.set(sig.step_order, sig));
-
-  // A document whose type had no chain has no steps, so its one signature is
-  // shown on its own rather than against a step that never existed.
-  const rows =
-    steps.length > 0
-      ? steps.map((step) => ({ step, signature: byStep.get(step.order) }))
-      : (signatures || []).map((signature) => ({ step: undefined, signature }));
+  // Each step takes the signature that filled it. Anything left over — a signature
+  // past the end of the chain, or on a document whose type had no chain — is shown
+  // below rather than dropped: a trail missing a real approval is worse than none.
+  const placed = new Set<AppliedSignature>();
+  const chainRows = steps.map((step) => {
+    const signature = (signatures || []).find((sig) => sig.step_order === step.order && !placed.has(sig));
+    if (signature) placed.add(signature);
+    return { step, signature };
+  });
+  const extraRows = (signatures || [])
+    .filter((sig) => !placed.has(sig))
+    .map((signature) => ({ step: undefined as DocumentStep | undefined, signature }));
+  const rows = [...chainRows, ...extraRows];
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
@@ -704,6 +713,11 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
                         <p className="text-sm font-semibold text-slate-900 truncate">
                           {signature ? signature.signer_name : step?.name || "—"}
                         </p>
+                        {!step && signature && (
+                          <span className="shrink-0 text-[10px] text-slate-500 italic">
+                            {t("documents.message.signature_outside_chain")}
+                          </span>
+                        )}
                       </div>
                       <p className="font-mono text-[11px] text-slate-500 mt-0.5 pl-7">
                         {signature

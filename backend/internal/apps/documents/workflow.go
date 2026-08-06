@@ -94,16 +94,23 @@ type approvalPosition struct {
 	// Next is the step this signature would fill. Nil means the document carries
 	// no chain and one open signature approves it.
 	Next *ApprovalStep
-	// Reserved are the registration numbers a LATER step names. They may not fill
-	// an open step now: a citizen signs a document once, so spending their
+	// Reserved are the registration numbers a LATER unfilled step names. They may
+	// not fill an open step now: a citizen signs a document once, so spending their
 	// signature early would leave their own step unfillable and the document
 	// unapprovable.
 	Reserved []string
+	// Unfilled is how many steps of the chain no signature has filled.
+	Unfilled int
 }
 
-// nextApprovalStep reads a document's position in its own chain. Signatures fill
-// the chain in order, so the count is the index: with two applied, step three is
-// next.
+// nextApprovalStep reads a document's position in its own chain: the next step is
+// the LOWEST one no signature has filled.
+//
+// Counting signatures and adding one would be wrong. Signatures made before the
+// chain became per-document were matched to the step that names their signer, not
+// to their place in time, so a document can legitimately hold a signature on step
+// two while step one is still open. Asking such a document for step two again would
+// ask a citizen who has already signed, and stick for ever.
 func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenantID, docID string) (*approvalPosition, error) {
 	pos := &approvalPosition{}
 	if err := q.QueryRow(ctx,
@@ -113,13 +120,16 @@ func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenan
 	}
 
 	rows, err := q.Query(ctx,
-		`SELECT step_order, name, signer_reg_number
-		   FROM document_approval_steps
-		  WHERE tenant_id = $1 AND document_id = $2 AND step_order >= $3
-		  ORDER BY step_order`,
-		tenantID, docID, pos.Applied+1)
+		`SELECT st.step_order, st.name, st.signer_reg_number
+		   FROM document_approval_steps st
+		  WHERE st.tenant_id = $1 AND st.document_id = $2
+		    AND NOT EXISTS (SELECT 1 FROM document_signatures s
+		                     WHERE s.document_id = st.document_id
+		                       AND s.step_order = st.step_order)
+		  ORDER BY st.step_order`,
+		tenantID, docID)
 	if err != nil {
-		return nil, fmt.Errorf("read remaining approval steps: %w", err)
+		return nil, fmt.Errorf("read unfilled approval steps: %w", err)
 	}
 	defer rows.Close()
 
@@ -140,7 +150,28 @@ func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenan
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	pos.Unfilled = len(pos.Reserved)
+	if pos.Next != nil {
+		pos.Unfilled++ // Reserved only counts the named ones after Next
+	}
 	return pos, nil
+}
+
+// unfilledSteps counts the steps of a document's chain that no signature has
+// filled. It is asked again after an insert, because "how many signatures" is not
+// the same question as "is the chain complete" once a signature can land on a step
+// other than the next one.
+func (m *DocumentsModule) unfilledSteps(ctx context.Context, q querier, docID string) (int, error) {
+	var left int
+	if err := q.QueryRow(ctx,
+		`SELECT count(*) FROM document_approval_steps st
+		  WHERE st.document_id = $1
+		    AND NOT EXISTS (SELECT 1 FROM document_signatures s
+		                     WHERE s.document_id = st.document_id
+		                       AND s.step_order = st.step_order)`, docID).Scan(&left); err != nil {
+		return 0, fmt.Errorf("count unfilled approval steps: %w", err)
+	}
+	return left, nil
 }
 
 // DocumentSteps returns a document's own chain, so a screen can show who each

@@ -83,7 +83,7 @@ export default function DocumentApprovalsPage() {
 
       {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
 
-      <section className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${loadFailed ? "hidden" : ""}`}>
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
           <div className="text-2xl font-bold text-amber-600">{pending.length}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.awaiting")}</div>
@@ -104,10 +104,14 @@ export default function DocumentApprovalsPage() {
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
-      ) : loadFailed ? null : pending.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
-          {t("documents.message.no_pending")}
-        </div>
+      ) : pending.length === 0 ? (
+        // "Nothing is waiting" is a claim about the queue, so only a load that
+        // succeeded may make it.
+        loadFailed ? null : (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+            {t("documents.message.no_pending")}
+          </div>
+        )
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">

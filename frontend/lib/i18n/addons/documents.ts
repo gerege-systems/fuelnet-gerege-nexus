@@ -79,6 +79,10 @@ export const documents = {
     mn: "Гарын үсгийн түүхийг ачаалж чадсангүй",
     en: "Could not load the signature history",
   },
+  "documents.message.signature_outside_chain": {
+    mn: "хэлхээнээс гадуур",
+    en: "outside the chain",
+  },
   "documents.message.step_open_to_anyone": {
     mn: "хэн ч зурж болно",
     en: "open to any signer",

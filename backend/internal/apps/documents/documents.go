@@ -519,7 +519,13 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, err
 	}
 
+	// The signature fills the step it was checked against — not "the next number",
+	// which is not the same thing once a signature can sit on a later step than an
+	// unfilled earlier one.
 	step := position.Applied + 1
+	if position.Next != nil {
+		step = position.Next.Order
+	}
 	signedAt := time.Now()
 	_, err = tx.Exec(ctx,
 		`INSERT INTO document_signatures
@@ -537,8 +543,16 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, fmt.Errorf("record signature: %w", err)
 	}
 
+	// Complete means every step of the document's own chain is filled AND it carries
+	// at least as many signatures as it asked for. A document with no chain has no
+	// steps to fill, so the count alone decides — which is how a type without a
+	// chain has always behaved.
+	left, err := m.unfilledSteps(ctx, tx, docID)
+	if err != nil {
+		return nil, err
+	}
 	status := StatusPending
-	if step >= required {
+	if left == 0 && position.Applied+1 >= required {
 		status = StatusApproved
 	}
 

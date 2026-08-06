@@ -91,10 +91,14 @@ export default function DocumentsPage() {
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
-      ) : loadFailed ? null : documents.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
-          {t("documents.message.empty")}
-        </div>
+      ) : documents.length === 0 ? (
+        // Only a load that succeeded may claim the tenant has no documents; a
+        // failed one says so in the banner and shows whatever it already had.
+        loadFailed ? null : (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+            {t("documents.message.empty")}
+          </div>
+        )
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">
