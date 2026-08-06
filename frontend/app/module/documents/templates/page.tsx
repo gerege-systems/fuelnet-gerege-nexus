@@ -46,6 +46,11 @@ export default function DocumentTemplatesPage() {
     setDirty(dirtyRef.current);
   };
 
+  // Rows the operator has deleted. A load that started before the delete still has
+  // them in its answer, and reconciling around it would put a row the operator
+  // watched disappear back on the table — where Use and Save then answer 404.
+  const removedRef = useRef<Set<string>>(new Set());
+
   // A failed load must not be reported as an empty list.
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -59,8 +64,9 @@ export default function DocumentTemplatesPage() {
       // holding nine templates was shown the one row it had just created, with no
       // spinner and no error, as though that were the list.
       setTemplates((current) => {
-        const served = new Set(rows.map((row) => row.id));
-        const kept = rows.map((row) =>
+        const live = rows.filter((row) => !removedRef.current.has(row.id));
+        const served = new Set(live.map((row) => row.id));
+        const kept = live.map((row) =>
           dirtyRef.current[row.id] ? current.find((row2) => row2.id === row.id) ?? row : row,
         );
         // A row created while this load was in flight is not in its answer yet.
@@ -155,6 +161,7 @@ export default function DocumentTemplatesPage() {
     try {
       await api.deleteDocumentTemplate(tpl.id);
       setMessage({ type: "success", text: t("documents.message.template_deleted", { name: tpl.name }) });
+      removedRef.current.add(tpl.id);
       setTemplates((current) => current.filter((row) => row.id !== tpl.id));
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });

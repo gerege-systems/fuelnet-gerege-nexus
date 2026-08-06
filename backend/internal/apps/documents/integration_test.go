@@ -1024,6 +1024,57 @@ func TestACyrillicChainReachesTheDocumentNamed(t *testing.T) {
 	}
 }
 
+// A chain whose step numbers are not 1..n. Nothing this module writes produces one —
+// ReplaceWorkflow renumbers from 1 — but the table only requires them positive and
+// distinct, so a chain edited by hand can carry gaps. The copy must preserve the
+// numbers rather than renumber them: the requirement is counted from the rows
+// inserted, and the next approval is the lowest UNFILLED number, so a renumbering
+// that disagreed with the signatures already placed would strand the document.
+func TestAChainWithGapsInItsNumbersStillWorks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	for order, reg := range map[int]string{3: "AA90010111", 9: ""} {
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_workflow_steps (tenant_id, doc_type, step_order, name, signer_reg_number)
+			      VALUES ($1, 'CONTRACT', $2, 'Шат', $3)`,
+			f.tenantID, order, reg); err != nil {
+			t.Fatalf("insert step %d: %v", order, err)
+		}
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Цоорхойтой хэлхээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if doc.RequiredSignatures != 2 {
+		t.Fatalf("required = %d, want 2 — two steps were copied", doc.RequiredSignatures)
+	}
+	steps, err := f.m.DocumentSteps(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if len(steps) != 2 || steps[0].Order != 3 || steps[1].Order != 9 {
+		t.Fatalf("the document's chain = %+v, want the numbers it was given", steps)
+	}
+
+	// The named citizen owns step 3, so nobody else may go first.
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456"); err == nil {
+		t.Error("a stranger filled the named step")
+	}
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("the named signer: %v", err)
+	}
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("the open step: %v", err)
+	}
+	if done.Status != StatusApproved || done.OutstandingSteps != 0 {
+		t.Errorf("status = %q with %d outstanding, want APPROVED with none",
+			done.Status, done.OutstandingSteps)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
