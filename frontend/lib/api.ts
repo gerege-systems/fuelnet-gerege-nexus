@@ -380,10 +380,16 @@ export const api = {
         signer_method: string;
         signature_hash: string;
         signed_at: string;
+        step_order: number;
         certificate_serial?: string;
         certificate_issuer?: string;
       }>
     >(`/documents/${id}/signatures`),
+
+  // The document's OWN approval chain — the copy taken when it started waiting,
+  // which a later configuration change does not touch.
+  getDocumentSteps: (id: string) =>
+    fetcher<Array<{ order: number; name: string; signer_reg_number: string }>>(`/documents/${id}/steps`),
 
   // Templates a document is started from
   getDocumentTemplates: () =>

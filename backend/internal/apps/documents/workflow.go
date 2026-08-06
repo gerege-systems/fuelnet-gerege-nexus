@@ -86,30 +86,61 @@ func (m *DocumentsModule) snapshotApprovalChain(ctx context.Context, tx pgx.Tx, 
 	return nil
 }
 
-// nextApprovalStep reports how many signatures a document already carries and
-// which step comes next. Signatures fill the chain in order, so the count is the
-// index: with two applied, step three is next. Nil means the document carries no
-// chain and one open signature approves it.
-func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenantID, docID string) (applied int, next *ApprovalStep, err error) {
+// approvalPosition is where a document stands in its own chain: how many
+// signatures it carries, which step comes next, and which citizens are held back
+// for a step further along.
+type approvalPosition struct {
+	Applied int
+	// Next is the step this signature would fill. Nil means the document carries
+	// no chain and one open signature approves it.
+	Next *ApprovalStep
+	// Reserved are the registration numbers a LATER step names. They may not fill
+	// an open step now: a citizen signs a document once, so spending their
+	// signature early would leave their own step unfillable and the document
+	// unapprovable.
+	Reserved []string
+}
+
+// nextApprovalStep reads a document's position in its own chain. Signatures fill
+// the chain in order, so the count is the index: with two applied, step three is
+// next.
+func (m *DocumentsModule) nextApprovalStep(ctx context.Context, q querier, tenantID, docID string) (*approvalPosition, error) {
+	pos := &approvalPosition{}
 	if err := q.QueryRow(ctx,
 		`SELECT count(*) FROM document_signatures WHERE tenant_id = $1 AND document_id = $2`,
-		tenantID, docID).Scan(&applied); err != nil {
-		return 0, nil, fmt.Errorf("count applied signatures: %w", err)
+		tenantID, docID).Scan(&pos.Applied); err != nil {
+		return nil, fmt.Errorf("count applied signatures: %w", err)
 	}
 
-	var step ApprovalStep
-	err = q.QueryRow(ctx,
+	rows, err := q.Query(ctx,
 		`SELECT step_order, name, signer_reg_number
 		   FROM document_approval_steps
-		  WHERE tenant_id = $1 AND document_id = $2 AND step_order = $3`,
-		tenantID, docID, applied+1).Scan(&step.Order, &step.Name, &step.SignerRegNumber)
-	if isNoRows(err) {
-		return applied, nil, nil
-	}
+		  WHERE tenant_id = $1 AND document_id = $2 AND step_order >= $3
+		  ORDER BY step_order`,
+		tenantID, docID, pos.Applied+1)
 	if err != nil {
-		return 0, nil, fmt.Errorf("read next approval step: %w", err)
+		return nil, fmt.Errorf("read remaining approval steps: %w", err)
 	}
-	return applied, &step, nil
+	defer rows.Close()
+
+	for rows.Next() {
+		var step ApprovalStep
+		if err := rows.Scan(&step.Order, &step.Name, &step.SignerRegNumber); err != nil {
+			return nil, fmt.Errorf("scan approval step: %w", err)
+		}
+		if pos.Next == nil {
+			next := step
+			pos.Next = &next
+			continue
+		}
+		if step.SignerRegNumber != "" {
+			pos.Reserved = append(pos.Reserved, step.SignerRegNumber)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return pos, nil
 }
 
 // DocumentSteps returns a document's own chain, so a screen can show who each
@@ -204,16 +235,25 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	}
 
 	cleaned := make([]WorkflowStep, 0, len(steps))
+	namedAt := map[string]int{}
 	for i, step := range steps {
 		name := strings.TrimSpace(step.Name)
 		if name == "" {
 			return nil, fmt.Errorf("%w: step %d needs a name", ErrInvalidConfiguration, i+1)
 		}
-		cleaned = append(cleaned, WorkflowStep{
-			Order:           i + 1,
-			Name:            name,
-			SignerRegNumber: strings.ToUpper(strings.TrimSpace(step.SignerRegNumber)),
-		})
+		reg := strings.ToUpper(strings.TrimSpace(step.SignerRegNumber))
+		// One citizen signs a document once, so naming the same person at two
+		// steps builds a chain that can never be completed — whatever the
+		// signature policy says. This has to be refused when it is saved, not
+		// discovered when a document sticks halfway.
+		if reg != "" {
+			if first, repeated := namedAt[reg]; repeated {
+				return nil, fmt.Errorf("%w: steps %d and %d both name %s, and one citizen signs a document once",
+					ErrInvalidConfiguration, first, i+1, reg)
+			}
+			namedAt[reg] = i + 1
+		}
+		cleaned = append(cleaned, WorkflowStep{Order: i + 1, Name: name, SignerRegNumber: reg})
 	}
 
 	tx, err := m.db.Begin(ctx)
@@ -454,6 +494,25 @@ func (m *DocumentsModule) routeDocumentHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, http.StatusOK, doc)
+}
+
+func (m *DocumentsModule) listDocumentStepsHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	list, err := m.DocumentSteps(r.Context(), tenantID, chi.URLParam(r, "id"))
+	switch {
+	case errors.Is(err, ErrNotSignable):
+		writeError(w, http.StatusNotFound, "document not found")
+		return
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "failed to fetch the approval chain")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 func (m *DocumentsModule) listSignaturesHandler(w http.ResponseWriter, r *http.Request) {

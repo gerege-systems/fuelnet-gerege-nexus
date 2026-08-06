@@ -105,23 +105,25 @@ func TestSignaturePolicyDefaultsToBothChannels(t *testing.T) {
 	}
 }
 
-// A signature is held to whoever the document's next step names. A step that
-// names nobody is open to anyone the permission already let through.
+// A signature is held to whoever the document's next step names, and held back
+// from anyone the chain still needs further along.
 func TestCheckSigner(t *testing.T) {
 	if err := checkSigner(nil, "CONTRACT", "AA90010111"); err != nil {
 		t.Errorf("a document with no chain must accept any authorised signer: %v", err)
 	}
+	if err := checkSigner(&approvalPosition{}, "CONTRACT", "AA90010111"); err != nil {
+		t.Errorf("a position with no next step must accept any authorised signer: %v", err)
+	}
 
-	open := &ApprovalStep{Order: 1, Name: "Хэн ч"}
+	open := &approvalPosition{Next: &ApprovalStep{Order: 1, Name: "Хэн ч"}}
 	if err := checkSigner(open, "CONTRACT", "AA90010111"); err != nil {
 		t.Errorf("an open step must accept any authorised signer: %v", err)
 	}
 
-	named := &ApprovalStep{Order: 2, Name: "Захирал", SignerRegNumber: "CC90010111"}
+	named := &approvalPosition{Next: &ApprovalStep{Order: 2, Name: "Захирал", SignerRegNumber: "CC90010111"}}
 	if err := checkSigner(named, "CONTRACT", "CC90010111"); err != nil {
 		t.Errorf("the named signer must be accepted: %v", err)
 	}
-
 	err := checkSigner(named, "CONTRACT", "AA90010111")
 	if !errors.Is(err, ErrSignatureRejected) {
 		t.Fatalf("got %v, want ErrSignatureRejected", err)
@@ -130,6 +132,23 @@ func TestCheckSigner(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("got %q, want it to mention %q so an operator can tell why", err, want)
 		}
+	}
+
+	// An open step is open — but not to somebody a later step names. Spending their
+	// one signature here would leave their own step unfillable for ever.
+	reserved := &approvalPosition{
+		Next:     &ApprovalStep{Order: 1, Name: "Хянагч"},
+		Reserved: []string{"CC90010111"},
+	}
+	if err := checkSigner(reserved, "CONTRACT", "AA90010111"); err != nil {
+		t.Errorf("anyone else may still take the open step: %v", err)
+	}
+	err = checkSigner(reserved, "CONTRACT", "CC90010111")
+	if !errors.Is(err, ErrSignatureRejected) {
+		t.Fatalf("a citizen a later step names must be held back: got %v", err)
+	}
+	if !strings.Contains(err.Error(), "CC90010111") {
+		t.Errorf("got %q, want it to name the signer being held back", err)
 	}
 }
 

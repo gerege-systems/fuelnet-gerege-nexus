@@ -169,6 +169,7 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// A single document. Static segments above win over {id} in chi's trie,
 		// so "templates" and "policies" are never read as document ids.
 		dr.Get("/{id}/signatures", m.listSignaturesHandler)
+		dr.Get("/{id}/steps", m.listDocumentStepsHandler)
 		dr.Post("/{id}/route", m.routeDocumentHandler)
 		dr.Post("/{id}/reject", m.rejectDocumentHandler)
 
@@ -353,11 +354,7 @@ type signaturePreflight struct {
 	DocType  string
 	Policy   SignaturePolicy
 	Required int
-	Applied  int
-	// NextStep is the step this signature would fill: the lowest one the document's
-	// chain has not reached yet. Nil when the document carries no chain, which
-	// means one open signature approves it.
-	NextStep *ApprovalStep
+	Position *approvalPosition
 }
 
 // preflightSignature checks that the document is still awaiting approval, that
@@ -394,28 +391,51 @@ func (m *DocumentsModule) preflightSignature(ctx context.Context, tenantID, docI
 			ErrSignatureRejected, docType, method)
 	}
 
-	applied, next, err := m.nextApprovalStep(ctx, m.db, tenantID, docID)
+	position, err := m.nextApprovalStep(ctx, m.db, tenantID, docID)
 	if err != nil {
 		return nil, err
 	}
-	return &signaturePreflight{
-		DocType: docType, Policy: policy, Required: required, Applied: applied, NextStep: next,
-	}, nil
+	return &signaturePreflight{DocType: docType, Policy: policy, Required: required, Position: position}, nil
 }
 
-// checkSigner holds the signature to whoever the document's next step names. A
-// step that names nobody is open to anyone the permission already let through.
-// The check runs against the identity a provider vouched for, never against what
-// the caller typed.
-func checkSigner(next *ApprovalStep, docType, regNumber string) error {
-	if next == nil || next.SignerRegNumber == "" {
-		return nil
+// alreadySigned reports whether this citizen has already signed this document. The
+// unique constraint would catch it either way, but only after the citizen had been
+// asked to approve on their own device and their approval discarded.
+func (m *DocumentsModule) alreadySigned(ctx context.Context, q querier, tenantID, docID, regNumber string) (bool, error) {
+	var signed bool
+	if err := q.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM document_signatures
+		                 WHERE tenant_id = $1 AND document_id = $2 AND signer_reg_number = $3)`,
+		tenantID, docID, regNumber).Scan(&signed); err != nil {
+		return false, fmt.Errorf("check whether the signer already signed: %w", err)
 	}
-	if next.SignerRegNumber == regNumber {
-		return nil
+	return signed, nil
+}
+
+// checkSigner holds the signature to whoever the document's next step names, and
+// holds back anyone a later step names. The check runs against the identity a
+// provider vouched for, never against what the caller typed.
+func checkSigner(pos *approvalPosition, docType, regNumber string) error {
+	if pos == nil || pos.Next == nil {
+		return nil // no chain: one open signature approves
 	}
-	return fmt.Errorf("%w: step %d of the %s chain (%s) is reserved for %s, not %s",
-		ErrSignatureRejected, next.Order, docType, next.Name, next.SignerRegNumber, regNumber)
+
+	if named := pos.Next.SignerRegNumber; named != "" {
+		if named == regNumber {
+			return nil
+		}
+		return fmt.Errorf("%w: step %d of the %s chain (%s) is reserved for %s, not %s",
+			ErrSignatureRejected, pos.Next.Order, docType, pos.Next.Name, named, regNumber)
+	}
+
+	// The step is open — but not to somebody the chain still needs further along.
+	// A citizen signs a document once, so letting them spend their signature here
+	// would leave their own step unfillable and the document unapprovable.
+	if slices.Contains(pos.Reserved, regNumber) {
+		return fmt.Errorf("%w: %s is named by a later step of the %s chain, so their signature is held for it — step %d (%s) is open to anyone else",
+			ErrSignatureRejected, regNumber, docType, pos.Next.Order, pos.Next.Name)
+	}
+	return nil
 }
 
 // SignWithDAN signs through dan.gerege.mn's registration-number and one-time-code
@@ -438,8 +458,15 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 
-	if err := checkSigner(pre.NextStep, pre.DocType, signature.RegNumber); err != nil {
+	if err := checkSigner(pre.Position, pre.DocType, signature.RegNumber); err != nil {
 		return nil, err
+	}
+	signed, err := m.alreadySigned(ctx, m.db, tenantID, docID, signature.RegNumber)
+	if err != nil {
+		return nil, err
+	}
+	if signed {
+		return nil, ErrAlreadySigned
 	}
 	return m.recordSignature(ctx, tenantID, docID, SignerDAN, signature, "")
 }
@@ -456,6 +483,13 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 // marked spent in the same transaction so a recorded signature and an unspent
 // session can never disagree.
 func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, method string, signature *verifiedSignature, sessionID string) (*Document, error) {
+	// The citizen has already approved by the time we get here, so an operator
+	// closing the dialog must not destroy their signature. The write runs on a
+	// context the caller cannot cancel — with its own deadline, so a stalled
+	// database still lets go.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin signature: %w", err)
@@ -475,17 +509,17 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, fmt.Errorf("lock document for signing: %w", err)
 	}
 
-	applied, next, err := m.nextApprovalStep(ctx, tx, tenantID, docID)
+	position, err := m.nextApprovalStep(ctx, tx, tenantID, docID)
 	if err != nil {
 		return nil, err
 	}
 	// The authority check that counts is this one: the preflight's was for a good
 	// error message before a citizen was troubled, this one is under the lock.
-	if err := checkSigner(next, docType, signature.RegNumber); err != nil {
+	if err := checkSigner(position, docType, signature.RegNumber); err != nil {
 		return nil, err
 	}
 
-	step := applied + 1
+	step := position.Applied + 1
 	signedAt := time.Now()
 	_, err = tx.Exec(ctx,
 		`INSERT INTO document_signatures
@@ -544,9 +578,7 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		"status":              status,
 	})
 
-	// The signature is committed, so the caller is told about it even if their
-	// connection went away while we were reading the row back.
-	return m.getDocument(context.WithoutCancel(ctx), tenantID, docID)
+	return m.getDocument(ctx, tenantID, docID)
 }
 
 // RejectDocument moves a pending document to REJECTED. Like signing, it is a

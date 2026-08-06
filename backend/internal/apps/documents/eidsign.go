@@ -146,8 +146,17 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	regNumber = strings.ToUpper(strings.TrimSpace(regNumber))
 	// Refusing here saves pushing a request that could never be turned into a
 	// signature, and tells the operator why before the citizen is involved.
-	if err := checkSigner(pre.NextStep, pre.DocType, regNumber); err != nil {
+	if err := checkSigner(pre.Position, pre.DocType, regNumber); err != nil {
 		return nil, err
+	}
+	// Asking somebody to approve on their own device and then discarding it because
+	// they had already signed is worse than not asking.
+	signed, err := m.alreadySigned(ctx, m.db, tenantID, docID, regNumber)
+	if err != nil {
+		return nil, err
+	}
+	if signed {
+		return nil, ErrAlreadySigned
 	}
 
 	var title string
@@ -290,7 +299,7 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	if err != nil {
 		return nil, err
 	}
-	if err := checkSigner(pre.NextStep, pre.DocType, approved); err != nil {
+	if err := checkSigner(pre.Position, pre.DocType, approved); err != nil {
 		return nil, err
 	}
 
@@ -332,7 +341,7 @@ func (m *DocumentsModule) startEIDSignatureHandler(w http.ResponseWriter, r *htt
 
 	session, err := m.StartEIDSignature(r.Context(), tenantID, chi.URLParam(r, "id"), req.RegNumber)
 	switch {
-	case errors.Is(err, ErrNotSignable):
+	case errors.Is(err, ErrNotSignable), errors.Is(err, ErrAlreadySigned):
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrSignatureRejected):

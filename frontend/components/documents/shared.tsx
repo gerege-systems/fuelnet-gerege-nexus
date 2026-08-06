@@ -51,6 +51,11 @@ const TOLERATED_POLL_FAILURES = 3;
 // Used when eID's expires_at cannot be read: an eID request is normally given
 // two minutes.
 const FALLBACK_APPROVAL_TTL = 120_000;
+// The server accepts an approval for this long past eID's own deadline, so a
+// small clock difference does not throw one away. Giving up earlier here would
+// tell the operator the request expired while the server would still have taken
+// it. Keep in step with signSessionGrace in eidsign.go.
+const APPROVAL_GRACE = 120_000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -58,7 +63,7 @@ function sleep(ms: number) {
 
 function deadlineOf(expiresAt: string) {
   const at = Date.parse(expiresAt);
-  return Number.isNaN(at) ? Date.now() + FALLBACK_APPROVAL_TTL : at;
+  return (Number.isNaN(at) ? Date.now() + FALLBACK_APPROVAL_TTL : at) + APPROVAL_GRACE;
 }
 
 /** The only state a document can be signed or rejected in. */
@@ -591,6 +596,13 @@ export function SignatureDialog({
   );
 }
 
+/** One step of the document's own approval chain, as the API returns it. */
+export interface DocumentStep {
+  order: number;
+  name: string;
+  signer_reg_number: string;
+}
+
 /** One row of a document's signature ledger, as the API returns it. */
 export interface AppliedSignature {
   signer_name: string;
@@ -598,31 +610,49 @@ export interface AppliedSignature {
   signer_method: string;
   signature_hash: string;
   signed_at: string;
+  /** Which step of the document's chain this signature filled. */
+  step_order: number;
   certificate_serial?: string;
   certificate_issuer?: string;
 }
 
 /**
- * The document's signature history. The list can only show how many signatures a
- * document carries; this is who gave them, through which channel, and on which
- * certificate — the part a dispute actually turns on.
+ * The document's approval trail: every step of the chain it started under, which
+ * of them are filled and by whom, and which one it is waiting on. The list can
+ * only show a count; this is the part a dispute turns on — who gave each approval,
+ * through which channel, on which certificate — and the part an approver needs:
+ * whose signature comes next.
  */
 export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; onClose: () => void }) {
   const { t } = useI18n();
   const [signatures, setSignatures] = useState<AppliedSignature[] | null>(null);
+  const [steps, setSteps] = useState<DocumentStep[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    api
-      .getDocumentSignatures(doc.id)
-      .then((rows) => alive && setSignatures(rows || []))
+    Promise.all([api.getDocumentSignatures(doc.id), api.getDocumentSteps(doc.id)])
+      .then(([applied, chain]) => {
+        if (!alive) return;
+        setSignatures(applied || []);
+        setSteps(chain || []);
+      })
       .catch((err: any) => alive && setError(err?.message || t("documents.message.history_failed")));
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id]);
+
+  const byStep = new Map<number, AppliedSignature>();
+  (signatures || []).forEach((sig) => byStep.set(sig.step_order, sig));
+
+  // A document whose type had no chain has no steps, so its one signature is
+  // shown on its own rather than against a step that never existed.
+  const rows =
+    steps.length > 0
+      ? steps.map((step) => ({ step, signature: byStep.get(step.order) }))
+      : (signatures || []).map((signature) => ({ step: undefined, signature }));
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
@@ -640,49 +670,94 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
             <Loader2 className="w-4 h-4 animate-spin" />
             {t("documents.message.loading")}
           </div>
-        ) : signatures.length === 0 ? (
+        ) : rows.length === 0 ? (
           <p className="text-sm text-slate-500 py-6">{t("documents.message.no_signatures")}</p>
         ) : (
           <ol className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {signatures.map((sig, index) => (
-              <li key={sig.signature_hash || index} className="border border-slate-200 rounded-lg p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 truncate">{sig.signer_name}</p>
-                    <p className="font-mono text-[11px] text-slate-500">{sig.signer_reg_number}</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    {sig.signer_method === "EID" ? "E-ID" : sig.signer_method}
-                  </span>
-                </div>
+            {rows.map(({ step, signature }, index) => {
+              const filled = Boolean(signature);
+              // The next approval is the first unfilled step of a pending document.
+              const isNext =
+                !filled && doc.status === PENDING && rows.findIndex((r) => !r.signature) === index;
 
-                <dl className="mt-2 space-y-1 text-[11px]">
-                  <div className="flex gap-2">
-                    <dt className="text-slate-500 shrink-0">{t("documents.field.signed_at")}:</dt>
-                    <dd className="text-slate-700">{new Date(sig.signed_at).toLocaleString()}</dd>
-                  </div>
-                  {sig.certificate_serial ? (
-                    <>
-                      <div className="flex gap-2">
-                        <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_serial")}:</dt>
-                        <dd className="font-mono text-slate-700 break-all">{sig.certificate_serial}</dd>
+              return (
+                <li
+                  key={step ? `step-${step.order}` : `sig-${index}`}
+                  className={`border rounded-lg p-3 ${
+                    filled
+                      ? "border-slate-200"
+                      : isNext
+                        ? "border-indigo-300 bg-indigo-50/40"
+                        : "border-dashed border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-5 h-5 shrink-0 rounded-full text-[10px] font-bold grid place-items-center ${
+                            filled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {step ? step.order : index + 1}
+                        </span>
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {signature ? signature.signer_name : step?.name || "—"}
+                        </p>
                       </div>
-                      {sig.certificate_issuer && (
+                      <p className="font-mono text-[11px] text-slate-500 mt-0.5 pl-7">
+                        {signature
+                          ? signature.signer_reg_number
+                          : step?.signer_reg_number || t("documents.message.step_open_to_anyone")}
+                      </p>
+                    </div>
+                    {filled ? (
+                      <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                        {signature!.signer_method === "EID" ? "E-ID" : signature!.signer_method}
+                      </span>
+                    ) : (
+                      <span
+                        className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                          isNext
+                            ? "bg-indigo-100 text-indigo-700 border-indigo-200"
+                            : "bg-slate-50 text-slate-500 border-slate-200"
+                        }`}
+                      >
+                        {isNext ? t("documents.state.awaiting_now") : t("documents.state.awaiting_later")}
+                      </span>
+                    )}
+                  </div>
+
+                  {signature && (
+                    <dl className="mt-2 space-y-1 text-[11px] pl-7">
+                      <div className="flex gap-2">
+                        <dt className="text-slate-500 shrink-0">{t("documents.field.signed_at")}:</dt>
+                        <dd className="text-slate-700">{new Date(signature.signed_at).toLocaleString()}</dd>
+                      </div>
+                      {signature.certificate_serial ? (
+                        <>
+                          <div className="flex gap-2">
+                            <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_serial")}:</dt>
+                            <dd className="font-mono text-slate-700 break-all">{signature.certificate_serial}</dd>
+                          </div>
+                          {signature.certificate_issuer && (
+                            <div className="flex gap-2">
+                              <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_issuer")}:</dt>
+                              <dd className="text-slate-700 break-all">{signature.certificate_issuer}</dd>
+                            </div>
+                          )}
+                        </>
+                      ) : (
                         <div className="flex gap-2">
-                          <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_issuer")}:</dt>
-                          <dd className="text-slate-700 break-all">{sig.certificate_issuer}</dd>
+                          <dt className="text-slate-500 shrink-0">{t("documents.field.approval_reference")}:</dt>
+                          <dd className="font-mono text-slate-500 break-all">{signature.signature_hash}</dd>
                         </div>
                       )}
-                    </>
-                  ) : (
-                    <div className="flex gap-2">
-                      <dt className="text-slate-500 shrink-0">{t("documents.field.approval_reference")}:</dt>
-                      <dd className="font-mono text-slate-500 break-all">{sig.signature_hash}</dd>
-                    </div>
+                    </dl>
                   )}
-                </dl>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ol>
         )}
 
@@ -701,7 +776,9 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
 /** Opens the signature history, shown only once there is something to show. */
 export function SignatureHistoryButton({ doc, onOpen }: { doc: DocumentRecord; onOpen: (doc: DocumentRecord) => void }) {
   const { t } = useI18n();
-  if (doc.signature_count === 0) return null;
+  // Worth opening as soon as there is anything to see: a signature already given,
+  // or a chain with an approval still to come.
+  if (doc.signature_count === 0 && doc.required_signatures <= 1) return null;
 
   return (
     <button
@@ -711,7 +788,9 @@ export function SignatureHistoryButton({ doc, onOpen }: { doc: DocumentRecord; o
       className="inline-flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 transition"
     >
       <History className="w-3.5 h-3.5" />
-      <span>{doc.signature_count}</span>
+      <span>
+        {doc.signature_count}/{doc.required_signatures}
+      </span>
     </button>
   );
 }

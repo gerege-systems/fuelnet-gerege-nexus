@@ -561,6 +561,167 @@ func TestThePolicyAndTheChainCannotLockATypeOutTogether(t *testing.T) {
 	}
 }
 
+// A chain naming one citizen at two steps could never be completed — they sign a
+// document once — so it has to be refused when it is saved, whatever the signature
+// policy says. The old guard only ran when the policy demanded named signers.
+func TestAChainCannotNameOneCitizenTwice(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	_, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Хэлтсийн дарга", SignerRegNumber: "AA90010111"},
+		{Name: "Захирал", SignerRegNumber: "AA90010111"},
+	})
+	if !errors.Is(err, ErrInvalidConfiguration) {
+		t.Fatalf("got %v, want ErrInvalidConfiguration", err)
+	}
+	if !strings.Contains(err.Error(), "AA90010111") {
+		t.Errorf("got %q, want it to name the repeated citizen", err)
+	}
+
+	// Case matters as little here as anywhere else: the check runs on the
+	// normalised value.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Нэг", SignerRegNumber: "aa90010111"},
+		{Name: "Хоёр", SignerRegNumber: "AA90010111 "},
+	}); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("same citizen written two ways: got %v, want ErrInvalidConfiguration", err)
+	}
+}
+
+// An open step is open to anyone — except somebody the chain still needs further
+// along. Letting them spend their one signature early would leave their own step
+// unfillable and the document unapprovable, with a legal chain and no policy flag
+// involved.
+func TestAnOpenStepHoldsBackALaterStepsSigner(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// The natural ordering: a reviewer anyone may be, then the director.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Хянагч"}, // open
+		{Name: "Захирал", SignerRegNumber: "AA90010111"},
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хоёр шаттай гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// The director cannot take the reviewer's step, even though it names nobody.
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111"); !errors.Is(err, ErrSignatureRejected) {
+		t.Errorf("the director taking the open step: got %v, want ErrSignatureRejected", err)
+	}
+
+	// Anyone else may.
+	if _, err := signWithEID(t, f, doc.ID, "ZZ99999999"); err != nil {
+		t.Fatalf("open step: %v", err)
+	}
+	// And then the director finishes their own.
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456")
+	if err != nil {
+		t.Fatalf("director: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+}
+
+// Asking a citizen to approve on their own device and then throwing the approval
+// away because they had already signed is worse than not asking.
+func TestARepeatSignerIsRefusedBeforeTheCitizenIsAsked(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "REQUEST", []WorkflowStep{
+		{Name: "Нэг"}, {Name: "Хоёр"}, // both open
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хоёр нээлттэй шат", "REQUEST")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("first signature: %v", err)
+	}
+
+	// The same citizen for the second, still-open step: refused at start, before a
+	// request reaches their phone.
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111"); !errors.Is(err, ErrAlreadySigned) {
+		t.Errorf("eid start: got %v, want ErrAlreadySigned", err)
+	}
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); !errors.Is(err, ErrAlreadySigned) {
+		t.Errorf("dan: got %v, want ErrAlreadySigned", err)
+	}
+
+	// Somebody else still finishes it.
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "BB90010111", "123456")
+	if err != nil {
+		t.Fatalf("second signer: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+}
+
+// The citizen has already approved by the time the signature is written, so an
+// operator closing the dialog — which aborts the poll and cancels its context —
+// must not destroy it.
+func TestASignatureSurvivesTheCallerHangingUp(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Цуцлагдсан хүсэлт", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	session, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// Wait for the mock citizen to approve, then poll on a context that is
+	// cancelled the instant the write begins — the shape of a dialog being closed.
+	time.Sleep(1800 * time.Millisecond)
+	cancelled, cancel := context.WithCancel(ctx)
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		cancel()
+	}()
+	_, _ = f.m.PollEIDSignature(cancelled, f.tenantID, doc.ID, session.SessionID)
+
+	// Whatever the caller was told, the citizen's approval is either fully applied
+	// or not applied at all — never half.
+	after, err := f.m.getDocument(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	if len(ledger) != after.SignatureCount {
+		t.Errorf("ledger has %d rows but the document reports %d", len(ledger), after.SignatureCount)
+	}
+	if after.SignatureCount == 1 && after.Status != StatusApproved {
+		t.Errorf("a single-signature document with its signature must be %q, got %q", StatusApproved, after.Status)
+	}
+	// And the session cannot be spent twice: a later poll reports the same outcome.
+	if after.SignatureCount == 1 {
+		again, err := f.m.PollEIDSignature(ctx, f.tenantID, doc.ID, session.SessionID)
+		if err != nil {
+			t.Fatalf("re-poll: %v", err)
+		}
+		if again.State != ApprovalComplete || again.Document == nil || again.Document.SignatureCount != 1 {
+			t.Errorf("re-poll = %+v, want the one signature it already produced", again)
+		}
+	}
+}
+
 func TestRejectIsFinal(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

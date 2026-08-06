@@ -42,6 +42,8 @@ export const documents = {
   "documents.state.pending": { mn: "Хүлээгдэж буй", en: "Pending" },
   "documents.state.approved": { mn: "Баталсан", en: "Approved" },
   "documents.state.rejected": { mn: "Татгалзсан", en: "Rejected" },
+  "documents.state.awaiting_now": { mn: "Одоо хүлээж байна", en: "Awaiting now" },
+  "documents.state.awaiting_later": { mn: "Дараа", en: "Later" },
 
   "documents.action.create": { mn: "Баримт үүсгэх", en: "Create Document" },
   "documents.action.sign": { mn: "Гарын үсэг зурах", en: "Sign" },
@@ -76,6 +78,10 @@ export const documents = {
   "documents.message.history_failed": {
     mn: "Гарын үсгийн түүхийг ачаалж чадсангүй",
     en: "Could not load the signature history",
+  },
+  "documents.message.step_open_to_anyone": {
+    mn: "хэн ч зурж болно",
+    en: "open to any signer",
   },
   "documents.message.no_signatures": {
     mn: "Энэ баримтад гарын үсэг зураагүй байна.",
