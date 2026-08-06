@@ -49,22 +49,40 @@ export default function DocumentsPage() {
   const filterRef = useRef({ q: "", doc_type: "", status: "" });
   filterRef.current = { q: search, doc_type: docType, status };
 
+  // The search text the rows on screen were actually fetched under, so a blur that
+  // changed nothing does not throw away the pages the operator has loaded.
+  const loadedSearch = useRef("");
+
+  // Only the newest load may write. A load walks several pages, so without this a
+  // filter change part-way through assembled a row set from two different filters, with
+  // a total belonging to neither — and the screen presented it as the whole answer to
+  // the filter shown.
+  const loadTicket = useRef(0);
+
   const loadSpan = async (rows: number) => {
+    const mine = ++loadTicket.current;
+    // Read once, at the start: every slice of this load has to be the same question.
+    const filter = { ...filterRef.current };
     setLoading(true);
     try {
       const wanted = Math.max(PAGE, rows);
       const collected: DocumentRecord[] = [];
       let counted = 0;
       for (let offset = 0; offset < wanted; offset += PAGE) {
-        const page = await api.getDocuments({ ...filterRef.current, limit: PAGE, offset });
+        const page = await api.getDocuments({ ...filter, limit: PAGE, offset });
+        if (loadTicket.current !== mine) return;
         counted = page?.total ?? 0;
         collected.push(...(page?.documents || []));
         if (collected.length >= counted) break;
       }
       setDocuments(collected);
       setTotal(counted);
+      loadedSearch.current = filter.q;
       setLoadFailed(false);
     } catch (err: any) {
+      // A load that has been superseded says nothing: the newer one speaks for the
+      // screen, and its own failure would be news about a question nobody is asking.
+      if (loadTicket.current !== mine) return;
       setLoadFailed(true);
       // Only when there is nothing on screen to carry the news. With rows showing, the
       // footer says the list is stale and stays saying it — and a banner here would
@@ -74,6 +92,7 @@ export default function DocumentsPage() {
         setMessage({ type: "error", text: err?.message || t("documents.message.load_failed") });
       }
     } finally {
+      // Unconditionally: the ticket decides who WRITES, not who stops the spinner.
       setLoading(false);
     }
   };
@@ -162,7 +181,13 @@ export default function DocumentsPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter") loadSpan(PAGE);
           }}
-          onBlur={() => loadSpan(PAGE)}
+          onBlur={() => {
+            // Only when it actually changed. Reloading on every blur threw away the
+            // pages the operator had loaded — and, because the table came down while
+            // the load ran, the click that caused the blur (Sign, Reject, Load more)
+            // was swallowed with it and the action never happened.
+            if (search.trim() !== loadedSearch.current) loadSpan(PAGE);
+          }}
           className="flex-1 min-w-[12rem] px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         />
         <select
@@ -196,7 +221,7 @@ export default function DocumentsPage() {
         </select>
       </section>
 
-      {loading ? (
+      {loading && documents.length === 0 ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
       ) : documents.length === 0 ? (
         // Only a load that succeeded may claim the tenant has no documents; a

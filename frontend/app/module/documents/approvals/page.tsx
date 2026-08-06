@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
@@ -45,7 +45,14 @@ export default function DocumentApprovalsPage() {
   // asking for a bigger one stopped at 500 and left the rest of a long queue with no
   // way to be signed or rejected from any screen.
   const PAGE = 200;
+
+  // Only the newest load may write. A load walks several pages, so two of them
+  // overlapping — Load more while an action's refresh is still running — would
+  // otherwise assemble a queue out of both and report a total belonging to neither.
+  const loadTicket = useRef(0);
+
   const loadSpan = async (rows: number) => {
+    const mine = ++loadTicket.current;
     setLoading(true);
     try {
       const wanted = Math.max(PAGE, rows);
@@ -53,6 +60,7 @@ export default function DocumentApprovalsPage() {
       let counted = 0;
       for (let offset = 0; offset < wanted; offset += PAGE) {
         const page = await api.getDocuments({ status: PENDING, order: "oldest", limit: PAGE, offset });
+        if (loadTicket.current !== mine) return;
         counted = page?.total ?? 0;
         collected.push(...(page?.documents || []));
         if (collected.length >= counted) break;
@@ -61,6 +69,8 @@ export default function DocumentApprovalsPage() {
       setTotal(counted);
       setLoadFailed(false);
     } catch (err: any) {
+      // A superseded load says nothing: the newer one speaks for the screen.
+      if (loadTicket.current !== mine) return;
       setLoadFailed(true);
       // Only when there is nothing on screen to carry the news. With rows showing, the
       // footer says the list is stale and stays saying it — and a banner here would
@@ -139,7 +149,9 @@ export default function DocumentApprovalsPage() {
         ))}
       </section>
 
-      {loading ? (
+      {/* The table stays up while a refresh runs, so the click that started it is not
+          swallowed by the table coming down under the pointer. */}
+      {loading && pending.length === 0 ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
       ) : pending.length === 0 ? (
         // "Nothing is waiting" is a claim about the queue, so only a load that
