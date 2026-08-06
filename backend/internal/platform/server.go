@@ -27,6 +27,7 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/developer_portal"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/documents"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/gov_services"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/products"
@@ -82,6 +83,7 @@ type Server struct {
 	contactsMod    *contacts.Module
 	productsMod    *products.Module
 	inventoryMod   *inventory.Module
+	esignMod       *esign.Module
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -143,6 +145,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	billingMod := billing.New(db)
 	documentsMod := documents.New(db)
 	govMod := gov_services.New(db)
+	esignMod := esign.New(db, gerege.NewEsignService())
 
 	// Instantiate Async Mailer Queue
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
@@ -174,6 +177,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		contactsMod:    contactsMod,
 		productsMod:    productsMod,
 		inventoryMod:   inventoryMod,
+		esignMod:       esignMod,
 	}
 
 	s.setupRoutes()
@@ -303,6 +307,7 @@ func (s *Server) registerAppModuleRoutes() {
 	s.documentsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.documents"))
 	s.govMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.gov_services"))
 	s.devPortalMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.developer_portal"))
+	s.esignMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.esign"))
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {

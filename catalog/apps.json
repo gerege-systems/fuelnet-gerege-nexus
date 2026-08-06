@@ -117,5 +117,22 @@
         "category": "Төрийн үйлчилгээ"
       }
     }
+  },
+  {
+    "id": "io.example.esign",
+    "slug": "esign",
+    "name": "PDF E-Sign",
+    "description": "Upload PDF documents and sign them with Mongolian digital signatures via the Gerege eSign HSM service.",
+    "icon_url": "/icons/esign.png",
+    "category": "Productivity",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "PDF цахим гарын үсэг",
+        "description": "PDF баримт бичгийг Gerege eSign HSM үйлчилгээгээр тоон гарын үсгээр баталгаажуулах.",
+        "category": "Бүтээмж"
+      }
+    }
   }
 ]

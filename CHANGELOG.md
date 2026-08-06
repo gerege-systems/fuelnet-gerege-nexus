@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **PDF E-Sign App Module ([`io.example.esign`](backend/internal/apps/esign))**:
+  - PDF document upload with tenant-scoped storage (migration `00009`), page-count detection, and original/signed download endpoints (`/api/v1/esign`).
+  - Digital signature (тоон гарын үсэг) certificate validation and PKCS#7 PDF signing via the Gerege eSign HSM platform client ([`internal/platform/gerege/esign.go`](backend/internal/platform/gerege/esign.go)) — the private signing key never leaves the HSM.
+  - Visible signature stamp placement with last-page auto-targeting and signature audit log (`esign_signature_logs`).
+  - Frontend signing flow (`/esign`): certificate check → canvas signature pad → HSM signing → signed PDF download.
+  - Mock mode by default (`ESIGN_MOCK_MODE`); configure `ESIGN_LOGIN_URL`, `ESIGN_SIGN_URL`, and `ESIGN_TOKEN` for live signing.
+
 ### Fixed — CI/CD pipeline
 
 - **Go toolchain mismatch broke every job**: `backend/go.mod` requires `go 1.25.7`

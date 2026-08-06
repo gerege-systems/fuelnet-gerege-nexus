@@ -326,6 +326,66 @@ export const api = {
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
 
+  // PDF E-Sign App (io.example.esign)
+  getEsignDocuments: () =>
+    fetcher<
+      Array<{
+        id: string;
+        title: string;
+        file_name: string;
+        status: string;
+        page_count: number;
+        signer_name: string;
+        signer_reg_no: string;
+        signer_phone: string;
+        signed_at: string | null;
+        created_at: string;
+      }>
+    >("/esign/documents"),
+
+  uploadEsignDocument: (data: { title: string; file_name: string; pdf_base64: string }) =>
+    fetcher("/esign/documents", { method: "POST", body: JSON.stringify(data) }),
+
+  checkEsignCert: (data: { phone_no: string; civil_id: string; data?: string }) =>
+    fetcher<{ is_valid: boolean; given_name: string; surname: string; common_name: string; uid: string }>(
+      "/esign/cert/check",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+
+  signEsignDocument: (
+    id: string,
+    data: { phone_no: string; signer_name: string; signer_reg_no: string; signature_image64: string }
+  ) => fetcher<{ status: string; document_id: string; signed_at: string }>(`/esign/documents/${id}/sign`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }),
+
+  getEsignLogs: () =>
+    fetcher<
+      Array<{
+        id: string;
+        document_id: string;
+        reg_no: string;
+        phone_no: string;
+        first_name: string;
+        last_name: string;
+        action: string;
+        created_at: string;
+      }>
+    >("/esign/logs"),
+
+  downloadEsignDocument: async (id: string, variant: "original" | "signed"): Promise<Blob> => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : null;
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/esign/documents/${id}/download?variant=${variant}`, {
+      headers,
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error("Download failed");
+    return res.blob();
+  },
+
   // Developer Portal & OAuth2 SSO Apps
   getDeveloperApps: () => fetcher<any[]>("/developer/apps"),
   createDeveloperApp: (clientName: string, redirectURIs: string[], scopes?: string[]) =>
