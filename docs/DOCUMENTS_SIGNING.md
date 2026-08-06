@@ -203,7 +203,53 @@ CI нь `DOCUMENTS_TEST_DATABASE_URL`-ыг тавьж, тестүүд чимээ
 
 ---
 
-## 7. Одоогийн цоорхойнууд
+## 7. Гараар турших
+
+Mock горимд бүтэн ceremony-г HTTP-ээр гүйцэтгэж болно. `EID_MOCK_MODE=true` үед
+иргэн 1.5 секундын дараа өөрөө "батална".
+
+```bash
+API=http://127.0.0.1:8080/api/v1
+TOKEN=$(curl -s -X POST "$API/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"Password123!"}' | jq -r .token)
+AUTH="Authorization: Bearer $TOKEN"
+
+# Хоёр шаттай хэлхээ: нэг дэх нь нэрлэгдсэн, хоёр дах нь нээлттэй
+curl -s -X PUT "$API/documents/workflows/CONTRACT" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"steps":[{"name":"Хэлтсийн дарга","signer_reg_number":"AA90010111"},
+                {"name":"Захирал","signer_reg_number":""}]}'
+
+DOC=$(curl -s -X POST "$API/documents" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"Хамтран ажиллах гэрээ 2026","doc_type":"CONTRACT"}' | jq -r .id)
+
+# Танихгүй хүн нэрлэгдсэн шатыг авч чадахгүй → 400
+curl -s -X POST "$API/documents/$DOC/sign/eid/start" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"reg_number":"ZZ99999999"}'
+
+# Нэрлэгдсэн хүн ceremony-г эхлүүлнэ
+SID=$(curl -s -X POST "$API/documents/$DOC/sign/eid/start" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"reg_number":"AA90010111"}' | jq -r .session_id)
+
+# COMPLETE болтол poll (mock: 2-3 удаа)
+curl -s -X POST "$API/documents/$DOC/sign/eid/poll" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"session_id\":\"$SID\"}"
+
+# Хоёр дах шат нээлттэй тул хэн ч дуусгана → APPROVED 2/2
+curl -s -X POST "$API/documents/$DOC/sign/dan" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"reg_number":"ZZ99999999","otp_code":"123456"}'
+
+# Ledger: шат тус бүрийг хэн дүүргэсэн
+curl -s "$API/documents/$DOC/signatures" -H "$AUTH"
+```
+
+Дараах зүйлсийг ингэж баталсан: `/documents/templates` нь баримтын id гэж
+уншигдахгүй; харагдах текст яг 60 байт, зорилго эхэндээ; шатны эрх 400-аар
+тодорхой татгалздаг; шийдэгдсэн баримт 409 буцаана; урт гарчиг SQLSTATE биш
+ойлгомжтой 400 өгнө.
+
+---
+
+## 8. Одоогийн цоорхойнууд
 
 - **ДАН live биш.** `AuthenticateDANCitizen` нь mock-гүйгээр алдаа буцаана.
 - **Прод дээр E-ID** нь `EID_MOCK_MODE=false` үед бодит холбогчоор ажиллана
