@@ -14,6 +14,11 @@
       "code": "documents.manage",
       "name": "Manage Documents",
       "description": "Allows creating documents and routing them for approval"
+    },
+    {
+      "code": "documents.sign",
+      "name": "Sign Documents",
+      "description": "Allows applying an E-ID / DAN digital signature or rejecting a document"
     }
   ],
   "menus": [

@@ -324,13 +324,25 @@ export const api = {
         title: string;
         doc_type: string;
         status: string;
-        signed_by: string;
+        signed_by?: string;
+        signature_hash?: string;
+        signer_reg_number?: string;
+        signer_method?: string;
+        signed_at?: string;
         created_at: string;
       }>
     >("/documents"),
 
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
+
+  // Apply an E-ID / DAN digital signature — moves the document to APPROVED.
+  signDocument: (id: string, data: { method: "EID" | "DAN"; reg_number: string; otp_code: string }) =>
+    fetcher(`/documents/${id}/sign`, { method: "POST", body: JSON.stringify(data) }),
+
+  // Reject a pending document — moves it to REJECTED.
+  rejectDocument: (id: string) =>
+    fetcher(`/documents/${id}/reject`, { method: "POST" }),
 
   // PDF E-Sign App (io.example.esign)
   getEsignDocuments: () =>
