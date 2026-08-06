@@ -196,6 +196,16 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 		return nil, fmt.Errorf("%w: E-ID could not reach the signer: %w", ErrProviderUnavailable, err)
 	}
 
+	// The citizen has been asked by this point, so that is recorded before anything
+	// else can fail. Who asked for a signature is not who gave it, and the ledger
+	// only ever knows the latter — this is the other half of the trail, and it must
+	// not go missing because the bookkeeping below did.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signature_requested", docID, map[string]any{
+		"signer_reg_number": regNumber,
+		"display_text":      displayText,
+		"session_id":        started.SessionID,
+	})
+
 	// The citizen's phone is now showing the request, so the pairing that makes it
 	// redeemable has to be written even if the caller has gone away — otherwise
 	// they could approve a document nothing can attach their signature to.
@@ -207,13 +217,6 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 		started.SessionID, tenantID, docID, regNumber, displayText, expiresAt); err != nil {
 		return nil, fmt.Errorf("record signature session: %w", err)
 	}
-
-	// Who asked for the signature is not who gave it, and the ledger only records
-	// the latter. This is the other half of the trail.
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signature_requested", docID, map[string]any{
-		"signer_reg_number": regNumber,
-		"display_text":      displayText,
-	})
 
 	return &EIDSignSession{
 		SessionID:        started.SessionID,
