@@ -56,21 +56,32 @@ BEGIN
     --    citizen signs a document once — so the second step would be owed to somebody
     --    who has already signed, and no document of that type could ever be approved.
     --
-    --    The later steps are opened. The tenant asked for that many approvals and
-    --    still gets them; the repeat is fillable by somebody else, which is the only
-    --    reading that leaves the chain completable. Doing this BEFORE the copy and the
-    --    placement below matters: it is what lets a legacy signature land in the step
-    --    it belongs in rather than being parked past the end of the chain.
-    WITH repeated AS (
-        SELECT id, row_number() OVER (PARTITION BY tenant_id, doc_type, signer_reg_number
-                                      ORDER BY step_order) AS n
-          FROM document_workflow_steps
-         WHERE signer_reg_number <> ''
+    --    The same applies to a step naming something that is not a registration
+    --    number at all. Nothing checked the length before this release either, and
+    --    the numbers were ignored unless the policy asked for them, so "AA9" was a
+    --    harmless typo in a chain that just meant "two signatures". Now it names a
+    --    citizen who can never present that number to a provider, so the step is
+    --    unfillable and rejection is the document's only exit.
+    --
+    --    Both are opened. The tenant asked for that many approvals and still gets
+    --    them; the step is simply fillable by whoever can actually sign, which is the
+    --    only reading that leaves the chain completable. Doing this BEFORE the copy
+    --    and the placement below matters: it is what lets a legacy signature land in
+    --    the step it belongs in rather than being parked past the end of the chain.
+    WITH unfillable AS (
+        SELECT id
+          FROM (SELECT id, signer_reg_number,
+                       row_number() OVER (PARTITION BY tenant_id, doc_type, signer_reg_number
+                                          ORDER BY step_order) AS n
+                  FROM document_workflow_steps
+                 WHERE signer_reg_number <> '') AS named
+         WHERE n > 1                              -- one citizen signs a document once
+            OR length(signer_reg_number) < 8      -- no provider would accept it
     )
     UPDATE document_workflow_steps w
        SET signer_reg_number = ''
-      FROM repeated
-     WHERE repeated.id = w.id AND repeated.n > 1;
+      FROM unfillable
+     WHERE unfillable.id = w.id;
 
     -- 1. Give every document still waiting a copy of its type's chain, unless it
     --    already carries one. That guard is what makes a partial re-run safe.

@@ -850,6 +850,59 @@ func TestASnapshotOpensARepeatedSigner(t *testing.T) {
 	}
 }
 
+// The other way a stored chain carries a step nobody can fill: a name too short to be
+// a registration number. Nothing checked the length before this release, and the number
+// was ignored unless the policy asked for it, so a typo sat there harmlessly meaning
+// "one more signature". Copied verbatim it now names a citizen who cannot present that
+// number to any provider, and rejection becomes the document's only exit.
+func TestASnapshotOpensAStepNamingSomethingUnusable(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Straight into the table: a real signer, then a typo, the way it was stored.
+	for order, reg := range map[int]string{1: "AA90010111", 2: "AA9"} {
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_workflow_steps (tenant_id, doc_type, step_order, name, signer_reg_number)
+			      VALUES ($1, 'CONTRACT', $2, 'Шат', $3)`,
+			f.tenantID, order, reg); err != nil {
+			t.Fatalf("insert legacy step %d: %v", order, err)
+		}
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хуучин алдаатай хэлхээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	steps, err := f.m.DocumentSteps(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("steps: %v", err)
+	}
+	if len(steps) != 2 {
+		t.Fatalf("got %d steps, want 2 — the tenant asked for two approvals", len(steps))
+	}
+	if steps[0].SignerRegNumber != "AA90010111" {
+		t.Errorf("step 1 = %q, want the citizen the chain names", steps[0].SignerRegNumber)
+	}
+	if steps[1].SignerRegNumber != "" {
+		t.Errorf("step 2 = %q, want it copied open — no provider would accept that number",
+			steps[1].SignerRegNumber)
+	}
+
+	// And the document can be finished, which is the whole point.
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("the named signer: %v", err)
+	}
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("the opened step: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q — an unusable name must not strand the type",
+			done.Status, StatusApproved)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
@@ -1134,25 +1187,42 @@ func TestRetentionReportsWhatIsPastItsTerm(t *testing.T) {
 	}
 
 	for _, rule := range rules {
+		// The list always knows its counts; only the save path may leave them absent.
+		if rule.Expired == nil || rule.Total == nil {
+			t.Errorf("%s: the list must carry both counts, got %+v", rule.DocType, rule)
+			continue
+		}
 		switch rule.DocType {
 		case "CONTRACT":
 			if !rule.Configured || rule.RetainYears != 5 {
 				t.Errorf("CONTRACT rule = %+v, want a stored 5-year term", rule)
 			}
-			if rule.Total != 2 {
-				t.Errorf("CONTRACT total = %d, want 2", rule.Total)
+			if *rule.Total != 2 {
+				t.Errorf("CONTRACT total = %d, want 2", *rule.Total)
 			}
-			if rule.Expired != 1 {
-				t.Errorf("CONTRACT expired = %d, want 1 (the six-year-old document)", rule.Expired)
+			if *rule.Expired != 1 {
+				t.Errorf("CONTRACT expired = %d, want 1 (the six-year-old document)", *rule.Expired)
 			}
 		default:
 			if rule.Configured {
 				t.Errorf("%s must stay unconfigured", rule.DocType)
 			}
-			if rule.Expired != 0 {
-				t.Errorf("%s expired = %d, want 0 without a term", rule.DocType, rule.Expired)
+			if *rule.Expired != 0 {
+				t.Errorf("%s expired = %d, want 0 without a term", rule.DocType, *rule.Expired)
 			}
 		}
+	}
+
+	// A saved rule answers with the counts too, so the screen need not refetch.
+	saved, err := f.m.SaveRetentionRule(ctx, f.tenantID, "CONTRACT", 5, "Гэрээг 5 жил хадгална")
+	if err != nil {
+		t.Fatalf("save again: %v", err)
+	}
+	if saved.Expired == nil || saved.Total == nil {
+		t.Fatalf("the saved rule must carry its counts, got %+v", saved)
+	}
+	if *saved.Total != 2 || *saved.Expired != 1 {
+		t.Errorf("saved counts = %d/%d, want 1 expired of 2", *saved.Expired, *saved.Total)
 	}
 }
 

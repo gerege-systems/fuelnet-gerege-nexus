@@ -13,8 +13,13 @@ interface Rule {
   note: string;
   configured: boolean;
   updated_at?: string;
-  expired: number;
-  total: number;
+  /**
+   * Absent when the server could not count — the save path treats a failed count as
+   * non-fatal — so the row keeps whatever it already knew rather than claiming the
+   * type has nothing filed under it.
+   */
+  expired?: number;
+  total?: number;
 }
 
 /**
@@ -63,7 +68,14 @@ export default function DocumentRetentionPage() {
         note: rule.note,
       })) as Rule | undefined;
       setMessage({ type: "success", text: t("documents.message.retention_saved", { type: rule.doc_type }) });
-      if (saved && saved.doc_type) edit(rule.doc_type, saved);
+      if (saved && saved.doc_type) {
+        // A save cannot change the counts, so absent ones keep the row's.
+        edit(rule.doc_type, {
+          ...saved,
+          expired: saved.expired ?? rule.expired,
+          total: saved.total ?? rule.total,
+        });
+      }
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.retention_failed") });
     } finally {
@@ -71,7 +83,7 @@ export default function DocumentRetentionPage() {
     }
   };
 
-  const expiredTotal = rules.reduce((sum, rule) => sum + rule.expired, 0);
+  const expiredTotal = rules.reduce((sum, rule) => sum + (rule.expired ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -85,7 +97,7 @@ export default function DocumentRetentionPage() {
 
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <div className="text-2xl font-bold text-slate-700">{rules.reduce((sum, r) => sum + r.total, 0)}</div>
+          <div className="text-2xl font-bold text-slate-700">{rules.reduce((sum, r) => sum + (r.total ?? 0), 0)}</div>
           <div className="text-[11px] text-slate-500 leading-snug mt-1">{t("documents.stat.filed")}</div>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-xl">
@@ -139,9 +151,11 @@ export default function DocumentRetentionPage() {
                       className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     />
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{rule.total}</td>
+                  <td className="px-4 py-3 text-slate-500">{rule.total ?? "—"}</td>
                   <td className="px-4 py-3">
-                    {rule.expired > 0 ? (
+                    {rule.expired === undefined ? (
+                      <span className="text-slate-400">—</span>
+                    ) : rule.expired > 0 ? (
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                         {rule.expired}
                       </span>

@@ -24,11 +24,15 @@ type RetentionRule struct {
 	Note        string     `json:"note"`
 	Configured  bool       `json:"configured"`
 	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
-	// Expired counts the documents of this type already past the term.
-	Expired int `json:"expired"`
-	// Total counts every document of this type, so a zero Expired can be told
-	// apart from a type nothing has been filed under.
-	Total int `json:"total"`
+	// Expired counts the documents of this type already past the term, and Total
+	// every document of this type — so a zero Expired can be told apart from a type
+	// nothing has been filed under.
+	//
+	// Both are absent, rather than zero, when they could not be read: the save path
+	// treats a failed count as non-fatal, and a screen shown "0 filed" for a type
+	// with hundreds is worse than one shown nothing.
+	Expired *int `json:"expired,omitempty"`
+	Total   *int `json:"total,omitempty"`
 }
 
 // ListRetentionRules returns a row per document type: its rule if the tenant set
@@ -69,10 +73,11 @@ func (m *DocumentsModule) ListRetentionRules(ctx context.Context, tenantID strin
 		if !ok {
 			rule = RetentionRule{DocType: docType}
 		}
-		if count, ok := counts[docType]; ok {
-			rule.Expired = count.expired
-			rule.Total = count.total
-		}
+		// The list always knows: a count failure here is fatal, so every row it
+		// returns carries both numbers.
+		count := counts[docType]
+		expired, total := count.expired, count.total
+		rule.Expired, rule.Total = &expired, &total
 		list = append(list, rule)
 	}
 	return list, nil
@@ -166,14 +171,16 @@ func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docTy
 	// presentation only: a failure here is logged and the saved rule still returned.
 	counts, err := m.retentionCounts(ctx, tenantID, map[string]RetentionRule{docType: saved})
 	if err != nil {
+		// The rule is stored and recorded. The counts are left absent rather than
+		// zero, so the screen keeps what it already knew instead of being told this
+		// type has nothing filed under it.
 		slog.WarnContext(ctx, "saved the retention rule but could not count its documents",
 			"doc_type", docType, "error", err)
 		return &saved, nil
 	}
-	if count, ok := counts[docType]; ok {
-		saved.Expired = count.expired
-		saved.Total = count.total
-	}
+	count := counts[docType]
+	expired, total := count.expired, count.total
+	saved.Expired, saved.Total = &expired, &total
 
 	return &saved, nil
 }

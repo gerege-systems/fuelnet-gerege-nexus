@@ -460,8 +460,10 @@ export const api = {
         note: string;
         configured: boolean;
         updated_at?: string;
-        expired: number;
-        total: number;
+        // Absent when the server could not count them; a save treats that as
+        // non-fatal, so the caller must not read absence as zero.
+        expired?: number;
+        total?: number;
       }>
     >("/documents/retention"),
 

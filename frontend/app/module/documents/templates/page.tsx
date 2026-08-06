@@ -53,7 +53,10 @@ export default function DocumentTemplatesPage() {
       setLoadFailed(true);
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
-      if (loadTicket.current === mine) setLoading(false);
+      // Unconditionally. The ticket exists to stop a stale load WRITING, not to
+      // decide who clears the spinner — gating this left the page saying "Loading"
+      // for ever whenever a create superseded the load that was still in flight.
+      setLoading(false);
     }
   };
 

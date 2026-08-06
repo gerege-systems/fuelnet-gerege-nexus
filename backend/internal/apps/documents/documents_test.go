@@ -2,6 +2,7 @@ package documents
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -213,5 +214,44 @@ func TestResolveTitlePattern(t *testing.T) {
 	// shows up in the document instead of disappearing.
 	if got, want := resolveTitlePattern("Гэрээ {quarter}", at), "Гэрээ {quarter}"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// The retention screen keeps the counts it already has when the server sends none,
+// so "could not count" has to reach it as absence rather than as zero. A type with
+// hundreds of documents reading "0 filed" under a green banner is the failure this
+// guards against, and it is a wire-format promise the frontend depends on.
+func TestUnknownRetentionCountsAreAbsentFromTheJSON(t *testing.T) {
+	uncounted, err := json.Marshal(RetentionRule{DocType: "CONTRACT", RetainYears: 5, Configured: true})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(uncounted), "expired") || strings.Contains(string(uncounted), "total") {
+		t.Errorf("uncounted rule = %s, want neither count — zero would be read as a fact", uncounted)
+	}
+
+	expired, total := 1, 2
+	counted, err := json.Marshal(RetentionRule{
+		DocType: "CONTRACT", RetainYears: 5, Configured: true,
+		Expired: &expired, Total: &total,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, want := range []string{`"expired":1`, `"total":2`} {
+		if !strings.Contains(string(counted), want) {
+			t.Errorf("counted rule = %s, want it to carry %s", counted, want)
+		}
+	}
+
+	// And a genuine zero is still stated, or a type with nothing filed under it
+	// would look like one the server failed to count.
+	zero := 0
+	none, err := json.Marshal(RetentionRule{DocType: "INVOICE", Expired: &zero, Total: &zero})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(none), `"expired":0`) || !strings.Contains(string(none), `"total":0`) {
+		t.Errorf("empty type = %s, want both zeroes stated", none)
 	}
 }

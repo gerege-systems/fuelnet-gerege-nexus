@@ -65,21 +65,23 @@ type querier interface {
 // document can never exist in a state where its requirement and its steps
 // disagree.
 func (m *DocumentsModule) snapshotApprovalChain(ctx context.Context, tx pgx.Tx, tenantID, docID, docType string) error {
-	// A citizen named at two steps could only fill one of them, so the later step is
-	// copied open. ReplaceWorkflow refuses such a chain now, but chains stored before
-	// it did still exist, and the path that decides who may sign must never snapshot
-	// a chain the path that saves them would reject.
+	// A step nobody could fill is copied open. Two ways a stored chain can carry one:
+	// a citizen named twice, who signs a document once, and a name too short to be a
+	// registration number any provider would accept. ReplaceWorkflow refuses both now,
+	// but chains saved before it did still exist — and the path that decides who may
+	// sign must never snapshot a chain the path that saves them would reject.
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
 		 SELECT $1, $2, w.step_order, w.name,
 		        CASE WHEN w.signer_reg_number = '' THEN ''
+		             WHEN length(w.signer_reg_number) < $4 THEN ''
 		             WHEN w.step_order = min(w.step_order)
 		                    OVER (PARTITION BY w.signer_reg_number) THEN w.signer_reg_number
 		             ELSE '' END
 		   FROM document_workflow_steps w
 		  WHERE w.tenant_id = $1 AND w.doc_type = $3
 		     ON CONFLICT (document_id, step_order) DO NOTHING`,
-		tenantID, docID, docType); err != nil {
+		tenantID, docID, docType, RegNumberLimit); err != nil {
 		return fmt.Errorf("copy approval chain onto document: %w", err)
 	}
 
