@@ -1,28 +1,53 @@
 /**
- * auth — Sign-in, including the national E-ID and DAN identity channels.
+ * auth — Signing in through eID Mongolia, plus the administrator's password
+ * fallback.
  */
 export const auth = {
-  "auth.view.subtitle": { mn: "Модуль бүтэцтэй байгууллагын платформ", en: "Modular Enterprise Application Platform" },
-  "auth.view.eid_title": { mn: "E-ID Mongolia танилт (eidmongolia.mn)", en: "E-ID Mongolia Identity (eidmongolia.mn)" },
-  "auth.view.dan_title": { mn: "Үндэсний ДАН Танилт Нэвтрэх Суваг", en: "National DAN identity channel" },
+  "auth.view.eyebrow": { mn: "ҮНДЭСНИЙ ЦАХИМ ТАНИЛТ", en: "NATIONAL DIGITAL IDENTITY" },
+  // The headline highlights its middle phrase, so it is stored in parts
+  // rather than as markup inside a translation.
+  "auth.view.title_lead": { mn: "Баталгаатай identity.", en: "Verified identity." },
+  "auth.view.title_highlight": { mn: "Нэг удаагийн", en: "Sign in" },
+  "auth.view.title_tail": { mn: "нэвтрэлт.", en: "once." },
+  "auth.view.lede": {
+    mn: "eID Mongolia апп дээр хүсэлтийг зөвшөөрөхөд ERP болон холбогдсон SSO аппууд таны баталгаажсан session-ийг ашиглана.",
+    en: "Approve the request in the eID Mongolia app and the ERP — along with every connected SSO app — uses that verified session.",
+  },
+  "auth.view.point_push": { mn: "Регистрийн дугаараар push хүсэлт", en: "Push request by registration number" },
+  "auth.view.point_qr": { mn: "QR болон mobile App2App", en: "QR and mobile App2App" },
+  "auth.view.point_rbac": { mn: "Tenant RBAC ба audit хамгаалалт", en: "Tenant RBAC and audit protection" },
 
-  "auth.field.email": { mn: "И-мэйл хаяг", en: "Email Address" },
-  "auth.field.password": { mn: "Нууц үг", en: "Password" },
-  "auth.field.reg_number": { mn: "Иргэний Регистрийн Дугаар *", en: "Registration number *" },
-  "auth.field.otp": { mn: "Баталгаажуулах Код (OTP / Pin)", en: "Verification code (OTP / PIN)" },
-  "auth.field.identity_channel": { mn: "Танилт Нэвтрэх Суваг", en: "Identity channel" },
+  "auth.eid.title": { mn: "eID Mongolia", en: "eID Mongolia" },
+  "auth.eid.subtitle": { mn: "Үндэсний цахим үнэмлэхээр баталгаажна", en: "Verified by the national digital ID" },
+  "auth.eid.tab_id": { mn: "Регистрийн дугаар", en: "Registration number" },
+  "auth.eid.tab_qr": { mn: "QR код", en: "QR code" },
+  "auth.eid.reg_number": { mn: "Регистрийн дугаар", en: "Registration number" },
+  "auth.eid.reg_number_placeholder": { mn: "АА00112233", en: "AA00112233" },
+  "auth.eid.send_request": { mn: "eID апп руу хүсэлт илгээх", en: "Send a request to the eID app" },
+  "auth.eid.verification_code": { mn: "Баталгаажуулах код", en: "Verification code" },
+  "auth.eid.confirm_hint": { mn: "Апп дээрх кодтой тулгаад зөвшөөрнө үү", en: "Match the code shown in the app, then approve" },
+  "auth.eid.footer": {
+    mn: "Нууц үг дамжуулахгүй · Баталгаажуулалт eID апп дотор хийгдэнэ",
+    en: "No password is sent · Approval happens inside the eID app",
+  },
 
-  "auth.method.eid": { mn: "E-ID Mongolia (Танилт Нэвтрэлт)", en: "E-ID Mongolia (National Identity)" },
-  "auth.method.pki": { mn: "Тоон Гарын Үсэг (PKI)", en: "PKI digital signature" },
-  "auth.method.otp": { mn: "Нэг удаагийн код (Mobile OTP)", en: "Mobile OTP" },
-  "auth.method.bank": { mn: "Банкны системээр нэвтрэх", en: "Bank SSO" },
-  "auth.method.biometric": { mn: "Царай танилт (Biometric Face)", en: "Biometric face verification" },
+  "auth.action.retry": { mn: "Дахин оролдох", en: "Try again" },
+  "auth.action.admin_disclosure": { mn: "Системийн админ нэвтрэлт", en: "System administrator sign-in" },
+  "auth.action.admin_sign_in": { mn: "Админаар нэвтрэх", en: "Sign in as administrator" },
 
-  "auth.action.sign_in": { mn: "Платформ руу нэвтрэх", en: "Sign In to Platform" },
-  "auth.action.verify_sign_in": { mn: "Баталгаажуулж Нэвтрэх", en: "Verify and sign in" },
-
-  "auth.label.or": { mn: "ЭСВЭЛ", en: "OR" },
-
-  "auth.message.signing_in": { mn: "Нэвтэрч байна...", en: "Signing in..." },
-  "auth.message.demo_credentials": { mn: "Туршилтын эрх:", en: "Demo credentials:" },
+  "auth.message.starting": { mn: "Хүсэлт үүсгэж байна…", en: "Creating the request…" },
+  "auth.message.scan_qr": { mn: "eID Mongolia апп-аар QR кодыг уншуулна уу.", en: "Scan the QR code with the eID Mongolia app." },
+  "auth.message.sent_push": { mn: "Таны eID Mongolia апп руу хүсэлт илгээлээ.", en: "A request has been sent to your eID Mongolia app." },
+  "auth.message.expired": { mn: "Хүсэлтийн хугацаа дууслаа.", en: "The request has expired." },
+  "auth.message.refused": { mn: "Та нэвтрэх хүсэлтийг татгалзлаа.", en: "You declined the sign-in request." },
+  "auth.message.success": { mn: "Амжилттай. Систем рүү шилжиж байна…", en: "Signed in. Taking you to the platform…" },
+  "auth.message.error_link": {
+    mn: "eID баталгаажуулалтыг ERP хэрэглэгчтэй холбож чадсангүй",
+    en: "The eID verification could not be linked to an ERP user",
+  },
+  "auth.message.error_service": {
+    mn: "eID Mongolia үйлчилгээтэй холбогдож чадсангүй",
+    en: "Could not reach the eID Mongolia service",
+  },
+  "auth.message.error_password": { mn: "Нэвтрэх боломжгүй байна", en: "Could not sign in" },
 } as const;

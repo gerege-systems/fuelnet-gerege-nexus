@@ -12,13 +12,13 @@
        The page background matches sso.gerege.mn (--bg: #f9fafc) so the two
        products read as one platform when a user moves between them. */
     --gerege-bg: #f9fafc;
-    --gerege-chrome: #edf4fd;
-    --gerege-surface-2: #eef4fb;
+    --gerege-chrome: #ffffff;
+    --gerege-surface-2: #f1f3f7;
     --gerege-navy: #0b2550;
     --gerege-surface: #ffffff;
-    --gerege-fg: #172033;
-    --gerege-muted: #667085;
-    --gerege-border: #e4e9f0;
+    --gerege-fg: #11161e;
+    --gerege-muted: #5e646c;
+    --gerege-border: #e2e5e9;
     --gerege-success: #159455;
     --gerege-danger: #d92d20;
     --gerege-radius-card: 10px;
@@ -30,12 +30,12 @@
 
   html[data-theme="dark"] {
     --gerege-bg: #0a0d12;
-    --gerege-chrome: #172131;
-    --gerege-surface: #171f2c;
-    --gerege-surface-2: #202a38;
-    --gerege-fg: #f2f4f7;
-    --gerege-muted: #98a2b3;
-    --gerege-border: #2b3646;
+    --gerege-chrome: #12161c;
+    --gerege-surface: #12161c;
+    --gerege-surface-2: #1b1f27;
+    --gerege-fg: #f0f2f5;
+    --gerege-muted: #8e929a;
+    --gerege-border: #252930;
     --gerege-blue-soft: #102d55;
     --background: 218 29% 5%;
     --foreground: 210 20% 96%;
