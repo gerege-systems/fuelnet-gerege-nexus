@@ -382,7 +382,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 			// Model-level access rights are additive across all assigned roles,
 			// matching Odoo's ir.model.access behaviour. Government workflow has
 			// its own action- and unit-aware permission checks.
-			if permission := appRequestPermission(appID, r.Method); permission != "" {
+			if permission := appRequestPermission(appID, r.Method, r.URL.Path); permission != "" {
 				rbac.RequirePermission(s.permissions, permission)(next).ServeHTTP(w, r)
 				return
 			}
@@ -391,7 +391,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 	}
 }
 
-func appRequestPermission(appID, method string) string {
+func appRequestPermission(appID, method, path string) string {
 	prefixes := map[string]string{
 		"io.example.contacts": "contacts", "io.example.products": "products",
 		"io.example.inventory": "inventory", "io.example.billing": "billing",
@@ -400,6 +400,14 @@ func appRequestPermission(appID, method string) string {
 	prefix := prefixes[appID]
 	if prefix == "" {
 		return ""
+	}
+	// Applying a signature is a different authority from routing a document: an
+	// approver may sign what they cannot draft, and a clerk may draft what they
+	// cannot sign. The documents module declares documents.sign for exactly that
+	// split, so the two decision routes are checked against it rather than
+	// against the blanket .manage right.
+	if prefix == "documents" && (strings.HasSuffix(path, "/sign") || strings.HasSuffix(path, "/reject")) {
+		return "documents.sign"
 	}
 	if method == http.MethodGet || method == http.MethodHead {
 		return prefix + ".read"
