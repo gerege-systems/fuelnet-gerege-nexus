@@ -41,12 +41,14 @@ export interface DocumentRecord {
 /** The national identity channel the signature is applied through. */
 type SignMethod = "EID" | "DAN";
 
-// The API holds a live poll open for up to 25s, so one check is already a wait —
-// this is only the breather between two of them. Without it a mock or a fast RP
-// answers at once and the dialog hammers the endpoint; the sign-in card records
-// where that led: stacked long-polls until the browser ran out of connections to
-// the host and the page stopped responding.
-const POLL_GAP = 1200;
+// The API holds a live poll open for up to eid.PollWindow (25s) and answers the
+// moment the citizen approves, so this gap is the only stretch where an approval is
+// not being watched — pure delay between the citizen approving and the signature
+// being recorded. Kept short for that reason, and non-zero because a mock or a
+// fast RP answers at once: without any breather the dialog stacked long-polls
+// until the browser ran out of connections to the host. Same figure and same
+// reasoning as the sign-in card's GAP.
+const POLL_GAP = 400;
 // A dropped long-poll is ordinary on a mobile network, and the citizen may be
 // about to approve, so a session survives a few failures before it is given up.
 const TOLERATED_POLL_FAILURES = 3;
