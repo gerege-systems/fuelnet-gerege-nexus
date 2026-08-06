@@ -101,6 +101,10 @@ const RegNumberMax = 64
 // step would be owed to somebody who has already signed, and the document could
 // never be approved by anybody.
 //
+// The steps must arrive in step_order: it decides which occurrence of a repeated
+// citizen keeps the name. Both callers read them ordered, and the migration that
+// repairs stored chains breaks the same tie the same way.
+//
 // Opening such a step is the only reading that leaves the chain completable: the
 // tenant asked for that many approvals and still gets them, the step is simply
 // fillable by whoever can actually sign. ReplaceWorkflow refuses to SAVE either
