@@ -54,10 +54,13 @@ export default function DocumentTemplatesPage() {
     setBusy("create");
     setMessage(null);
     try {
-      await api.createDocumentTemplate(form);
+      const created = (await api.createDocumentTemplate(form)) as Template | undefined;
       setForm({ name: "", doc_type: "CONTRACT", title_pattern: "" });
       setMessage({ type: "success", text: t("documents.message.template_saved") });
-      await loadData();
+      // Appending keeps whatever the operator has typed into the other rows; a
+      // reload here threw it away.
+      if (created && created.id) setTemplates((current) => [...current, created]);
+      else await loadData();
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
@@ -72,15 +75,19 @@ export default function DocumentTemplatesPage() {
     setBusy(tpl.id);
     setMessage(null);
     try {
-      await api.updateDocumentTemplate(tpl.id, {
+      const saved = (await api.updateDocumentTemplate(tpl.id, {
         name: tpl.name,
         doc_type: tpl.doc_type,
         title_pattern: tpl.title_pattern,
         active: tpl.active,
-      });
+      })) as Template | undefined;
       setMessage({ type: "success", text: t("documents.message.template_saved") });
-      await loadData();
+      // Only the row that was saved is replaced, with what the server stored.
+      // Reloading the whole table reverted every other row the operator had typed
+      // into, under a banner saying this one was saved.
+      if (saved && saved.id) edit(tpl.id, saved);
     } catch (err: any) {
+      // The draft stays on screen so the operator can fix what was refused.
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
       setBusy(null);
@@ -110,7 +117,7 @@ export default function DocumentTemplatesPage() {
     try {
       await api.deleteDocumentTemplate(tpl.id);
       setMessage({ type: "success", text: t("documents.message.template_deleted", { name: tpl.name }) });
-      await loadData();
+      setTemplates((current) => current.filter((row) => row.id !== tpl.id));
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {

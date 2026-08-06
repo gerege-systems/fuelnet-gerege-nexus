@@ -102,11 +102,17 @@ type Document struct {
 	SignerRegNumber string     `json:"signer_reg_number,omitempty"`
 	SignerMethod    string     `json:"signer_method,omitempty"`
 	SignedAt        *time.Time `json:"signed_at,omitempty"`
-	// Progress through the approval chain: how many signatures are on the
-	// document and how many its type needs.
-	SignatureCount     int       `json:"signature_count"`
-	RequiredSignatures int       `json:"required_signatures"`
-	CreatedAt          time.Time `json:"created_at"`
+	// Progress through the approval chain: how many signatures the document carries
+	// and how many it asked for.
+	SignatureCount     int `json:"signature_count"`
+	RequiredSignatures int `json:"required_signatures"`
+	// OutstandingSteps is how many steps of the document's own chain no signature has
+	// filled. Completion needs this to be zero as well as the count to be met, so a
+	// screen that only compared the two numbers could paint "complete" over a document
+	// whose named step was still owed — a signature from somebody no step names counts
+	// toward the total and satisfies none of the chain.
+	OutstandingSteps int       `json:"outstanding_steps"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type DocumentsModule struct {
@@ -636,7 +642,12 @@ const documentColumns = `
 	COALESCE(d.signer_reg_number, ''), COALESCE(d.signer_method, ''),
 	d.signed_at, d.created_at,
 	(SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id),
-	GREATEST(1, d.required_signatures)`
+	GREATEST(1, d.required_signatures),
+	(SELECT count(*) FROM document_approval_steps st
+	  WHERE st.document_id = d.id
+	    AND NOT EXISTS (SELECT 1 FROM document_signatures s
+	                     WHERE s.document_id = st.document_id
+	                       AND s.step_order = st.step_order))`
 
 func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string) ([]Document, error) {
 	rows, err := m.db.Query(ctx,
@@ -687,6 +698,7 @@ func (m *DocumentsModule) scanDocument(row rowScanner) (*Document, error) {
 		&doc.ID, &doc.TenantID, &doc.Title, &doc.DocType, &doc.Status,
 		&doc.SignedBy, &doc.SignatureHash, &doc.SignerRegNumber, &doc.SignerMethod,
 		&doc.SignedAt, &doc.CreatedAt, &doc.SignatureCount, &doc.RequiredSignatures,
+		&doc.OutstandingSteps,
 	)
 	if err != nil {
 		return nil, err

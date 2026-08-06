@@ -30,9 +30,11 @@ export interface DocumentRecord {
   signer_reg_number?: string;
   signer_method?: string;
   signed_at?: string;
-  /** How many signatures the document carries, and how many its type needs. */
+  /** How many signatures the document carries, and how many it asked for. */
   signature_count: number;
   required_signatures: number;
+  /** How many steps of its own chain no signature has filled. */
+  outstanding_steps: number;
   created_at: string;
 }
 
@@ -139,7 +141,11 @@ export function SignatureProgress({ doc }: { doc: DocumentRecord }) {
   const { t } = useI18n();
   if (doc.required_signatures <= 1) return null;
 
-  const complete = doc.signature_count >= doc.required_signatures;
+  // Meeting the count is not enough: a signature from somebody no step names counts
+  // toward the total and satisfies none of the chain, so painting this emerald on the
+  // numbers alone put "complete" beside "Pending" on a document that still owed a
+  // named approval.
+  const complete = doc.outstanding_steps === 0 && doc.signature_count >= doc.required_signatures;
   return (
     <span
       className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${

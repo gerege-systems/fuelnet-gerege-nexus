@@ -47,6 +47,31 @@ ALTER TABLE document_signatures
 -- +goose StatementBegin
 DO $$
 BEGIN
+    -- 0. Repair the chains first, because everything below depends on their shape.
+    --
+    --    A chain naming ONE citizen at TWO steps was legal before this release: the
+    --    registration numbers were only consulted when the signature policy demanded
+    --    named signers, and then as an unordered set, so the chain simply meant "two
+    --    signatures". Under the new rules a named step binds on its own, and one
+    --    citizen signs a document once — so the second step would be owed to somebody
+    --    who has already signed, and no document of that type could ever be approved.
+    --
+    --    The later steps are opened. The tenant asked for that many approvals and
+    --    still gets them; the repeat is fillable by somebody else, which is the only
+    --    reading that leaves the chain completable. Doing this BEFORE the copy and the
+    --    placement below matters: it is what lets a legacy signature land in the step
+    --    it belongs in rather than being parked past the end of the chain.
+    WITH repeated AS (
+        SELECT id, row_number() OVER (PARTITION BY tenant_id, doc_type, signer_reg_number
+                                      ORDER BY step_order) AS n
+          FROM document_workflow_steps
+         WHERE signer_reg_number <> ''
+    )
+    UPDATE document_workflow_steps w
+       SET signer_reg_number = ''
+      FROM repeated
+     WHERE repeated.id = w.id AND repeated.n > 1;
+
     -- 1. Give every document still waiting a copy of its type's chain, unless it
     --    already carries one. That guard is what makes a partial re-run safe.
     INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
@@ -135,13 +160,21 @@ BEGIN
              SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id))
      WHERE d.status = 'APPROVED';
 
+    --    A signature that filled no step — one from a citizen no step names, with no
+    --    open step to take — is numbered past the end of the chain by §4. It counts
+    --    toward what the document holds but satisfies none of what it owes, so the
+    --    requirement is the chain PLUS those, not the greater of the two. Taking the
+    --    maximum let a document read "2 of 2" while a named step was still owed.
     UPDATE document_records d
        SET required_signatures = GREATEST(
              1,
-             (SELECT count(*) FROM document_approval_steps s WHERE s.document_id = d.id),
+             (SELECT count(*) FROM document_approval_steps s WHERE s.document_id = d.id)
+               + (SELECT count(*) FROM document_signatures s
+                   WHERE s.document_id = d.id
+                     AND s.step_order > (SELECT count(*) FROM document_approval_steps st
+                                          WHERE st.document_id = d.id)),
              (SELECT count(*) FROM document_workflow_steps w
-               WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type),
-             (SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id))
+               WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type))
      WHERE d.status IN ('PENDING_APPROVAL', 'REJECTED');
 
     -- 6. A document the old code left pending-but-complete — its chain was shortened

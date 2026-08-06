@@ -850,6 +850,64 @@ func TestASnapshotOpensARepeatedSigner(t *testing.T) {
 	}
 }
 
+// Meeting the signature count is not the same as finishing the chain. A signature
+// from somebody no step names counts toward what a document holds and satisfies none
+// of what it owes, so the payload has to say how many steps are still outstanding —
+// a screen comparing only the two numbers painted "complete" over a document whose
+// named approval was still missing.
+func TestOutstandingStepsIsWhatCompletionMeans(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Хянагч"},                                 // open
+		{Name: "Захирал", SignerRegNumber: "AA90010111"}, // named
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хоёр шат", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if doc.OutstandingSteps != 2 {
+		t.Fatalf("outstanding = %d, want 2 before anybody signs", doc.OutstandingSteps)
+	}
+
+	half, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("open step: %v", err)
+	}
+	if half.OutstandingSteps != 1 {
+		t.Errorf("outstanding = %d, want 1 — the director has not signed", half.OutstandingSteps)
+	}
+	if half.Status != StatusPending {
+		t.Errorf("status = %q, want %q", half.Status, StatusPending)
+	}
+
+	done, err := signWithEID(t, f, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("the director: %v", err)
+	}
+	if done.OutstandingSteps != 0 {
+		t.Errorf("outstanding = %d, want 0 once every step is filled", done.OutstandingSteps)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+
+	// A document with no chain has no steps to owe, so the count alone decides — the
+	// way a type without a chain has always behaved.
+	plain, err := f.m.CreateDocument(ctx, f.tenantID, "Хэлхээгүй", "APPROVAL")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if plain.OutstandingSteps != 0 || plain.RequiredSignatures != 1 {
+		t.Errorf("no chain: outstanding %d, required %d; want 0 and 1",
+			plain.OutstandingSteps, plain.RequiredSignatures)
+	}
+}
+
 func TestRejectIsFinal(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

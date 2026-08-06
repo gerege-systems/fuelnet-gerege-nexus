@@ -340,6 +340,7 @@ export const api = {
         signed_at?: string;
         signature_count: number;
         required_signatures: number;
+        outstanding_steps: number;
         created_at: string;
       }>
     >("/documents"),
