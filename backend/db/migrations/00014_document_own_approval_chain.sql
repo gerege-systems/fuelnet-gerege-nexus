@@ -68,6 +68,17 @@ BEGIN
     --    only reading that leaves the chain completable. Doing this BEFORE the copy
     --    and the placement below matters: it is what lets a legacy signature land in
     --    the step it belongs in rather than being parked past the end of the chain.
+    --    First, though, the numbers themselves. The save path upper-cases and trims
+    --    what it stores, and the signing path upper-cases what the citizen presents, so
+    --    a step holding 'aa90010111' or a padded number names somebody who can never
+    --    match it — unfillable in exactly the same way. Normalising before the test
+    --    below is also what makes the test right: 'AA90010111' at one step and
+    --    'aa90010111' at another are ONE citizen named twice, and comparing the raw
+    --    strings would not notice.
+    UPDATE document_workflow_steps
+       SET signer_reg_number = upper(btrim(signer_reg_number))
+     WHERE signer_reg_number <> upper(btrim(signer_reg_number));
+
     WITH unfillable AS (
         SELECT id
           FROM (SELECT id, signer_reg_number,

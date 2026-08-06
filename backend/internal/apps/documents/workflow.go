@@ -65,18 +65,25 @@ type querier interface {
 // document can never exist in a state where its requirement and its steps
 // disagree.
 func (m *DocumentsModule) snapshotApprovalChain(ctx context.Context, tx pgx.Tx, tenantID, docID, docType string) error {
-	// A step nobody could fill is copied open. Two ways a stored chain can carry one:
-	// a citizen named twice, who signs a document once, and a name too short to be a
-	// registration number any provider would accept. ReplaceWorkflow refuses both now,
-	// but chains saved before it did still exist — and the path that decides who may
-	// sign must never snapshot a chain the path that saves them would reject.
+	// A step nobody could fill is copied open. Three ways a stored chain can carry one:
+	// a citizen named twice, who signs a document once; a name too short to be a
+	// registration number any provider would accept; and a number in a shape no signer
+	// will ever present, since both providers' answers are upper-cased and trimmed
+	// before they are compared. ReplaceWorkflow refuses all three now, but chains saved
+	// before it did still exist — and the path that decides who may sign must never
+	// snapshot a chain the path that saves them would reject.
+	//
+	// The comparison is on the normalised number for the same reason: 'AA90010111' and
+	// 'aa90010111' in one chain are one citizen named twice, and the raw strings would
+	// not notice. An empty number normalises to empty, which is shorter than the limit,
+	// so an open step stays open.
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
 		 SELECT $1, $2, w.step_order, w.name,
-		        CASE WHEN w.signer_reg_number = '' THEN ''
-		             WHEN length(w.signer_reg_number) < $4 THEN ''
+		        CASE WHEN length(upper(btrim(w.signer_reg_number))) < $4 THEN ''
 		             WHEN w.step_order = min(w.step_order)
-		                    OVER (PARTITION BY w.signer_reg_number) THEN w.signer_reg_number
+		                    OVER (PARTITION BY upper(btrim(w.signer_reg_number)))
+		                  THEN upper(btrim(w.signer_reg_number))
 		             ELSE '' END
 		   FROM document_workflow_steps w
 		  WHERE w.tenant_id = $1 AND w.doc_type = $3

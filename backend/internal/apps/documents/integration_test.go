@@ -903,6 +903,62 @@ func TestASnapshotOpensAStepNamingSomethingUnusable(t *testing.T) {
 	}
 }
 
+// Three decisions compare a registration number to another registration number: whether
+// a named step is this citizen's, whether they have signed already, and the ledger's
+// one-per-signer constraint. All three are string comparisons, so the shape the number
+// arrives in must not matter — a citizen presenting their own number in lower case is
+// the named signer, and is not a second person who may sign again.
+func TestARegistrationNumbersShapeDoesNotDecideWhoSigned(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Order: 1, Name: "Ня-бо", SignerRegNumber: "AA90010111"},
+		{Order: 2, Name: "Захирал", SignerRegNumber: ""},
+	}); err != nil {
+		t.Fatalf("chain: %v", err)
+	}
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хэлбэрийн шалгалт", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// The named citizen, presenting their number the other way round.
+	signed, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "  aa90010111  ", "123456")
+	if err != nil {
+		t.Fatalf("the named signer in lower case: %v — the step is theirs", err)
+	}
+	if signed.SignatureCount != 1 {
+		t.Fatalf("count = %d, want 1", signed.SignatureCount)
+	}
+
+	// Stored normalised, so the ledger and the trail name one citizen, not two shapes.
+	sigs, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	if len(sigs) != 1 || sigs[0].SignerRegNumber != "AA90010111" {
+		t.Fatalf("ledger = %+v, want one row holding AA90010111", sigs)
+	}
+
+	// And the other shape is the same person, so it cannot fill the open step too.
+	if _, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456"); err == nil {
+		t.Error("the same citizen signed twice by changing the case of their number")
+	}
+	if _, err := signWithEID(t, f, doc.ID, "aa90010111"); err == nil {
+		t.Error("the same citizen signed twice through the other provider")
+	}
+
+	// Somebody else still can.
+	done, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "ZZ99999999", "123456")
+	if err != nil {
+		t.Fatalf("the open step: %v", err)
+	}
+	if done.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", done.Status, StatusApproved)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

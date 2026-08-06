@@ -471,9 +471,15 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 	if err != nil {
 		return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
 	}
+	// Normalised here, not trusted from the provider. Three decisions compare this
+	// string — whether a named step belongs to this citizen, whether they have already
+	// signed, and the ledger's one-signature-per-signer constraint — and the E-ID path
+	// normalises its own answer for the same reason. A provider returning 'aa90010111'
+	// where a step names 'AA90010111' would lock the named signer out of their own step,
+	// and let them sign a second time in the other case.
 	signature := &verifiedSignature{
 		SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
-		RegNumber:  profile.RegNumber,
+		RegNumber:  strings.ToUpper(strings.TrimSpace(profile.RegNumber)),
 		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 
