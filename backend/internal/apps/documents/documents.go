@@ -634,18 +634,27 @@ func (m *DocumentsModule) RejectDocument(ctx context.Context, tenantID, docID st
 		return nil, ErrNotSignable
 	}
 
-	tag, err := m.db.Exec(ctx,
+	// What the rejection interrupted is recorded with it. A document rejected with
+	// two of three approvals already given is a different event from one rejected
+	// untouched, and the row itself keeps no memory of which it was.
+	var docType, title string
+	var held int
+	err := m.db.QueryRow(ctx,
 		`UPDATE document_records SET status = $1
-		  WHERE id = $2 AND tenant_id = $3 AND status = $4`,
-		StatusRejected, docID, tenantID, StatusPending)
+		  WHERE id = $2 AND tenant_id = $3 AND status = $4
+		  RETURNING doc_type, title,
+		            (SELECT count(*) FROM document_signatures s WHERE s.document_id = document_records.id)`,
+		StatusRejected, docID, tenantID, StatusPending).Scan(&docType, &title, &held)
+	if isNoRows(err) {
+		return nil, ErrNotSignable
+	}
 	if err != nil {
 		return nil, fmt.Errorf("reject document: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return nil, ErrNotSignable
-	}
 
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.rejected", docID, nil)
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.rejected", docID, map[string]any{
+		"doc_type": docType, "title": title, "signatures_held": held,
+	})
 
 	return m.getDocument(ctx, tenantID, docID)
 }

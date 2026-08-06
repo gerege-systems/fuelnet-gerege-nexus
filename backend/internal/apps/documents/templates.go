@@ -187,16 +187,23 @@ func (m *DocumentsModule) DeleteTemplate(ctx context.Context, tenantID, template
 	if uuid.Validate(templateID) != nil {
 		return ErrTemplateNotFound
 	}
-	tag, err := m.db.Exec(ctx,
-		`DELETE FROM document_templates WHERE id = $1 AND tenant_id = $2`, templateID, tenantID)
+	// RETURNING, because after this the row is the only place the name existed and
+	// the record is what a reader has left. "Somebody deleted template
+	// 0f6f16cf-…" answers nothing.
+	var name, docType string
+	err := m.db.QueryRow(ctx,
+		`DELETE FROM document_templates WHERE id = $1 AND tenant_id = $2
+		 RETURNING name, doc_type`, templateID, tenantID).Scan(&name, &docType)
+	if isNoRows(err) {
+		return ErrTemplateNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("delete template: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrTemplateNotFound
-	}
 
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.template_deleted", templateID, nil)
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.template_deleted", templateID, map[string]any{
+		"name": name, "doc_type": docType,
+	})
 
 	return nil
 }

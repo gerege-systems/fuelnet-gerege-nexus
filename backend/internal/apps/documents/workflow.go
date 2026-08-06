@@ -249,8 +249,13 @@ func (m *DocumentsModule) DocumentSteps(ctx context.Context, tenantID, docID str
 	if uuid.Validate(docID) != nil {
 		return nil, ErrNotSignable
 	}
+	return m.stepsForDocumentTx(ctx, m.db, tenantID, docID)
+}
 
-	rows, err := m.db.Query(ctx,
+// stepsForDocumentTx reads a document's own chain through whatever querier it is
+// given, so the transaction that wrote the chain can also read back what it wrote.
+func (m *DocumentsModule) stepsForDocumentTx(ctx context.Context, q querier, tenantID, docID string) ([]ApprovalStep, error) {
+	rows, err := q.Query(ctx,
 		`SELECT step_order, name, signer_reg_number
 		   FROM document_approval_steps
 		  WHERE tenant_id = $1 AND document_id = $2 ORDER BY step_order`, tenantID, docID)
@@ -508,11 +513,22 @@ func (m *DocumentsModule) RouteDocument(ctx context.Context, tenantID, docID str
 		return nil, err
 	}
 
+	// Read inside the transaction that wrote it: this is the chain the document will
+	// be held to for the rest of its life, and the type's chain may be edited
+	// afterwards without reaching it. The record is where "which rules governed this
+	// document" is answerable from.
+	given, err := m.stepsForDocumentTx(ctx, tx, tenantID, docID)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit route document: %w", err)
 	}
 
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.routed", docID, nil)
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.routed", docID, map[string]any{
+		"doc_type": docType, "chain": given,
+	})
 
 	return m.getDocument(ctx, tenantID, docID)
 }
