@@ -23,15 +23,29 @@ DECLARE
     repaired INTEGER;
 BEGIN
     -- Any duplicate that already exists is renumbered past the end of its document's
-    -- chain, oldest kept in place. That is what §4 should have done with it: the
-    -- signature is real and counts toward what the document holds, it just cannot
-    -- claim an approval another signature already claimed.
+    -- chain. That is what §4 should have done with it: the signature is real and
+    -- counts toward what the document holds, it just cannot claim an approval another
+    -- signature already claimed.
+    --
+    -- WHICH one keeps the step is decided by the step itself, not by the clock. The
+    -- collision this repairs is the one 00014 §4 produced: a signature from somebody
+    -- no step names, parked onto a real step next to the signature of the citizen that
+    -- step DOES name. The stranger's is often the older of the two — legacy signatures
+    -- are what §4 was placing — so keeping the oldest would strip the named signer of
+    -- their own approval and freeze the stranger into it, which is the misattribution
+    -- this migration exists to end. So: the citizen the step names first, then the
+    -- clock, then the id.
     WITH ranked AS (
-        SELECT id, document_id, step_order,
-               row_number() OVER (PARTITION BY document_id, step_order
-                                  ORDER BY signed_at, id) AS n
-          FROM document_signatures
-         WHERE step_order IS NOT NULL
+        SELECT s.id, s.document_id, s.step_order,
+               row_number() OVER (
+                   PARTITION BY s.document_id, s.step_order
+                   ORDER BY (st.signer_reg_number IS NOT NULL
+                             AND st.signer_reg_number = s.signer_reg_number) DESC,
+                            s.signed_at, s.id) AS n
+          FROM document_signatures s
+          LEFT JOIN document_approval_steps st
+            ON st.document_id = s.document_id AND st.step_order = s.step_order
+         WHERE s.step_order IS NOT NULL
     ),
     clashing AS (
         SELECT r.id, r.document_id,

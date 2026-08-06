@@ -142,6 +142,13 @@ export default function DocumentRetentionPage() {
 
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
+      ) : loadFailed ? (
+        // The server answers with a row for every document type, so an empty table
+        // could only mean the load failed — and rendering the headers over nothing
+        // reads as "this tenant has no document types".
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+          {t("documents.message.retention_failed")}
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">

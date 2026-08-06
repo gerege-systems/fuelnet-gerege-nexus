@@ -131,11 +131,26 @@ export default function DocumentTemplatesPage() {
       // into, under a banner saying this one was saved.
       if (saved && saved.id) edit(tpl.id, saved, true);
     } catch (err: any) {
-      // The draft stays on screen so the operator can fix what was refused.
+      // The draft stays on screen so the operator can fix what was refused — unless
+      // the row itself is gone, which is not something they can fix by retyping.
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+      if (err?.status === 404) reconcile(tpl, err);
     } finally {
       setBusy(null);
     }
+  };
+
+  // What the server says about a row is applied TO that row. Reporting "this template
+  // has been retired" in a banner while the row still shows an Active tick and an
+  // enabled Use button leaves the screen contradicting itself in one breath — and the
+  // operator clicking Use again gets the same refusal.
+  const reconcile = (tpl: Template, err: any) => {
+    if (err?.status === 404) {
+      removedRef.current.add(tpl.id);
+      setTemplates((current) => current.filter((row) => row.id !== tpl.id));
+      return;
+    }
+    if (err?.status === 409 && tpl.active) edit(tpl.id, { active: false }, true);
   };
 
   const handleUse = async (tpl: Template) => {
@@ -149,6 +164,7 @@ export default function DocumentTemplatesPage() {
       });
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
+      reconcile(tpl, err);
     } finally {
       setBusy(null);
     }

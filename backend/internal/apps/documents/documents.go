@@ -350,21 +350,26 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 		return nil, fmt.Errorf("commit create document: %w", err)
 	}
 
-	doc, err := m.getDocument(ctx, tenantID, id)
+	// Recorded before anything else that can fail. Creating a document is what puts
+	// it into the approval queue and pins the chain it will be approved under, and
+	// document_records holds no created_by — so this is the only place "who drafted
+	// this contract" is ever answered. Ordering it after the read below would lose the
+	// record for a document that is already committed, on a read that has nothing to
+	// do with whether it was created.
+	//
+	// The chain is read best-effort for the same reason it is recorded at all: the
+	// type's chain may be edited later without reaching this document, so what it was
+	// given is only knowable from here.
+	given, err := m.stepsForDocumentTx(ctx, m.db, tenantID, id)
 	if err != nil {
-		return nil, err
+		slog.WarnContext(ctx, "created the document but could not read back its chain for the record",
+			"document_id", id, "error", err)
 	}
-
-	// Creating a document is what puts it into the approval queue and pins the chain
-	// it will be approved under, and document_records holds no created_by — so
-	// without this record, "who drafted this contract" has no answer anywhere. Every
-	// other mutation in the module is recorded; this one was not.
 	audit.Record(ctx, tenantID, actorFor(ctx), "documents.created", id, map[string]any{
-		"doc_type": docType, "title": title,
-		"status": doc.Status, "signatures_required": doc.RequiredSignatures,
+		"doc_type": docType, "title": title, "status": StatusPending, "chain": given,
 	})
 
-	return doc, nil
+	return m.getDocument(ctx, tenantID, id)
 }
 
 // verifiedSignature is what a national identity channel hands back once it has

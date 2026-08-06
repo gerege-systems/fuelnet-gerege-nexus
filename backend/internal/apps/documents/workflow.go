@@ -426,10 +426,12 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 		return nil, fmt.Errorf("commit workflow update: %w", err)
 	}
 
-	// Who must sign a document type is an authority decision, so a change to it
-	// is recorded alongside the signatures it will govern.
+	// Who must sign a document type is an authority decision, so a change to it is
+	// recorded alongside the signatures it will govern — and the record carries the
+	// chain itself, not just how long it is. "The CONTRACT chain went from three steps
+	// to three steps" answers nothing about who was swapped in.
 	audit.Record(ctx, tenantID, actorFor(ctx), "documents.approval_chain_changed", docType, map[string]any{
-		"steps": len(cleaned),
+		"steps": len(cleaned), "chain": cleaned,
 	})
 
 	return &DocumentWorkflow{DocType: docType, Steps: cleaned}, nil
