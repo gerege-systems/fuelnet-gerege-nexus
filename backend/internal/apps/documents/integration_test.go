@@ -1075,6 +1075,37 @@ func TestAChainWithGapsInItsNumbersStillWorks(t *testing.T) {
 	}
 }
 
+// A retired template is not a missing one. The row is on the operator's screen,
+// greyed out; answering "template not found" sends them looking for something that
+// is not wrong. The Use button is hidden on a retired row, so reaching this means the
+// page is older than the retirement — which is exactly when the answer matters.
+func TestARetiredTemplateSaysSoRatherThanVanishing(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	tpl, err := f.m.CreateTemplate(ctx, f.tenantID, "Хүчингүй загвар", "CONTRACT", "Гэрээ {year}")
+	if err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	if _, err := f.m.UpdateTemplate(ctx, f.tenantID, tpl.ID, "Хүчингүй загвар", "CONTRACT", "Гэрээ {year}", false); err != nil {
+		t.Fatalf("retire: %v", err)
+	}
+
+	_, err = f.m.CreateDocumentFromTemplate(ctx, f.tenantID, tpl.ID)
+	if !errors.Is(err, ErrTemplateRetired) {
+		t.Fatalf("got %v, want ErrTemplateRetired", err)
+	}
+	if errors.Is(err, ErrTemplateNotFound) {
+		t.Error("a retired template must not be reported as missing")
+	}
+
+	// And a template this tenant really does not hold is still missing.
+	if _, err := f.m.CreateDocumentFromTemplate(ctx, f.tenantID,
+		"3f1b9c62-2f1a-4a1c-9d3e-8b7a5c4e1d20"); !errors.Is(err, ErrTemplateNotFound) {
+		t.Errorf("got %v, want ErrTemplateNotFound", err)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
@@ -1261,8 +1292,10 @@ func TestTemplatesCreateDocumentsAndKeepNamesUnique(t *testing.T) {
 	if retired.Active {
 		t.Error("the template was not retired")
 	}
-	if _, err := f.m.CreateDocumentFromTemplate(ctx, f.tenantID, tpl.ID); !errors.Is(err, ErrTemplateNotFound) {
-		t.Errorf("using a retired template: got %v, want ErrTemplateNotFound", err)
+	// A retired template produces nothing — and says which of the two it is, rather
+	// than reporting a row the operator can see as missing.
+	if _, err := f.m.CreateDocumentFromTemplate(ctx, f.tenantID, tpl.ID); !errors.Is(err, ErrTemplateRetired) {
+		t.Errorf("using a retired template: got %v, want ErrTemplateRetired", err)
 	}
 
 	// A name another template already holds is a conflict, not a validation error.

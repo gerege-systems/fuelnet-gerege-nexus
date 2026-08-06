@@ -22,6 +22,12 @@ import (
 // ErrTemplateNotFound is returned for a template id this tenant does not hold.
 var ErrTemplateNotFound = errors.New("template not found")
 
+// ErrTemplateRetired is returned for a template that is there but has been retired.
+// It is a different answer from "not found" because it is a different situation for
+// the operator: the row is on their screen, greyed out, and telling them it does not
+// exist sends them looking for something that is not wrong.
+var ErrTemplateRetired = errors.New("this template has been retired, so it cannot start a document")
+
 // ErrTemplateNameTaken is returned when a tenant already has a template under
 // the requested name.
 var ErrTemplateNameTaken = errors.New("a template with this name already exists")
@@ -203,14 +209,19 @@ func (m *DocumentsModule) CreateDocumentFromTemplate(ctx context.Context, tenant
 		return nil, ErrTemplateNotFound
 	}
 
+	// Read without the active filter, so a retired template can be told apart from
+	// one this tenant does not have.
 	tpl, err := scanTemplate(m.db.QueryRow(ctx,
 		`SELECT `+templateColumns+` FROM document_templates
-		  WHERE id = $1 AND tenant_id = $2 AND active`, templateID, tenantID))
+		  WHERE id = $1 AND tenant_id = $2`, templateID, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrTemplateNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("load template: %w", err)
+	}
+	if !tpl.Active {
+		return nil, ErrTemplateRetired
 	}
 
 	return m.CreateDocument(ctx, tenantID, resolveTitlePattern(tpl.TitlePattern, time.Now()), tpl.DocType)
@@ -323,6 +334,13 @@ func (m *DocumentsModule) useTemplateHandler(w http.ResponseWriter, r *http.Requ
 	switch {
 	case errors.Is(err, ErrTemplateNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
+		return
+	case errors.Is(err, ErrTemplateRetired):
+		// 409, not 404: the template is there. The screen hides Use on a retired row,
+		// so reaching this means the page is older than the retirement — and the
+		// answer has to say so, or the operator goes looking for a template they can
+		// see in front of them.
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	case err != nil:
 		// A pattern that resolves to an over-long title is the template's problem,
