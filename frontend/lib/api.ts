@@ -336,6 +336,12 @@ export const api = {
     order?: "oldest";
     limit?: number;
     offset?: number;
+    // Continue after a row already seen. Prefer this to offset on a list other people
+    // are changing: offset counts from the start of a set that can shift, so a document
+    // approved between two requests makes the next one skip a row — and a skipped row is
+    // on no screen at all. Both halves together, or neither.
+    after_at?: string;
+    after_id?: string;
   }) => {
     const query = new URLSearchParams();
     if (params?.status) query.set("status", params.status);
@@ -344,6 +350,10 @@ export const api = {
     if (params?.order) query.set("order", params.order);
     if (params?.limit) query.set("limit", String(params.limit));
     if (params?.offset) query.set("offset", String(params.offset));
+    if (params?.after_at && params?.after_id) {
+      query.set("after_at", params.after_at);
+      query.set("after_id", params.after_id);
+    }
     const suffix = query.toString() ? `?${query}` : "";
     return fetcher<{
       documents: Array<{

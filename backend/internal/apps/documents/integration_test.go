@@ -1666,6 +1666,106 @@ func TestThisDatabaseCanFoldCyrillicOneWayOrTheOther(t *testing.T) {
 	t.Logf("ctype folds Cyrillic: %v; ICU collation available: %v", ctypeFolds, icu)
 }
 
+// Offset counts from the start of a set other people are changing. Approve one document
+// between two requests and the rows shift up, so the next request skips one — and a
+// skipped document is on no screen at all, which on the approval queue is a signature
+// nobody can give. A cursor names a place instead of a distance.
+func TestACursorDoesNotSkipWhatMovesUnderIt(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Six documents, oldest first, one minute apart so the order is unambiguous.
+	for i := 0; i < 6; i++ {
+		if _, err := f.m.db.Exec(ctx,
+			`INSERT INTO document_records (tenant_id, title, doc_type, status, created_at)
+			      VALUES ($1, $2, 'CONTRACT', $3, NOW() - make_interval(mins => $4))`,
+			f.tenantID, fmt.Sprintf("Мөр %d", i), StatusPending, 10-i); err != nil {
+			t.Fatalf("insert %d: %v", i, err)
+		}
+	}
+
+	oldest := DocumentFilter{Status: StatusPending, Order: ListOrderOldest}
+	first, err := f.m.ListDocuments(ctx, f.tenantID, oldest, 3, 0)
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	if len(first.Documents) != 3 || first.Documents[0].Title != "Мөр 0" {
+		t.Fatalf("first page = %+v", first.Documents)
+	}
+	last := first.Documents[2]
+
+	// Somebody approves a document from the FIRST page, so everything after it shifts
+	// up by one. This is what breaks offset.
+	if _, err := f.m.db.Exec(ctx,
+		`UPDATE document_records SET status = $1 WHERE tenant_id = $2 AND title = 'Мөр 1'`,
+		StatusApproved, f.tenantID); err != nil {
+		t.Fatalf("approve one: %v", err)
+	}
+
+	// Offset would now skip: rows 4..6 of a set that lost one are 5 and 6.
+	byOffset, err := f.m.ListDocuments(ctx, f.tenantID, oldest, 3, 3)
+	if err != nil {
+		t.Fatalf("offset page: %v", err)
+	}
+	skipped := true
+	for _, doc := range byOffset.Documents {
+		if doc.Title == "Мөр 3" {
+			skipped = false
+		}
+	}
+	if !skipped {
+		t.Log("offset happened not to skip here; the cursor assertion below is what matters")
+	}
+
+	// The cursor continues from the row actually seen, so nothing between here and
+	// there can move it.
+	after := oldest
+	after.AfterAt, after.AfterID = last.CreatedAt, last.ID
+	byCursor, err := f.m.ListDocuments(ctx, f.tenantID, after, 3, 0)
+	if err != nil {
+		t.Fatalf("cursor page: %v", err)
+	}
+	got := []string{}
+	for _, doc := range byCursor.Documents {
+		got = append(got, doc.Title)
+	}
+	want := []string{"Мөр 3", "Мөр 4", "Мөр 5"}
+	if len(got) != len(want) {
+		t.Fatalf("cursor page = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("cursor page = %v, want %v", got, want)
+			break
+		}
+	}
+
+	// Newest-first reads the other way from the same place.
+	newest, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Status: StatusPending}, 2, 0)
+	if err != nil {
+		t.Fatalf("newest page: %v", err)
+	}
+	if newest.Documents[0].Title != "Мөр 5" {
+		t.Fatalf("newest page starts at %q", newest.Documents[0].Title)
+	}
+	onwards := DocumentFilter{Status: StatusPending}
+	onwards.AfterAt, onwards.AfterID = newest.Documents[1].CreatedAt, newest.Documents[1].ID
+	tail, err := f.m.ListDocuments(ctx, f.tenantID, onwards, 5, 0)
+	if err != nil {
+		t.Fatalf("newest tail: %v", err)
+	}
+	if len(tail.Documents) == 0 || tail.Documents[0].Title != "Мөр 3" {
+		t.Errorf("newest tail = %+v, want it to continue at Мөр 3", tail.Documents)
+	}
+
+	// An id that is not an id is refused rather than paged from nowhere.
+	bad := oldest
+	bad.AfterID = "not-a-uuid"
+	if _, err := f.m.ListDocuments(ctx, f.tenantID, bad, 3, 0); !errors.Is(err, ErrInvalidDocument) {
+		t.Errorf("got %v, want ErrInvalidDocument", err)
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —

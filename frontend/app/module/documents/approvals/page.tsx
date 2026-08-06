@@ -36,6 +36,9 @@ export default function DocumentApprovalsPage() {
   const [loadFailed, setLoadFailed] = useState(false);
 
   const [total, setTotal] = useState(0);
+  // Whether a further page may exist. Kept separately from the total, which other
+  // people can change between two of this walk's requests.
+  const [hasMore, setHasMore] = useState(false);
 
   // The queue asks the SERVER for what is waiting, oldest first. Filtering a capped
   // page in the browser would let a document waiting for a signature fall off the end
@@ -58,13 +61,32 @@ export default function DocumentApprovalsPage() {
       const wanted = Math.max(PAGE, rows);
       const collected: DocumentRecord[] = [];
       let counted = 0;
-      for (let offset = 0; offset < wanted; offset += PAGE) {
-        const page = await api.getDocuments({ status: PENDING, order: "oldest", limit: PAGE, offset });
+      // Walked by CURSOR, not by offset: offset counts from the start of a set other
+      // people are changing, so a document approved between two of these requests
+      // shifts the rest up and the next request skips one — and a skipped document is
+      // on no screen at all. The cursor names the last row actually seen.
+      //
+      // The end is a page that comes back short, which is a fact about the data rather
+      // than a comparison against a total that may have moved in the meantime.
+      let cursor: { after_at: string; after_id: string } | undefined;
+      let ranOut = false;
+      while (collected.length < wanted) {
+        const page = await api.getDocuments({ status: PENDING, order: "oldest", limit: PAGE, ...cursor });
         if (loadTicket.current !== mine) return;
         counted = page?.total ?? 0;
-        collected.push(...(page?.documents || []));
-        if (collected.length >= counted) break;
+        const rowsBack = page?.documents || [];
+        collected.push(...rowsBack);
+        if (rowsBack.length < PAGE) {
+          ranOut = true;
+          break;
+        }
+        const last = rowsBack[rowsBack.length - 1];
+        cursor = { after_at: last.created_at, after_id: last.id };
       }
+      // There is more to read when the walk stopped because it had enough, not because
+      // the data ran out. That is a fact about what came back, so it holds even when the
+      // total has moved; the total only says roughly how much more.
+      setHasMore(!ranOut);
       setDocuments(collected);
       setTotal(counted);
       setLoadFailed(false);
@@ -217,7 +239,7 @@ export default function DocumentApprovalsPage() {
           )}
 
           {/* A queue shown in part says so, and can be read to the end. */}
-          {total > pending.length && (
+          {hasMore && (
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">
               <p className="text-[11px] text-slate-500">
                 {t("documents.message.showing_some_oldest", { shown: pending.length, total })}

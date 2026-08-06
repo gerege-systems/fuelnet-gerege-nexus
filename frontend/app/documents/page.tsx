@@ -39,6 +39,9 @@ export default function DocumentsPage() {
   // tenant unreachable from any screen.
   const PAGE = 200;
   const [total, setTotal] = useState(0);
+  // Whether a further page may exist. Kept separately from the total, which other
+  // people can change between two of this walk's requests.
+  const [hasMore, setHasMore] = useState(false);
 
   // What the operator is looking for. Mirrored in a ref because loadSpan is also called
   // by the actions hook, which captured it at an earlier render: a refresh after signing
@@ -49,9 +52,10 @@ export default function DocumentsPage() {
   const filterRef = useRef({ q: "", doc_type: "", status: "" });
   filterRef.current = { q: search, doc_type: docType, status };
 
-  // The search text the rows on screen were actually fetched under, so a blur that
-  // changed nothing does not throw away the pages the operator has loaded.
-  const loadedSearch = useRef("");
+  // The filter the rows on screen were actually fetched under, so a blur that changed
+  // nothing does not throw away the pages the operator has loaded, and the empty state
+  // describes the question that was asked rather than the one being typed.
+  const loadedFilter = useRef({ q: "", doc_type: "", status: "" });
 
   // Only the newest load may write. A load walks several pages, so without this a
   // filter change part-way through assembled a row set from two different filters, with
@@ -68,16 +72,38 @@ export default function DocumentsPage() {
       const wanted = Math.max(PAGE, rows);
       const collected: DocumentRecord[] = [];
       let counted = 0;
-      for (let offset = 0; offset < wanted; offset += PAGE) {
-        const page = await api.getDocuments({ ...filter, limit: PAGE, offset });
+      // Walked by CURSOR, not by offset: offset counts from the start of a set other
+      // people are changing, so a document approved between two of these requests
+      // shifts the rest up and the next request skips one — and a skipped document is
+      // on no screen at all. The cursor names the last row actually seen.
+      //
+      // The end is a page that comes back short, which is a fact about the data rather
+      // than a comparison against a total that may have moved in the meantime.
+      let cursor: { after_at: string; after_id: string } | undefined;
+      let ranOut = false;
+      while (collected.length < wanted) {
+        const page = await api.getDocuments({ ...filter, limit: PAGE, ...cursor });
         if (loadTicket.current !== mine) return;
         counted = page?.total ?? 0;
-        collected.push(...(page?.documents || []));
-        if (collected.length >= counted) break;
+        const rowsBack = page?.documents || [];
+        collected.push(...rowsBack);
+        if (rowsBack.length < PAGE) {
+          ranOut = true;
+          break;
+        }
+        const last = rowsBack[rowsBack.length - 1];
+        cursor = { after_at: last.created_at, after_id: last.id };
       }
+      // There is more to read when the walk stopped because it had enough, not because
+      // the data ran out. That is a fact about what came back, so it holds even when the
+      // total has moved; the total only says roughly how much more.
+      setHasMore(!ranOut);
       setDocuments(collected);
       setTotal(counted);
-      loadedSearch.current = filter.q;
+      // What the rows on screen are the answer to. Trimmed, because that is what the
+      // server compared, and kept so the empty state can speak about the filter the
+      // rows were fetched under rather than whatever is in the boxes now.
+      loadedFilter.current = { q: filter.q.trim(), doc_type: filter.doc_type, status: filter.status };
       setLoadFailed(false);
     } catch (err: any) {
       // A load that has been superseded says nothing: the newer one speaks for the
@@ -186,7 +212,7 @@ export default function DocumentsPage() {
             // pages the operator had loaded — and, because the table came down while
             // the load ran, the click that caused the blur (Sign, Reject, Load more)
             // was swallowed with it and the action never happened.
-            if (search.trim() !== loadedSearch.current) loadSpan(PAGE);
+            if (search.trim() !== loadedFilter.current.q) loadSpan(PAGE);
           }}
           className="flex-1 min-w-[12rem] px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         />
@@ -228,8 +254,13 @@ export default function DocumentsPage() {
         // failed one says so in the banner and shows whatever it already had.
         loadFailed ? null : (
           <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
-            {/* With a filter on, an empty answer says nothing about the tenant. */}
-            {search || docType || status ? t("documents.message.no_matches") : t("documents.message.empty")}
+            {/* With a filter on, an empty answer says nothing about the tenant — and the
+                filter that matters is the one these rows were fetched under. Reading the
+                live boxes instead let clearing the search box turn "nothing matches"
+                into "no documents yet", about a tenant holding hundreds. */}
+            {loadedFilter.current.q || loadedFilter.current.doc_type || loadedFilter.current.status
+              ? t("documents.message.no_matches")
+              : t("documents.message.empty")}
           </div>
         )
       ) : (
@@ -298,7 +329,7 @@ export default function DocumentsPage() {
 
           {/* A partial list says so. Silence here is what makes an operator search for
               a contract that is simply on the next page. */}
-          {total > documents.length && (
+          {hasMore && (
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">
               <p className="text-[11px] text-slate-500">
                 {t("documents.message.showing_some", { shown: documents.length, total })}

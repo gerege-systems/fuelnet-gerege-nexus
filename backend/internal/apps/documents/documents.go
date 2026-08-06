@@ -126,8 +126,12 @@ type DocumentsModule struct {
 	// titleMatch: without one, a Cyrillic search is case-sensitive on a database
 	// initialised with LC_CTYPE=C, which is what the postgres:16-alpine image this
 	// stack deploys produces.
-	collationOnce sync.Once
-	hasICU        bool
+	collationMu sync.Mutex
+	// collationKnown is set only when the answer is definitive. A failed probe must not
+	// latch: it would leave a case-sensitive Cyrillic search for the life of the
+	// process, on the strength of one transient error.
+	collationKnown bool
+	hasICU         bool
 }
 
 // New builds the module and registers it in the compile-time app registry so
@@ -215,12 +219,28 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	query := r.URL.Query()
-	page, err := m.ListDocuments(r.Context(), tenantID, DocumentFilter{
+	filter := DocumentFilter{
 		Status:  query.Get("status"),
 		DocType: query.Get("doc_type"),
 		Search:  query.Get("q"),
 		Order:   query.Get("order"),
-	}, limit, offset)
+		AfterID: strings.TrimSpace(query.Get("after_id")),
+	}
+	if raw := strings.TrimSpace(query.Get("after_at")); raw != "" {
+		at, parseErr := time.Parse(time.RFC3339Nano, raw)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, "after_at must be an RFC3339 timestamp")
+			return
+		}
+		filter.AfterAt = at
+	}
+	// Both halves name one row, so one without the other would silently page from
+	// somewhere nobody asked for.
+	if (filter.AfterID == "") != filter.AfterAt.IsZero() {
+		writeError(w, http.StatusBadRequest, "after_at and after_id go together")
+		return
+	}
+	page, err := m.ListDocuments(r.Context(), tenantID, filter, limit, offset)
 	if errors.Is(err, ErrInvalidDocument) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -795,21 +815,29 @@ const ListOrderOldest = "oldest"
 // in, though, and naming a collation that does not exist is an error rather than a
 // degraded search — so it is asked for once and only used if it is there.
 func (m *DocumentsModule) titleMatch(ctx context.Context) string {
-	m.collationOnce.Do(func() {
+	m.collationMu.Lock()
+	defer m.collationMu.Unlock()
+
+	// Asked once and remembered — but only a definitive answer is remembered. A probe
+	// that fails is retried on the next request, because latching it would trade a
+	// transient error for a search that is case-sensitive for Mongolian until the
+	// process restarts.
+	if !m.collationKnown {
 		var present bool
 		if err := m.db.QueryRow(ctx,
 			`SELECT EXISTS (SELECT 1 FROM pg_collation WHERE collname = 'und-x-icu')`).Scan(&present); err != nil {
 			slog.WarnContext(ctx, "could not tell whether this database has an ICU collation; "+
-				"a Cyrillic title search will be case-sensitive if it does not", "error", err)
-			return
+				"searching case-sensitively for now and asking again on the next request",
+				"error", err)
+			return `d.title ILIKE $4 ESCAPE '!'`
 		}
-		m.hasICU = present
+		m.hasICU, m.collationKnown = present, true
 		if !present {
 			slog.WarnContext(ctx, "this database has no ICU collation, so a Cyrillic title "+
 				"search is case-sensitive; build Postgres with ICU or initialise the cluster "+
 				"with a UTF-8 ctype")
 		}
-	})
+	}
 	if m.hasICU {
 		return `d.title COLLATE "und-x-icu" ILIKE $4 ESCAPE '!'`
 	}
@@ -828,6 +856,17 @@ type DocumentFilter struct {
 	Search string
 	// Order is ListOrderOldest, or empty for newest first.
 	Order string
+	// AfterAt and AfterID continue from a row already seen: the answer holds only the
+	// documents that come after it in this order.
+	//
+	// This is what a screen reading a long list should use, rather than Offset. Offset
+	// counts from the start of a set that other people are changing: approve one
+	// document between two requests and the rows shift up, so the next request skips
+	// one — and the skipped document is then on no screen at all, which on the approval
+	// queue means a signature nobody can give. A cursor names a place instead of a
+	// distance, so nothing between here and there can move it.
+	AfterAt time.Time
+	AfterID string
 }
 
 // ListDocuments returns one page of a tenant's documents matching the filter, newest
@@ -874,6 +913,9 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string, fi
 	if offset < 0 {
 		offset = 0
 	}
+	if filter.AfterID != "" && uuid.Validate(filter.AfterID) != nil {
+		return nil, fmt.Errorf("%w: after_id is not a document id", ErrInvalidDocument)
+	}
 
 	where := `d.tenant_id = $1
 		   AND ($2 = '' OR d.status = $2)
@@ -893,17 +935,27 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string, fi
 	}
 
 	// The id breaks ties, so paging cannot show one document twice and skip another
-	// when several share a timestamp.
-	sort := "d.created_at DESC, d.id DESC"
-	if strings.EqualFold(strings.TrimSpace(filter.Order), ListOrderOldest) {
-		sort = "d.created_at ASC, d.id ASC"
+	// when several share a timestamp. The cursor comparison below is the same pair in
+	// the same order, which is what makes it exact.
+	oldestFirst := strings.EqualFold(strings.TrimSpace(filter.Order), ListOrderOldest)
+	sort, after := "d.created_at DESC, d.id DESC", "(d.created_at, d.id) < ($7::timestamptz, $8::uuid)"
+	if oldestFirst {
+		sort, after = "d.created_at ASC, d.id ASC", "(d.created_at, d.id) > ($7::timestamptz, $8::uuid)"
+	}
+	// The arguments follow the SQL: with no cursor the comparison is not in the query,
+	// so its parameters must not be passed either.
+	cursor := "TRUE"
+	args := []any{tenantID, status, docType, pattern, limit, offset}
+	if filter.AfterID != "" {
+		cursor = after
+		args = append(args, filter.AfterAt, filter.AfterID)
 	}
 	rows, err := m.db.Query(ctx,
 		`SELECT `+documentColumns+`
 		   FROM document_records d
-		  WHERE `+where+`
+		  WHERE `+where+` AND `+cursor+`
 		  ORDER BY `+sort+`
-		  LIMIT $5 OFFSET $6`, tenantID, status, docType, pattern, limit, offset)
+		  LIMIT $5 OFFSET $6`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list documents: %w", err)
 	}
