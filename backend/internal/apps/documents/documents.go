@@ -82,6 +82,13 @@ var ErrInvalidDocument = errors.New("invalid document")
 // ErrInvalidDocument its message is meant to be read by whoever sent it.
 var ErrInvalidConfiguration = errors.New("invalid configuration")
 
+// ErrProviderUnavailable is returned when the identity provider could not be
+// reached or answered in a way we could not use. It is nobody's mistake and it may
+// work in a moment, so it is reported as a temporary server-side failure — a
+// polling client must retry it rather than abandon a ceremony the citizen may be
+// about to complete.
+var ErrProviderUnavailable = errors.New("identity provider unavailable")
+
 type Document struct {
 	ID       string `json:"id"`
 	TenantID string `json:"tenant_id"`

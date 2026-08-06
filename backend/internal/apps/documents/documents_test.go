@@ -180,6 +180,26 @@ func TestStepsCanRequireNamedSigners(t *testing.T) {
 	}
 }
 
+// A registration number this module can see is wrong is refused here, so that
+// anything the provider then refuses can be treated as the provider's trouble —
+// which a polling client must retry rather than give up on.
+func TestAShortRegistrationNumberIsRefusedLocally(t *testing.T) {
+	module := &DocumentsModule{}
+	// A nil pool is safe: this refusal comes before any query, and before any
+	// provider call.
+	_, err := module.StartEIDSignature(context.Background(), "tenant",
+		"3f1b9c62-2f1a-4a1c-9d3e-8b7a5c4e1d20", "AA1")
+	if !errors.Is(err, ErrSignatureRejected) {
+		t.Fatalf("got %v, want ErrSignatureRejected", err)
+	}
+	if errors.Is(err, ErrProviderUnavailable) {
+		t.Error("a short registration number is not provider trouble")
+	}
+	if !strings.Contains(err.Error(), "AA1") {
+		t.Errorf("got %q, want it to quote what was sent", err)
+	}
+}
+
 func TestResolveTitlePattern(t *testing.T) {
 	at := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
 

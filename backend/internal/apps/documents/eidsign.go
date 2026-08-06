@@ -138,12 +138,19 @@ func signatureDisplayText(title string) string {
 // StartEIDSignature pushes an approval request for this document to the citizen's
 // eID app and remembers which document it was for.
 func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID, regNumber string) (*EIDSignSession, error) {
+	// What this module can see is wrong is refused before any work is done on the
+	// caller's behalf — and so that anything the provider refuses later can be
+	// treated as the provider's trouble, which a polling client must retry rather
+	// than abandon a ceremony over.
+	regNumber = strings.ToUpper(strings.TrimSpace(regNumber))
+	if len(regNumber) < 8 {
+		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
+	}
+
 	pre, err := m.preflightSignature(ctx, tenantID, docID, SignerEID)
 	if err != nil {
 		return nil, err
 	}
-
-	regNumber = strings.ToUpper(strings.TrimSpace(regNumber))
 	// Refusing here saves pushing a request that could never be turned into a
 	// signature, and tells the operator why before the citizen is involved.
 	if err := checkSigner(pre.Position, pre.DocType, regNumber); err != nil {
@@ -186,7 +193,7 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	displayText := signatureDisplayText(title)
 	started, err := m.eidSvc.StartSignature(ctx, regNumber, displayText, "")
 	if err != nil {
-		return nil, fmt.Errorf("%w: E-ID could not reach the signer: %w", ErrSignatureRejected, err)
+		return nil, fmt.Errorf("%w: E-ID could not reach the signer: %w", ErrProviderUnavailable, err)
 	}
 
 	// The citizen's phone is now showing the request, so the pairing that makes it
@@ -263,7 +270,10 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 
 	result, err := m.eidSvc.Poll(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: E-ID could not be reached: %w", ErrSignatureRejected, err)
+		// A dropped connection to eID is not an answer. Reporting it as the caller's
+		// mistake made the dialog give up on a ceremony the citizen was still holding
+		// their phone for.
+		return nil, fmt.Errorf("%w: E-ID could not be reached: %w", ErrProviderUnavailable, err)
 	}
 
 	if result.State != ApprovalComplete {
@@ -283,7 +293,7 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	}
 
 	if result.Identity == nil {
-		return nil, fmt.Errorf("%w: E-ID reported an approval without an identity", ErrSignatureRejected)
+		return nil, fmt.Errorf("%w: E-ID reported an approval without an identity", ErrProviderUnavailable)
 	}
 
 	// The approval has to come from the citizen the request was addressed to.
@@ -344,6 +354,9 @@ func (m *DocumentsModule) startEIDSignatureHandler(w http.ResponseWriter, r *htt
 	case errors.Is(err, ErrNotSignable), errors.Is(err, ErrAlreadySigned):
 		writeError(w, http.StatusConflict, err.Error())
 		return
+	case errors.Is(err, ErrProviderUnavailable):
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
 	case errors.Is(err, ErrSignatureRejected):
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -376,6 +389,9 @@ func (m *DocumentsModule) pollEIDSignatureHandler(w http.ResponseWriter, r *http
 		return
 	case errors.Is(err, ErrNotSignable), errors.Is(err, ErrAlreadySigned):
 		writeError(w, http.StatusConflict, err.Error())
+		return
+	case errors.Is(err, ErrProviderUnavailable):
+		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	case errors.Is(err, ErrSignatureRejected):
 		writeError(w, http.StatusBadRequest, err.Error())
