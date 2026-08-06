@@ -55,7 +55,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [page, setPage] = useState(1);
 
-  const report = useCallback((err: unknown) => setError(describeError(err, t("common.error"))), [t]);
+  const report = useCallback((err: unknown) => setError(describeError(err, t("base.message.error"))), [t]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -107,7 +107,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
   const act = async (task: Task, action: TaskAction) => {
     let comment = "";
     if (ACTION_REQUIRES_COMMENT.includes(action)) {
-      comment = window.prompt(t("gov.commentPrompt")) || "";
+      comment = window.prompt(t("gov.message.comment_prompt")) || "";
       if (!comment) return;
     }
 
@@ -115,13 +115,13 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
     if (action === "delegate") {
       const children = units.filter((u) => u.parent_id === task.unit_id && u.active);
       if (children.length === 0) {
-        setError(t("gov.noChildUnit"));
+        setError(t("gov.message.no_child_unit"));
         return;
       }
       targetUnit =
         children.length === 1
           ? children[0].id
-          : window.prompt(`${t("gov.delegateTo")}\n${children.map((c) => `${c.code} = ${c.id}`).join("\n")}`) || "";
+          : window.prompt(`${t("gov.message.delegate_to")}\n${children.map((c) => `${c.code} = ${c.id}`).join("\n")}`) || "";
       if (!targetUnit) return;
     }
 
@@ -173,7 +173,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
           }}
           className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
         >
-          <option value="">{t("gov.filter.allStatuses")}</option>
+          <option value="">{t("gov.filter.all_statuses")}</option>
           {ALL_STATUSES.map((status) => (
             <option key={status} value={status}>
               {statusLabel(status)}
@@ -189,7 +189,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
           }}
           className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
         >
-          <option value="">{t("gov.filter.allUnits")}</option>
+          <option value="">{t("gov.filter.all_units")}</option>
           {units.map((unit) => (
             <option key={unit.id} value={unit.id}>
               {locale === "en" && unit.name_en ? unit.name_en : unit.name}
@@ -206,24 +206,24 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
               setOverdueOnly(e.target.checked);
             }}
           />
-          {t("gov.filter.overdueOnly")}
+          {t("gov.filter.overdue_only")}
         </label>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         {!queue || queue.items.length === 0 ? (
-          <EmptyState message={t("gov.queueEmpty")} />
+          <EmptyState message={t("gov.message.queue_empty")} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[880px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">{t("gov.reference")}</th>
-                  <th className="px-4 py-3">{t("gov.service")}</th>
-                  <th className="px-4 py-3">{t("gov.unit")}</th>
-                  <th className="px-4 py-3">{t("common.status")}</th>
-                  <th className="px-4 py-3">{t("gov.due")}</th>
-                  <th className="px-4 py-3 text-right">{t("common.actions")}</th>
+                  <th className="px-4 py-3">{t("gov.field.reference")}</th>
+                  <th className="px-4 py-3">{t("gov.field.service")}</th>
+                  <th className="px-4 py-3">{t("gov.field.unit")}</th>
+                  <th className="px-4 py-3">{t("base.field.status")}</th>
+                  <th className="px-4 py-3">{t("gov.field.due")}</th>
+                  <th className="px-4 py-3 text-right">{t("base.field.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -246,7 +246,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
                       {task.due_at ? (
                         <span className={task.overdue ? "text-red-600 font-semibold" : "text-slate-500"}>
                           {new Date(task.due_at).toLocaleDateString(locale === "en" ? "en-GB" : "mn-MN")}
-                          {task.overdue ? ` · ${t("gov.overdue")}` : ""}
+                          {task.overdue ? ` · ${t("gov.label.overdue")}` : ""}
                         </span>
                       ) : (
                         "—"
@@ -282,7 +282,7 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
       {queue && queue.total > PAGE_SIZE && (
         <div className="flex items-center justify-between text-sm text-slate-500">
           <span>
-            {t("gov.pageOf")
+            {t("base.message.page_of")
               .replace("{page}", String(queue.page))
               .replace("{total}", String(Math.ceil(queue.total / queue.page_size)))}
           </span>
@@ -292,14 +292,14 @@ export default function TaskQueue({ showDashboard = true }: { showDashboard?: bo
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               className="px-3 py-1.5 border border-slate-200 rounded-lg disabled:opacity-40"
             >
-              {t("gov.previous")}
+              {t("base.action.previous")}
             </button>
             <button
               disabled={queue.page * queue.page_size >= queue.total}
               onClick={() => setPage((p) => p + 1)}
               className="px-3 py-1.5 border border-slate-200 rounded-lg disabled:opacity-40"
             >
-              {t("gov.next")}
+              {t("base.action.next")}
             </button>
           </div>
         </div>

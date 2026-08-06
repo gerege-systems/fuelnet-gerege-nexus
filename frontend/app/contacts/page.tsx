@@ -55,7 +55,7 @@ export default function ContactsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <Users className="w-6 h-6 text-indigo-600" />
-            <span>{t("contacts.contactsDirectory")}</span>
+            <span>{t("contacts.view.title")}</span>
           </h1>
           <p className="text-sm text-slate-500">Manage business contacts, customers, and partners</p>
         </div>
@@ -64,7 +64,7 @@ export default function ContactsPage() {
           className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center space-x-2 transition"
         >
           <Plus className="w-4 h-4" />
-          <span>{t("contacts.newContact")}</span>
+          <span>{t("contacts.action.create")}</span>
         </button>
       </div>
 
@@ -75,7 +75,7 @@ export default function ContactsPage() {
       )}
 
       {loading ? (
-        <div className="py-8 text-slate-500 text-sm">{t("contacts.loadingContacts")}</div>
+        <div className="py-8 text-slate-500 text-sm">{t("contacts.message.loading")}</div>
       ) : contacts.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm">
           No contacts created yet. Click "New Contact" to add your first record.
@@ -85,11 +85,11 @@ export default function ContactsPage() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                <th className="py-3 px-4">{t("contacts.name")}</th>
-                <th className="py-3 px-4">{t("contacts.email")}</th>
-                <th className="py-3 px-4">{t("contacts.phone")}</th>
-                <th className="py-3 px-4">{t("contacts.company")}</th>
-                <th className="py-3 px-4">{t("contacts.status")}</th>
+                <th className="py-3 px-4">{t("base.field.name")}</th>
+                <th className="py-3 px-4">{t("base.field.email")}</th>
+                <th className="py-3 px-4">{t("base.field.phone")}</th>
+                <th className="py-3 px-4">{t("base.field.company")}</th>
+                <th className="py-3 px-4">{t("base.field.status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -124,7 +124,7 @@ export default function ContactsPage() {
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-slate-900">{t("contacts.createNewContact")}</h2>
+              <h2 className="text-xl font-bold text-slate-900">{t("contacts.view.create_title")}</h2>
               <button
                 type="button"
                 onClick={async () => {
@@ -134,7 +134,7 @@ export default function ContactsPage() {
                       name: `${info.last_name} ${info.first_name}`,
                       email: `${info.reg_number.toLowerCase()}@gerege.mn`,
                       phone: "99112233",
-                      company: t("contacts.xypVerifiedCitizen"),
+                      company: t("contacts.message.xyp_verified"),
                       active: true,
                     });
                   } catch (err: any) {
@@ -142,7 +142,7 @@ export default function ContactsPage() {
                   }
                 }}
                 className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 transition"
-              >{t("contacts.xypAutofill")}</button>
+              >{t("contacts.action.xyp_autofill")}</button>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
@@ -157,7 +157,7 @@ export default function ContactsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("contacts.email")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("base.field.email")}</label>
                 <input
                   type="email"
                   value={form.email}
@@ -167,7 +167,7 @@ export default function ContactsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("contacts.phone")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("base.field.phone")}</label>
                 <input
                   type="text"
                   value={form.phone}
@@ -177,7 +177,7 @@ export default function ContactsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("contacts.company")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("base.field.company")}</label>
                 <input
                   type="text"
                   value={form.company}

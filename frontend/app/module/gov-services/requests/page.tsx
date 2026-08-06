@@ -13,7 +13,7 @@ export default function GovRequestsPage() {
       <PageHeader
         icon={<Inbox className="w-7 h-7 text-[var(--gerege-blue)]" />}
         title={t("gov.menu.requests")}
-        subtitle={t("gov.menu.requestsHint")}
+        subtitle={t("gov.view.requests_hint")}
       />
       <TaskQueue />
     </div>

@@ -51,7 +51,7 @@ export default function IntegrationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <Share2 className="w-7 h-7 text-indigo-600" />
-            <span>{t("integrations.externalSystemIntegrationsWebhooks")}</span>
+            <span>{t("integrations.view.title")}</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Manage government gateways, REST API connectors, and event webhooks
@@ -69,13 +69,13 @@ export default function IntegrationsPage() {
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
-            <span>{t("integrations.addIntegration")}</span>
+            <span>{t("integrations.action.create")}</span>
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("integrations.loadingIntegrations")}</div>
+        <div className="py-12 text-center text-slate-400">{t("integrations.message.loading")}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {integrations.map((item) => (
@@ -126,13 +126,13 @@ export default function IntegrationsPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.registerIntegrationConnector")}</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.view.create_title")}</h2>
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Integration Name *</label>
                 <input
                   type="text"
-                  placeholder={t("integrations.egSalesWebhook")}
+                  placeholder={t("integrations.field.name_placeholder")}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -141,16 +141,16 @@ export default function IntegrationsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.integrationType")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.field.type")}</label>
                 <select
                   value={form.type}
                   onChange={(e) => setForm({ ...form, type: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="webhook">{t("integrations.webhookListener")}</option>
-                  <option value="government">{t("integrations.governmentGateway")}</option>
-                  <option value="payment">{t("integrations.paymentGateway")}</option>
-                  <option value="custom_rest">{t("integrations.customRestEndpoint")}</option>
+                  <option value="webhook">{t("integrations.type.webhook")}</option>
+                  <option value="government">{t("integrations.type.government_gateway")}</option>
+                  <option value="payment">{t("integrations.type.payment_gateway")}</option>
+                  <option value="custom_rest">{t("integrations.type.custom_rest")}</option>
                 </select>
               </div>
 
@@ -167,10 +167,10 @@ export default function IntegrationsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.secretKeySigning")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.field.secret")}</label>
                 <input
                   type="password"
-                  placeholder={t("integrations.optionalHmacSecret")}
+                  placeholder={t("integrations.field.secret_placeholder")}
                   value={form.secret_key}
                   onChange={(e) => setForm({ ...form, secret_key: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"

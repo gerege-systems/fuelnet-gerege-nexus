@@ -17,7 +17,7 @@ export default function GovAppointmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ service_id: "", citizen_name: "", scheduled_at: "", location: "" });
 
-  const report = useCallback((err: unknown) => setError(describeError(err, t("common.error"))), [t]);
+  const report = useCallback((err: unknown) => setError(describeError(err, t("base.message.error"))), [t]);
 
   const load = useCallback(async () => {
     try {
@@ -67,7 +67,7 @@ export default function GovAppointmentsPage() {
       <PageHeader
         icon={<CalendarClock className="w-7 h-7 text-[var(--gerege-blue)]" />}
         title={t("gov.menu.appointments")}
-        subtitle={t("gov.menu.appointmentsHint")}
+        subtitle={t("gov.view.appointments_hint")}
       />
 
       {error && <Banner tone="error" message={error} onDismiss={() => setError(null)} />}
@@ -75,7 +75,7 @@ export default function GovAppointmentsPage() {
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
           <Plus className="w-5 h-5 text-[var(--gerege-blue)]" />
-          {t("gov.appointment.new")}
+          {t("gov.view.appointment_create")}
         </h2>
         <form onSubmit={book} className="grid sm:grid-cols-5 gap-2">
           <select
@@ -84,7 +84,7 @@ export default function GovAppointmentsPage() {
             onChange={(e) => setForm({ ...form, service_id: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
           >
-            <option value="">{t("gov.service")}</option>
+            <option value="">{t("gov.field.service")}</option>
             {services.map((service) => (
               <option key={service.id} value={service.id}>
                 {locale === "en" && service.name_en ? service.name_en : service.name}
@@ -93,7 +93,7 @@ export default function GovAppointmentsPage() {
           </select>
           <input
             required
-            placeholder={t("gov.appointment.citizen")}
+            placeholder={t("gov.field.citizen")}
             value={form.citizen_name}
             onChange={(e) => setForm({ ...form, citizen_name: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
@@ -106,7 +106,7 @@ export default function GovAppointmentsPage() {
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
           />
           <input
-            placeholder={t("gov.appointment.location")}
+            placeholder={t("gov.field.location")}
             value={form.location}
             onChange={(e) => setForm({ ...form, location: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
@@ -115,24 +115,24 @@ export default function GovAppointmentsPage() {
             disabled={saving}
             className="px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg disabled:opacity-50"
           >
-            {t("gov.appointment.book")}
+            {t("gov.action.book")}
           </button>
         </form>
       </section>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         {appointments.length === 0 ? (
-          <EmptyState message={t("gov.appointment.none")} />
+          <EmptyState message={t("gov.message.no_appointments")} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">{t("gov.appointment.when")}</th>
-                  <th className="px-4 py-3">{t("gov.service")}</th>
-                  <th className="px-4 py-3">{t("gov.appointment.citizen")}</th>
-                  <th className="px-4 py-3">{t("gov.appointment.location")}</th>
-                  <th className="px-4 py-3">{t("common.status")}</th>
+                  <th className="px-4 py-3">{t("gov.field.scheduled_at")}</th>
+                  <th className="px-4 py-3">{t("gov.field.service")}</th>
+                  <th className="px-4 py-3">{t("gov.field.citizen")}</th>
+                  <th className="px-4 py-3">{t("gov.field.location")}</th>
+                  <th className="px-4 py-3">{t("base.field.status")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

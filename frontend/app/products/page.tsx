@@ -54,16 +54,16 @@ export default function ProductsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <Package className="w-6 h-6 text-emerald-600" />
-            <span>{t("products.productCatalog")}</span>
+            <span>{t("products.view.title")}</span>
           </h1>
-          <p className="text-sm text-slate-500">{t("products.manageSkusProductNamesAndPricing")}</p>
+          <p className="text-sm text-slate-500">{t("products.view.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center space-x-2 transition"
         >
           <Plus className="w-4 h-4" />
-          <span>{t("products.newProduct")}</span>
+          <span>{t("products.action.create")}</span>
         </button>
       </div>
 
@@ -74,7 +74,7 @@ export default function ProductsPage() {
       )}
 
       {loading ? (
-        <div className="py-8 text-slate-500 text-sm">{t("products.loadingProducts")}</div>
+        <div className="py-8 text-slate-500 text-sm">{t("products.message.loading")}</div>
       ) : products.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm">
           No products added yet. Click "New Product" to build your catalog.
@@ -84,10 +84,10 @@ export default function ProductsPage() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                <th className="py-3 px-4">{t("products.sku")}</th>
-                <th className="py-3 px-4">{t("products.productName")}</th>
-                <th className="py-3 px-4">{t("products.unitPrice")}</th>
-                <th className="py-3 px-4">{t("products.status")}</th>
+                <th className="py-3 px-4">{t("products.field.sku")}</th>
+                <th className="py-3 px-4">{t("products.field.name")}</th>
+                <th className="py-3 px-4">{t("products.field.price")}</th>
+                <th className="py-3 px-4">{t("base.field.status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -117,13 +117,13 @@ export default function ProductsPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("products.createNewProduct")}</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("products.view.create_title")}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">SKU *</label>
                 <input
                   type="text"
-                  placeholder={t("products.egProd001")}
+                  placeholder={t("products.field.sku_placeholder")}
                   value={form.sku}
                   onChange={(e) => setForm({ ...form, sku: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"

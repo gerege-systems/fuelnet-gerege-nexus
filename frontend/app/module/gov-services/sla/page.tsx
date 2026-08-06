@@ -28,7 +28,7 @@ export default function GovSlaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const report = useCallback((err: unknown) => setError(describeError(err, t("common.error"))), [t]);
+  const report = useCallback((err: unknown) => setError(describeError(err, t("base.message.error"))), [t]);
 
   const load = useCallback(async () => {
     try {
@@ -73,7 +73,7 @@ export default function GovSlaPage() {
       <PageHeader
         icon={<Timer className="w-7 h-7 text-[var(--gerege-blue)]" />}
         title={t("gov.menu.sla")}
-        subtitle={t("gov.menu.slaHint")}
+        subtitle={t("gov.view.sla_hint")}
       />
 
       {error && <Banner tone="error" message={error} onDismiss={() => setError(null)} />}
@@ -81,9 +81,9 @@ export default function GovSlaPage() {
       <DashboardCards dashboard={dashboard} />
 
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-        <h2 className="font-semibold">{t("gov.config.workflows")}</h2>
+        <h2 className="font-semibold">{t("gov.view.workflows")}</h2>
         {versions.length === 0 ? (
-          <p className="text-sm text-slate-500">{t("gov.sla.noWorkflow")}</p>
+          <p className="text-sm text-slate-500">{t("gov.message.no_published_workflow")}</p>
         ) : (
           versions.map(({ workflow, version }) => (
             <div key={version.id} className="space-y-2">
@@ -95,10 +95,10 @@ export default function GovSlaPage() {
                 <table className="w-full text-sm min-w-[560px]">
                   <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                     <tr>
-                      <th className="px-3 py-2">{t("gov.sla.step")}</th>
-                      <th className="px-3 py-2">{t("gov.routing.strategy")}</th>
-                      <th className="px-3 py-2">{t("gov.sla.hours")}</th>
-                      <th className="px-3 py-2">{t("gov.sla.verification")}</th>
+                      <th className="px-3 py-2">{t("gov.field.step")}</th>
+                      <th className="px-3 py-2">{t("gov.field.strategy")}</th>
+                      <th className="px-3 py-2">{t("gov.field.sla_hours")}</th>
+                      <th className="px-3 py-2">{t("gov.field.requires_verification")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -113,10 +113,10 @@ export default function GovSlaPage() {
                         <td className="px-3 py-2">
                           {step.requires_verification ? (
                             <span className="text-xs font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-700">
-                              {t("gov.yes")}
+                              {t("base.value.yes")}
                             </span>
                           ) : (
-                            <span className="text-xs text-slate-400">{t("gov.no")}</span>
+                            <span className="text-xs text-slate-400">{t("base.value.no")}</span>
                           )}
                         </td>
                       </tr>
@@ -130,20 +130,20 @@ export default function GovSlaPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">{t("gov.sla.overdueTasks")}</h2>
+        <h2 className="font-semibold">{t("gov.view.overdue_tasks")}</h2>
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           {!overdue || overdue.items.length === 0 ? (
-            <EmptyState message={t("gov.queueEmpty")} />
+            <EmptyState message={t("gov.message.queue_empty")} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[720px]">
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-4 py-3">{t("gov.reference")}</th>
-                    <th className="px-4 py-3">{t("gov.service")}</th>
-                    <th className="px-4 py-3">{t("gov.unit")}</th>
-                    <th className="px-4 py-3">{t("common.status")}</th>
-                    <th className="px-4 py-3">{t("gov.due")}</th>
+                    <th className="px-4 py-3">{t("gov.field.reference")}</th>
+                    <th className="px-4 py-3">{t("gov.field.service")}</th>
+                    <th className="px-4 py-3">{t("gov.field.unit")}</th>
+                    <th className="px-4 py-3">{t("base.field.status")}</th>
+                    <th className="px-4 py-3">{t("gov.field.due")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

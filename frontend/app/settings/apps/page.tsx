@@ -59,7 +59,7 @@ export default function InstalledAppsSettingsPage() {
       <div className="border-b border-slate-200 pb-4">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
           <Settings className="w-6 h-6 text-slate-600" />
-          <span>{t("settingsApps.installedAppsSettings")}</span>
+          <span>{t("app_store.view.installed_title")}</span>
         </h1>
         <p className="text-sm text-slate-500">
           Manage installed tenant modules, check operational status, and enable/disable features.
@@ -67,7 +67,7 @@ export default function InstalledAppsSettingsPage() {
       </div>
 
       {loading ? (
-        <div className="py-8 text-slate-500 text-sm">{t("settingsApps.loadingInstalledApps")}</div>
+        <div className="py-8 text-slate-500 text-sm">{t("app_store.message.loading_installed")}</div>
       ) : apps.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
           No apps installed for this tenant yet. Visit the{" "}
@@ -81,12 +81,12 @@ export default function InstalledAppsSettingsPage() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                <th className="py-3 px-4">{t("settingsApps.applicationName")}</th>
-                <th className="py-3 px-4">{t("settingsApps.moduleId")}</th>
-                <th className="py-3 px-4">{t("settingsApps.installedVersion")}</th>
-                <th className="py-3 px-4">{t("settingsApps.status")}</th>
-                <th className="py-3 px-4">{t("settingsApps.installedDate")}</th>
-                <th className="py-3 px-4 text-right">{t("settingsApps.actions")}</th>
+                <th className="py-3 px-4">{t("app_store.field.application_name")}</th>
+                <th className="py-3 px-4">{t("app_store.field.module_id")}</th>
+                <th className="py-3 px-4">{t("app_store.field.installed_version")}</th>
+                <th className="py-3 px-4">{t("base.field.status")}</th>
+                <th className="py-3 px-4">{t("app_store.field.installed_date")}</th>
+                <th className="py-3 px-4 text-right">{t("base.field.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

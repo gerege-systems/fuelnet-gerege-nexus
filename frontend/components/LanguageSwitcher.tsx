@@ -26,7 +26,7 @@ export default function LanguageSwitcher({ variant = "light" }: { variant?: "lig
     <div
       className={`inline-flex items-center gap-0.5 rounded-lg border p-0.5 ${base}`}
       role="group"
-      aria-label={t("common.language")}
+      aria-label={t("base.field.language")}
     >
       {LOCALES.map((option) => (
         <button

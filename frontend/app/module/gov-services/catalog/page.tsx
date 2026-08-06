@@ -26,7 +26,7 @@ export default function GovCatalogPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", category: "", fee: "", duration_days: "" });
 
-  const report = useCallback((err: unknown) => setError(describeError(err, t("common.error"))), [t]);
+  const report = useCallback((err: unknown) => setError(describeError(err, t("base.message.error"))), [t]);
 
   const load = useCallback(async () => {
     try {
@@ -102,7 +102,7 @@ export default function GovCatalogPage() {
       <PageHeader
         icon={<Landmark className="w-7 h-7 text-[var(--gerege-blue)]" />}
         title={t("gov.menu.catalog")}
-        subtitle={t("gov.menu.catalogHint")}
+        subtitle={t("gov.view.catalog_hint")}
         actions={
           access.isAdmin ? (
             <button
@@ -110,7 +110,7 @@ export default function GovCatalogPage() {
               className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg"
             >
               <Plus className="w-4 h-4" />
-              {t("common.create")}
+              {t("base.action.create")}
             </button>
           ) : undefined
         }
@@ -122,20 +122,20 @@ export default function GovCatalogPage() {
         <form onSubmit={create} className="bg-white border border-slate-200 rounded-xl p-5 grid sm:grid-cols-5 gap-2">
           <input
             required
-            placeholder={t("gov.config.unitCode")}
+            placeholder={t("gov.field.unit_code")}
             value={form.code}
             onChange={(e) => setForm({ ...form, code: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
           />
           <input
             required
-            placeholder={t("common.name")}
+            placeholder={t("base.field.name")}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
           />
           <input
-            placeholder={t("gov.service")}
+            placeholder={t("gov.field.service")}
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
@@ -143,7 +143,7 @@ export default function GovCatalogPage() {
           <input
             type="number"
             min={0}
-            placeholder={t("gov.fee")}
+            placeholder={t("gov.field.fee")}
             value={form.fee}
             onChange={(e) => setForm({ ...form, fee: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
@@ -152,24 +152,24 @@ export default function GovCatalogPage() {
             disabled={saving}
             className="px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg disabled:opacity-50"
           >
-            {t("common.save")}
+            {t("base.action.save")}
           </button>
         </form>
       )}
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         {services.length === 0 ? (
-          <EmptyState message={t("gov.noServices")} />
+          <EmptyState message={t("gov.message.no_services")} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[860px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">{t("gov.service")}</th>
-                  <th className="px-3 py-2">{t("gov.fee")}</th>
-                  <th className="px-3 py-2">{t("gov.mode")}</th>
-                  <th className="px-3 py-2">{t("gov.config.workflowVersion")}</th>
-                  <th className="px-3 py-2">{t("gov.config.ownerUnit")}</th>
+                  <th className="px-3 py-2">{t("gov.field.service")}</th>
+                  <th className="px-3 py-2">{t("gov.field.fee")}</th>
+                  <th className="px-3 py-2">{t("gov.field.mode")}</th>
+                  <th className="px-3 py-2">{t("gov.field.workflow_version")}</th>
+                  <th className="px-3 py-2">{t("gov.field.owner_unit")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

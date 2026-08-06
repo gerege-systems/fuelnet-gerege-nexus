@@ -64,10 +64,10 @@ export default function DeveloperAppsPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
               <Code2 className="w-7 h-7 text-indigo-600" />
-              <span>{t("developer.title")}</span>
+              <span>{t("developer.view.title")}</span>
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              {t("developer.subtitle")}
+              {t("developer.view.subtitle")}
             </p>
           </div>
           <button
@@ -75,7 +75,7 @@ export default function DeveloperAppsPage() {
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
-            <span>{t("developer.registerOauth2Client")}</span>
+            <span>{t("developer.action.create")}</span>
           </button>
         </div>
 
@@ -84,7 +84,7 @@ export default function DeveloperAppsPage() {
           <div className="flex items-center space-x-3">
             <Shield className="w-8 h-8 text-cyan-400" />
             <div>
-              <h3 className="font-semibold text-sm">{t("developer.oidcDiscoveryEndpoint")}</h3>
+              <h3 className="font-semibold text-sm">{t("developer.field.discovery_endpoint")}</h3>
               <p className="text-xs text-slate-400 font-mono">/.well-known/openid-configuration</p>
             </div>
           </div>
@@ -94,7 +94,7 @@ export default function DeveloperAppsPage() {
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-400">{t("developer.loadingOauth2ClientApps")}</div>
+          <div className="p-12 text-center text-slate-400">{t("developer.message.loading")}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {apps.map((app) => (
@@ -132,13 +132,13 @@ export default function DeveloperAppsPage() {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-slate-400 italic">{t("developer.secretHidden")}</span>
+                      <span className="text-slate-400 italic">{t("developer.message.secret_hidden")}</span>
                     )}
                   </div>
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-slate-700 block mb-1">{t("developer.redirectUris")}</span>
+                  <span className="text-xs font-semibold text-slate-700 block mb-1">{t("developer.field.redirect_uris")}</span>
                   <div className="flex flex-wrap gap-1">
                     {app.redirect_uris.map((uri, idx) => (
                       <span key={idx} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
@@ -149,7 +149,7 @@ export default function DeveloperAppsPage() {
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-slate-700 block mb-1">{t("developer.scopes")}</span>
+                  <span className="text-xs font-semibold text-slate-700 block mb-1">{t("developer.field.scopes")}</span>
                   <div className="flex flex-wrap gap-1">
                     {app.scopes.map((scope, idx) => (
                       <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono">
@@ -167,7 +167,7 @@ export default function DeveloperAppsPage() {
         {showModal && (
           <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">{t("developer.registerNewOauth2ClientApp")}</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t("developer.view.create_title")}</h2>
               <form onSubmit={handleCreateApp} className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Application Name *</label>

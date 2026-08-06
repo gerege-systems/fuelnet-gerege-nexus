@@ -46,7 +46,7 @@ export default function DocumentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <FileText className="w-7 h-7 text-indigo-600" />
-            <span>{t("documents.digitalDocumentsEsignatures")}</span>
+            <span>{t("documents.view.title")}</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Enterprise document routing, digital signatures, and approval workflows
@@ -57,22 +57,22 @@ export default function DocumentsPage() {
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
         >
           <Plus className="w-4 h-4" />
-          <span>{t("documents.createDocument")}</span>
+          <span>{t("documents.action.create")}</span>
         </button>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("documents.loadingDocuments")}</div>
+        <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase">
               <tr>
-                <th className="px-4 py-3">{t("documents.documentTitle")}</th>
-                <th className="px-4 py-3">{t("documents.type")}</th>
-                <th className="px-4 py-3">{t("documents.status")}</th>
-                <th className="px-4 py-3">{t("documents.digitalSignatureEidDan")}</th>
-                <th className="px-4 py-3">{t("documents.createdDate")}</th>
+                <th className="px-4 py-3">{t("documents.field.title")}</th>
+                <th className="px-4 py-3">{t("base.field.type")}</th>
+                <th className="px-4 py-3">{t("base.field.status")}</th>
+                <th className="px-4 py-3">{t("documents.field.signature")}</th>
+                <th className="px-4 py-3">{t("documents.field.created")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -103,7 +103,7 @@ export default function DocumentsPage() {
                         <span>{doc.signed_by}</span>
                       </span>
                     ) : (
-                      <span className="text-slate-400 italic">{t("documents.pendingSignature")}</span>
+                      <span className="text-slate-400 italic">{t("documents.state.pending_signature")}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-400">{new Date(doc.created_at).toLocaleDateString()}</td>
@@ -118,13 +118,13 @@ export default function DocumentsPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("documents.createDigitalDocument")}</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("documents.view.create_title")}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Document Title *</label>
                 <input
                   type="text"
-                  placeholder={t("documents.titlePlaceholder")}
+                  placeholder={t("documents.field.title_placeholder")}
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -133,15 +133,15 @@ export default function DocumentsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("documents.documentCategory")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("documents.field.category")}</label>
                 <select
                   value={form.doc_type}
                   onChange={(e) => setForm({ ...form, doc_type: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="CONTRACT">{t("documents.legalContract")}</option>
-                  <option value="REQUEST">{t("documents.officialRequest")}</option>
-                  <option value="APPROVAL">{t("documents.internalApproval")}</option>
+                  <option value="CONTRACT">{t("documents.category.legal_contract")}</option>
+                  <option value="REQUEST">{t("documents.category.official_request")}</option>
+                  <option value="APPROVAL">{t("documents.category.internal_approval")}</option>
                 </select>
               </div>
 
@@ -156,7 +156,7 @@ export default function DocumentsPage() {
                 <button
                   type="submit"
                   className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
-                >{t("documents.createDocument")}</button>
+                >{t("documents.action.create")}</button>
               </div>
             </form>
           </div>

@@ -63,7 +63,7 @@ export default function LoginPage() {
           <Building2 className="w-8 h-8" />
         </div>
         <h1 className="text-xl font-bold text-slate-900 text-center">Gerege Template Platform</h1>
-        <p className="text-sm text-slate-500 mt-1">{t("login.subtitle")}</p>
+        <p className="text-sm text-slate-500 mt-1">{t("auth.view.subtitle")}</p>
       </div>
 
       {error && (
@@ -75,7 +75,7 @@ export default function LoginPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.email")}</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">{t("auth.field.email")}</label>
           <div className="relative">
             <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
             <input
@@ -89,7 +89,7 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.password")}</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">{t("auth.field.password")}</label>
           <div className="relative">
             <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
             <input
@@ -107,13 +107,13 @@ export default function LoginPage() {
           disabled={loading}
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition disabled:opacity-50"
         >
-          {loading ? t("login.submitting") : t("login.submit")}
+          {loading ? t("auth.message.signing_in") : t("auth.action.sign_in")}
         </button>
       </form>
 
       <div className="my-4 flex items-center justify-between text-xs text-slate-400">
         <span className="w-1/3 border-t border-slate-200"></span>
-        <span>{t("login.or")}</span>
+        <span>{t("auth.label.or")}</span>
         <span className="w-1/3 border-t border-slate-200"></span>
       </div>
 
@@ -122,7 +122,7 @@ export default function LoginPage() {
         className="w-full bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 text-white py-2.5 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-2 shadow-sm"
       >
         <ShieldCheck className="w-4 h-4 text-cyan-300" />
-        <span>{t("login.eid")}</span>
+        <span>{t("auth.method.eid")}</span>
       </button>
 
       {/* E-ID SSO Modal */}
@@ -134,28 +134,28 @@ export default function LoginPage() {
                 <CreditCard className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900">{t("login.eidMongoliaIdentityEidmongoliamn")}</h3>
-                <p className="text-xs text-slate-500">{t("login.nationalDanIdentityChannel")}</p>
+                <h3 className="font-bold text-slate-900">{t("auth.view.eid_title")}</h3>
+                <p className="text-xs text-slate-500">{t("auth.view.dan_title")}</p>
               </div>
             </div>
 
             <form onSubmit={handleEIDLogin} className="space-y-3 text-left">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.identityChannel")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("auth.field.identity_channel")}</label>
                 <select
                   value={authMethod}
                   onChange={(e) => setAuthMethod(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="PKI_DIGITAL_SIGNATURE">{t("login.methodPki")}</option>
-                  <option value="MOBILE_OTP">{t("login.methodOtp")}</option>
-                  <option value="BANK_SSO">{t("login.methodBank")}</option>
-                  <option value="BIOMETRIC_FACE">{t("login.methodBiometric")}</option>
+                  <option value="PKI_DIGITAL_SIGNATURE">{t("auth.method.pki")}</option>
+                  <option value="MOBILE_OTP">{t("auth.method.otp")}</option>
+                  <option value="BANK_SSO">{t("auth.method.bank")}</option>
+                  <option value="BIOMETRIC_FACE">{t("auth.method.biometric")}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.regNumberRequired")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("auth.field.reg_number")}</label>
                 <input
                   type="text"
                   placeholder="e.g. AA90010111"
@@ -167,7 +167,7 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("login.otpCode")}</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("auth.field.otp")}</label>
                 <input
                   type="text"
                   placeholder="Optional for Mock Mode"
@@ -182,12 +182,12 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowEIDModal(false)}
                   className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
-                >{t("login.cancel")}</button>
+                >{t("base.action.cancel")}</button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-1/2 bg-blue-700 hover:bg-blue-800 text-white font-medium py-2 rounded-lg text-xs"
-                >{t("login.verifyAndSignIn")}</button>
+                >{t("auth.action.verify_sign_in")}</button>
               </div>
             </form>
           </div>
@@ -195,7 +195,7 @@ export default function LoginPage() {
       )}
 
       <div className="mt-6 pt-4 border-t border-slate-100 text-xs text-slate-500 text-center">
-        <span className="font-semibold text-slate-700">{t("login.demoCredentials")}</span>
+        <span className="font-semibold text-slate-700">{t("auth.message.demo_credentials")}</span>
         <br />
         admin@example.com / Password123!
       </div>

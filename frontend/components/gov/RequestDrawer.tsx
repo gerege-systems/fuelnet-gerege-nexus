@@ -34,18 +34,18 @@ export default function RequestDrawer({
               {detail.request.applicant_name} · {detail.request.source_system}
             </p>
           </div>
-          <button onClick={onClose} aria-label={t("common.close")}>
+          <button onClick={onClose} aria-label={t("base.action.close")}>
             <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>
 
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <dt className="text-xs text-slate-500">{t("gov.mode")}</dt>
+            <dt className="text-xs text-slate-500">{t("gov.field.mode")}</dt>
             <dd className="font-medium">{detail.request.fulfillment_mode}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">{t("gov.currentUnit")}</dt>
+            <dt className="text-xs text-slate-500">{t("gov.field.current_unit")}</dt>
             <dd className="font-medium">{unitName(detail.request.current_unit_id)}</dd>
           </div>
         </dl>
@@ -53,7 +53,7 @@ export default function RequestDrawer({
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
             <WorkflowIcon className="w-4 h-4" />
-            {t("gov.tasks")}
+            {t("gov.view.tasks")}
           </h3>
           {detail.tasks.map((task) => (
             <div key={task.id} className="p-3 border border-slate-200 rounded-lg text-sm flex items-center gap-3">
@@ -72,7 +72,7 @@ export default function RequestDrawer({
         </section>
 
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-700">{t("gov.timeline")}</h3>
+          <h3 className="text-sm font-semibold text-slate-700">{t("gov.view.timeline")}</h3>
           <ol className="space-y-3">
             {detail.timeline.map((event) => (
               <li key={event.id} className="flex gap-3 text-sm">

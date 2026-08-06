@@ -37,7 +37,7 @@ export default function GovWorkflowPage() {
     target_unit_id: "",
   });
 
-  const report = useCallback((err: unknown) => setError(describeError(err, t("common.error"))), [t]);
+  const report = useCallback((err: unknown) => setError(describeError(err, t("base.message.error"))), [t]);
 
   const load = useCallback(async () => {
     try {
@@ -130,14 +130,14 @@ export default function GovWorkflowPage() {
 
   const unitCode = (id?: string | null) => (id ? units.find((u) => u.id === id)?.code || id : "—");
   const serviceName = (id?: string | null) =>
-    id ? services.find((s) => s.id === id)?.name || id : t("gov.filter.allStatuses");
+    id ? services.find((s) => s.id === id)?.name || id : t("gov.filter.all_statuses");
 
   return (
     <div className="space-y-6">
       <PageHeader
         icon={<WorkflowIcon className="w-7 h-7 text-[var(--gerege-blue)]" />}
         title={t("gov.menu.workflow")}
-        subtitle={t("gov.menu.workflowHint")}
+        subtitle={t("gov.view.workflow_hint")}
       />
 
       {error && <Banner tone="error" message={error} onDismiss={() => setError(null)} />}
@@ -145,10 +145,10 @@ export default function GovWorkflowPage() {
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
           <Building2 className="w-5 h-5 text-[var(--gerege-blue)]" />
-          {t("gov.config.units")}
+          {t("gov.view.units")}
         </h2>
         <ul className="text-sm divide-y divide-slate-100">
-          {units.length === 0 && <li className="py-2 text-slate-500">{t("gov.config.noUnits")}</li>}
+          {units.length === 0 && <li className="py-2 text-slate-500">{t("gov.message.no_units")}</li>}
           {units.map((unit) => (
             <li key={unit.id} className="py-2 flex items-center gap-2">
               <span className="font-mono text-xs text-slate-400 w-16">{unit.code}</span>
@@ -165,14 +165,14 @@ export default function GovWorkflowPage() {
         <form onSubmit={submitUnit} className="grid sm:grid-cols-5 gap-2">
           <input
             required
-            placeholder={t("gov.config.unitCode")}
+            placeholder={t("gov.field.unit_code")}
             value={unitForm.code}
             onChange={(e) => setUnitForm({ ...unitForm, code: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
           />
           <input
             required
-            placeholder={t("gov.config.unitName")}
+            placeholder={t("base.field.name")}
             value={unitForm.name}
             onChange={(e) => setUnitForm({ ...unitForm, name: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
@@ -182,7 +182,7 @@ export default function GovWorkflowPage() {
             onChange={(e) => setUnitForm({ ...unitForm, parent_id: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
           >
-            <option value="">{t("gov.config.noParent")}</option>
+            <option value="">{t("gov.message.no_parent")}</option>
             {units.map((unit) => (
               <option key={unit.id} value={unit.id}>
                 {unit.code}
@@ -199,7 +199,7 @@ export default function GovWorkflowPage() {
             disabled={saving}
             className="px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg disabled:opacity-50"
           >
-            {t("common.create")}
+            {t("base.action.create")}
           </button>
         </form>
         )}
@@ -208,10 +208,10 @@ export default function GovWorkflowPage() {
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
           <WorkflowIcon className="w-5 h-5 text-[var(--gerege-blue)]" />
-          {t("gov.config.workflows")}
+          {t("gov.view.workflows")}
         </h2>
         <ul className="text-sm divide-y divide-slate-100">
-          {workflows.length === 0 && <li className="py-2 text-slate-500">{t("gov.config.noWorkflows")}</li>}
+          {workflows.length === 0 && <li className="py-2 text-slate-500">{t("gov.message.no_workflows")}</li>}
           {workflows.map((wf) => (
             <li key={wf.id} className="py-2">
               <span className="font-medium">{locale === "en" && wf.name_en ? wf.name_en : wf.name}</span>
@@ -239,7 +239,7 @@ export default function GovWorkflowPage() {
             onChange={(e) => setTemplate(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white flex-1 min-w-52"
           >
-            <option value="">{t("gov.config.pickTemplate")}</option>
+            <option value="">{t("gov.action.pick_template")}</option>
             {templates.map((tpl) => (
               <option key={tpl.Code} value={tpl.Code}>
                 {locale === "en" ? tpl.NameEN : tpl.Name}
@@ -251,7 +251,7 @@ export default function GovWorkflowPage() {
             disabled={!template || saving}
             className="px-3 py-2 text-sm font-semibold text-white bg-[var(--gerege-blue)] rounded-lg disabled:opacity-50"
           >
-            {t("gov.config.publish")}
+            {t("gov.action.publish")}
           </button>
         </div>
         )}
@@ -260,20 +260,20 @@ export default function GovWorkflowPage() {
       <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
           <Route className="w-5 h-5 text-[var(--gerege-blue)]" />
-          {t("gov.routing.title")}
+          {t("gov.view.routing_rules")}
         </h2>
         {rules.length === 0 ? (
-          <p className="text-sm text-slate-500">{t("gov.routing.none")}</p>
+          <p className="text-sm text-slate-500">{t("gov.message.no_routing_rules")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[640px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">{t("gov.routing.priority")}</th>
-                  <th className="px-3 py-2">{t("gov.service")}</th>
-                  <th className="px-3 py-2">{t("gov.routing.match")}</th>
-                  <th className="px-3 py-2">{t("gov.routing.strategy")}</th>
-                  <th className="px-3 py-2">{t("gov.routing.target")}</th>
+                  <th className="px-3 py-2">{t("gov.field.priority")}</th>
+                  <th className="px-3 py-2">{t("gov.field.service")}</th>
+                  <th className="px-3 py-2">{t("gov.field.match")}</th>
+                  <th className="px-3 py-2">{t("gov.field.strategy")}</th>
+                  <th className="px-3 py-2">{t("gov.field.target_unit")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -311,7 +311,7 @@ export default function GovWorkflowPage() {
             onChange={(e) => setRuleForm({ ...ruleForm, service_id: e.target.value })}
             className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
           >
-            <option value="">{t("gov.filter.allStatuses")}</option>
+            <option value="">{t("gov.filter.all_statuses")}</option>
             {services.map((service) => (
               <option key={service.id} value={service.id}>
                 {service.code}

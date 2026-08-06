@@ -56,10 +56,10 @@ export default function LandingPage() {
           </div>
 
           <nav className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
-            <a href="#features" className="hover:text-indigo-400 transition">{t("landing.nav.features")}</a>
-            <a href="#architecture" className="hover:text-indigo-400 transition">{t("landing.nav.architecture")}</a>
-            <a href="#modules" className="hover:text-indigo-400 transition">{t("landing.nav.modules")}</a>
-            <a href="#sso" className="hover:text-indigo-400 transition">{t("landing.nav.sso")}</a>
+            <a href="#features" className="hover:text-indigo-400 transition">{t("website.menu.features")}</a>
+            <a href="#architecture" className="hover:text-indigo-400 transition">{t("website.menu.architecture")}</a>
+            <a href="#modules" className="hover:text-indigo-400 transition">{t("website.menu.modules")}</a>
+            <a href="#sso" className="hover:text-indigo-400 transition">{t("website.menu.sso")}</a>
             <a href="https://github.com/gerege-systems/open-gerege-mn-erp" target="_blank" rel="noreferrer" className="hover:text-white transition flex items-center space-x-1">
               <Globe className="w-4 h-4" />
               <span>GitHub</span>
@@ -72,7 +72,7 @@ export default function LandingPage() {
               href="/login"
               className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white rounded-xl shadow-lg shadow-indigo-500/25 transition transform hover:-translate-y-0.5"
             >
-              {t("landing.cta.signIn")}
+              {t("website.action.sign_in")}
             </Link>
           </div>
         </div>
@@ -82,31 +82,31 @@ export default function LandingPage() {
       <section className="relative z-10 pt-24 pb-20 px-6 max-w-7xl mx-auto text-center space-y-8">
         <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-slate-900 border border-indigo-500/30 text-indigo-300 text-xs font-semibold backdrop-blur-md">
           <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-          <span>{t("landing.badge")}</span>
+          <span>{t("website.view.badge")}</span>
         </div>
 
         <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white max-w-4xl mx-auto leading-tight">
-          {t("landing.hero.lead")}{" "}
+          {t("website.view.hero_lead")}{" "}
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-cyan-300 to-emerald-400">
-            {t("landing.hero.highlight")}
+            {t("website.view.hero_highlight")}
           </span>
         </h1>
 
         <p className="text-lg md:text-xl text-slate-400 max-w-3xl mx-auto font-light leading-relaxed">
-          {t("landing.hero.body")}
+          {t("website.view.hero_body")}
         </p>
 
         {/* Demo Credentials Banner */}
         <div className="max-w-xl mx-auto p-4 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl flex items-center justify-between text-left text-xs font-mono">
           <div>
-            <span className="text-slate-400 block mb-0.5">{t("landing.demoBanner")}</span>
+            <span className="text-slate-400 block mb-0.5">{t("website.message.demo_account")}</span>
             <span className="text-indigo-300 font-bold">admin@example.com</span> / <span className="text-emerald-400">Password123!</span>
           </div>
           <Link
             href="/login"
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-sans font-semibold transition"
           >
-            {t("landing.cta.enter")}
+            {t("website.action.enter")}
           </Link>
         </div>
       </section>
@@ -115,10 +115,10 @@ export default function LandingPage() {
       <section className="relative z-10 pb-16 px-6 max-w-5xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { value: "6", label: t("landing.stats.modules"), accent: "text-indigo-300" },
-            { value: "0", label: t("landing.stats.lint"), accent: "text-emerald-300" },
-            { value: "0", label: t("landing.stats.vulns"), accent: "text-cyan-300" },
-            { value: "100%", label: t("landing.stats.tests"), accent: "text-amber-300" },
+            { value: "6", label: t("website.stat.modules"), accent: "text-indigo-300" },
+            { value: "0", label: t("website.stat.lint"), accent: "text-emerald-300" },
+            { value: "0", label: t("website.stat.vulns"), accent: "text-cyan-300" },
+            { value: "100%", label: t("website.stat.tests"), accent: "text-amber-300" },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -130,7 +130,7 @@ export default function LandingPage() {
           ))}
         </div>
         <p className="mt-4 text-center text-[11px] text-slate-500">
-          {t("landing.stats.note")}
+          {t("website.message.stats_note")}
         </p>
       </section>
 
@@ -138,9 +138,9 @@ export default function LandingPage() {
       <section id="features" className="relative z-10 py-20 bg-slate-900/50 border-y border-slate-800/80">
         <div className="max-w-7xl mx-auto px-6 space-y-16">
           <div className="text-center space-y-4 max-w-2xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold text-white">{t("landing.features.title")}</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white">{t("website.view.features_title")}</h2>
             <p className="text-slate-400 text-sm">
-              {t("landing.features.subtitle")}
+              {t("website.view.features_subtitle")}
             </p>
           </div>
 
@@ -150,8 +150,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400 group-hover:scale-110 transition transform">
                 <Cpu className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">{t("landing.feature1.title")}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{t("landing.feature1.body")}</p>
+              <h3 className="text-xl font-bold text-white">{t("website.feature.monolith_title")}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{t("website.feature.monolith_body")}</p>
             </div>
 
             {/* Card 2 */}
@@ -159,8 +159,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-cyan-500/10 rounded-xl flex items-center justify-center text-cyan-400 group-hover:scale-110 transition transform">
                 <Shield className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">{t("landing.feature2.title")}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{t("landing.feature2.body")}</p>
+              <h3 className="text-xl font-bold text-white">{t("website.feature.resilience_title")}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{t("website.feature.resilience_body")}</p>
             </div>
 
             {/* Card 3 */}
@@ -168,8 +168,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 group-hover:scale-110 transition transform">
                 <Lock className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">{t("landing.feature3.title")}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{t("landing.feature3.body")}</p>
+              <h3 className="text-xl font-bold text-white">{t("website.feature.identity_title")}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{t("website.feature.identity_body")}</p>
             </div>
 
             {/* Card 4 */}
@@ -177,8 +177,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 group-hover:scale-110 transition transform">
                 <Code2 className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">{t("landing.feature4.title")}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{t("landing.feature4.body")}</p>
+              <h3 className="text-xl font-bold text-white">{t("website.feature.provider_title")}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{t("website.feature.provider_body")}</p>
             </div>
 
             {/* Card 5 */}
@@ -186,8 +186,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-400 group-hover:scale-110 transition transform">
                 <Bot className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">{t("landing.feature5.title")}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{t("landing.feature5.body")}</p>
+              <h3 className="text-xl font-bold text-white">{t("website.feature.ai_title")}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{t("website.feature.ai_body")}</p>
             </div>
 
             {/* Card 6 */}
@@ -195,8 +195,8 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-pink-500/10 rounded-xl flex items-center justify-center text-pink-400 group-hover:scale-110 transition transform">
                 <Activity className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">{t("landing.feature6.title")}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{t("landing.feature6.body")}</p>
+              <h3 className="text-xl font-bold text-white">{t("website.feature.xyp_title")}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{t("website.feature.xyp_body")}</p>
             </div>
           </div>
         </div>
@@ -205,9 +205,9 @@ export default function LandingPage() {
       {/* Production Business Apps Suite */}
       <section id="modules" className="relative z-10 py-20 max-w-7xl mx-auto px-6 space-y-16">
         <div className="text-center space-y-4 max-w-2xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-white">{t("landing.modules.title")}</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-white">{t("website.view.modules_title")}</h2>
           <p className="text-slate-400 text-sm">
-            {t("landing.modules.subtitle")}
+            {t("website.view.modules_subtitle")}
           </p>
         </div>
 
@@ -215,49 +215,49 @@ export default function LandingPage() {
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
             <div className="flex items-center space-x-3">
               <Users className="w-6 h-6 text-indigo-400" />
-              <h3 className="font-bold text-white text-base">{t("landing.module1.title")}</h3>
+              <h3 className="font-bold text-white text-base">{t("website.module.contacts_title")}</h3>
             </div>
-            <p className="text-xs text-slate-400">{t("landing.module1.body")}</p>
+            <p className="text-xs text-slate-400">{t("website.module.contacts_body")}</p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
             <div className="flex items-center space-x-3">
               <Boxes className="w-6 h-6 text-cyan-400" />
-              <h3 className="font-bold text-white text-base">{t("landing.module2.title")}</h3>
+              <h3 className="font-bold text-white text-base">{t("website.module.inventory_title")}</h3>
             </div>
-            <p className="text-xs text-slate-400">{t("landing.module2.body")}</p>
+            <p className="text-xs text-slate-400">{t("website.module.inventory_body")}</p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
             <div className="flex items-center space-x-3">
               <CreditCard className="w-6 h-6 text-emerald-400" />
-              <h3 className="font-bold text-white text-base">{t("landing.module3.title")}</h3>
+              <h3 className="font-bold text-white text-base">{t("website.module.billing_title")}</h3>
             </div>
-            <p className="text-xs text-slate-400">{t("landing.module3.body")}</p>
+            <p className="text-xs text-slate-400">{t("website.module.billing_body")}</p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
             <div className="flex items-center space-x-3">
               <FileText className="w-6 h-6 text-purple-400" />
-              <h3 className="font-bold text-white text-base">{t("landing.module4.title")}</h3>
+              <h3 className="font-bold text-white text-base">{t("website.module.documents_title")}</h3>
             </div>
-            <p className="text-xs text-slate-400">{t("landing.module4.body")}</p>
+            <p className="text-xs text-slate-400">{t("website.module.documents_body")}</p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
             <div className="flex items-center space-x-3">
               <Code2 className="w-6 h-6 text-pink-400" />
-              <h3 className="font-bold text-white text-base">{t("landing.module5.title")}</h3>
+              <h3 className="font-bold text-white text-base">{t("website.module.developer_title")}</h3>
             </div>
-            <p className="text-xs text-slate-400">{t("landing.module5.body")}</p>
+            <p className="text-xs text-slate-400">{t("website.module.developer_body")}</p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
             <div className="flex items-center space-x-3">
               <Globe className="w-6 h-6 text-amber-400" />
-              <h3 className="font-bold text-white text-base">{t("landing.module6.title")}</h3>
+              <h3 className="font-bold text-white text-base">{t("website.module.integrations_title")}</h3>
             </div>
-            <p className="text-xs text-slate-400">{t("landing.module6.body")}</p>
+            <p className="text-xs text-slate-400">{t("website.module.integrations_body")}</p>
           </div>
         </div>
       </section>
@@ -268,7 +268,7 @@ export default function LandingPage() {
           <div className="flex items-center space-x-2">
             <Building2 className="w-4 h-4 text-indigo-500" />
             <span className="font-semibold text-slate-300">Gerege Template Platform</span>
-            <span>{t("landing.footer.license")}</span>
+            <span>{t("website.message.license")}</span>
           </div>
 
           <div className="flex items-center space-x-6">

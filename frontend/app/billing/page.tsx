@@ -49,32 +49,32 @@ export default function BillingPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
             <CreditCard className="w-7 h-7 text-indigo-600" />
-            <span>{t("billing.publicBillingEbarimtTaxReceipts")}</span>
+            <span>{t("billing.view.title")}</span>
           </h1>
-          <p className="text-sm text-slate-500 mt-1">{t("billing.stateFeeInvoicesBillingAndTaxReceipts")}</p>
+          <p className="text-sm text-slate-500 mt-1">{t("billing.view.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-sm transition"
         >
           <Plus className="w-4 h-4" />
-          <span>{t("billing.createInvoice")}</span>
+          <span>{t("billing.action.create")}</span>
         </button>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("billing.loadingInvoices")}</div>
+        <div className="py-12 text-center text-slate-400">{t("billing.message.loading")}</div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase">
               <tr>
                 <th className="px-4 py-3">Invoice #</th>
-                <th className="px-4 py-3">{t("billing.contactClient")}</th>
-                <th className="px-4 py-3">{t("billing.totalAmount")}</th>
+                <th className="px-4 py-3">{t("billing.field.contact")}</th>
+                <th className="px-4 py-3">{t("billing.field.total")}</th>
                 <th className="px-4 py-3">10% VAT</th>
-                <th className="px-4 py-3">{t("billing.ebarimtStatus")}</th>
-                <th className="px-4 py-3">{t("billing.paymentStatus")}</th>
+                <th className="px-4 py-3">{t("billing.field.ebarimt_status")}</th>
+                <th className="px-4 py-3">{t("billing.field.payment_status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -117,13 +117,13 @@ export default function BillingPage() {
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("billing.createStateFeeInvoice")}</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("billing.view.create_title")}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Contact / Client Name *</label>
                 <input
                   type="text"
-                  placeholder={t("billing.contactPlaceholder")}
+                  placeholder={t("billing.field.contact_placeholder")}
                   value={form.contact_name}
                   onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"

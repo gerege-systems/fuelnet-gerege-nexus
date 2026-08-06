@@ -27,8 +27,8 @@ export default function GovServicesPage() {
     <div className="space-y-6">
       <PageHeader
         icon={<Landmark className="w-7 h-7 text-[var(--gerege-blue)]" />}
-        title={t("gov.title")}
-        subtitle={t("gov.overviewHint")}
+        title={t("gov.view.title")}
+        subtitle={t("gov.view.subtitle")}
       />
 
       <TaskQueue />
@@ -44,7 +44,7 @@ export default function GovServicesPage() {
               <Icon className="w-5 h-5 text-[var(--gerege-blue)] shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-slate-800">{t(`gov.menu.${id}` as never)}</div>
-                <p className="text-xs text-slate-500 mt-1 leading-snug">{t(`gov.menu.${id}Hint` as never)}</p>
+                <p className="text-xs text-slate-500 mt-1 leading-snug">{t(`gov.view.${id}_hint` as never)}</p>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[var(--gerege-blue)]" />
             </div>

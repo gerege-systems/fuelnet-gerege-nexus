@@ -113,8 +113,8 @@ export default function AppStorePage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t("apps.platformAppStore")}</h1>
-          <p className="text-sm text-slate-500">{t("apps.installEnableAndManage")}</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t("app_store.view.title")}</h1>
+          <p className="text-sm text-slate-500">{t("app_store.view.subtitle")}</p>
         </div>
 
         {/* Search & Category */}
@@ -123,7 +123,7 @@ export default function AppStorePage() {
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder={t("apps.searchApps")}
+              placeholder={t("app_store.view.search_placeholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64 bg-white"
@@ -137,7 +137,7 @@ export default function AppStorePage() {
           >
             {categories.map((c) => (
               <option key={c} value={c}>
-                {c === "All" ? t("apps.allCategories") : c}
+                {c === "All" ? t("app_store.filter.all") : c}
               </option>
             ))}
           </select>
@@ -164,9 +164,9 @@ export default function AppStorePage() {
 
       {/* App Cards Grid */}
       {loading ? (
-        <div className="py-12 text-center text-slate-500 text-sm">{t("apps.loadingAppsCatalog")}</div>
+        <div className="py-12 text-center text-slate-500 text-sm">{t("app_store.message.loading")}</div>
       ) : filteredApps.length === 0 ? (
-        <div className="py-12 text-center text-slate-500 text-sm">{t("apps.noAppsFoundMatchingYourQuery")}</div>
+        <div className="py-12 text-center text-slate-500 text-sm">{t("app_store.message.no_match")}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredApps.map((app) => (
@@ -191,7 +191,7 @@ export default function AppStorePage() {
                             : "bg-amber-100 text-amber-700"
                         }`}
                       >
-                        {app.enabled ? t("apps.installedEnabled") : t("apps.disabled")}
+                        {app.enabled ? t("app_store.state.installed") : t("app_store.state.disabled")}
                       </span>
                     )}
                   </div>
@@ -204,7 +204,7 @@ export default function AppStorePage() {
                 {/* Dependencies info */}
                 {app.manifest.dependencies && app.manifest.dependencies.length > 0 && (
                   <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    <span className="font-semibold text-slate-700">{t("apps.requires")}</span>
+                    <span className="font-semibold text-slate-700">{t("app_store.field.requires")}</span>
                     {app.manifest.dependencies.map((d) => d.id.replace("io.example.", "")).join(", ")}
                   </div>
                 )}
@@ -234,12 +234,12 @@ export default function AppStorePage() {
                     {app.enabled ? (
                       <>
                         <PowerOff className="w-4 h-4" />
-                        <span>{t("apps.disableApp")}</span>
+                        <span>{t("app_store.action.disable")}</span>
                       </>
                     ) : (
                       <>
                         <Power className="w-4 h-4" />
-                        <span>{t("apps.enableApp")}</span>
+                        <span>{t("app_store.action.enable")}</span>
                       </>
                     )}
                   </button>

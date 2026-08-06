@@ -25,8 +25,11 @@ export const ALL_STATUSES = Object.keys(STATUS_STYLE) as TaskStatus[];
 export function useStatusLabel() {
   const { t } = useI18n();
   return (status: TaskStatus) => {
-    const label = t(`gov.status.${status}` as never);
-    return label === `gov.status.${status}` ? status : label;
+    // The API sends the state in upper case; the dictionary holds it in the
+    // lower-case technical form Odoo uses for selection values.
+    const key = `gov.state.${status.toLowerCase()}`;
+    const label = t(key as never);
+    return label === key ? status : label;
   };
 }
 
@@ -89,7 +92,7 @@ export function Banner({
     >
       {error ? <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> : <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />}
       <span className="flex-1">{message}</span>
-      <button onClick={onDismiss} aria-label={t("common.close")}>
+      <button onClick={onDismiss} aria-label={t("base.action.close")}>
         <X className="w-4 h-4" />
       </button>
     </div>
@@ -101,7 +104,7 @@ export function Loading({ label }: { label?: string }) {
   return (
     <div className="flex items-center gap-2 text-slate-500 text-sm">
       <Loader2 className="w-4 h-4 animate-spin" />
-      {label || t("gov.loading")}
+      {label || t("base.message.loading")}
     </div>
   );
 }
@@ -116,23 +119,23 @@ export function DashboardCards({ dashboard }: { dashboard: Dashboard | null }) {
   if (!dashboard) return null;
 
   const cards = [
-    { key: "received", label: t("gov.card.received"), value: dashboard.received, tone: "text-slate-700" },
-    { key: "in_progress", label: t("gov.card.inProgress"), value: dashboard.in_progress, tone: "text-blue-600" },
-    { key: "delegated", label: t("gov.card.delegated"), value: dashboard.delegated, tone: "text-violet-600" },
+    { key: "received", label: t("gov.stat.received"), value: dashboard.received, tone: "text-slate-700" },
+    { key: "in_progress", label: t("gov.stat.in_progress"), value: dashboard.in_progress, tone: "text-blue-600" },
+    { key: "delegated", label: t("gov.stat.delegated"), value: dashboard.delegated, tone: "text-violet-600" },
     {
       key: "verify",
-      label: t("gov.card.awaitingVerification"),
+      label: t("gov.stat.awaiting_verification"),
       value: dashboard.awaiting_verification,
       tone: "text-orange-600",
     },
-    { key: "returned", label: t("gov.card.returned"), value: dashboard.returned, tone: "text-rose-600" },
+    { key: "returned", label: t("gov.stat.returned"), value: dashboard.returned, tone: "text-rose-600" },
     {
       key: "completed",
-      label: t("gov.card.completed"),
+      label: t("gov.stat.completed"),
       value: dashboard.completed + dashboard.closed,
       tone: "text-emerald-600",
     },
-    { key: "overdue", label: t("gov.card.overdue"), value: dashboard.overdue, tone: "text-red-600" },
+    { key: "overdue", label: t("gov.stat.overdue"), value: dashboard.overdue, tone: "text-red-600" },
   ];
 
   return (

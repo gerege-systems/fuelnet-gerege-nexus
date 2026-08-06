@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
-import { LOCALES, useI18n } from "@/lib/i18n";
+import { LOCALES, TranslationKey, useI18n } from "@/lib/i18n";
 import { ColorMode, useTheme } from "@/lib/theme";
 
-const MODES: { value: ColorMode; icon: typeof Sun; labelKey: "appearance.light" | "appearance.dark" | "appearance.system" }[] = [
-  { value: "light", icon: Sun, labelKey: "appearance.light" },
-  { value: "dark", icon: Moon, labelKey: "appearance.dark" },
-  { value: "system", icon: Monitor, labelKey: "appearance.system" },
+const MODES: { value: ColorMode; icon: typeof Sun; labelKey: TranslationKey }[] = [
+  { value: "light", icon: Sun, labelKey: "appearance.mode.light" },
+  { value: "dark", icon: Moon, labelKey: "appearance.mode.dark" },
+  { value: "system", icon: Monitor, labelKey: "appearance.mode.system" },
 ];
 
 /**
@@ -84,17 +84,17 @@ export default function UserMenu({
               role="menuitem"
             >
               <Settings className="w-4 h-4 text-slate-400" />
-              {t("shell.settings")}
+              {t("web.menu.settings")}
             </Link>
           </div>
 
           <div className="px-4 py-3 space-y-3 border-b border-slate-100">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              {t("userMenu.preferences")}
+              {t("web.menu.preferences")}
             </p>
 
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-slate-600">{t("common.language")}</span>
+              <span className="text-sm text-slate-600">{t("base.field.language")}</span>
               <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
                 {LOCALES.map((option) => (
                   <button
@@ -114,7 +114,7 @@ export default function UserMenu({
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-slate-600">{t("userMenu.theme")}</span>
+              <span className="text-sm text-slate-600">{t("web.field.theme")}</span>
               <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
                 {MODES.map(({ value, icon: Icon, labelKey }) => (
                   <button
@@ -144,7 +144,7 @@ export default function UserMenu({
             role="menuitem"
           >
             <LogOut className="w-4 h-4" />
-            {t("shell.logout")}
+            {t("web.action.logout")}
           </button>
         </div>
       )}
