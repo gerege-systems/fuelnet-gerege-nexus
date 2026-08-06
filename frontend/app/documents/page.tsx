@@ -52,15 +52,23 @@ export default function DocumentsPage() {
     loadData();
   }, []);
 
+  // Nothing between the click and the POST changed any state, so a second click —
+  // or Enter held down — created a second document, each one routed for approval.
+  const [creating, setCreating] = useState(false);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creating) return;
+    setCreating(true);
     try {
       await api.createDocument(form);
       setShowModal(false);
       setForm({ title: "", doc_type: "CONTRACT" });
-      loadData();
+      await loadData();
     } catch (err: any) {
       setMessage({ type: "error", text: `${t("documents.message.create_failed")}: ${err.message}` });
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -189,7 +197,8 @@ export default function DocumentsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
+                  disabled={creating || !form.title.trim()}
+                  className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs disabled:opacity-50"
                 >{t("documents.action.create")}</button>
               </div>
             </form>

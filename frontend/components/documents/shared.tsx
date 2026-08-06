@@ -140,12 +140,20 @@ export function StatusBadge({ status }: { status: string }) {
 export function SignatureProgress({ doc }: { doc: DocumentRecord }) {
   const { t } = useI18n();
   if (doc.required_signatures <= 1) return null;
+  // A rejected document's progress is moot, and showing it invited the reader to
+  // work out whether "2/2" beside a red badge meant the chain had been satisfied.
+  // The status badge says everything there is to say about it.
+  if (doc.status === "REJECTED") return null;
 
-  // Meeting the count is not enough: a signature from somebody no step names counts
-  // toward the total and satisfies none of the chain, so painting this emerald on the
-  // numbers alone put "complete" beside "Pending" on a document that still owed a
-  // named approval.
-  const complete = doc.outstanding_steps === 0 && doc.signature_count >= doc.required_signatures;
+  // Meeting the count is not enough on two counts. A signature from somebody no step
+  // names counts toward the total and satisfies none of the chain — so this used to
+  // paint "complete" beside "Pending" on a document that still owed a named approval.
+  // And a REJECTED document is over: whatever it collected, its chain was never
+  // satisfied, and an emerald "2/2" beside a red badge says it was.
+  const complete =
+    doc.status !== "REJECTED" &&
+    doc.outstanding_steps === 0 &&
+    doc.signature_count >= doc.required_signatures;
   return (
     <span
       className={`inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
@@ -388,6 +396,14 @@ export function SignatureDialog({
   const [otpCode, setOtpCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState<EIDSignSession | null>(null);
+  // The page's banner sits behind this dialog, so a failure reported only there is a
+  // failure the operator cannot read while the dialog is still open. It is shown
+  // here as well, and the caller is told too so it survives the dialog closing.
+  const [failure, setFailure] = useState<string | null>(null);
+  const report = (text: string) => {
+    setFailure(text);
+    onError(text);
+  };
 
   // One check at a time, with a breather between them, a tolerance for the
   // dropped long-polls a mobile network produces, and a deadline — a request that
@@ -404,7 +420,7 @@ export function SignatureDialog({
     const wait = async () => {
       while (!cancelled) {
         if (Date.now() >= deadline) {
-          onError(t("documents.message.approval_expired"));
+          report(t("documents.message.approval_expired"));
           setSession(null);
           return;
         }
@@ -421,12 +437,12 @@ export function SignatureDialog({
             return;
           }
           if (progress.state === "REFUSED") {
-            onError(t("documents.message.approval_refused"));
+            report(t("documents.message.approval_refused"));
             setSession(null);
             return;
           }
           if (progress.state === "EXPIRED") {
-            onError(t("documents.message.approval_expired"));
+            report(t("documents.message.approval_expired"));
             setSession(null);
             return;
           }
@@ -438,7 +454,7 @@ export function SignatureDialog({
           const status: number | undefined = err?.status;
           const answered = typeof status === "number" && status >= 400 && status < 500;
           if (answered || ++failures > TOLERATED_POLL_FAILURES) {
-            onError(err?.message || t("documents.message.sign_failed"));
+            report(err?.message || t("documents.message.sign_failed"));
             setSession(null);
             return;
           }
@@ -473,6 +489,7 @@ export function SignatureDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    setFailure(null);
     try {
       if (method === "DAN") {
         await api.signDocumentWithDAN(doc.id, { reg_number: regNumber, otp_code: otpCode });
@@ -481,7 +498,7 @@ export function SignatureDialog({
       }
       setSession(await api.startEIDSignature(doc.id, regNumber));
     } catch (err: any) {
-      onError(err?.message || t("documents.message.sign_failed"));
+      report(err?.message || t("documents.message.sign_failed"));
     } finally {
       setBusy(false);
     }
@@ -495,6 +512,13 @@ export function SignatureDialog({
           <span>{t("documents.view.sign_title")}</span>
         </h2>
         <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
+
+        {failure && (
+          <div className="mb-4 p-3 rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{failure}</span>
+          </div>
+        )}
 
         {session ? (
           <div className="space-y-4">
@@ -727,7 +751,7 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
                         <p className="text-sm font-semibold text-slate-900 truncate">
                           {signature ? signature.signer_name : step?.name || "—"}
                         </p>
-                        {!step && signature && (
+                        {!step && signature && steps.length > 0 && (
                           <span className="shrink-0 text-[10px] text-slate-500 italic">
                             {t("documents.message.signature_outside_chain")}
                           </span>
@@ -804,9 +828,11 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
 /** Opens the signature history, shown only once there is something to show. */
 export function SignatureHistoryButton({ doc, onOpen }: { doc: DocumentRecord; onOpen: (doc: DocumentRecord) => void }) {
   const { t } = useI18n();
-  // Worth opening as soon as there is anything to see: a signature already given,
-  // or a chain with an approval still to come.
-  if (doc.signature_count === 0 && doc.required_signatures <= 1) return null;
+  // Worth opening as soon as there is anything to see: a signature already given, or
+  // a step still to be filled. Testing required_signatures <= 1 used to stand in for
+  // "no chain", which stopped being true — a document whose own chain is exactly one
+  // step pins 1 as well, and hid its trail.
+  if (doc.signature_count === 0 && doc.outstanding_steps === 0) return null;
 
   return (
     <button

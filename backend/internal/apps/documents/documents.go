@@ -300,6 +300,11 @@ func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.R
 // storage error the caller cannot read into one they can act on.
 const TitleLimit = 255
 
+// RegNumberLimit is the shortest thing that can be a registration number. Both
+// national channels refuse anything shorter, so naming one in an approval chain
+// would create a step no citizen could fill.
+const RegNumberLimit = 8
+
 func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, docType string) (*Document, error) {
 	title = strings.TrimSpace(title)
 	docType = strings.ToUpper(strings.TrimSpace(docType))

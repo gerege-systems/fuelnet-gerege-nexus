@@ -54,17 +54,28 @@ export default function SignaturePoliciesPage() {
     setBusy(policy.doc_type);
     setMessage(null);
     try {
-      await api.saveSignaturePolicy(policy.doc_type, {
+      const saved = (await api.saveSignaturePolicy(policy.doc_type, {
         allow_eid: policy.allow_eid,
         allow_dan: policy.allow_dan,
         require_named_signer: policy.require_named_signer,
-      });
+      })) as Policy | undefined;
       setMessage({ type: "success", text: t("documents.message.policy_saved", { type: policy.doc_type }) });
-      await loadData();
+      // Only the row that was saved is replaced. Reloading the table reverted the
+      // edits an operator had made to the other document types, under a banner
+      // naming only this one.
+      if (saved && saved.doc_type) edit(policy.doc_type, saved);
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.policies_failed") });
-      // The server refused the change, so show what is actually stored again.
-      await loadData();
+      // This refusal cannot be fixed on this screen — the chain beneath the policy is
+      // what has to change — so this row goes back to what is stored. The others keep
+      // whatever the operator has typed.
+      try {
+        const stored = await api.getSignaturePolicies();
+        const mine = (stored || []).find((row) => row.doc_type === policy.doc_type);
+        if (mine) edit(policy.doc_type, mine);
+      } catch {
+        // Leave the row as typed rather than blank the screen over a second failure.
+      }
     } finally {
       setBusy(null);
     }

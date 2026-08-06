@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
@@ -34,14 +34,26 @@ export default function DocumentTemplatesPage() {
   const [message, setMessage] = useState<ActionMessage | null>(null);
   const [form, setForm] = useState({ name: "", doc_type: "CONTRACT", title_pattern: "" });
 
+  // A failed load must not be reported as an empty list, and a load that resolves
+  // late must not overwrite a row the operator has since created or edited: each
+  // load takes a ticket and only the newest one may write.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const loadTicket = useRef(0);
+
   const loadData = async () => {
+    const mine = ++loadTicket.current;
     setLoading(true);
     try {
-      setTemplates((await api.getDocumentTemplates()) || []);
+      const rows = (await api.getDocumentTemplates()) || [];
+      if (loadTicket.current !== mine) return;
+      setTemplates(rows);
+      setLoadFailed(false);
     } catch (err: any) {
+      if (loadTicket.current !== mine) return;
+      setLoadFailed(true);
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
-      setLoading(false);
+      if (loadTicket.current === mine) setLoading(false);
     }
   };
 
@@ -59,8 +71,12 @@ export default function DocumentTemplatesPage() {
       setMessage({ type: "success", text: t("documents.message.template_saved") });
       // Appending keeps whatever the operator has typed into the other rows; a
       // reload here threw it away.
-      if (created && created.id) setTemplates((current) => [...current, created]);
-      else await loadData();
+      if (created && created.id) {
+        loadTicket.current++; // a load still in flight must not overwrite this
+        setTemplates((current) => [...current, created]);
+      } else {
+        await loadData();
+      }
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
     } finally {
@@ -68,8 +84,14 @@ export default function DocumentTemplatesPage() {
     }
   };
 
-  const edit = (id: string, patch: Partial<Template>) =>
+  // Rows with edits that have not been saved. The Use button acts on what the server
+  // holds, so it must not be enabled by a tick the server has not seen.
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+
+  const edit = (id: string, patch: Partial<Template>, saved = false) => {
     setTemplates((current) => current.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setDirty((current) => ({ ...current, [id]: !saved }));
+  };
 
   const handleSave = async (tpl: Template) => {
     setBusy(tpl.id);
@@ -85,7 +107,7 @@ export default function DocumentTemplatesPage() {
       // Only the row that was saved is replaced, with what the server stored.
       // Reloading the whole table reverted every other row the operator had typed
       // into, under a banner saying this one was saved.
-      if (saved && saved.id) edit(tpl.id, saved);
+      if (saved && saved.id) edit(tpl.id, saved, true);
     } catch (err: any) {
       // The draft stays on screen so the operator can fix what was refused.
       setMessage({ type: "error", text: err?.message || t("documents.message.templates_failed") });
@@ -177,7 +199,7 @@ export default function DocumentTemplatesPage() {
           <div className="md:col-span-1 flex items-end">
             <button
               type="submit"
-              disabled={busy === "create"}
+              disabled={busy === "create" || !form.name.trim() || !form.title_pattern.trim()}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
@@ -191,9 +213,14 @@ export default function DocumentTemplatesPage() {
       {loading ? (
         <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
       ) : templates.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
-          {t("documents.message.no_templates")}
-        </div>
+        // Only a load that succeeded may say the tenant has no templates; a failed one
+        // says so in the banner instead, and an operator adding one to a list the page
+        // called complete would be building on a claim it could not make.
+        loadFailed ? null : (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+            {t("documents.message.no_templates")}
+          </div>
+        )
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600">
@@ -264,8 +291,14 @@ export default function DocumentTemplatesPage() {
                         </button>
                         <button
                           onClick={() => handleUse(tpl)}
-                          disabled={busy === tpl.id || !tpl.active}
-                          title={tpl.active ? undefined : t("documents.message.template_inactive")}
+                          disabled={busy === tpl.id || !tpl.active || dirty[tpl.id]}
+                          title={
+                            dirty[tpl.id]
+                              ? t("documents.message.template_unsaved")
+                              : tpl.active
+                                ? undefined
+                                : t("documents.message.template_inactive")
+                          }
                           className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
                         >
                           <Wand2 className="w-3.5 h-3.5" />

@@ -143,7 +143,7 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// treated as the provider's trouble, which a polling client must retry rather
 	// than abandon a ceremony over.
 	regNumber = strings.ToUpper(strings.TrimSpace(regNumber))
-	if len(regNumber) < 8 {
+	if len(regNumber) < RegNumberLimit {
 		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
 	}
 

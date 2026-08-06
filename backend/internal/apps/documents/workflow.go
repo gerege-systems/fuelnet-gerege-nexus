@@ -280,6 +280,17 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 			return nil, fmt.Errorf("%w: step %d needs a name", ErrInvalidConfiguration, i+1)
 		}
 		reg := strings.ToUpper(strings.TrimSpace(step.SignerRegNumber))
+		// A step naming something no citizen could present is a step nobody can
+		// fill: signing checks the identity a provider vouched for, and both
+		// providers refuse a registration number under eight characters.
+		if reg != "" && len(reg) < RegNumberLimit {
+			return nil, fmt.Errorf("%w: step %d names %q, which is not a registration number",
+				ErrInvalidConfiguration, i+1, reg)
+		}
+		if len(reg) > 64 {
+			return nil, fmt.Errorf("%w: step %d names a registration number of %d characters",
+				ErrInvalidConfiguration, i+1, len(reg))
+		}
 		// One citizen signs a document once, so naming the same person at two
 		// steps builds a chain that can never be completed — whatever the
 		// signature policy says. This has to be refused when it is saved, not

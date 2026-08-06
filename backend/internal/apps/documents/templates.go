@@ -48,6 +48,27 @@ func scanTemplate(row rowScanner) (*DocumentTemplate, error) {
 	return &tpl, nil
 }
 
+// checkTemplateFields keeps a template inside what its columns hold. Both are
+// VARCHAR(255); without this, pasting a longer one reaches Postgres and comes back
+// as a 22001 the operator cannot read.
+func checkTemplateFields(name, titlePattern string) error {
+	if name == "" {
+		return fmt.Errorf("%w: template name cannot be empty", ErrInvalidConfiguration)
+	}
+	if len([]rune(name)) > TitleLimit {
+		return fmt.Errorf("%w: a template name is at most %d characters, this one is %d",
+			ErrInvalidConfiguration, TitleLimit, len([]rune(name)))
+	}
+	if titlePattern == "" {
+		return fmt.Errorf("%w: title pattern cannot be empty", ErrInvalidConfiguration)
+	}
+	if len([]rune(titlePattern)) > TitleLimit {
+		return fmt.Errorf("%w: a title pattern is at most %d characters, this one is %d",
+			ErrInvalidConfiguration, TitleLimit, len([]rune(titlePattern)))
+	}
+	return nil
+}
+
 // resolveTitlePattern fills the placeholders a template may carry. Anything it
 // does not recognise is left alone, so an unknown token shows up in the created
 // document instead of vanishing silently.
@@ -85,11 +106,8 @@ func (m *DocumentsModule) CreateTemplate(ctx context.Context, tenantID, name, do
 	titlePattern = strings.TrimSpace(titlePattern)
 	docType = strings.ToUpper(strings.TrimSpace(docType))
 
-	if name == "" {
-		return nil, fmt.Errorf("%w: template name cannot be empty", ErrInvalidConfiguration)
-	}
-	if titlePattern == "" {
-		return nil, fmt.Errorf("%w: title pattern cannot be empty", ErrInvalidConfiguration)
+	if err := checkTemplateFields(name, titlePattern); err != nil {
+		return nil, err
 	}
 	if docType == "" {
 		docType = DocTypes[0]
@@ -130,11 +148,8 @@ func (m *DocumentsModule) UpdateTemplate(ctx context.Context, tenantID, template
 	titlePattern = strings.TrimSpace(titlePattern)
 	docType = strings.ToUpper(strings.TrimSpace(docType))
 
-	if name == "" {
-		return nil, fmt.Errorf("%w: template name cannot be empty", ErrInvalidConfiguration)
-	}
-	if titlePattern == "" {
-		return nil, fmt.Errorf("%w: title pattern cannot be empty", ErrInvalidConfiguration)
+	if err := checkTemplateFields(name, titlePattern); err != nil {
+		return nil, err
 	}
 	if !slices.Contains(DocTypes, docType) {
 		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)

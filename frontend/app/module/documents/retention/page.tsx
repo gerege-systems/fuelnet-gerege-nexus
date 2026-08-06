@@ -54,13 +54,20 @@ export default function DocumentRetentionPage() {
     setBusy(rule.doc_type);
     setMessage(null);
     try {
-      await api.saveRetentionRule(rule.doc_type, { retain_years: rule.retain_years, note: rule.note });
+      // The saved rule comes back with the counts the server computed, so only this
+      // row needs replacing. Reloading the table wiped the years an operator had
+      // typed into the other rows — and, on the error path, the very value they were
+      // being asked to correct.
+      const saved = (await api.saveRetentionRule(rule.doc_type, {
+        retain_years: rule.retain_years,
+        note: rule.note,
+      })) as Rule | undefined;
       setMessage({ type: "success", text: t("documents.message.retention_saved", { type: rule.doc_type }) });
+      if (saved && saved.doc_type) edit(rule.doc_type, saved);
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || t("documents.message.retention_failed") });
     } finally {
       setBusy(null);
-      await loadData();
     }
   };
 

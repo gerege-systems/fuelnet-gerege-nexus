@@ -171,6 +171,10 @@ export const documents = {
     mn: "Идэвхгүй загвараас баримт үүсгэхгүй, гэхдээ бүртгэл хадгалагдана.",
     en: "An inactive template produces no documents, but its record is kept.",
   },
+  "documents.message.template_unsaved": {
+    mn: "Хадгалаагүй засвар байна — эхлээд хадгална уу.",
+    en: "There are unsaved changes — save them first.",
+  },
   "documents.message.template_inactive": {
     mn: "Идэвхгүй загвар — эхлээд идэвхжүүлнэ үү.",
     en: "This template is inactive — activate it first.",

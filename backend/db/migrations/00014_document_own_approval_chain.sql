@@ -175,7 +175,22 @@ BEGIN
                                           WHERE st.document_id = d.id)),
              (SELECT count(*) FROM document_workflow_steps w
                WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type))
-     WHERE d.status IN ('PENDING_APPROVAL', 'REJECTED');
+     WHERE d.status = 'PENDING_APPROVAL';
+
+    --    A rejected document did not get what it asked for, and nothing records what
+    --    that was: it carries no copied chain, and its type's chain may have changed
+    --    or gone since. The best available reading is the longer of that chain and
+    --    what the document actually holds — never less than it holds, which would
+    --    have it needing fewer signatures than it has. It cannot read as a satisfied
+    --    chain either way: the screens do not call a rejected document complete, and
+    --    do not show its progress at all.
+    UPDATE document_records d
+       SET required_signatures = GREATEST(
+             1,
+             (SELECT count(*) FROM document_workflow_steps w
+               WHERE w.tenant_id = d.tenant_id AND w.doc_type = d.doc_type),
+             (SELECT count(*) FROM document_signatures s WHERE s.document_id = d.id))
+     WHERE d.status = 'REJECTED';
 
     -- 6. A document the old code left pending-but-complete — its chain was shortened
     --    under it — is finished here rather than left needing one more signature than

@@ -908,6 +908,36 @@ func TestOutstandingStepsIsWhatCompletionMeans(t *testing.T) {
 	}
 }
 
+// A chain may not name something no citizen could present, and a template may not
+// carry more than its column holds — both are refusals the operator can read rather
+// than a Postgres error they cannot.
+func TestConfigurationIsBoundedByWhatCanBeStoredAndSigned(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Захирал", SignerRegNumber: "AA1"},
+	}); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("a step naming AA1: got %v, want ErrInvalidConfiguration", err)
+	}
+
+	long := strings.Repeat("Урт ", 100) // 400 runes
+	if _, err := f.m.CreateTemplate(ctx, f.tenantID, long, "CONTRACT", "Гэрээ {year}"); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("an over-long template name: got %v, want ErrInvalidConfiguration", err)
+	}
+	if _, err := f.m.CreateTemplate(ctx, f.tenantID, "Зөв нэр", "CONTRACT", long); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("an over-long title pattern: got %v, want ErrInvalidConfiguration", err)
+	}
+
+	tpl, err := f.m.CreateTemplate(ctx, f.tenantID, "Зөв нэр", "CONTRACT", "Гэрээ {year}")
+	if err != nil {
+		t.Fatalf("a template inside its limits must be accepted: %v", err)
+	}
+	if _, err := f.m.UpdateTemplate(ctx, f.tenantID, tpl.ID, long, "CONTRACT", "Гэрээ {year}", true); !errors.Is(err, ErrInvalidConfiguration) {
+		t.Errorf("an over-long name on update: got %v, want ErrInvalidConfiguration", err)
+	}
+}
+
 func TestRejectIsFinal(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
