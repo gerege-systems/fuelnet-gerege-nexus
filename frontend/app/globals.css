@@ -8,8 +8,10 @@
     --gerege-blue: #0064e1;
     --gerege-blue-hover: #0054c2;
     --gerege-blue-soft: #eef6ff;
-    /* Chrome-profile style tonal surfaces derived from the selected accent. */
-    --gerege-bg: #f3f7fd;
+    /* Chrome-profile style tonal surfaces derived from the selected accent.
+       The page background matches sso.gerege.mn (--bg: #f9fafc) so the two
+       products read as one platform when a user moves between them. */
+    --gerege-bg: #f9fafc;
     --gerege-chrome: #edf4fd;
     --gerege-surface-2: #eef4fb;
     --gerege-navy: #0b2550;
@@ -22,12 +24,12 @@
     --gerege-radius-card: 10px;
     --gerege-radius-control: 8px;
     --gerege-shadow-menu: 0 8px 24px rgb(16 24 40 / 8%);
-    --background: 216 45% 98%;
+    --background: 220 33% 98%;
     --foreground: 222 38% 15%;
   }
 
   html[data-theme="dark"] {
-    --gerege-bg: #111722;
+    --gerege-bg: #0a0d12;
     --gerege-chrome: #172131;
     --gerege-surface: #171f2c;
     --gerege-surface-2: #202a38;
@@ -35,7 +37,7 @@
     --gerege-muted: #98a2b3;
     --gerege-border: #2b3646;
     --gerege-blue-soft: #102d55;
-    --background: 216 33% 10%;
+    --background: 218 29% 5%;
     --foreground: 210 20% 96%;
   }
 
