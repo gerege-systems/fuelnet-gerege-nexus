@@ -33,7 +33,9 @@ import (
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"golang.org/x/time/rate"
 )
 
 // DocTypes enumerates the accepted document classifications. The column has no
@@ -126,6 +128,9 @@ type DocumentsModule struct {
 	// titleMatch: without one, a Cyrillic search is case-sensitive on a database
 	// initialised with LC_CTYPE=C, which is what the postgres:16-alpine image this
 	// stack deploys produces.
+	// signLimiter budgets the requests that reach a citizen's phone. See New.
+	signLimiter *security.IPRateLimiter
+
 	collationMu sync.Mutex
 	// collationKnown is set only when the answer is definitive. A failed probe must not
 	// latch: it would leave a case-sensitive Cyrillic search for the life of the
@@ -138,11 +143,28 @@ type DocumentsModule struct {
 // the app store can resolve and install io.example.documents. The module owns
 // its own E-ID and DAN clients so signing stays self-contained; both read their
 // configuration from the environment and default to mock mode.
+// Starting an E-ID signature pushes a notification to a real person's phone, so it is
+// budgeted the way the platform budgets its own sign-in push rather than left open.
+// Measured before this existed: thirty starts in a row against one document all went
+// through, which in production is thirty buzzes on one citizen's phone from one
+// operator's session — while /auth/eid/start-id, which does the same thing, refused
+// eight of twelve.
+//
+// A little more generous than sign-in, because several clerks in one office share an
+// address and each of them getting a document signed is legitimate; still tight,
+// because each request reaches somebody's pocket. Polling and reading are not budgeted:
+// they trouble nobody.
+const (
+	signPushRatePerMinute = 10
+	signPushBurst         = 5
+)
+
 func New(db *pgxpool.Pool) *DocumentsModule {
 	m := &DocumentsModule{
-		db:     db,
-		eidSvc: eid.NewEIDService(),
-		danSvc: dan.NewDANService(),
+		db:          db,
+		eidSvc:      eid.NewEIDService(),
+		danSvc:      dan.NewDANService(),
+		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
 	}
 	appregistry.Register(m)
 	return m
@@ -203,9 +225,23 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// Signing is per channel, because the channels are not the same shape.
 		// E-ID is an approval the citizen gives on their own device, so it takes
 		// two calls; DAN is a code they read out, so it takes one.
-		dr.Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
+		//
+		// The start is budgeted: it is the one that reaches a citizen's phone. The poll
+		// is not — a citizen takes as long as they take to find it, and throttling the
+		// watching would only lose approvals. DAN is a code the citizen reads out, so it
+		// pushes nothing, but it is budgeted with the same bucket because it is still an
+		// authentication attempt against a real person's credentials.
+		if m.signLimiter != nil {
+			dr.With(security.RateLimitMiddleware(m.signLimiter)).
+				Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
+			dr.With(security.RateLimitMiddleware(m.signLimiter)).
+				Post("/{id}/sign/dan", m.signWithDANHandler)
+		} else {
+			// A module built by hand in a test has no limiter; the routes still work.
+			dr.Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
+			dr.Post("/{id}/sign/dan", m.signWithDANHandler)
+		}
 		dr.Post("/{id}/sign/eid/poll", m.pollEIDSignatureHandler)
-		dr.Post("/{id}/sign/dan", m.signWithDANHandler)
 	})
 }
 

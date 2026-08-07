@@ -246,6 +246,24 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 		return nil, fmt.Errorf("record signature session: %w", err)
 	}
 
+	// The citizen has been asked again, so the previous asking is over: only the newest
+	// request for this document and this citizen stays redeemable. Thirty retries used
+	// to leave thirty live rows, every one of them an approval id that could still be
+	// turned into a signature.
+	//
+	// After the insert, deliberately. Retiring the old one first would mean a push that
+	// then failed left the citizen holding a prompt for a session nothing could redeem —
+	// their approval given and lost. Best-effort for the same reason the sweep is: the
+	// prompt on their phone is real whatever this row does.
+	if _, err := m.db.Exec(context.WithoutCancel(ctx),
+		`DELETE FROM document_eid_sign_sessions
+		  WHERE tenant_id = $1 AND document_id = $2 AND reg_number = $3
+		    AND session_id <> $4 AND consumed_at IS NULL`,
+		tenantID, docID, regNumber, started.SessionID); err != nil {
+		slog.WarnContext(ctx, "started a new signature session but could not retire the previous one",
+			"document_id", docID, "error", err)
+	}
+
 	return &EIDSignSession{
 		SessionID:        started.SessionID,
 		VerificationCode: started.VerificationCode,

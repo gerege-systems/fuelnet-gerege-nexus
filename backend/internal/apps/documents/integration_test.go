@@ -1803,6 +1803,77 @@ func TestAnUnreachableDANIsProviderTroubleNotARejection(t *testing.T) {
 	}
 }
 
+// Asking the citizen again ends the previous asking. Every start pushes a prompt to
+// their phone and leaves a row that can be turned into a signature; without this, an
+// operator retrying five times left five live approval ids for one document, any of
+// which could still be redeemed later.
+func TestStartingAgainRetiresTheLastAsking(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Дахин дахин асуув", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	var ids []string
+	for i := 0; i < 5; i++ {
+		session, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA90010111")
+		if err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+		ids = append(ids, session.SessionID)
+	}
+
+	var live int
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT count(*) FROM document_eid_sign_sessions
+		  WHERE document_id = $1 AND consumed_at IS NULL`, doc.ID).Scan(&live); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if live != 1 {
+		t.Errorf("%d live sessions after five askings, want 1", live)
+	}
+
+	// An earlier asking is no longer redeemable...
+	if _, err := f.m.PollEIDSignature(ctx, f.tenantID, doc.ID, ids[0]); !errors.Is(err, ErrSignSessionUnknown) {
+		t.Errorf("polling a retired session: got %v, want ErrSignSessionUnknown", err)
+	}
+	// ...and the newest one still signs.
+	signed, err := pollUntilApproved(t, f, doc.ID, ids[len(ids)-1])
+	if err != nil {
+		t.Fatalf("the newest session: %v", err)
+	}
+	if signed.SignatureCount != 1 {
+		t.Errorf("count = %d, want 1", signed.SignatureCount)
+	}
+
+	// A session for a DIFFERENT citizen on the same document is untouched: they were
+	// each asked, and each of them may answer.
+	other, err := f.m.CreateDocument(ctx, f.tenantID, "Хоёр хүн", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create the second: %v", err)
+	}
+	first, err := f.m.StartEIDSignature(ctx, f.tenantID, other.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("ask the first citizen: %v", err)
+	}
+	if _, err := f.m.StartEIDSignature(ctx, f.tenantID, other.ID, "BB90010111"); err != nil {
+		t.Fatalf("ask the second citizen: %v", err)
+	}
+	if err := f.m.db.QueryRow(ctx,
+		`SELECT count(*) FROM document_eid_sign_sessions
+		  WHERE document_id = $1 AND consumed_at IS NULL`, other.ID).Scan(&live); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if live != 2 {
+		t.Errorf("%d live sessions for two citizens, want 2", live)
+	}
+	if _, err := f.m.PollEIDSignature(ctx, f.tenantID, other.ID, first.SessionID); errors.Is(err, ErrSignSessionUnknown) {
+		t.Error("asking a second citizen retired the first citizen's request")
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
