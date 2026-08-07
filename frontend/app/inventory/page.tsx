@@ -64,7 +64,7 @@ export default function InventoryPage() {
       setStockLevels(stock || []);
       setMovements(mov || []);
     } catch (err: any) {
-      setError(err.message || "Failed to load inventory data. Ensure Inventory app is installed & enabled.");
+      setError(err.message || t("inventory.message.load_failed"));
     } finally {
       setLoading(false);
     }
@@ -81,10 +81,10 @@ export default function InventoryPage() {
       await api.createWarehouse(whForm);
       setShowWhModal(false);
       setWhForm({ code: "", name: "", address: "" });
-      setSuccess("Warehouse created successfully!");
+      setSuccess(t("inventory.message.warehouse_created"));
       await loadData();
     } catch (err: any) {
-      setError(err.message || "Failed to create warehouse");
+      setError(err.message || t("inventory.message.warehouse_failed"));
     }
   };
 
@@ -96,10 +96,10 @@ export default function InventoryPage() {
       await api.adjustStock(adjForm);
       setShowAdjModal(false);
       setAdjForm({ warehouse_id: "", product_id: "", quantity_change: 0, reference: "" });
-      setSuccess("Stock adjustment recorded successfully!");
+      setSuccess(t("inventory.message.adjustment_recorded"));
       await loadData();
     } catch (err: any) {
-      setError(err.message || "Stock adjustment failed");
+      setError(err.message || t("inventory.message.adjustment_failed"));
     }
   };
 
@@ -115,7 +115,7 @@ export default function InventoryPage() {
             <Boxes className="w-6 h-6 text-amber-600" />
             <span>{t("inventory.view.title")}</span>
           </h1>
-          <p className="text-sm text-slate-500">Track stock levels across warehouses and log adjustments</p>
+          <p className="text-sm text-slate-500">{t("inventory.view.subtitle")}</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -169,7 +169,7 @@ export default function InventoryPage() {
             </h2>
             {warehouses.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
-                No warehouses configured yet. Click "New Warehouse" to add a location.
+                {t("inventory.message.empty_warehouses")}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -179,7 +179,7 @@ export default function InventoryPage() {
                       {w.code}
                     </span>
                     <h3 className="text-base font-bold text-slate-900 mt-2">{w.name}</h3>
-                    <p className="text-xs text-slate-500 mt-1">{w.address || "No address specified"}</p>
+                    <p className="text-xs text-slate-500 mt-1">{w.address || t("inventory.message.no_address")}</p>
                   </div>
                 ))}
               </div>
@@ -191,7 +191,7 @@ export default function InventoryPage() {
             <h2 className="text-lg font-bold text-slate-900 mb-3">{t("inventory.view.stock_levels")}</h2>
             {stockLevels.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
-                No stock recorded yet. Click "Adjust Stock" to perform stock intake.
+                {t("inventory.message.empty_stock")}
               </div>
             ) : (
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -235,7 +235,7 @@ export default function InventoryPage() {
             </h2>
             {movements.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-6 text-center text-slate-500 text-sm">
-                No stock movement audit events logged.
+                {t("inventory.message.empty_movements")}
               </div>
             ) : (
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -284,7 +284,7 @@ export default function InventoryPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-4">{t("inventory.view.create_warehouse")}</h2>
             <form onSubmit={handleCreateWarehouse} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Code *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("inventory.field.code")} *</label>
                 <input
                   type="text"
                   placeholder="e.g. WH-MAIN"
@@ -296,7 +296,7 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Warehouse Name *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("inventory.field.warehouse_name")} *</label>
                 <input
                   type="text"
                   value={whForm.name}
@@ -328,7 +328,7 @@ export default function InventoryPage() {
                   type="submit"
                   className="w-1/2 bg-amber-600 hover:bg-amber-700 text-white font-medium py-2 rounded-lg text-sm"
                 >
-                  Save Warehouse
+                  {t("inventory.action.save_warehouse")}
                 </button>
               </div>
             </form>
@@ -343,7 +343,7 @@ export default function InventoryPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-4">{t("inventory.view.adjustment")}</h2>
             <form onSubmit={handleAdjustStock} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Warehouse *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("inventory.field.select_warehouse")} *</label>
                 <select
                   value={adjForm.warehouse_id}
                   onChange={(e) => setAdjForm({ ...adjForm, warehouse_id: e.target.value })}
@@ -359,7 +359,7 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Product *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("inventory.field.select_product")} *</label>
                 <select
                   value={adjForm.product_id}
                   onChange={(e) => setAdjForm({ ...adjForm, product_id: e.target.value })}
@@ -411,7 +411,7 @@ export default function InventoryPage() {
                   type="submit"
                   className="w-1/2 bg-amber-600 hover:bg-amber-700 text-white font-medium py-2 rounded-lg text-sm"
                 >
-                  Confirm Adjustment
+                  {t("inventory.action.confirm_adjustment")}
                 </button>
               </div>
             </form>

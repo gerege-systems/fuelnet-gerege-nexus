@@ -51,7 +51,7 @@ export default function DeveloperAppsPage() {
       setShowModal(false);
       loadApps();
     } catch (err: any) {
-      alert(err.message || "Failed to create OAuth2 app");
+      alert(err.message || t("developer.message.create_failed"));
     }
   };
 
@@ -92,7 +92,7 @@ export default function DeveloperAppsPage() {
             </div>
           </div>
           <span className="text-xs bg-emerald-500/20 text-emerald-300 font-mono px-3 py-1 rounded-full border border-emerald-500/30">
-            Active SSO Provider
+            {t("developer.view.provider_active")}
           </span>
         </div>
 
@@ -111,7 +111,7 @@ export default function DeveloperAppsPage() {
 
                 <div className="space-y-2 text-xs font-mono bg-slate-50 p-3 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Client ID:</span>
+                    <span className="text-slate-500">{t("developer.field.client_id")}:</span>
                     <div className="flex items-center space-x-2">
                       <span className="text-slate-900 font-bold">{app.client_id}</span>
                       <button onClick={() => copyToClipboard(app.client_id, app.client_id)}>
@@ -120,7 +120,7 @@ export default function DeveloperAppsPage() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Client Secret:</span>
+                    <span className="text-slate-500">{t("developer.field.client_secret")}:</span>
                     {/* The API returns the secret only in the response that
                         creates the client; later reads redact it. */}
                     {app.client_secret ? (
@@ -173,7 +173,7 @@ export default function DeveloperAppsPage() {
               <h2 className="text-lg font-bold text-slate-900">{t("developer.view.create_title")}</h2>
               <form onSubmit={handleCreateApp} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Application Name *</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">{t("developer.field.application_name")} *</label>
                   <input
                     type="text"
                     placeholder="e.g. My External Mobile App"
@@ -184,7 +184,7 @@ export default function DeveloperAppsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Redirect URIs (comma-separated) *</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">{t("developer.field.redirect_uris_hint")} *</label>
                   <input
                     type="text"
                     value={redirectURIs}
@@ -205,7 +205,7 @@ export default function DeveloperAppsPage() {
                     type="submit"
                     className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold"
                   >
-                    Register App
+                    {t("developer.action.register")}
                   </button>
                 </div>
               </form>

@@ -42,6 +42,50 @@ func TestIsValidSlug(t *testing.T) {
 	}
 }
 
+func TestSafeCORSOrigins(t *testing.T) {
+	tests := []struct {
+		name  string
+		env   string
+		want  []string
+		unset bool
+	}{
+		{name: "unset falls back to local development", unset: true,
+			want: []string{"http://localhost:3000", "http://127.0.0.1:3000"}},
+		{name: "single origin", env: "https://nexus.gov.mn",
+			want: []string{"https://nexus.gov.mn"}},
+		// The reason this function exists: a list written with spaces after the
+		// commas used to yield origins with a leading space, which match no
+		// Origin header a browser ever sends.
+		{name: "spaces after the commas are not part of the origin",
+			env:  "https://a.gov.mn, https://b.gov.mn ,\thttps://c.gov.mn",
+			want: []string{"https://a.gov.mn", "https://b.gov.mn", "https://c.gov.mn"}},
+		{name: "empty entries are dropped", env: "https://a.gov.mn,,https://b.gov.mn,",
+			want: []string{"https://a.gov.mn", "https://b.gov.mn"}},
+		{name: "a value of only separators falls back rather than allowing nothing",
+			env:  " , ",
+			want: []string{"http://localhost:3000", "http://127.0.0.1:3000"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.unset {
+				t.Setenv("ALLOWED_ORIGINS", "")
+			} else {
+				t.Setenv("ALLOWED_ORIGINS", tc.env)
+			}
+			got := security.SafeCORSOrigins()
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %q, want %q", got, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func TestRateLimitMiddleware(t *testing.T) {
 	limiter := security.NewIPRateLimiter(rate.Limit(2), 2) // 2 requests allowed
 	middleware := security.RateLimitMiddleware(limiter)

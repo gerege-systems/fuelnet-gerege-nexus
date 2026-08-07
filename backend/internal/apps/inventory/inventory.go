@@ -75,7 +75,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "inventory", ParentID: "operations", Label: "Inventory", Path: "/inventory", Icon: "boxes", Order: 10, Labels: map[string]string{"mn": "Агуулах"}},
+		{ID: "inventory", ParentID: "operations", Label: "Inventory", Path: "/inventory", Icon: "boxes", Order: 10, Labels: map[string]string{"mn": "Агуулах", "ar": "المخزون", "zh": "库存", "fr": "Inventaire", "ru": "Склад", "es": "Inventario"}},
 	}
 }
 
@@ -113,6 +113,12 @@ func (m *Module) listWarehousesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		list = append(list, wh)
+	}
+	// A broken stream ends the loop exactly like a complete one; without this
+	// a truncated list goes out under a 200.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -186,6 +192,12 @@ func (m *Module) listStockLevelsHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		list = append(list, sl)
 	}
+	// Stock levels above all: a short list here reads as stock that is not
+	// there, and somebody reorders against it.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(list)
@@ -215,6 +227,12 @@ func (m *Module) listStockMovementsHandler(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		list = append(list, sm)
+	}
+	// The movement ledger is what a stock figure is reconciled against, so a
+	// silently short one is worse than an error.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -53,7 +53,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "contacts", ParentID: "master_data", Label: "Contacts", Path: "/contacts", Icon: "users", Order: 10, Labels: map[string]string{"mn": "Харилцагчид"}},
+		{ID: "contacts", ParentID: "master_data", Label: "Contacts", Path: "/contacts", Icon: "users", Order: 10, Labels: map[string]string{"mn": "Харилцагчид", "ar": "جهات الاتصال", "zh": "联系人", "fr": "Contacts", "ru": "Контакты", "es": "Contactos"}},
 	}
 }
 
@@ -90,6 +90,13 @@ func (m *Module) listContactsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		list = append(list, c)
+	}
+	// A stream that breaks partway through ends the loop the same way a
+	// complete one does, so without this the caller receives a short list
+	// under a 200 and has no way to tell it apart from the whole set.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
