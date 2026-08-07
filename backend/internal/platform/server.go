@@ -448,6 +448,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A user can hold memberships in several tenants. LIMIT 1 without an ORDER
+	// BY let Postgres pick, so the same credentials could land in a different
+	// tenant from one sign-in to the next — and the session, its audit trail
+	// and every subsequent read are scoped to whichever it picked. Oldest
+	// membership first makes it the same tenant every time.
 	var userID, passwordHash, tenantID, name string
 	var isAdmin bool
 	err := s.db.QueryRow(r.Context(),
@@ -461,7 +466,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		        m.tenant_id
 		 FROM users u
 		 JOIN memberships m ON m.user_id = u.id
-		 WHERE u.email = $1 LIMIT 1`, req.Email).Scan(&userID, &passwordHash, &name, &isAdmin, &tenantID)
+		 WHERE u.email = $1
+		 ORDER BY m.created_at, m.tenant_id
+		 LIMIT 1`, req.Email).Scan(&userID, &passwordHash, &name, &isAdmin, &tenantID)
 
 	if err != nil || !auth.CheckPasswordHash(req.Password, passwordHash) {
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
@@ -573,6 +580,7 @@ func (s *Server) resolveNationalIdentityUser(ctx context.Context, email, regNumb
 			   FROM users u
 			   JOIN memberships m ON m.user_id = u.id
 			  WHERE lower(u.email) = lower($1)
+			  ORDER BY m.created_at, m.tenant_id
 			  LIMIT 1`, email).Scan(&userID, &tenantID)
 		if err == nil {
 			return userID, tenantID, nil
@@ -680,7 +688,8 @@ func (s *Server) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.EI
 	digest := eidLinkingDigest(linkingKey, subject)
 	syntheticEmail := "eid+" + digest[:32] + "@identity.invalid"
 	if err = s.db.QueryRow(ctx,
-		`SELECT u.id::text, m.tenant_id::text FROM users u JOIN memberships m ON m.user_id=u.id WHERE u.email=$1 LIMIT 1`,
+		`SELECT u.id::text, m.tenant_id::text FROM users u JOIN memberships m ON m.user_id=u.id WHERE u.email=$1
+		 ORDER BY m.created_at, m.tenant_id LIMIT 1`,
 		syntheticEmail).Scan(&userID, &tenantID); err == nil {
 		return userID, tenantID, nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -897,9 +906,17 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 	list := make([]InstalledApp, 0)
 	for rows.Next() {
 		var item InstalledApp
-		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion, &item.Status, &item.Enabled, &item.InstalledAt); err == nil {
-			list = append(list, item)
+		// Skipping unreadable rows reported a tenant's app as not installed,
+		// and the store then offered to install it again over the top.
+		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion, &item.Status, &item.Enabled, &item.InstalledAt); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to read installed apps")
+			return
 		}
+		list = append(list, item)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to read installed apps")
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1101,9 +1118,15 @@ func (s *Server) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var key, content string
 		var active, global bool
-		if rows.Scan(&key, &content, &active, &global) == nil {
-			items = append(items, map[string]any{"key": key, "content": content, "active": active, "global": global})
+		if err := rows.Scan(&key, &content, &active, &global); err != nil {
+			writeJSONError(w, 500, "failed to read AI prompts")
+			return
 		}
+		items = append(items, map[string]any{"key": key, "content": content, "active": active, "global": global})
+	}
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, 500, "failed to read AI prompts")
+		return
 	}
 	writeJSON(w, 200, items)
 }
@@ -1149,9 +1172,15 @@ func (s *Server) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id, title, content, url string
 		var updated time.Time
-		if rows.Scan(&id, &title, &content, &url, &updated) == nil {
-			items = append(items, map[string]any{"id": id, "title": title, "content": content, "source_url": url, "updated_at": updated})
+		if err := rows.Scan(&id, &title, &content, &url, &updated); err != nil {
+			writeJSONError(w, 500, "failed to read knowledge")
+			return
 		}
+		items = append(items, map[string]any{"id": id, "title": title, "content": content, "source_url": url, "updated_at": updated})
+	}
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, 500, "failed to read knowledge")
+		return
 	}
 	writeJSON(w, 200, items)
 }
@@ -1507,6 +1536,11 @@ func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 	}
 
 	s.integrationMgr.Register(&cfg)
+
+	// Echo the connector back without the signing secret. Reflecting a
+	// just-submitted credential puts it in every proxy log and browser cache on
+	// the way back for no benefit — the caller already has it.
+	cfg.SecretKey = ""
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "registered", "integration": cfg})

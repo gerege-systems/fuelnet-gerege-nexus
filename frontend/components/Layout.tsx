@@ -5,6 +5,7 @@ import Link from "next/link";
 import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
 import { api, APP_MENU_CHANGED_EVENT } from "@/lib/api";
+import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
@@ -81,7 +82,10 @@ export default function Layout({children}:{children:React.ReactNode}){
   const results=query.trim()?searchIndex.filter(x=>(x.label+" "+x.app).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0,8):[];
 
   function togglePanel(){if(window.matchMedia("(min-width:901px)").matches){setPanelOpen(v=>{localStorage.setItem("gerege_sidebar_open",String(!v));return !v})}else setMobileOpen(v=>!v)}
-  async function logout(){try{await api.logout()}catch{}localStorage.removeItem("session_token");router.push("/login")}
+  // resetAccess before navigating: /login is a client-side route, so the cached
+  // identity would otherwise still be the signed-out user's when the next
+  // person signs in at this tab.
+  async function logout(){try{await api.logout()}catch{}localStorage.removeItem("session_token");resetAccess();router.push("/login")}
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},

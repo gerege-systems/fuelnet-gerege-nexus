@@ -52,7 +52,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "products", ParentID: "master_data", Label: "Products", Path: "/products", Icon: "package", Order: 20, Labels: map[string]string{"mn": "Бараа бүтээгдэхүүн"}},
+		{ID: "products", ParentID: "master_data", Label: "Products", Path: "/products", Icon: "package", Order: 20, Labels: map[string]string{"mn": "Бараа бүтээгдэхүүн", "ar": "المنتجات", "zh": "产品", "fr": "Produits", "ru": "Товары", "es": "Productos"}},
 	}
 }
 
@@ -89,6 +89,12 @@ func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		list = append(list, p)
+	}
+	// A broken stream ends the loop exactly like a complete one; without this
+	// a truncated list goes out under a 200.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

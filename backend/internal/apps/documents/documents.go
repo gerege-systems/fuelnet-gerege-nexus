@@ -201,7 +201,7 @@ func (m *DocumentsModule) Permissions() []internal.PermissionDefinition {
 
 func (m *DocumentsModule) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "documents", ParentID: "operations", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 30, Labels: map[string]string{"mn": "Баримт ба цахим гарын үсэг"}},
+		{ID: "documents", ParentID: "operations", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 30, Labels: map[string]string{"mn": "Баримт ба цахим гарын үсэг", "ar": "المستندات والتوقيع الإلكتروني", "zh": "文档与电子签名", "fr": "Documents et signature électronique", "ru": "Документы и электронная подпись", "es": "Documentos y firma electrónica"}},
 	}
 }
 

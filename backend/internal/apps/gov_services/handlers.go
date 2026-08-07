@@ -478,6 +478,10 @@ func (m *Module) listOutboxHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, o)
 	}
+	if err := rows.Err(); err != nil {
+		writeDomainError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 

@@ -78,7 +78,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "esign", ParentID: "operations", Label: "PDF E-Sign", Path: "/esign", Icon: "pen-tool", Order: 55, Labels: map[string]string{"mn": "PDF цахим гарын үсэг"}},
+		{ID: "esign", ParentID: "operations", Label: "PDF E-Sign", Path: "/esign", Icon: "pen-tool", Order: 55, Labels: map[string]string{"mn": "PDF цахим гарын үсэг", "ar": "توقيع PDF الإلكتروني", "zh": "PDF 电子签名", "fr": "Signature électronique PDF", "ru": "Электронная подпись PDF", "es": "Firma electrónica PDF"}},
 	}
 }
 

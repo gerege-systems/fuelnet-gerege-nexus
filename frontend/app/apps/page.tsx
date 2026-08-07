@@ -50,7 +50,7 @@ export default function AppStorePage() {
       const data = await api.getStoreApps();
       setApps(data || []);
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Failed to load apps catalog" });
+      setMessage({ type: "error", text: err.message || t("app_store.message.load_failed") });
     } finally {
       setLoading(false);
     }
@@ -92,7 +92,7 @@ export default function AppStorePage() {
       }
       await loadApps();
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Action failed" });
+      setMessage({ type: "error", text: err.message || t("app_store.message.action_failed") });
     } finally {
       setActionLoading(null);
     }
