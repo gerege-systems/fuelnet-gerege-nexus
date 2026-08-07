@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 var roleCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{1,62}[a-z0-9]$`)
@@ -69,7 +71,15 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 		}
 		roles = append(roles, v)
 	}
+	// A stream that fails partway through leaves rows.Next() returning false —
+	// exactly like a clean end. Without this check the screen renders a short
+	// list as if it were the whole one, and the administrator then saves that
+	// truncated view back, silently revoking whatever fell off the end.
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, 500, "failed to read roles")
+		return
+	}
 
 	permissions := make([]accessPermission, 0)
 	rows, err = s.db.Query(r.Context(), `SELECT code,name,description,split_part(code,'.',1) FROM permissions ORDER BY split_part(code,'.',1),code`)
@@ -87,6 +97,10 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 		permissions = append(permissions, v)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, 500, "failed to read permissions")
+		return
+	}
 
 	members := make([]accessMember, 0)
 	rows, err = s.db.Query(r.Context(), `
@@ -110,6 +124,10 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 		members = append(members, v)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, 500, "failed to read members")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"roles": roles, "permissions": permissions, "members": members})
 }
@@ -240,15 +258,10 @@ func (s *Server) handleSetRolePermissions(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	rows, _ := tx.Query(r.Context(), `SELECT p.code FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=$1 ORDER BY p.code`, id)
-	before := []string{}
-	if rows != nil {
-		for rows.Next() {
-			var p string
-			_ = rows.Scan(&p)
-			before = append(before, p)
-		}
-		rows.Close()
+	before, err := collectStrings(r.Context(), tx, `SELECT p.code FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=$1 ORDER BY p.code`, id)
+	if err != nil {
+		writeJSONError(w, 500, "failed to read the current permissions")
+		return
 	}
 	if _, err = tx.Exec(r.Context(), `DELETE FROM role_permissions WHERE role_id=$1`, id); err != nil {
 		writeJSONError(w, 500, "failed to clear permissions")
@@ -303,15 +316,10 @@ func (s *Server) handleSetMembershipRoles(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	rows, _ := tx.Query(r.Context(), `SELECT role_id::text FROM membership_roles WHERE membership_id=$1 ORDER BY role_id`, id)
-	before := []string{}
-	if rows != nil {
-		for rows.Next() {
-			var v string
-			_ = rows.Scan(&v)
-			before = append(before, v)
-		}
-		rows.Close()
+	before, err := collectStrings(r.Context(), tx, `SELECT role_id::text FROM membership_roles WHERE membership_id=$1 ORDER BY role_id`, id)
+	if err != nil {
+		writeJSONError(w, 500, "failed to read the current role assignment")
+		return
 	}
 	var removedAdmin bool
 	if err = tx.QueryRow(r.Context(), `
@@ -340,6 +348,37 @@ func (s *Server) handleSetMembershipRoles(w http.ResponseWriter, r *http.Request
 	}
 	s.recordAccessChange(r, claims.UserID, "membership.roles", "membership", id, before, clean)
 	writeJSON(w, 200, map[string]string{"status": "updated"})
+}
+
+// querier is the part of pgxpool.Pool and pgx.Tx this file needs, so the
+// before-state snapshots can run inside the same transaction as the write they
+// describe.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// collectStrings reads a single-text-column result into a slice.
+//
+// The before-state snapshots that feed the access-change audit trail used to
+// discard the query error, discard each scan error, and append the zero value
+// regardless — so a failed read was recorded as "this role had no permissions
+// beforehand", which is precisely the claim an audit trail must never invent.
+func collectStrings(ctx context.Context, q querier, sql string, args ...any) ([]string, error) {
+	rows, err := q.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []string{}
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 func (s *Server) recordAccessChange(r *http.Request, actor, action, resource, resourceID string, before, after any) {

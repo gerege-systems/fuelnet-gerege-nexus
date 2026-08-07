@@ -90,6 +90,12 @@ func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, p)
 	}
+	// A broken stream ends the loop exactly like a complete one; without this
+	// a truncated list goes out under a 200.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(list)

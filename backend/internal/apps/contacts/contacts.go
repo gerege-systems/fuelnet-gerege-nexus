@@ -91,6 +91,13 @@ func (m *Module) listContactsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, c)
 	}
+	// A stream that breaks partway through ends the loop the same way a
+	// complete one does, so without this the caller receives a short list
+	// under a 200 and has no way to tell it apart from the whole set.
+	if err := rows.Err(); err != nil {
+		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(list)
