@@ -6,6 +6,20 @@
 Хамгийн сүүлд шинэчилсэн: **2026-08-06**, `origin/main`-аас **61 commit урд**
 (push хийгдээгүй — доорх «Хүлээгдэж байгаа» хэсгийг хар).
 
+> **Gerege Nexus-тай нийлүүлсэн (merge).** `origin/main` 8 commit урагшилсан: платформ
+> **Gerege Nexus** болж, **Go модулийн зам** `open-gerege-nexus/backend` болсон,
+> esign нь eID-ийн дундын номын санг хэрэглэдэг болсон. Гурван зүйлийг эвлэрүүлсэн:
+> (1) миний хүрсэн бүх файлыг шинэ модулийн зам рүү; (2) **migration дугаарын
+> мөргөлдөөн** — upstream 00010/00011/00012-ыг авсан тул миний documents-ийнх нь
+> **00013…00021** болж, SQL/Go/docs-ийн бүх ишлэл хамт шилжсэн (хаана ч applied
+> болоогүй тул страндах goose мөр байхгүй); (3) хуучин брэндийг иш татсан хоёр
+> тайлбар. Нийлсэн модыг бүрэн шалгасан: 21 migration цэвэр, `go test -race ./...`
+> бүх package (upstream-ийн шинэ esign тестүүд ч) ногоон, lint 0, frontend build
+> цэвэр, HTTP дээр кирилл хэлхээ+гарын үсэг+хайлт ажиллаж байна.
+>
+> **Remote** нь `open-gerege-nexus.git` болж залруулагдсан (GitHub 301-ээр
+> дамжуулдаг ч зөв нэр дээр байх нь зөв).
+
 > **Rebase хийгдсэн.** `origin/main` 4 commit хөдөлсөн (#21…#24), тэдний гурав нь eID
 > polling — яг миний ажилтай нийлдэг хэсэг. Rebase-ийн зөрчил нь зөвхөн текстийн
 > (`StartSignature` ба `normalizeStart`-ын тайлбар хоёулаа үлдсэн), гэхдээ **утгын**
@@ -110,6 +124,11 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJClVkH7M8Wi/veIH+7HA2BoJWJpT7cU7XLtQrvyIW1Q
 ```
 git -C "~/gerege/open-gerege-mn-erp (gerege-systems)" push origin main
 ```
+
+**Push нь юу хөдөлгөх вэ** (rebrand-ийн дараа): `ci.yml` (vet, migrate, `go test -race`,
+frontend build) **ба** `deploy.yml` — image build → ghcr.io → **`nexus.gerege.mn`** рүү
+SSH → `docker compose pull` → **`migrate` сервисийг гүйцээж** → backend/frontend swap.
+Өөрөөр хэлбэл миний `00013`…`00021` migration production мэдээн дээр гүйнэ.
 
 ### 3.2 Ноорог төлөв — **шийдвэр хэрэгтэй**
 
