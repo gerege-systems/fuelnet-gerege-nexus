@@ -18,4 +18,13 @@ export const integrations = {
   "integrations.action.create": { mn: "Интеграц нэмэх", en: "Add Integration" },
 
   "integrations.message.loading": { mn: "Интеграцуудыг ачаалж байна...", en: "Loading integrations..." },
+
+  "integrations.view.subtitle": { mn: "Төрийн гарц, REST API холбогч, event webhook-уудыг удирдана", en: "Manage government gateways, REST API connectors, and event webhooks" },
+
+  "integrations.field.name": { mn: "Интеграцын нэр", en: "Integration Name" },
+  "integrations.field.target_url": { mn: "Хүлээн авах хаяг (URL)", en: "Target Endpoint URL" },
+
+  "integrations.action.register": { mn: "Холбогч бүртгэх", en: "Register Connector" },
+
+  "integrations.message.register_failed": { mn: "Интеграц бүртгэж чадсангүй", en: "Failed to register integration" },
 } as const;

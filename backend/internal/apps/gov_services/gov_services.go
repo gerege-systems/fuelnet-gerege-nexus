@@ -153,7 +153,7 @@ func (m *Module) Menus() []internal.MenuDefinition {
 		{
 			ID: "gov_services", ParentID: "operations", Label: "State Services",
 			Path: "/gov-services", Icon: "landmark", Order: 5,
-			Labels: map[string]string{"mn": "Төрийн үйлчилгээ"},
+			Labels: map[string]string{"mn": "Төрийн үйлчилгээ", "ar": "الخدمات الحكومية", "zh": "政务服务", "fr": "Services publics", "ru": "Государственные услуги", "es": "Servicios públicos"},
 		},
 	}
 }

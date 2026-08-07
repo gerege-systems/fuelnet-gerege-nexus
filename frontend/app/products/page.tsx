@@ -26,7 +26,7 @@ export default function ProductsPage() {
       const data = await api.getProducts();
       setProducts(data || []);
     } catch (err: any) {
-      setError(err.message || "Failed to load products. Ensure Products app is installed & enabled.");
+      setError(err.message || t("products.message.load_failed"));
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ export default function ProductsPage() {
       setForm({ sku: "", name: "", price: 0, active: true });
       await loadProducts();
     } catch (err: any) {
-      setError(err.message || "Failed to create product");
+      setError(err.message || t("products.message.create_failed"));
     }
   };
 
@@ -77,7 +77,7 @@ export default function ProductsPage() {
         <div className="py-8 text-slate-500 text-sm">{t("products.message.loading")}</div>
       ) : products.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm">
-          No products added yet. Click "New Product" to build your catalog.
+          {t("products.message.empty")}
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -132,7 +132,7 @@ export default function ProductsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Product Name *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("products.field.name")} *</label>
                 <input
                   type="text"
                   value={form.name}
@@ -166,7 +166,7 @@ export default function ProductsPage() {
                   type="submit"
                   className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-lg text-sm"
                 >
-                  Save Product
+                  {t("products.action.save")}
                 </button>
               </div>
             </form>

@@ -39,7 +39,7 @@ export default function BillingPage() {
       setForm({ contact_name: "", amount: "" });
       loadData();
     } catch (err: any) {
-      alert("Failed to create invoice: " + err.message);
+      alert(t("billing.message.create_failed") + ": " + err.message);
     }
   };
 
@@ -69,7 +69,7 @@ export default function BillingPage() {
           <table className="w-full text-left text-xs text-slate-600">
             <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase">
               <tr>
-                <th className="px-4 py-3">Invoice #</th>
+                <th className="px-4 py-3">{t("billing.field.invoice_number")}</th>
                 <th className="px-4 py-3">{t("billing.field.contact")}</th>
                 <th className="px-4 py-3">{t("billing.field.total")}</th>
                 <th className="px-4 py-3">10% VAT</th>
@@ -120,7 +120,7 @@ export default function BillingPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-4">{t("billing.view.create_title")}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Contact / Client Name *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("billing.field.contact")} *</label>
                 <input
                   type="text"
                   placeholder={t("billing.field.contact_placeholder")}
@@ -132,7 +132,7 @@ export default function BillingPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice Amount (₮) *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("billing.field.amount")} *</label>
                 <input
                   type="number"
                   placeholder="150000"
@@ -155,7 +155,7 @@ export default function BillingPage() {
                   type="submit"
                   className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
                 >
-                  Generate Invoice
+                  {t("billing.action.generate")}
                 </button>
               </div>
             </form>

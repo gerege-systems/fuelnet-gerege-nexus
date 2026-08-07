@@ -27,7 +27,7 @@ export default function ContactsPage() {
       const data = await api.getContacts();
       setContacts(data || []);
     } catch (err: any) {
-      setError(err.message || "Failed to load contacts. Ensure Contacts app is installed & enabled.");
+      setError(err.message || t("contacts.message.load_failed"));
     } finally {
       setLoading(false);
     }
@@ -45,7 +45,7 @@ export default function ContactsPage() {
       setForm({ name: "", email: "", phone: "", company: "", active: true });
       await loadContacts();
     } catch (err: any) {
-      setError(err.message || "Failed to create contact");
+      setError(err.message || t("contacts.message.create_failed"));
     }
   };
 
@@ -57,7 +57,7 @@ export default function ContactsPage() {
             <Users className="w-6 h-6 text-indigo-600" />
             <span>{t("contacts.view.title")}</span>
           </h1>
-          <p className="text-sm text-slate-500">Manage business contacts, customers, and partners</p>
+          <p className="text-sm text-slate-500">{t("contacts.view.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -78,7 +78,7 @@ export default function ContactsPage() {
         <div className="py-8 text-slate-500 text-sm">{t("contacts.message.loading")}</div>
       ) : contacts.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm">
-          No contacts created yet. Click "New Contact" to add your first record.
+          {t("contacts.message.empty")}
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -138,7 +138,7 @@ export default function ContactsPage() {
                       active: true,
                     });
                   } catch (err: any) {
-                    alert("XYP Query Failed: " + err.message);
+                    alert(t("contacts.message.xyp_failed") + ": " + err.message);
                   }
                 }}
                 className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 transition"
@@ -146,7 +146,7 @@ export default function ContactsPage() {
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("contacts.field.full_name")} *</label>
                 <input
                   type="text"
                   value={form.name}
@@ -198,7 +198,7 @@ export default function ContactsPage() {
                   type="submit"
                   className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-sm"
                 >
-                  Save Contact
+                  {t("contacts.action.save")}
                 </button>
               </div>
             </form>

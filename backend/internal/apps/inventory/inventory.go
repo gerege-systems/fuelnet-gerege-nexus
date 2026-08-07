@@ -75,7 +75,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "inventory", ParentID: "operations", Label: "Inventory", Path: "/inventory", Icon: "boxes", Order: 10, Labels: map[string]string{"mn": "Агуулах"}},
+		{ID: "inventory", ParentID: "operations", Label: "Inventory", Path: "/inventory", Icon: "boxes", Order: 10, Labels: map[string]string{"mn": "Агуулах", "ar": "المخزون", "zh": "库存", "fr": "Inventaire", "ru": "Склад", "es": "Inventario"}},
 	}
 }
 

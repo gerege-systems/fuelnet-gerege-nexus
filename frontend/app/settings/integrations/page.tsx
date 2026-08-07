@@ -41,7 +41,7 @@ export default function IntegrationsPage() {
       setForm({ name: "", type: "webhook", target_url: "", secret_key: "" });
       loadData();
     } catch (err: any) {
-      alert("Failed to register integration: " + err.message);
+      alert(t("integrations.message.register_failed") + ": " + err.message);
     }
   };
 
@@ -54,7 +54,7 @@ export default function IntegrationsPage() {
             <span>{t("integrations.view.title")}</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage government gateways, REST API connectors, and event webhooks
+            {t("integrations.view.subtitle")}
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -129,7 +129,7 @@ export default function IntegrationsPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.view.create_title")}</h2>
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Integration Name *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.field.name")} *</label>
                 <input
                   type="text"
                   placeholder={t("integrations.field.name_placeholder")}
@@ -155,7 +155,7 @@ export default function IntegrationsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Target Endpoint URL *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{t("integrations.field.target_url")} *</label>
                 <input
                   type="url"
                   placeholder="https://api.example.com/webhooks"
@@ -189,7 +189,7 @@ export default function IntegrationsPage() {
                   type="submit"
                   className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
                 >
-                  Register Connector
+                  {t("integrations.action.register")}
                 </button>
               </div>
             </form>
