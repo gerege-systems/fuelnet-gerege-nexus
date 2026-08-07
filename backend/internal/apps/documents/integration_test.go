@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
 )
 
 // These tests exercise signing against a real PostgreSQL schema, because what
@@ -1939,6 +1943,57 @@ func TestTextThatCannotBeStoredIsRefusedNotBlamedOnUs(t *testing.T) {
 				t.Errorf("%s with %q: got %v, want %v", tc.what, value, err, tc.want)
 			}
 		}
+	}
+}
+
+// An absent field and an empty one mean opposite things here, and one of them is
+// destructive: an empty array is a tenant saying "this type needs no chain", while a
+// body that does not carry the field is a client that has gone wrong. Both used to
+// clear the chain — and clearing it LOOSENS the type, since a type with no chain is
+// approved by one open signature, so a malformed request could quietly turn a
+// three-approver contract into a one-signature one.
+func TestAnAbsentChainIsNotAnEmptyChain(t *testing.T) {
+	f := newFixture(t)
+	ctx := tenant.WithTenantID(context.Background(), f.tenantID)
+
+	if _, err := f.m.ReplaceWorkflow(context.Background(), f.tenantID, "CONTRACT", []WorkflowStep{
+		{Order: 1, Name: "Ня-бо", SignerRegNumber: "УБ99010111"},
+		{Order: 2, Name: "Захирал", SignerRegNumber: ""},
+	}); err != nil {
+		t.Fatalf("chain: %v", err)
+	}
+
+	route := chi.NewRouter()
+	route.Put("/{docType}", f.m.saveWorkflowHandler)
+	put := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/CONTRACT", strings.NewReader(body)).WithContext(ctx)
+		rec := httptest.NewRecorder()
+		route.ServeHTTP(rec, req)
+		return rec
+	}
+	steps := func() int {
+		chain, err := f.m.workflowStepsTx(context.Background(), f.m.db, f.tenantID, "CONTRACT")
+		if err != nil {
+			t.Fatalf("read the chain: %v", err)
+		}
+		return len(chain)
+	}
+
+	for _, body := range []string{`{}`, `{"steps":null}`, `{"nope":[]}`} {
+		if rec := put(body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: got %d, want 400 (%s)", body, rec.Code, rec.Body.String())
+		}
+	}
+	if n := steps(); n != 2 {
+		t.Errorf("the chain has %d steps after three refused requests, want the 2 it had", n)
+	}
+
+	// An explicit empty array is a real instruction and is obeyed.
+	if rec := put(`{"steps":[]}`); rec.Code != http.StatusOK {
+		t.Fatalf("an explicit empty chain: got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if n := steps(); n != 0 {
+		t.Errorf("the chain has %d steps after being cleared on purpose", n)
 	}
 }
 

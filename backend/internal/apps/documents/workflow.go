@@ -598,15 +598,29 @@ func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// A POINTER, so an absent or null "steps" can be told from an empty one.
+	//
+	// They mean opposite things and one of them is destructive: an empty array is a
+	// tenant saying "this type needs no chain", while a body that simply does not carry
+	// the field is a client that has gone wrong. Both used to clear the chain — and
+	// clearing it LOOSENS the type, because a type with no chain is approved by one
+	// open signature, so a malformed request could quietly turn a three-approver
+	// contract into a one-signature one. The policy endpoint next door already refuses
+	// to make a type unsignable; this is the same rule pointing the other way.
 	var req struct {
-		Steps []WorkflowStep `json:"steps"`
+		Steps *[]WorkflowStep `json:"steps"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid approval chain payload")
 		return
 	}
+	if req.Steps == nil {
+		writeError(w, http.StatusBadRequest,
+			"invalid approval chain payload: steps is required — send an empty array to clear the chain")
+		return
+	}
 
-	saved, err := m.ReplaceWorkflow(r.Context(), tenantID, chi.URLParam(r, "docType"), req.Steps)
+	saved, err := m.ReplaceWorkflow(r.Context(), tenantID, chi.URLParam(r, "docType"), *req.Steps)
 	if err != nil {
 		writeWriteFailure(r.Context(), w, err, "failed to save the approval chain")
 		return
