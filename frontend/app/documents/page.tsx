@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import {
   Banner,
   DocumentRecord,
+  PENDING,
   RowActions,
   SignatureCell,
   SignatureDialog,
@@ -16,7 +17,7 @@ import {
   StatusBadge,
   useDocumentActions,
 } from "@/components/documents/shared";
-import { FileText, Plus } from "lucide-react";
+import { FileText, Pencil, Plus } from "lucide-react";
 
 export default function DocumentsPage() {
   const { t } = useI18n();
@@ -142,6 +143,28 @@ export default function DocumentsPage() {
   useEffect(() => {
     loadSpan(PAGE, filterRef.current);
   }, []);
+
+  // Which row's title is being corrected, and what has been typed into it. A title may
+  // be fixed until the first signature: creating a document routes it immediately, which
+  // is one step instead of two, and this is what stops that costing a permanent typo.
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+
+  const commitRename = async () => {
+    if (!renaming) return;
+    const { id, title } = renaming;
+    const row = documents.find((d) => d.id === id);
+    setRenaming(null);
+    if (!row || title.trim() === "" || title.trim() === row.title) return;
+    setMessage(null);
+    try {
+      const saved = (await api.renameDocument(id, title.trim())) as DocumentRecord | undefined;
+      // Only this row, with what the server stored.
+      if (saved?.id) setDocuments((current) => current.map((d) => (d.id === id ? { ...d, ...saved } : d)));
+      setMessage({ type: "success", text: t("documents.message.renamed", { title: saved?.title ?? title.trim() }) });
+    } catch (err: any) {
+      fail(`${t("documents.message.rename_failed")}: ${err?.message ?? ""}`);
+    }
+  };
 
   // Nothing between the click and the POST changed any state, so a second click —
   // or Enter held down — created a second document, each one routed for approval.
@@ -305,7 +328,41 @@ export default function DocumentsPage() {
             <tbody className="divide-y divide-slate-100">
               {documents.map((doc) => (
                 <tr key={doc.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{doc.title}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">
+                    {renaming?.id === doc.id ? (
+                      <input
+                        autoFocus
+                        value={renaming.title}
+                        maxLength={255}
+                        onChange={(e) => setRenaming({ id: doc.id, title: e.target.value })}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") setRenaming(null);
+                        }}
+                        className="w-full px-2 py-1 text-xs font-semibold border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500"
+                      />
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <span>{doc.title}</span>
+                        {/* Offered only while it can actually be changed: nobody has signed,
+                            the document is still open, and this operator may author. */}
+                        {can("documents.manage") &&
+                          doc.signature_count === 0 &&
+                          (doc.status === PENDING || doc.status === "DRAFT") && (
+                            <button
+                              type="button"
+                              title={t("documents.action.rename")}
+                              aria-label={t("documents.action.rename")}
+                              onClick={() => setRenaming({ id: doc.id, title: doc.title })}
+                              className="shrink-0 text-slate-300 hover:text-indigo-600"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-mono text-slate-600">{doc.doc_type}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">

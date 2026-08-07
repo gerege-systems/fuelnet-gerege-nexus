@@ -78,6 +78,7 @@ func TestSigningDocumentsNeedsItsOwnPermission(t *testing.T) {
 	// configure. Reading a document's own chain is an ordinary read.
 	for _, tc := range []struct{ method, path, want string }{
 		{"POST", "/documents/" + docID + "/route", "documents.manage"},
+		{"PUT", "/documents/" + docID + "/title", "documents.manage"},
 		{"GET", "/documents/" + docID + "/steps", "documents.read"},
 		{"GET", "/documents/templates", "documents.read"},
 		{"POST", "/documents/templates", "documents.manage"},

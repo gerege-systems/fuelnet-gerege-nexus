@@ -377,6 +377,11 @@ export const api = {
     }>(`/documents${suffix}`);
   },
 
+  // A title can be corrected until the first signature; after that it is what the
+  // citizen read on their own device before approving.
+  renameDocument: (id: string, title: string) =>
+    fetcher(`/documents/${id}/title`, { method: "PUT", body: JSON.stringify({ title }) }),
+
   createDocument: (data: { title: string; doc_type: string }) =>
     fetcher("/documents", { method: "POST", body: JSON.stringify(data) }),
 

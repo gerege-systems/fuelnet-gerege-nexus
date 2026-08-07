@@ -63,6 +63,14 @@ const (
 	SignerDAN = "DAN" // dan.gerege.mn SSO gateway
 )
 
+// ErrTitleFrozen is returned when a document's title can no longer be corrected.
+//
+// It freezes at the first signature, and that is not a policy choice: the title is
+// what the citizen READ on their own device before approving — signatureDisplayText
+// puts it in front of them precisely so they know what they are consenting to. A title
+// that could change afterwards would make that consent a consent to something else.
+var ErrTitleFrozen = errors.New("this document has been signed, so its title is what the signer approved and cannot change")
+
 // ErrNotSignable is returned when a sign/reject is attempted on a document that
 // is missing, belongs to another tenant, or is no longer pending. The three
 // cases are deliberately indistinguishable so the endpoint cannot be used to
@@ -254,6 +262,9 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// so "templates" and "policies" are never read as document ids.
 		dr.Get("/{id}/signatures", m.listSignaturesHandler)
 		dr.Get("/{id}/steps", m.listDocumentStepsHandler)
+		// Correcting a title is authoring, not approving, so it is checked against
+		// documents.manage like the rest of this group — the path carries no /sign.
+		dr.Put("/{id}/title", m.renameDocumentHandler)
 		dr.Post("/{id}/route", m.routeDocumentHandler)
 		dr.Post("/{id}/reject", m.rejectDocumentHandler)
 
@@ -388,6 +399,38 @@ func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Requ
 		// the driver's message out of the response.
 		slog.ErrorContext(r.Context(), "failed to sign document through DAN", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to sign document")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, doc)
+}
+
+func (m *DocumentsModule) renameDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid rename request: title is required")
+		return
+	}
+
+	doc, err := m.RenameDocument(r.Context(), tenantID, chi.URLParam(r, "id"), req.Title)
+	switch {
+	case errors.Is(err, ErrTitleFrozen):
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	case errors.Is(err, ErrInvalidDocument):
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	case err != nil:
+		slog.ErrorContext(r.Context(), "failed to rename document", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to rename document")
 		return
 	}
 
@@ -673,6 +716,59 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 		return nil, ErrAlreadySigned
 	}
 	return m.recordSignature(ctx, tenantID, docID, SignerDAN, signature, "")
+}
+
+// RenameDocument corrects a document's title while nobody has signed it yet.
+//
+// The app creates a document straight into the approval queue, which is one step for
+// an operator instead of two and leaves nothing to be forgotten in a drawer — but it
+// also means a mistyped title reaches the approvers with no way back. This is the way
+// back, and it closes at the first signature: from then on the title is what somebody
+// read and approved.
+//
+// The guard is in the statement, not around it. Reading "has anybody signed?" and then
+// updating would leave room for a signature to land in between, which is exactly the
+// case that must not be renameable.
+func (m *DocumentsModule) RenameDocument(ctx context.Context, tenantID, docID, title string) (*Document, error) {
+	if uuid.Validate(docID) != nil {
+		return nil, ErrTitleFrozen
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil, fmt.Errorf("%w: title cannot be empty", ErrInvalidDocument)
+	}
+	if len([]rune(title)) > TitleLimit {
+		return nil, fmt.Errorf("%w: a title is at most %d characters, this one is %d",
+			ErrInvalidDocument, TitleLimit, len([]rune(title)))
+	}
+	if fault := textFault(title); fault != "" {
+		return nil, fmt.Errorf("%w: the title cannot be stored — %s", ErrInvalidDocument, fault)
+	}
+
+	var was string
+	err := m.db.QueryRow(ctx,
+		`UPDATE document_records d
+		    SET title = $1
+		  WHERE d.id = $2 AND d.tenant_id = $3
+		    AND d.status IN ($4, $5)
+		    AND NOT EXISTS (SELECT 1 FROM document_signatures s WHERE s.document_id = d.id)
+		 RETURNING (SELECT title FROM document_records o WHERE o.id = d.id)`,
+		title, docID, tenantID, StatusDraft, StatusPending).Scan(&was)
+	if isNoRows(err) {
+		// Signed, decided, or not this tenant's. All three are "you cannot rename this",
+		// and telling them apart would say whether a document exists.
+		return nil, ErrTitleFrozen
+	}
+	if err != nil {
+		return nil, fmt.Errorf("rename document: %w", err)
+	}
+
+	// Both titles, because a dispute asks what it used to say.
+	audit.Record(ctx, tenantID, actorFor(ctx), "documents.renamed", docID, map[string]any{
+		"from": was, "to": title,
+	})
+
+	return m.getDocument(ctx, tenantID, docID)
 }
 
 // recordSignature writes the signature and decides whether the chain is complete.
