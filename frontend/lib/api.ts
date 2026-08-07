@@ -55,6 +55,43 @@ async function mutateApp(url: string) {
   return result;
 }
 
+export type IntegrationProvider =
+  | "webhook"
+  | "government"
+  | "payment"
+  | "custom_rest"
+  | "google_drive"
+  | "dropbox"
+  | "google_meet";
+
+export interface Integration {
+  id: string;
+  provider: IntegrationProvider;
+  name: string;
+  target_url: string;
+  status: "ACTIVE" | "INACTIVE" | "ERROR";
+  config: Record<string, string>;
+  account_label: string;
+  /** True once an OAuth grant is stored. The token itself never comes back. */
+  connected: boolean;
+  connected_at?: string;
+  last_ping_at?: string;
+  last_error?: string;
+  capabilities: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationInput {
+  provider: IntegrationProvider;
+  name: string;
+  target_url?: string;
+  /** Write-only. Left blank on an update it means "unchanged", not "clear it". */
+  secret_key?: string;
+  status?: string;
+  config?: Record<string, string>;
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -291,21 +328,70 @@ export const api = {
       body: JSON.stringify({ company_reg: companyReg }),
     }),
 
-  // External Integrations Manager
-  getIntegrations: () =>
+  // External Integrations Manager.
+  //
+  // Connectors are per tenant and stored server-side; the secret and any OAuth
+  // grant are write-only, so nothing here ever reads a credential back.
+  getIntegrations: () => fetcher<Integration[]>("/integrations"),
+
+  // Which providers this deployment can actually offer. A provider whose OAuth
+  // client was never configured comes back unavailable with the reason, so the
+  // screen can say why instead of showing a form that cannot work.
+  getIntegrationProviders: () =>
+    fetcher<{
+      providers: Array<{
+        provider: IntegrationProvider;
+        oauth: boolean;
+        capabilities: string[];
+        available: boolean;
+        reason?: string;
+      }>;
+      encryption_configured: boolean;
+      redirect_uri: string;
+    }>("/integrations/providers"),
+
+  registerIntegration: (data: IntegrationInput) =>
+    fetcher<Integration>("/integrations", { method: "POST", body: JSON.stringify(data) }),
+
+  updateIntegration: (id: string, data: IntegrationInput) =>
+    fetcher<Integration>(`/integrations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  deleteIntegration: (id: string) =>
+    fetcher<{ status: string }>(`/integrations/${id}`, { method: "DELETE" }),
+
+  // Starts the OAuth grant. The answer is the provider URL to send the
+  // administrator to; the callback lands back on the settings screen.
+  connectIntegration: (id: string) =>
+    fetcher<{ authorization_url: string }>(`/integrations/${id}/connect`, { method: "POST" }),
+
+  disconnectIntegration: (id: string) =>
+    fetcher<{ status: string }>(`/integrations/${id}/disconnect`, { method: "POST" }),
+
+  // What has recently left the platform. A signed document reaching an outside
+  // account is a disclosure, and this is the record of it.
+  getIntegrationDeliveries: (limit = 50) =>
     fetcher<
       Array<{
         id: string;
-        name: string;
-        type: string;
-        target_url: string;
-        status: string;
-        last_ping_at: string;
+        integration_id: string;
+        kind: string;
+        reference: string;
+        outcome: "OK" | "FAILED";
+        detail?: string;
+        external_id?: string;
+        external_url?: string;
+        created_at: string;
       }>
-    >("/integrations"),
+    >(`/integrations/deliveries?limit=${limit}`),
 
-  registerIntegration: (data: { name: string; type: string; target_url: string; secret_key?: string }) =>
-    fetcher("/integrations", { method: "POST", body: JSON.stringify(data) }),
+  // Send an already-signed document to a storage connector. Automatic export
+  // covers documents signed after a connector was set up; this covers the ones
+  // signed before it, and the retry after a destination was unreachable.
+  exportEsignDocument: (id: string, integrationId?: string) =>
+    fetcher<{ exported: Array<{ integration_name: string; provider: string; url?: string }> }>(
+      `/esign/documents/${id}/export`,
+      { method: "POST", body: JSON.stringify(integrationId ? { integration_id: integrationId } : {}) }
+    ),
 
   // Billing App (io.example.billing)
   getInvoices: () =>

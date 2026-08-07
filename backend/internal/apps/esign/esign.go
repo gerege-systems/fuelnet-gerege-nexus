@@ -22,6 +22,7 @@
 package esign
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -38,25 +39,39 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
-type Module struct {
-	db    *pgxpool.Pool
-	store *store
-	hsm   *gerege.EsignService
-	eid   *eidmongolia.Service
-	perms *rbac.SQLPermissionStore
+// FileExporter is the part of the integration manager this module needs: a way
+// to put a finished document somewhere outside the platform.
+//
+// It is an interface rather than the concrete manager so a test can sign a
+// document without a Google account, and so the dependency reads as what esign
+// actually wants — somewhere to file a PDF — rather than as "integrations".
+type FileExporter interface {
+	ExportFileToAll(ctx context.Context, tenantID, filename string, content []byte, reference string) []integration.ExportResult
+	ExportFile(ctx context.Context, tenantID, integrationID, filename string, content []byte, reference string) (*integration.ExportResult, error)
 }
 
-func New(db *pgxpool.Pool, hsm *gerege.EsignService, eid *eidmongolia.Service) *Module {
+type Module struct {
+	db      *pgxpool.Pool
+	store   *store
+	hsm     *gerege.EsignService
+	eid     *eidmongolia.Service
+	perms   *rbac.SQLPermissionStore
+	exports FileExporter
+}
+
+func New(db *pgxpool.Pool, hsm *gerege.EsignService, eid *eidmongolia.Service, exports FileExporter) *Module {
 	m := &Module{
-		db:    db,
-		store: &store{db: db},
-		hsm:   hsm,
-		eid:   eid,
-		perms: rbac.NewSQLPermissionStore(db),
+		db:      db,
+		store:   &store{db: db},
+		hsm:     hsm,
+		eid:     eid,
+		perms:   rbac.NewSQLPermissionStore(db),
+		exports: exports,
 	}
 	appregistry.Register(m)
 	return m
@@ -93,6 +108,7 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		er.Get("/documents/{id}", m.getDocumentHandler)
 		er.Delete("/documents/{id}", m.deleteDocumentHandler)
 		er.Get("/documents/{id}/download", m.downloadDocumentHandler)
+		er.Post("/documents/{id}/export", m.exportDocumentHandler)
 
 		// HSM rail
 		er.Post("/cert/check", m.checkCertHandler)

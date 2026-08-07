@@ -19,8 +19,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -30,6 +32,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
@@ -110,16 +113,47 @@ type Appointment struct {
 	Location      string    `json:"location"`
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Mode is IN_PERSON or ONLINE. An online appointment carries a joining
+	// link instead of an address.
+	Mode string `json:"mode"`
+	// MeetingURL is stored rather than derived: it is issued once by the
+	// conferencing provider and has to outlive the connector being
+	// disconnected. A citizen holding a link for next Tuesday should still be
+	// able to attend.
+	MeetingURL      string `json:"meeting_url,omitempty"`
+	MeetingProvider string `json:"meeting_provider,omitempty"`
+	// MeetingError explains why an online booking has no link yet. The
+	// appointment is still made — a conferencing outage must not cost the
+	// citizen their slot — so the failure is reported rather than thrown.
+	MeetingError string `json:"meeting_error,omitempty"`
+}
+
+// MeetingBooker is the part of the integration manager this module needs.
+//
+// An interface rather than the concrete manager so the appointment tests do
+// not need a Google account, and so the dependency reads as what gov_services
+// wants — a way to get a joining link — rather than as "integrations".
+type MeetingBooker interface {
+	FirstMeetingConnector(ctx context.Context, tenantID string) (*integration.Connector, error)
+	CreateMeeting(ctx context.Context, tenantID, integrationID, title string,
+		startsAt time.Time, duration time.Duration, reference string) (*integration.Meeting, error)
 }
 
 type Module struct {
-	db    *pgxpool.Pool
-	store *store
-	perms *rbac.SQLPermissionStore
+	db       *pgxpool.Pool
+	store    *store
+	perms    *rbac.SQLPermissionStore
+	meetings MeetingBooker
 }
 
-func New(db *pgxpool.Pool) *Module {
-	m := &Module{db: db, store: &store{db: db}, perms: rbac.NewSQLPermissionStore(db)}
+func New(db *pgxpool.Pool, meetings MeetingBooker) *Module {
+	m := &Module{
+		db:       db,
+		store:    &store{db: db},
+		perms:    rbac.NewSQLPermissionStore(db),
+		meetings: meetings,
+	}
 	appregistry.Register(m)
 	return m
 }
@@ -609,7 +643,8 @@ func (m *Module) listAppointmentsHandler(w http.ResponseWriter, r *http.Request)
 
 	rows, err := m.db.Query(r.Context(),
 		`SELECT ap.id, ap.tenant_id, ap.application_id, ap.service_id, s.name, ap.citizen_name,
-		        ap.scheduled_at, ap.location, ap.status, ap.created_at
+		        ap.scheduled_at, ap.location, ap.status, ap.created_at,
+		        ap.mode, ap.meeting_url, ap.meeting_provider
 		   FROM gov_appointments ap
 		   JOIN gov_services s ON s.id = ap.service_id
 		  WHERE ap.tenant_id = $1
@@ -624,7 +659,8 @@ func (m *Module) listAppointmentsHandler(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var a Appointment
 		if err := rows.Scan(&a.ID, &a.TenantID, &a.ApplicationID, &a.ServiceID, &a.ServiceName,
-			&a.CitizenName, &a.ScheduledAt, &a.Location, &a.Status, &a.CreatedAt); err != nil {
+			&a.CitizenName, &a.ScheduledAt, &a.Location, &a.Status, &a.CreatedAt,
+			&a.Mode, &a.MeetingURL, &a.MeetingProvider); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to read appointments")
 			return
 		}
@@ -651,6 +687,10 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		CitizenName   string    `json:"citizen_name"`
 		ScheduledAt   time.Time `json:"scheduled_at"`
 		Location      string    `json:"location"`
+		Mode          string    `json:"mode"`
+		// DurationMinutes sizes the conference slot. Ignored for an in-person
+		// visit, which has no end time to publish.
+		DurationMinutes int `json:"duration_minutes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ServiceID == "" || req.CitizenName == "" {
 		writeError(w, http.StatusBadRequest, "invalid appointment: service_id and citizen_name are required")
@@ -660,16 +700,25 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "scheduled_at must be in the future")
 		return
 	}
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		mode = AppointmentInPerson
+	}
+	if mode != AppointmentInPerson && mode != AppointmentOnline {
+		writeError(w, http.StatusBadRequest, "mode must be IN_PERSON or ONLINE")
+		return
+	}
 
 	var a Appointment
 	err = m.db.QueryRow(r.Context(),
-		`INSERT INTO gov_appointments (tenant_id, application_id, service_id, citizen_name, scheduled_at, location)
-		 SELECT $1, $2, $3, $4, $5, $6
+		`INSERT INTO gov_appointments (tenant_id, application_id, service_id, citizen_name, scheduled_at, location, mode)
+		 SELECT $1, $2, $3, $4, $5, $6, $7
 		  WHERE EXISTS (SELECT 1 FROM gov_services WHERE id = $3 AND tenant_id = $1 AND active)
-		 RETURNING id, tenant_id, application_id, service_id, citizen_name, scheduled_at, location, status, created_at`,
-		claims.TenantID, req.ApplicationID, req.ServiceID, req.CitizenName, req.ScheduledAt, req.Location).
+		 RETURNING id, tenant_id, application_id, service_id, citizen_name, scheduled_at, location, status,
+		           created_at, mode, meeting_url, meeting_provider`,
+		claims.TenantID, req.ApplicationID, req.ServiceID, req.CitizenName, req.ScheduledAt, req.Location, mode).
 		Scan(&a.ID, &a.TenantID, &a.ApplicationID, &a.ServiceID, &a.CitizenName, &a.ScheduledAt,
-			&a.Location, &a.Status, &a.CreatedAt)
+			&a.Location, &a.Status, &a.CreatedAt, &a.Mode, &a.MeetingURL, &a.MeetingProvider)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "service not found or no longer offered")
 		return
@@ -679,7 +728,74 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if mode == AppointmentOnline {
+		m.attachMeeting(r.Context(), claims.TenantID, &a, req.DurationMinutes)
+	}
+
 	writeJSON(w, http.StatusCreated, a)
+}
+
+// Appointment modes. An online appointment is held over a conferencing link
+// rather than at an address.
+const (
+	AppointmentInPerson = "IN_PERSON"
+	AppointmentOnline   = "ONLINE"
+)
+
+// defaultMeetingDuration is how long a service appointment is assumed to take
+// when the caller does not say. It only sizes the calendar slot; nothing ends
+// the meeting.
+const defaultMeetingDuration = 30 * time.Minute
+
+// attachMeeting books a conferencing link and records it against the
+// appointment.
+//
+// The booking is deliberately not allowed to fail the appointment. A citizen
+// who has taken a slot has taken it; if the conferencing provider is
+// unreachable, or nobody has connected one, the right outcome is a booked
+// appointment that says why it has no link yet — not a lost slot and a 500.
+func (m *Module) attachMeeting(ctx context.Context, tenantID string, a *Appointment, durationMinutes int) {
+	if m.meetings == nil {
+		a.MeetingError = "no conferencing provider is connected"
+		return
+	}
+	conn, err := m.meetings.FirstMeetingConnector(ctx, tenantID)
+	if err != nil {
+		a.MeetingError = "no conferencing provider is connected"
+		return
+	}
+
+	duration := time.Duration(durationMinutes) * time.Minute
+	if duration <= 0 {
+		duration = defaultMeetingDuration
+	}
+
+	title := a.CitizenName
+	if a.ServiceName != "" {
+		title = a.ServiceName + " — " + a.CitizenName
+	}
+
+	meeting, err := m.meetings.CreateMeeting(ctx, tenantID, conn.ID, title, a.ScheduledAt, duration, a.ID)
+	if err != nil {
+		slog.Warn("gov_services: could not create a meeting link",
+			"tenant", tenantID, "appointment", a.ID, "error", err)
+		a.MeetingError = err.Error()
+		return
+	}
+
+	if _, err := m.db.Exec(ctx,
+		`UPDATE gov_appointments SET meeting_url = $3, meeting_provider = $4
+		  WHERE id = $1 AND tenant_id = $2`,
+		a.ID, tenantID, meeting.JoinURL, meeting.Provider); err != nil {
+		// The link exists but could not be recorded. Returning it anyway means
+		// the operator on this screen can still pass it on, and the delivery
+		// log holds the copy.
+		slog.Error("gov_services: meeting link created but not stored",
+			"appointment", a.ID, "error", err)
+		a.MeetingError = "the meeting link could not be saved — copy it before leaving this screen"
+	}
+	a.MeetingURL = meeting.JoinURL
+	a.MeetingProvider = meeting.Provider
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

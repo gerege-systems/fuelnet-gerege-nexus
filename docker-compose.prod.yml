@@ -109,6 +109,19 @@ services:
       ESIGN_TOKEN: ${ESIGN_TOKEN:-}
       DAN_MOCK_MODE: ${DEMO_MODE:-false}
       XYP_MOCK_MODE: ${DEMO_MODE:-false}
+      # Integration connectors. Without the key the server refuses to store a
+      # credential rather than storing it in the clear, so Drive, Dropbox and
+      # Meet simply cannot be saved — which is the visible failure, not a
+      # silent one. Generate with: openssl rand -base64 32
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      # OAuth clients belong to whoever operates this deployment, not to each
+      # tenant: the consent screen is this platform's. Leave them empty and the
+      # providers report themselves unavailable with the reason, instead of
+      # offering a form that cannot work.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      DROPBOX_OAUTH_CLIENT_ID: ${DROPBOX_OAUTH_CLIENT_ID:-}
+      DROPBOX_OAUTH_CLIENT_SECRET: ${DROPBOX_OAUTH_CLIENT_SECRET:-}
     ports:
       - "127.0.0.1:8082:8080"
     depends_on:

@@ -175,6 +175,12 @@ export interface Appointment {
   location: string;
   status: string;
   created_at: string;
+  /** IN_PERSON or ONLINE. An online appointment carries a link, not an address. */
+  mode: "IN_PERSON" | "ONLINE";
+  meeting_url?: string;
+  meeting_provider?: string;
+  /** Why an online booking has no link yet. The slot is still booked. */
+  meeting_error?: string;
 }
 
 export interface Dashboard {
@@ -296,11 +302,16 @@ export const gov = {
 
   appointments: () => request<Appointment[]>("/gov/appointments"),
 
+  // mode: "ONLINE" asks the connected conferencing provider for a joining
+  // link. The appointment is booked either way — a provider outage must not
+  // cost the citizen their slot — so check meeting_error on the answer.
   bookAppointment: (body: {
     service_id: string;
     citizen_name: string;
     scheduled_at: string;
     location?: string;
+    mode?: "IN_PERSON" | "ONLINE";
+    duration_minutes?: number;
     application_id?: string | null;
   }) => request<Appointment>("/gov/appointments", { method: "POST", body: JSON.stringify(body) }),
 
