@@ -215,6 +215,27 @@ func TestGoogleDriveAsksForTheNarrowScope(t *testing.T) {
 	}
 }
 
+// A scope short of what the code calls does not fail the build, and does not
+// fail the upload either: Dropbox rejects only the call that needs the missing
+// permission, so the file lands and the shared link silently never appears.
+// This ties the requested scopes to the endpoints this package actually calls.
+func TestDropboxRequestsAScopeForEveryEndpointItCalls(t *testing.T) {
+	spec, err := SpecFor(ProviderDropbox)
+	if err != nil {
+		t.Fatal(err)
+	}
+	needs := map[string]string{
+		"files/upload":                             "files.content.write",
+		"users/get_current_account":                "account_info.read",
+		"sharing/create_shared_link_with_settings": "sharing.write",
+	}
+	for endpoint, scope := range needs {
+		if !containsString(spec.Scopes, scope) {
+			t.Errorf("the package calls %s but never asks for %s", endpoint, scope)
+		}
+	}
+}
+
 func TestDropboxPath(t *testing.T) {
 	tests := []struct{ folder, filename, want string }{
 		{"", "contract.pdf", "/contract.pdf"},
