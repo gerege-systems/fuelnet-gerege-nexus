@@ -1,11 +1,17 @@
-# Gerege Template Platform
+# Gerege Nexus
 
-**Gerege Template Platform** is an open-source **modular monolith ERP and
-business application platform** inspired by Odoo and the cloud-native ecosystem.
-It is **Mongolian-first** and integrates directly with Mongolia's national
-digital infrastructure (DAN, E-ID, XYP / ХУР).
+**Integrated Digital Operations Platform**
 
-Business modules compile into a single Go binary, while a PostgreSQL-backed app
+**Gerege Nexus** is an open-source modular platform that connects services,
+operations, systems, and data across public and private organizations. It is
+**Mongolian-first** and integrates directly with Mongolia's national digital
+infrastructure (DAN, E-ID, XYP / ХУР).
+
+*Nexus* is the connection point: where organizations, services, workflows,
+systems, users and data meet. The platform itself is not tied to one sector —
+the modules running on it are what make a deployment specific.
+
+Modules compile into a single Go binary, while a PostgreSQL-backed app
 store decides which apps are active per tenant — module separation without the
 network hops or operational cost of microservices.
 
@@ -205,8 +211,13 @@ Required repository secrets:
 | `DEPLOY_SSH_KEY` | Yes | Private key of the deploy user. Without it the rollout is skipped |
 | `POSTGRES_PASSWORD` | Yes | Database password on the server |
 | `SSO_DEFAULT_CLIENT_SECRET` | Yes | Mandatory for the built-in OAuth2 client in production |
-| `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | No | Default to `openerp.gerege.mn` / `deploy` / `22` |
-| `PUBLIC_ORIGIN` | No | Defaults to `https://openerp.gerege.mn` |
+| `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | No | Default to `nexus.gerege.mn` / `deploy` / `22` |
+| `PUBLIC_ORIGIN` | No | Defaults to `https://nexus.gerege.mn` |
+
+> The production domain is `nexus.gerege.mn`, which replaced
+> `openerp.gerege.mn` in the Gerege Nexus rename. `PUBLIC_ORIGIN` defines CORS,
+> the OIDC issuer and the eID callback in one place, so moving it carries DNS,
+> the TLS certificate and every client that pinned the issuer along with it.
 
 The server needs Docker only — no source tree and no Go/Node toolchain. See
 [`deploy/.env.prod.example`](../deploy/.env.prod.example) for the values.

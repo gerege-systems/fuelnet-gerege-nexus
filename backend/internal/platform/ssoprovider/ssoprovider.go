@@ -1,5 +1,5 @@
 /*
- * Gerege Template Platform
+ * Gerege Nexus
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 )
 
 type OAuth2Client struct {
@@ -68,7 +68,13 @@ type SSOProvider struct {
 func NewSSOProvider() *SSOProvider {
 	issuer := os.Getenv("SSO_ISSUER")
 	if issuer == "" {
-		issuer = "https://openerp.gerege.mn"
+		// The issuer is baked into every token already granted and into the
+		// relying parties' configuration, so it is migrated deliberately rather
+		// than tracked automatically. It moved from openerp.gerege.mn with the
+		// Gerege Nexus rebrand; tokens issued under the old issuer stop
+		// validating, so clients pinning it must be updated alongside.
+		// Deployments override it with SSO_ISSUER.
+		issuer = "https://nexus.gerege.mn"
 	}
 
 	provider := &SSOProvider{
@@ -98,10 +104,18 @@ func NewSSOProvider() *SSOProvider {
 		ClientID:     "gerege-dev-portal",
 		ClientSecret: secret,
 		ClientName:   "Gerege Developer Portal App",
-		RedirectURIs: []string{"http://localhost:3000/callback", "https://openerp.gerege.mn/callback"},
+		// A redirect URI is matched exactly against what the client sends, so a
+		// client still sending the pre-rebrand openerp.gerege.mn callback is
+		// rejected until it is updated. Add entries here rather than editing in
+		// place if both origins must be accepted during a migration window.
+		RedirectURIs: []string{"http://localhost:3000/callback", "https://nexus.gerege.mn/callback"},
 		GrantTypes:   []string{"authorization_code", "client_credentials", "refresh_token"},
-		Scopes:       []string{"openid", "profile", "email", "erp.read", "erp.write"},
-		CreatedAt:    time.Now(),
+		// erp.read/erp.write are legacy compatibility scope names, kept through
+		// the Gerege Nexus rebrand. They are protocol identifiers already held
+		// in issued tokens and third-party client registrations; renaming them
+		// would invalidate live grants.
+		Scopes:    []string{"openid", "profile", "email", "erp.read", "erp.write"},
+		CreatedAt: time.Now(),
 	})
 
 	return provider
