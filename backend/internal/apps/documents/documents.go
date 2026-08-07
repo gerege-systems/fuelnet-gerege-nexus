@@ -304,12 +304,18 @@ func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Requ
 	case errors.Is(err, ErrAlreadySigned):
 		writeError(w, http.StatusConflict, err.Error())
 		return
+	case errors.Is(err, ErrProviderUnavailable):
+		// The gateway, not the caller. Same 503 the E-ID routes give, and for the same
+		// reason: it is worth trying again, and it is not something the operator did.
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
 	case errors.Is(err, ErrSignatureRejected):
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
 		// A storage failure is ours, not the caller's: report it as one and keep
 		// the driver's message out of the response.
+		slog.ErrorContext(r.Context(), "failed to sign document through DAN", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to sign document")
 		return
 	}
@@ -537,6 +543,15 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 	}
 
 	profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
+	if errors.Is(err, dan.ErrUnavailable) {
+		// The channel is not there, which is not the same as the citizen being refused.
+		// Answering 400 told an operator their signature had been rejected every time
+		// they picked DAN on a deployment without a live gateway — which is every
+		// deployment today, since DAN_MOCK_MODE is off in production and the live OTP
+		// client does not exist. This is the same 503 the E-ID path gives for the same
+		// reason, and it is the answer a client may retry.
+		return nil, fmt.Errorf("%w: DAN could not be reached: %w", ErrProviderUnavailable, err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: DAN verification failed: %w", ErrSignatureRejected, err)
 	}

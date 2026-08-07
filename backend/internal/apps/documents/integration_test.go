@@ -1766,6 +1766,43 @@ func TestACursorDoesNotSkipWhatMovesUnderIt(t *testing.T) {
 	}
 }
 
+// A channel that is not there and a citizen who was refused are opposite answers: one
+// is nobody's fault at this end and may be retried, the other is the caller's and must
+// not be. DAN has no live client in this platform, so on any deployment with
+// DAN_MOCK_MODE off — which is every production one — signing through it told the
+// operator their signature had been REJECTED. It had not: the gateway was never reached.
+func TestAnUnreachableDANIsProviderTroubleNotARejection(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "ДАН байхгүй", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// The same module, against a DAN service in the shape production runs it: no mock,
+	// so no gateway.
+	t.Setenv("DAN_MOCK_MODE", "false")
+	live := &DocumentsModule{db: f.m.db, eidSvc: f.m.eidSvc, danSvc: dan.NewDANService()}
+
+	_, err = live.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456")
+	if !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("got %v, want ErrProviderUnavailable — the gateway was never reached", err)
+	}
+	if errors.Is(err, ErrSignatureRejected) {
+		t.Error("an unreachable gateway must not be reported as a refused signature")
+	}
+
+	// And nothing was recorded on the strength of a call that never happened.
+	sigs, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("signatures: %v", err)
+	}
+	if len(sigs) != 0 {
+		t.Errorf("the ledger holds %d signatures after an unreachable gateway", len(sigs))
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
