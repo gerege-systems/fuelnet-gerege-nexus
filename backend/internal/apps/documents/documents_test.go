@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 	"unicode/utf8"
 )
@@ -315,5 +319,63 @@ func TestUnknownRetentionCountsAreAbsentFromTheJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(none), `"expired":0`) || !strings.Contains(string(none), `"total":0`) {
 		t.Errorf("empty type = %s, want both zeroes stated", none)
+	}
+}
+
+// A request body is read before anything can judge it, so the judging has to come
+// first. Measured before this bound existed: a 143 MB approval chain took the API's
+// resident memory from 86 MB to 444 MB in six tenths of a second and was then correctly
+// refused for having more than ten steps — the refusal was right and far too late.
+func TestAnOversizeBodyIsRefusedBeforeItIsRead(t *testing.T) {
+	var reached bool
+	handler := limitBody(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			// What a chunked over-size body looks like from inside the handler.
+			http.Error(w, "too big", http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+
+	// Declared over-size: refused without the handler ever running.
+	big := httptest.NewRequest(http.MethodPut, "/documents/workflows/CONTRACT",
+		strings.NewReader(strings.Repeat("x", bodyLimit+1)))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, big)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("declared over-size: got %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+	if reached {
+		t.Error("the handler read a body that was already known to be too large")
+	}
+
+	// Undeclared length (chunked), over-size: the read itself is capped.
+	reached = false
+	chunked := httptest.NewRequest(http.MethodPut, "/documents/workflows/CONTRACT",
+		iotest.OneByteReader(strings.NewReader(strings.Repeat("y", bodyLimit+100))))
+	chunked.ContentLength = -1
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, chunked)
+	if !reached {
+		t.Error("a chunked request must reach the handler; the cap is on the read")
+	}
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("chunked over-size: got %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+
+	// And a real one goes through untouched.
+	reached = false
+	ok := httptest.NewRequest(http.MethodPut, "/documents/workflows/CONTRACT",
+		strings.NewReader(`{"steps":[{"name":"Ня-бо","signer_reg_number":"УБ99010111"}]}`))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, ok)
+	if !reached || rec.Code != http.StatusOK {
+		t.Errorf("an ordinary request: reached=%v code=%d", reached, rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "УБ99010111") {
+		t.Errorf("the body did not arrive intact: %q", rec.Body.String())
 	}
 }

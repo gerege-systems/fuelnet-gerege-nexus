@@ -191,9 +191,37 @@ func (m *DocumentsModule) Menus() []internal.MenuDefinition {
 	}
 }
 
+// bodyLimit is the most any request to this module legitimately carries. The largest
+// is an approval chain: ten steps, each a name of at most 255 characters and a
+// registration number of at most 64 — about four kilobytes. Everything else is a title,
+// a note or a registration number.
+//
+// Measured before this existed: a 143 MB body took the API's resident memory from 86 MB
+// to 444 MB in six tenths of a second, and was then refused for having more than ten
+// steps. The refusal was correct and far too late — the whole thing had already been
+// read and parsed into Go objects. A few of those at once would take the box down, and
+// on this stack the database is on the same box.
+const bodyLimit = 64 << 10 // 64 KB, sixteen times the largest real request
+
+// limitBody refuses an over-large request before it is read, and caps what a
+// chunked one can stream. It sits on the module's whole route group so no handler
+// can forget it.
+func limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength > bodyLimit {
+			writeError(w, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("the request body is larger than %d bytes", bodyLimit))
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/v1/documents", func(dr chi.Router) {
 		dr.Use(tenantAuthMiddleware)
+		dr.Use(limitBody)
 		dr.Get("/", m.listDocumentsHandler)
 		dr.Post("/", m.createDocumentHandler)
 
