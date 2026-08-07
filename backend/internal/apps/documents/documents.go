@@ -1,5 +1,5 @@
 /*
- * Gerege Template Platform
+ * Gerege Nexus
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
@@ -28,14 +28,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appregistry"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"golang.org/x/time/rate"
 )
 
@@ -728,7 +728,7 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 	// unfilled earlier one.
 	//
 	// With no step left to fill, the signature is parked PAST THE END of the chain,
-	// the way migration 00014 §4 parks a legacy one. Counting instead — applied + 1 —
+	// the way migration 00017 §4 parks a legacy one. Counting instead — applied + 1 —
 	// collides with a real step number as soon as a chain is not numbered 1..n: on a
 	// hand-numbered chain of steps 2 and 3, both filled, the third signature would be
 	// written as step 3 as well, and the trail would show somebody the chain never

@@ -12,12 +12,12 @@
 -- every document of that type, which is the outcome the save-time guards exist to
 -- prevent.
 --
--- Migration 00014 has already repaired the chains themselves — where a citizen was
+-- Migration 00017 has already repaired the chains themselves — where a citizen was
 -- named more than once, the later steps were opened, before anything was copied onto
 -- a document or any signature placed. What is left here is the flag.
 --
 -- The flag is cleared wherever the repaired chain still could not satisfy it: a
--- chain with no steps at all, or one carrying an open step — including a step 00014
+-- chain with no steps at all, or one carrying an open step — including a step 00017
 -- opened on its way past.
 UPDATE document_signature_policies p
    SET require_named_signer = FALSE, updated_at = NOW()
@@ -30,7 +30,7 @@ UPDATE document_signature_policies p
         OR EXISTS (SELECT 1 FROM document_workflow_steps w
                     WHERE w.tenant_id = p.tenant_id AND w.doc_type = p.doc_type
                       AND w.signer_reg_number = '')
-        -- one citizen named twice: 00014 will have opened the repeat, so this is a
+        -- one citizen named twice: 00017 will have opened the repeat, so this is a
         -- belt to that brace — a chain that somehow still carries one could not be
         -- completed under the flag either
         OR EXISTS (SELECT w.signer_reg_number

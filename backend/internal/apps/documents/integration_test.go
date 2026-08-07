@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
 // These tests exercise signing against a real PostgreSQL schema, because what
@@ -727,7 +727,7 @@ func TestASignatureSurvivesTheCallerHangingUp(t *testing.T) {
 }
 
 // A document may hold a signature on a LATER step while an earlier one is still
-// open: migration 00014 credits a pre-existing signature to the step that names its
+// open: migration 00017 credits a pre-existing signature to the step that names its
 // signer, not to its place in time, because order did not matter before. The next
 // approval is therefore the lowest unfilled step — not "one more than the count",
 // which would ask a citizen who has already signed and stick for ever.
@@ -1131,7 +1131,7 @@ func TestASignatureThatFillsNoStepIsParkedPastTheChain(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	// Stand in for what migration 00014 leaves on a document that held a parked
+	// Stand in for what migration 00017 leaves on a document that held a parked
 	// signature: it owes one approval more than its chain has steps.
 	if _, err := f.m.db.Exec(ctx,
 		`UPDATE document_records SET required_signatures = 3 WHERE id = $1`, doc.ID); err != nil {

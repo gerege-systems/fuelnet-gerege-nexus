@@ -1,5 +1,5 @@
 /*
- * Gerege Template Platform
+ * Gerege Nexus
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
@@ -26,32 +26,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/billing"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/contacts"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/developer_portal"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/gov_services"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/inventory"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/apps/products"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ai"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/appinstaller"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/dan"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/integration"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/mailer"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/menu"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/rbac"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/resilience"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/ssoprovider"
-	"github.com/gerege-systems/open-gerege-mn-erp/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/developer_portal"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/mailer"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -88,6 +89,7 @@ type Server struct {
 	productsMod    *products.Module
 	inventoryMod   *inventory.Module
 	esignMod       *esign.Module
+	eidMN          *eidmongolia.Service
 }
 
 func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
@@ -149,7 +151,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	billingMod := billing.New(db)
 	documentsMod := documents.New(db)
 	govMod := gov_services.New(db)
-	esignMod := esign.New(db, gerege.NewEsignService())
+	eidMN, err := eidmongolia.New(db)
+	if err != nil {
+		return nil, fmt.Errorf("eID Mongolia service: %w", err)
+	}
+	esignMod := esign.New(db, gerege.NewEsignService(), eidMN)
 
 	// Instantiate Async Mailer Queue
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
@@ -183,10 +189,20 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		productsMod:    productsMod,
 		inventoryMod:   inventoryMod,
 		esignMod:       esignMod,
+		eidMN:          eidMN,
 	}
 
 	s.setupRoutes()
 	return s, nil
+}
+
+// StartBackgroundJobs launches the periodic work app modules need. It is
+// separate from NewServer so a test can build a server without spawning
+// goroutines, and it returns immediately — every job runs until ctx is
+// cancelled at shutdown.
+func (s *Server) StartBackgroundJobs(ctx context.Context) {
+	s.esignMod.StartHousekeeping(ctx)
+	s.eidMN.StartHousekeeping(ctx)
 }
 
 func (s *Server) Router() *chi.Mux {
@@ -541,11 +557,11 @@ func reportSignInFailure(w http.ResponseWriter, err error) {
 		return
 	}
 	slog.Error("failed to link verified national identity", "error", err)
-	writeJSONError(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг ERP бүртгэлтэй холбож чадсангүй")
+	writeJSONError(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг Gerege Nexus бүртгэлтэй холбож чадсангүй")
 }
 
 // resolveNationalIdentityUser maps a verified national identity (E-ID / DAN)
-// onto a local ERP user.
+// onto a local platform user.
 //
 // The previous implementation ran `SELECT id FROM users LIMIT 1` and granted
 // is_admin unconditionally, i.e. any successful gateway response logged the
@@ -567,7 +583,7 @@ func (s *Server) resolveNationalIdentityUser(ctx context.Context, email, regNumb
 	}
 
 	if config.IsProduction() {
-		return "", "", signInError{fmt.Sprintf("no ERP user is linked to national identity %s", regNumber)}
+		return "", "", signInError{fmt.Sprintf("no Gerege Nexus user is linked to national identity %s", regNumber)}
 	}
 
 	// Development convenience only: fall back to the seeded demo account so
@@ -579,7 +595,7 @@ func (s *Server) resolveNationalIdentityUser(ctx context.Context, email, regNumb
 		  ORDER BY u.created_at
 		  LIMIT 1`).Scan(&userID, &tenantID)
 	if err != nil {
-		return "", "", fmt.Errorf("no ERP user available for national identity login: %w", err)
+		return "", "", fmt.Errorf("no platform user available for national identity login: %w", err)
 	}
 	slog.Warn("national identity login fell back to the demo account",
 		"reg_number", regNumber, "email", email)
@@ -594,6 +610,51 @@ func eidLinkingDigest(linkingKey, subject string) string {
 	mac := hmac.New(sha256.New, []byte(linkingKey))
 	_, _ = mac.Write([]byte("eid-mn:" + subject))
 	return fmt.Sprintf("%x", mac.Sum(nil))
+}
+
+// linkEIDIdentity records who a signed-in user is to eID Mongolia.
+//
+// Qualified remote signing addresses the citizen by their ETSI semantics
+// identifier, and until this row exists nothing on the platform knows how to
+// reach the phone of the person who just authenticated. Without it every
+// signature would make the citizen retype the registration number they had
+// just proved — and a typo there would push a PIN2 prompt at somebody else.
+//
+// It is best effort on purpose. Sign-in has already succeeded by this point,
+// and failing the login because a convenience row could not be written would
+// trade a working session for a missing one.
+func (s *Server) linkEIDIdentity(ctx context.Context, userID string, identity *eid.EIDIdentity) {
+	if identity == nil {
+		return
+	}
+	subject := strings.TrimSpace(identity.CivilID)
+	if subject == "" {
+		subject = strings.TrimSpace(identity.RegNumber)
+	}
+	if subject == "" {
+		return
+	}
+	personEtsi := eidmongolia.PersonEtsi(subject)
+
+	// The conflict target is person_etsi as well as user_id: one eID citizen
+	// resolves to one platform account, and a second account claiming the same
+	// identifier would silently split that person's signing history in two.
+	if _, err := s.db.Exec(ctx,
+		`INSERT INTO user_eid_identities
+		     (user_id, civil_id, reg_number, person_etsi, given_name, surname, last_seen_at)
+		 VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, NULLIF($5,''), NULLIF($6,''), NOW())
+		 ON CONFLICT (user_id) DO UPDATE SET
+		     civil_id     = COALESCE(EXCLUDED.civil_id, user_eid_identities.civil_id),
+		     reg_number   = COALESCE(EXCLUDED.reg_number, user_eid_identities.reg_number),
+		     person_etsi  = EXCLUDED.person_etsi,
+		     given_name   = COALESCE(EXCLUDED.given_name, user_eid_identities.given_name),
+		     surname      = COALESCE(EXCLUDED.surname, user_eid_identities.surname),
+		     last_seen_at = NOW()`,
+		userID, identity.CivilID, identity.RegNumber, personEtsi,
+		identity.FirstName, identity.LastName); err != nil {
+		slog.Warn("could not link the eID identity to the platform account",
+			"user_id", userID, "error", err)
+	}
 }
 
 // resolveOrProvisionEIDUser links an eID subject to a stable, non-PII local
@@ -1227,6 +1288,7 @@ func (s *Server) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 		reportSignInFailure(w, err)
 		return
 	}
+	s.linkEIDIdentity(r.Context(), userID, result.Identity)
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid-app")
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to establish session")

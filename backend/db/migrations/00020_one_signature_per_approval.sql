@@ -8,7 +8,7 @@
 --
 -- Two ways it could arise, both now fixed in the code, both invisible without this:
 --
---   * migration 00014 §4 parked a left-over signature at "number of steps + n", which
+--   * migration 00017 §4 parked a left-over signature at "number of steps + n", which
 --     on a chain whose numbers are not 1..n lands ON an existing step;
 --   * recordSignature numbered a signature that filled no step "applied + 1", with
 --     the same collision at runtime.
@@ -28,7 +28,7 @@ BEGIN
     -- signature already claimed.
     --
     -- WHICH one keeps the step is decided by the step itself, not by the clock. The
-    -- collision this repairs is the one 00014 §4 produced: a signature from somebody
+    -- collision this repairs is the one 00017 §4 produced: a signature from somebody
     -- no step names, parked onto a real step next to the signature of the citizen that
     -- step DOES name. The stranger's is often the older of the two — legacy signatures
     -- are what §4 was placing — so keeping the oldest would strip the named signer of
@@ -69,7 +69,7 @@ BEGIN
 END $$;
 -- +goose StatementEnd
 
--- NULL step_order is still allowed — 00014 fills them all in, but a row that somehow
+-- NULL step_order is still allowed — 00017 fills them all in, but a row that somehow
 -- arrives without one should not be forced onto an approval it did not fill. Postgres
 -- treats NULLs as distinct in a unique index, which is the behaviour wanted here.
 ALTER TABLE document_signatures
