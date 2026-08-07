@@ -100,9 +100,14 @@ var specs = map[Provider]Spec{
 		Capabilities: []Capability{CapabilityFileExport},
 		AuthURL:      "https://www.dropbox.com/oauth2/authorize",
 		TokenURL:     "https://api.dropbox.com/oauth2/token",
-		// Dropbox scopes are granular; these two are write plus the identity
-		// call that names the connected account.
-		Scopes:          []string{"files.content.write", "account_info.read"},
+		// Dropbox scopes are granular, and each of these is asked for because
+		// something here calls it: files.content.write to upload,
+		// account_info.read to name the connected account, sharing.write for
+		// the shared link recorded against the delivery. Requesting a scope
+		// short of what the code calls is not a build error — the upload
+		// succeeds and the link silently never appears — so the list is
+		// pinned by a test against the endpoints actually used.
+		Scopes:          []string{"files.content.write", "account_info.read", "sharing.write"},
 		ClientIDEnv:     "DROPBOX_OAUTH_CLIENT_ID",
 		ClientSecretEnv: "DROPBOX_OAUTH_CLIENT_SECRET",
 	},
