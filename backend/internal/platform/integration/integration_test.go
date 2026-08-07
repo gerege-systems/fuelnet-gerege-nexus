@@ -1,93 +1,288 @@
-package integration_test
+package integration
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
+	"errors"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 )
 
-func TestIntegrationManagerList(t *testing.T) {
-	mgr := integration.NewManager()
+// A credential must not be storable in the clear. Without a key the save fails
+// rather than writing a refresh token a database dump would hand over.
+func TestSavingACredentialWithoutAKeyFails(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "")
+	resetKeyForTest()
 
-	list := mgr.List()
-	if len(list) < 2 {
-		t.Fatalf("expected at least 2 default integrations, got %d", len(list))
+	if EncryptionConfigured() {
+		t.Fatal("EncryptionConfigured() is true with no key set")
+	}
+	if _, err := seal([]byte("hmac-secret")); !errors.Is(err, ErrNoEncryptionKey) {
+		t.Fatalf("seal without a key returned %v, want ErrNoEncryptionKey", err)
 	}
 }
 
-// A webhook signing secret is written, never read back. It used to ride along
-// in the JSON of the admin endpoint that renders this list.
-func TestIntegrationManagerListOmitsSecret(t *testing.T) {
-	mgr := integration.NewManager()
-	mgr.Register(&integration.IntegrationConfig{
-		ID: "int_secret", Name: "Signed", Type: "webhook",
-		TargetURL: "https://example.invalid/hook", SecretKey: "s3cret",
-	})
+func TestSealRoundTrip(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "a-passphrase-an-operator-would-actually-type")
+	resetKeyForTest()
 
-	for _, cfg := range mgr.List() {
-		if cfg.SecretKey != "" {
-			t.Fatalf("List() exposed the signing secret for %s", cfg.ID)
+	plaintext := []byte("ya29.a0-refresh-token")
+	sealed, err := seal(plaintext)
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	// The point of sealing: the secret must not be findable in what is stored.
+	if strings.Contains(string(sealed), string(plaintext)) {
+		t.Fatal("the plaintext survives in the ciphertext")
+	}
+
+	opened, err := open(sealed)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if string(opened) != string(plaintext) {
+		t.Fatalf("round trip gave %q, want %q", opened, plaintext)
+	}
+}
+
+// A rotated or mistyped key must surface, not decode to an empty credential —
+// that would turn a configuration error into silently unsigned webhooks.
+func TestOpenUnderTheWrongKeyIsAnError(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "the-original-key")
+	resetKeyForTest()
+	sealed, err := seal([]byte("secret"))
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+
+	t.Setenv(encryptionKeyEnv, "a-different-key-entirely")
+	resetKeyForTest()
+	if _, err := open(sealed); err == nil {
+		t.Fatal("open under the wrong key succeeded")
+	}
+}
+
+func TestValidateRejectsWhatCannotWork(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "key-for-validation-tests")
+	resetKeyForTest()
+
+	tests := []struct {
+		name string
+		req  SaveRequest
+		want string
+	}{
+		{"unknown provider", SaveRequest{Provider: "sharepoint", Name: "x"}, "unknown integration provider"},
+		{"no name", SaveRequest{Provider: ProviderWebhook, TargetURL: "https://a.mn/hook"}, "needs a name"},
+		{"webhook without a url", SaveRequest{Provider: ProviderWebhook, Name: "x"}, "needs a target URL"},
+		{"url with no host", SaveRequest{Provider: ProviderWebhook, Name: "x", TargetURL: "not-a-url"}, "not a valid absolute URL"},
+		// A path-only URL has no host either, which is the branch it lands in.
+		{"local file path", SaveRequest{Provider: ProviderWebhook, Name: "x", TargetURL: "file:///etc/passwd"}, "not a valid absolute URL"},
+		// A host is present here, so this is the scheme check doing the work.
+		{"non-web scheme", SaveRequest{Provider: ProviderWebhook, Name: "x", TargetURL: "ftp://files.example.mn/drop"}, "must be http or https"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := tc.req
+			err := validate(&req)
+			if err == nil {
+				t.Fatalf("validate accepted %+v", tc.req)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// An OAuth connector has no URL to type. Accepting one would suggest the upload
+// goes somewhere it does not.
+func TestValidateClearsTheTargetURLOnOAuthProviders(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "key-for-validation-tests")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "client-id")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "client-secret")
+	resetKeyForTest()
+
+	req := SaveRequest{
+		Provider:  ProviderGoogleDrive,
+		Name:      "Archive",
+		TargetURL: "https://example.invalid/not-where-this-goes",
+		Secret:    "ignored",
+	}
+	if err := validate(&req); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if req.TargetURL != "" || req.Secret != "" {
+		t.Fatalf("OAuth connector kept url=%q secret=%q", req.TargetURL, req.Secret)
+	}
+}
+
+// A provider whose OAuth client the deployment never configured must be refused
+// at save time, with an error naming the variable to set.
+func TestValidateRefusesAnUnconfiguredProvider(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "key-for-validation-tests")
+	t.Setenv("DROPBOX_OAUTH_CLIENT_ID", "")
+	t.Setenv("DROPBOX_OAUTH_CLIENT_SECRET", "")
+	resetKeyForTest()
+
+	req := SaveRequest{Provider: ProviderDropbox, Name: "Archive"}
+	err := validate(&req)
+	if err == nil {
+		t.Fatal("validate accepted a provider with no OAuth client")
+	}
+	if !strings.Contains(err.Error(), "DROPBOX_OAUTH_CLIENT_ID") {
+		t.Fatalf("error %q does not name the missing variable", err)
+	}
+}
+
+func TestCatalogReportsAvailability(t *testing.T) {
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "id")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
+	t.Setenv("DROPBOX_OAUTH_CLIENT_ID", "")
+	t.Setenv("DROPBOX_OAUTH_CLIENT_SECRET", "")
+
+	byProvider := map[Provider]ProviderCatalog{}
+	for _, entry := range Catalog() {
+		byProvider[entry.Provider] = entry
+	}
+
+	if !byProvider[ProviderGoogleDrive].Available {
+		t.Error("Google Drive is configured but reported unavailable")
+	}
+	if byProvider[ProviderDropbox].Available {
+		t.Error("Dropbox has no client credentials but is reported available")
+	}
+	if !strings.Contains(byProvider[ProviderDropbox].Reason, "DROPBOX_OAUTH_CLIENT_ID") {
+		t.Errorf("Dropbox reason %q does not say what is missing", byProvider[ProviderDropbox].Reason)
+	}
+	// A webhook needs nothing from the deployment.
+	if !byProvider[ProviderWebhook].Available {
+		t.Error("webhooks reported unavailable")
+	}
+}
+
+func TestCapabilitiesAreProviderDriven(t *testing.T) {
+	for _, tc := range []struct {
+		provider Provider
+		want     Capability
+	}{
+		{ProviderGoogleDrive, CapabilityFileExport},
+		{ProviderDropbox, CapabilityFileExport},
+		{ProviderGoogleMeet, CapabilityMeeting},
+		{ProviderWebhook, CapabilityEventPush},
+	} {
+		spec, err := SpecFor(tc.provider)
+		if err != nil {
+			t.Fatalf("SpecFor(%s): %v", tc.provider, err)
+		}
+		if !spec.Supports(tc.want) {
+			t.Errorf("%s does not report %s", tc.provider, tc.want)
+		}
+	}
+	// Meet cannot store a file, and Drive cannot hold a meeting. The business
+	// modules pick a connector by capability, so a wrong answer here files a
+	// document into a calendar.
+	drive, _ := SpecFor(ProviderGoogleDrive)
+	if drive.Supports(CapabilityMeeting) {
+		t.Error("Google Drive claims it can create meetings")
+	}
+	meet, _ := SpecFor(ProviderGoogleMeet)
+	if meet.Supports(CapabilityFileExport) {
+		t.Error("Google Meet claims it can store files")
+	}
+}
+
+// A Meet link comes from Calendar, so the connector must ask for the Calendar
+// scope. Asking for the wrong one fails only at the moment a citizen is waiting
+// for a link.
+func TestGoogleMeetRequestsTheCalendarScope(t *testing.T) {
+	spec, err := SpecFor(ProviderGoogleMeet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsString(spec.Scopes, "https://www.googleapis.com/auth/calendar.events") {
+		t.Fatalf("Meet scopes %v do not include calendar.events", spec.Scopes)
+	}
+}
+
+// drive.file grants access only to files this application creates. The broad
+// drive scope would hand the platform the rest of someone's documents.
+func TestGoogleDriveAsksForTheNarrowScope(t *testing.T) {
+	spec, _ := SpecFor(ProviderGoogleDrive)
+	if containsString(spec.Scopes, "https://www.googleapis.com/auth/drive") {
+		t.Fatal("Drive connector asks for full-account access")
+	}
+	if !containsString(spec.Scopes, "https://www.googleapis.com/auth/drive.file") {
+		t.Fatalf("Drive scopes %v do not include drive.file", spec.Scopes)
+	}
+}
+
+func TestDropboxPath(t *testing.T) {
+	tests := []struct{ folder, filename, want string }{
+		{"", "contract.pdf", "/contract.pdf"},
+		{"Archive", "contract.pdf", "/Archive/contract.pdf"},
+		{"/Archive/", "contract.pdf", "/Archive/contract.pdf"},
+		{"Archive/2026", "contract.pdf", "/Archive/2026/contract.pdf"},
+		// A filename is a name, not a path: a caller-supplied "../" must not
+		// climb out of the configured folder.
+		{"Archive", "../../etc/passwd", "/Archive/passwd"},
+		{"Archive", "", "/Archive/document"},
+	}
+	for _, tc := range tests {
+		if got := dropboxPath(tc.folder, tc.filename); got != tc.want {
+			t.Errorf("dropboxPath(%q, %q) = %q, want %q", tc.folder, tc.filename, got, tc.want)
 		}
 	}
 }
 
-// Register must not keep the caller's pointer: mutating it afterwards would
-// change registered state with no lock held.
-func TestIntegrationManagerRegisterCopies(t *testing.T) {
-	mgr := integration.NewManager()
-	cfg := &integration.IntegrationConfig{
-		ID: "int_copy", Name: "Original", Type: "webhook", TargetURL: "https://example.invalid/hook",
+// Dropbox carries its arguments in an HTTP header, which is ASCII. A Mongolian
+// document title reaches this as a filename, so it has to be escaped or the
+// request fails on an invalid header byte.
+func TestEscapeNonASCII(t *testing.T) {
+	got := escapeNonASCII(`{"path":"/Гэрээ.pdf"}`)
+	if strings.ContainsAny(got, "ГэрээПpp") && !strings.Contains(got, `\u`) {
+		t.Fatalf("non-ASCII survived unescaped: %q", got)
 	}
-	mgr.Register(cfg)
-	cfg.Name = "Mutated after registration"
-
-	for _, stored := range mgr.List() {
-		if stored.ID == "int_copy" && stored.Name != "Original" {
-			t.Fatalf("Register aliased the caller's config: name is now %q", stored.Name)
+	for _, r := range got {
+		if r > 0x7F {
+			t.Fatalf("result still contains a non-ASCII rune: %q", got)
 		}
+	}
+	if !strings.Contains(got, `"path"`) {
+		t.Fatalf("ASCII structure was mangled: %q", got)
 	}
 }
 
-// Dispatch is asynchronous, so it must not inherit the caller's cancellation.
-// ctx is a request context in every real caller and is cancelled as soon as the
-// handler returns — which is before the POST leaves the process, so every
-// webhook used to race its own cancellation.
-func TestDispatchEventSurvivesCallerCancellation(t *testing.T) {
-	delivered := make(chan string, 1)
-	subscriber := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delivered <- r.Header.Get("X-ERP-Event")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer subscriber.Close()
-
-	mgr := integration.NewManager()
-	mgr.Register(&integration.IntegrationConfig{
-		ID: "int_test_webhook", Name: "Test Webhook", Type: "webhook", TargetURL: subscriber.URL,
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	if err := mgr.DispatchEvent(ctx, integration.EventPayload{
-		EventID:   "evt_1001",
-		EventType: "contact.created",
-		TenantID:  "00000000-0000-0000-0000-000000000001",
-		Timestamp: time.Now(),
-		Data:      map[string]any{"name": "Test User"},
-	}); err != nil {
-		t.Fatalf("unexpected dispatch error: %v", err)
+func TestURLPathEscapeHandlesCalendarIDs(t *testing.T) {
+	// Calendar ids are email-like; the @ has to survive as %40 inside a path.
+	if got := urlPathEscape("office@gerege.mn"); got != "office%40gerege.mn" {
+		t.Fatalf("urlPathEscape gave %q", got)
 	}
-	// Exactly what a returning HTTP handler does to its request context.
-	cancel()
+	if got := urlPathEscape("primary"); got != "primary" {
+		t.Fatalf("urlPathEscape mangled a plain id: %q", got)
+	}
+}
 
-	select {
-	case eventType := <-delivered:
-		if eventType != "contact.created" {
-			t.Fatalf("X-ERP-Event = %q, want contact.created", eventType)
+func TestTokenExpiry(t *testing.T) {
+	if (tokenBundle{}).expired() {
+		t.Error("a token with no expiry is treated as expired")
+	}
+	if !(tokenBundle{ExpiresAt: nowMinus(time.Minute)}).expired() {
+		t.Error("an expired token is treated as live")
+	}
+	// Refreshed a minute early: a token that expires between the check and the
+	// call fails the same way, only less reproducibly.
+	if !(tokenBundle{ExpiresAt: nowPlus(30 * time.Second)}).expired() {
+		t.Error("a token expiring in 30s is not refreshed early")
+	}
+	if (tokenBundle{ExpiresAt: nowPlus(10 * time.Minute)}).expired() {
+		t.Error("a token good for 10 minutes is refreshed needlessly")
+	}
+}
+
+func containsString(list []string, want string) bool {
+	for _, have := range list {
+		if have == want {
+			return true
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("webhook was never delivered after the caller's context was cancelled")
 	}
+	return false
 }
