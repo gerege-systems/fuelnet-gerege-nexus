@@ -328,6 +328,11 @@ func (m *DocumentsModule) ListWorkflows(ctx context.Context, tenantID string) ([
 	return list, nil
 }
 
+// maxChainSteps is the longest approval chain a tenant may configure. It is also the
+// burst allowed on the signing routes, since a chain of that length is sometimes signed
+// in one sitting.
+const maxChainSteps = 10
+
 // ReplaceWorkflow swaps the whole chain for one document type. Editing a chain
 // step by step would let a half-applied edit decide who may approve, so the
 // delete and the inserts share one transaction.
@@ -336,8 +341,9 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	if !slices.Contains(DocTypes, docType) {
 		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
 	}
-	if len(steps) > 10 {
-		return nil, fmt.Errorf("%w: an approval chain is limited to 10 steps", ErrInvalidConfiguration)
+	if len(steps) > maxChainSteps {
+		return nil, fmt.Errorf("%w: an approval chain is limited to %d steps",
+			ErrInvalidConfiguration, maxChainSteps)
 	}
 
 	cleaned := make([]WorkflowStep, 0, len(steps))

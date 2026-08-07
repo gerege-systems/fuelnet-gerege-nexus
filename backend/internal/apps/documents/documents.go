@@ -155,9 +155,15 @@ type DocumentsModule struct {
 // address and each of them getting a document signed is legitimate; still tight,
 // because each request reaches somebody's pocket. Polling and reading are not budgeted:
 // they trouble nobody.
+//
+// The burst is the length of the longest chain a tenant may configure, because a chain
+// really is signed in one sitting sometimes — ten people at one counter, one after
+// another, all from the office's address. A burst of five turned that into a refusal
+// half way through, which I found by running one. The sustained rate is what matters
+// against guessing a six-digit DAN code, and ten a minute leaves that hopeless.
 const (
 	signPushRatePerMinute = 10
-	signPushBurst         = 5
+	signPushBurst         = maxChainSteps
 )
 
 func New(db *pgxpool.Pool) *DocumentsModule {
