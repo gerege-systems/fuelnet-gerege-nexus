@@ -163,6 +163,13 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// caller's behalf — and so that anything the provider refuses later can be
 	// treated as the provider's trouble, which a polling client must retry rather
 	// than abandon a ceremony over.
+	// On the RAW value, before normalising: strings.ToUpper replaces an invalid byte
+	// with U+FFFD, so checking afterwards would find a perfectly storable string of
+	// replacement characters and let a nonsense number through as if it were a name.
+	if fault := textFault(regNumber); fault != "" {
+		return nil, fmt.Errorf("%w: that registration number cannot be stored — %s",
+			ErrSignatureRejected, fault)
+	}
 	regNumber = normaliseRegNumber(regNumber)
 	if !plausibleRegNumber(regNumber) {
 		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)

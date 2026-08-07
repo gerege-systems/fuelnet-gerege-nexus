@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -380,6 +381,23 @@ func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, doc)
 }
 
+// textFault says why a string cannot be stored as Postgres text, or "" when it can.
+//
+// Postgres text holds neither a NUL character nor a byte sequence that is not UTF-8, so
+// a value carrying either is refused by the driver — and every field in this module
+// answered that with 500 "we could not save it", which is untrue twice over: nothing
+// broke, and it is the caller's input. A 400 that names the fault is the honest answer,
+// and it keeps a log line for something nobody can fix out of the error log.
+func textFault(value string) string {
+	if strings.ContainsRune(value, 0) {
+		return "it contains a NUL character"
+	}
+	if !utf8.ValidString(value) {
+		return "it is not valid UTF-8"
+	}
+	return ""
+}
+
 // TitleLimit is what document_records.title holds. Checking it here turns a
 // storage error the caller cannot read into one they can act on.
 const TitleLimit = 255
@@ -399,6 +417,9 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 	if len([]rune(title)) > TitleLimit {
 		return nil, fmt.Errorf("%w: a title is at most %d characters, this one is %d",
 			ErrInvalidDocument, TitleLimit, len([]rune(title)))
+	}
+	if fault := textFault(title); fault != "" {
+		return nil, fmt.Errorf("%w: the title cannot be stored — %s", ErrInvalidDocument, fault)
 	}
 	if docType == "" {
 		docType = DocTypes[0]
@@ -569,6 +590,10 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 	// Refused before the gateway is troubled, on the same terms as the E-ID path: a
 	// number this module knows cannot name a step is not worth a round trip, and the
 	// caller gets told what is wrong with it rather than what DAN thought of it.
+	if fault := textFault(regNumber); fault != "" {
+		return nil, fmt.Errorf("%w: that registration number cannot be stored — %s",
+			ErrSignatureRejected, fault)
+	}
 	if !plausibleRegNumber(normaliseRegNumber(regNumber)) {
 		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
 	}
@@ -949,6 +974,9 @@ func (m *DocumentsModule) ListDocuments(ctx context.Context, tenantID string, fi
 	search := strings.TrimSpace(filter.Search)
 	if len([]rune(search)) > TitleLimit {
 		return nil, fmt.Errorf("%w: a search is at most %d characters", ErrInvalidDocument, TitleLimit)
+	}
+	if fault := textFault(search); fault != "" {
+		return nil, fmt.Errorf("%w: the search cannot be run — %s", ErrInvalidDocument, fault)
 	}
 	pattern := ""
 	if search != "" {

@@ -61,6 +61,11 @@ func checkTemplateFields(name, titlePattern string) error {
 	if name == "" {
 		return fmt.Errorf("%w: template name cannot be empty", ErrInvalidConfiguration)
 	}
+	for field, value := range map[string]string{"name": name, "title pattern": titlePattern} {
+		if fault := textFault(value); fault != "" {
+			return fmt.Errorf("%w: the %s cannot be stored — %s", ErrInvalidConfiguration, field, fault)
+		}
+	}
 	if len([]rune(name)) > TitleLimit {
 		return fmt.Errorf("%w: a template name is at most %d characters, this one is %d",
 			ErrInvalidConfiguration, TitleLimit, len([]rune(name)))

@@ -133,6 +133,9 @@ func (m *DocumentsModule) retentionCounts(ctx context.Context, tenantID string, 
 
 // SaveRetentionRule upserts the rule for one document type.
 func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docType string, retainYears int, note string) (*RetentionRule, error) {
+	if fault := textFault(note); fault != "" {
+		return nil, fmt.Errorf("%w: the note cannot be stored — %s", ErrInvalidConfiguration, fault)
+	}
 	docType = strings.ToUpper(strings.TrimSpace(docType))
 	if !slices.Contains(DocTypes, docType) {
 		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)

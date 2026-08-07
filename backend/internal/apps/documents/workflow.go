@@ -347,6 +347,12 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 		if name == "" {
 			return nil, fmt.Errorf("%w: step %d needs a name", ErrInvalidConfiguration, i+1)
 		}
+		for field, value := range map[string]string{"name": name, "signer": step.SignerRegNumber} {
+			if fault := textFault(value); fault != "" {
+				return nil, fmt.Errorf("%w: step %d's %s cannot be stored — %s",
+					ErrInvalidConfiguration, i+1, field, fault)
+			}
+		}
 		reg := normaliseRegNumber(step.SignerRegNumber)
 		// A step naming something no citizen could present is a step nobody can
 		// fill: signing checks the identity a provider vouched for, and both

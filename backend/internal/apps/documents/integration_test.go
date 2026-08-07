@@ -1874,6 +1874,74 @@ func TestStartingAgainRetiresTheLastAsking(t *testing.T) {
 	}
 }
 
+// Postgres text holds neither a NUL character nor a byte sequence that is not UTF-8, so
+// the driver refuses a value carrying either. Every field in this module used to answer
+// that with 500 "we could not save it", which is untrue twice: nothing broke, and the
+// input is the caller's. Each entry point now says which field and why.
+func TestTextThatCannotBeStoredIsRefusedNotBlamedOnUs(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хадгалагдах текст", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	const nul = "a\x00b"
+	badUTF8 := string([]byte{0x41, 0xff, 0xfe})
+
+	for _, tc := range []struct {
+		what string
+		run  func(string) error
+		want error
+	}{
+		{"document title", func(v string) error {
+			_, err := f.m.CreateDocument(ctx, f.tenantID, v, "CONTRACT")
+			return err
+		}, ErrInvalidDocument},
+		{"search", func(v string) error {
+			_, err := f.m.ListDocuments(ctx, f.tenantID, DocumentFilter{Search: v}, 0, 0)
+			return err
+		}, ErrInvalidDocument},
+		{"template name", func(v string) error {
+			_, err := f.m.CreateTemplate(ctx, f.tenantID, v, "CONTRACT", "x")
+			return err
+		}, ErrInvalidConfiguration},
+		{"title pattern", func(v string) error {
+			_, err := f.m.CreateTemplate(ctx, f.tenantID, "нэр", "CONTRACT", v)
+			return err
+		}, ErrInvalidConfiguration},
+		{"step name", func(v string) error {
+			_, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "APPROVAL", []WorkflowStep{{Order: 1, Name: v}})
+			return err
+		}, ErrInvalidConfiguration},
+		{"step signer", func(v string) error {
+			_, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "APPROVAL",
+				[]WorkflowStep{{Order: 1, Name: "ok", SignerRegNumber: "AA9001" + v}})
+			return err
+		}, ErrInvalidConfiguration},
+		{"retention note", func(v string) error {
+			_, err := f.m.SaveRetentionRule(ctx, f.tenantID, "APPROVAL", 3, v)
+			return err
+		}, ErrInvalidConfiguration},
+		{"eID reg number", func(v string) error {
+			_, err := f.m.StartEIDSignature(ctx, f.tenantID, doc.ID, "AA9001"+v)
+			return err
+		}, ErrSignatureRejected},
+		{"DAN reg number", func(v string) error {
+			_, err := f.m.SignWithDAN(ctx, f.tenantID, doc.ID, "AA9001"+v, "123456")
+			return err
+		}, ErrSignatureRejected},
+	} {
+		for _, value := range []string{nul, badUTF8} {
+			err := tc.run(value)
+			if !errors.Is(err, tc.want) {
+				t.Errorf("%s with %q: got %v, want %v", tc.what, value, err, tc.want)
+			}
+		}
+	}
+}
+
 // Meeting the signature count is not the same as finishing the chain. A signature
 // from somebody no step names counts toward what a document holds and satisfies none
 // of what it owes, so the payload has to say how many steps are still outstanding —
