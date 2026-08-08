@@ -92,6 +92,10 @@
 - **内置 OAuth2 / OIDC 提供方**
   （`/.well-known/openid-configuration`），为第三方系统签发 client credentials
   令牌。
+- **电子邮件验证**（`platform/emailverify`）——统一的地址验证流程：一次性链接、
+  按租户签发的 API 客户端密钥、每小时配额以及回跳地址白名单。平台内的应用模块
+  在进程内直接调用，外部系统则通过 `POST /api/v1/verify/send` 调用。在“设置 →
+  电子邮件验证”中管理。
 
 > **注意。** E-ID、DAN 与 XYP 的 mock 模式仅用于开发环境。当
 > `ENVIRONMENT=production` 时会自动关闭，伪造的登记号无法完成认证。
@@ -219,6 +223,9 @@ npm run dev
 | `GET` | `/api/v1/menus` | 租户已启用应用的菜单 |
 | `GET` | `/api/v1/store/apps` | 应用商店列表 |
 | `POST` | `/api/v1/store/apps/{slug}/install` | 安装应用（管理员） |
+| `POST` | `/api/v1/verify/send` | 签发电子邮件验证链接（客户端密钥或会话） |
+| `GET` | `/api/v1/verify/confirm` | 处理邮件中的链接——仅可使用一次 |
+| `GET/POST/PUT/DELETE` | `/api/v1/admin/email-verification/*` | 验证概览与 API 客户端（管理员） |
 | `POST` | `/oauth2/token` | OAuth2 client credentials 令牌 |
 
 会话令牌通过 HttpOnly Cookie 或 `Authorization: Bearer <token>` 传递。

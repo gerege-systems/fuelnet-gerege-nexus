@@ -79,6 +79,66 @@ export interface Integration {
   updated_at: string;
 }
 
+/**
+ * Email verification — the platform's shared "prove this address" service.
+ *
+ * A client is a key issued to a caller outside the browser. The key exists in
+ * exactly one response, the one that creates it: `secret` is present there and
+ * absent from every later read, because the server keeps only its hash.
+ */
+export interface EmailVerifyClient {
+  id: string;
+  name: string;
+  /** The first characters of the key, kept so two keys can be told apart. */
+  key_prefix: string;
+  status: "ACTIVE" | "DISABLED";
+  hourly_limit: number;
+  /** Empty means any HTTPS destination is allowed. */
+  allowed_redirect_hosts: string[];
+  last_used_at?: string;
+  created_at: string;
+  updated_at: string;
+  /** Present only in the response that creates the client. */
+  secret?: string;
+}
+
+export interface EmailVerification {
+  id: string;
+  client_id?: string;
+  /** Who asked: a client name, an app module id, or "portal". */
+  source: string;
+  purpose?: string;
+  email: string;
+  redirect_url?: string;
+  status: "PENDING" | "VERIFIED" | "EXPIRED";
+  expires_at: string;
+  verified_at?: string;
+  created_at: string;
+}
+
+export interface EmailVerifyOverview {
+  stats: {
+    total: number;
+    verified: number;
+    pending: number;
+    expired: number;
+    last_24h: number;
+    verified_pct: number;
+  };
+  recent: EmailVerification[];
+  send_url: string;
+  confirm_url: string;
+  /** False when SMTP was never configured — mail is logged, not sent. */
+  mail_configured: boolean;
+}
+
+export interface EmailVerifyClientInput {
+  name: string;
+  status?: "ACTIVE" | "DISABLED";
+  hourly_limit?: number;
+  allowed_redirect_hosts?: string[];
+}
+
 export interface IntegrationInput {
   provider: IntegrationProvider;
   name: string;
@@ -651,6 +711,37 @@ export const api = {
     if (!res.ok) throw new Error("Download failed");
     return res.blob();
   },
+
+  // Email verification.
+  //
+  // The keys are write-once: createEmailVerifyClient is the only call that ever
+  // returns one, and there is no call that reads one back, because the server
+  // stores only its hash. Losing it means issuing a new one.
+  getEmailVerifyOverview: (limit = 25) =>
+    fetcher<EmailVerifyOverview>(`/admin/email-verification/overview?limit=${limit}`),
+
+  getEmailVerifyClients: () => fetcher<EmailVerifyClient[]>("/admin/email-verification/clients"),
+
+  createEmailVerifyClient: (data: EmailVerifyClientInput) =>
+    fetcher<EmailVerifyClient>("/admin/email-verification/clients", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateEmailVerifyClient: (id: string, data: EmailVerifyClientInput) =>
+    fetcher<EmailVerifyClient>(`/admin/email-verification/clients/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteEmailVerifyClient: (id: string) =>
+    fetcher<{ status: string }>(`/admin/email-verification/clients/${id}`, { method: "DELETE" }),
+
+  // The same endpoint outside callers use, reached with the session instead of
+  // a client key — so the screen can prove the flow works end to end without
+  // the product having to hold a key it issued to itself.
+  sendEmailVerification: (data: { email: string; redirect_url?: string; purpose?: string }) =>
+    fetcher<EmailVerification>("/verify/send", { method: "POST", body: JSON.stringify(data) }),
 
   // Developer Portal & OAuth2 SSO Apps
   getDeveloperApps: () => fetcher<any[]>("/developer/apps"),

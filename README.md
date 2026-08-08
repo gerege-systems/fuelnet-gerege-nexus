@@ -106,6 +106,11 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 - **Платформын өөрийн OAuth2 / OIDC provider**
   (`/.well-known/openid-configuration`) — гуравдагч системд client credentials
   урсгалаар токен олгоно.
+- **И-мэйл баталгаажуулалт** (`platform/emailverify`) — хаяг эзэмшлийг батлах
+  нэгдсэн урсгал: нэг удаа ажиллах холбоос, тенант тус бүрийн API клиент
+  түлхүүр, цагийн хязгаар, буцах хаягийн зөвшөөрлийн жагсаалт. Платформ доторх
+  апп модулиуд Go дуудлагаар, гадаад системүүд `POST /api/v1/verify/send`-ээр
+  ижил үйлчилгээг ашиглана. Тохиргоо → И-мэйл баталгаажуулалт дотор удирдана.
 
 > **Анхаар.** E-ID / ДАН / ХУР-ын mock горим зөвхөн хөгжүүлэлтийн орчинд
 > ажиллана. `ENVIRONMENT=production` үед mock горим автоматаар унтарч,
@@ -278,6 +283,9 @@ npm run dev
 | `GET/PUT` | `/api/v1/admin/ai/prompts/{key}` | AI prompt тохируулах (админ) |
 | `GET/POST` | `/api/v1/admin/ai/knowledge` | AI мэдлэгийн сан (админ) |
 | `POST` | `/api/v1/store/apps/{slug}/install` | Апп суулгах (админ) |
+| `POST` | `/api/v1/verify/send` | И-мэйл баталгаажуулах холбоос илгээх (клиент түлхүүр эсвэл session) |
+| `GET` | `/api/v1/verify/confirm` | Захидал дахь холбоосыг хүлээн авах — нэг л удаа ажиллана |
+| `GET/POST/PUT/DELETE` | `/api/v1/admin/email-verification/*` | Баталгаажуулалтын тойм ба API клиентүүд (админ) |
 | `POST` | `/oauth2/token` | OAuth2 client credentials токен |
 
 Нэвтрэлтийн токен нь HttpOnly cookie эсвэл `Authorization: Bearer <token>`

@@ -10,6 +10,7 @@ export const web = {
   "web.menu.appearance": { mn: "Харагдац", en: "Appearance" },
   "web.menu.preferences": { mn: "Тохиргоо", en: "Preferences" },
   "web.menu.ai_settings": { mn: "AI тохиргоо", en: "AI settings" },
+  "web.menu.email_verification": { mn: "И-мэйл баталгаажуулалт", en: "Email verification" },
 
   "web.group.modules": { mn: "Модулиуд", en: "Modules" },
   "web.group.settings": { mn: "Тохиргоо", en: "Settings" },

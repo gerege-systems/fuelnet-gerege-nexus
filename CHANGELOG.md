@@ -15,6 +15,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Email verification as a platform capability
+
+- **One flow instead of one per app**
+  ([`internal/platform/emailverify`](backend/internal/platform/emailverify)):
+  proving that somebody controls an address is not one module's business.
+  Contacts wants it before it trusts an address, Documents before a signing link
+  leaves for an outsider, Gov Services before it answers a citizen at one, and a
+  platform running next to Gerege Nexus wants the same thing over HTTP. Each of
+  those is the same three steps — issue a single-use link, mail it, honour it
+  once — and each private copy is another place to get token reuse or an open
+  redirect wrong. App modules take the service in their constructor the way
+  `gov_services` takes the integration manager and call
+  `emailverify.Service.Send`; outside callers post to `/api/v1/verify/send`.
+- **API clients, per tenant** (migration `00026`): a key issued from the
+  settings screen, stored only as a SHA-256 — the key exists in exactly one
+  response, the one that creates it. Disabling or deleting a client refuses its
+  key from the very next request. Each client carries its own hourly allowance
+  and, optionally, a redirect allowlist.
+- **The link is good exactly once**: the claim is a single conditional `UPDATE`,
+  so a mail client prefetching the link cannot race the recipient into two
+  successes. A spent, expired or invented token is `410` — one answer for all
+  three, so a caller holding a token learns only that it is no longer good.
+- **The platform is not an open redirector**: a destination must be HTTPS (HTTP
+  is tolerated for localhost outside production), carry no credentials, and be
+  on the client's allowlist when it declares one. It is checked when the link is
+  issued, not when it is followed — by then the mail has gone.
+- **Mail bombing has a cost**: an hourly allowance per client, a per-tenant cap
+  for in-process callers that hold no key, and a one-minute pause per recipient,
+  each answered with `429` and a `Retry-After` somebody can actually obey.
+- **Settings → Email verification**: what has been sent and by whom, the
+  verified rate, and the keys — with the new key shown once, loudly, because
+  there is no second chance to read it. The screen says so when SMTP is not
+  configured, since mail that is only logged looks exactly like mail that was
+  sent.
+- **The verification mail and the page after the click exist in all seven
+  platform languages.** They are read outside the product, by somebody who may
+  never have seen it.
+
 ### Added — PDF E-Sign v2: eID Mongolia qualified remote signing
 
 - **eID Mongolia signature client ([`internal/platform/eidsign`](backend/internal/platform/eidsign))**:

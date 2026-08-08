@@ -95,6 +95,40 @@ func (m *Module) RegisterRoutes(r chi.Router, gateMiddleware func(http.Handler) 
 }
 ```
 
+### Using platform services
+
+Anything more than one app needs lives in `internal/platform/` and reaches a
+module through its constructor, not through a package-level singleton. The
+server builds one instance in `NewServer` and passes it in, the way
+`gov_services` receives the integration manager.
+
+Email verification is one of these. Do not grow your own token table:
+
+```go
+type Module struct {
+    db          *pgxpool.Pool
+    emailVerify *emailverify.Service
+}
+
+func New(db *pgxpool.Pool, emailVerify *emailverify.Service) *Module { /* … */ }
+
+// Somewhere in a handler, with the tenant taken from the request context:
+_, err := m.emailVerify.Send(ctx, tenantID, emailverify.Request{
+    Email:       invitee.Email,
+    Source:      m.ID(),          // kept on the row, so the audit trail names you
+    Purpose:     "invoice_portal_invite",
+    RedirectURL: "https://portal.example/invited", // optional; HTTPS only
+    Locale:      config.LocaleFromRequest(r),
+})
+```
+
+The service issues a single-use link, mails it in the recipient's language,
+enforces the sending limits, and records the attempt where an administrator can
+see it under **Settings → Email verification**. `Send` returns a
+`*emailverify.RateLimitedError` (carrying `RetryAfter`) or an
+`*emailverify.InvalidError` for a bad address or destination — map them onto
+`429` and `400` rather than reporting them as server failures.
+
 ### Step 4: Create App Manifest JSON
 Add a manifest file in `catalog/manifests/invoices.json`:
 
