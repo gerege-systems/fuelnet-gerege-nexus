@@ -233,7 +233,26 @@ jobs:
             # Do not ask Compose for a graceful stop here: a wedged frontend
             # previously held that wait until the SSH action's 10-minute
             # timeout. These containers are stateless and safe to force-remove.
-            docker rm -f gerege_nexus_backend gerege_nexus_frontend gerege_nexus_migrate 2>/dev/null || true
+            set +e
+            timeout 30s docker rm -f gerege_nexus_backend gerege_nexus_frontend gerege_nexus_migrate
+            REMOVE_STATUS=$?
+            set -e
+            if [ "$REMOVE_STATUS" -eq 124 ]; then
+              echo "Docker did not remove stateless containers within 30s; collecting host state."
+              docker ps -a --no-trunc || true
+              systemctl --no-pager --full status docker containerd || true
+              echo "Restarting the wedged Docker runtime; the database volume is not removed."
+              timeout 90s sudo -n systemctl restart docker
+              for i in $(seq 1 30); do
+                docker info >/dev/null 2>&1 && break
+                sleep 2
+              done
+              docker info >/dev/null
+              timeout 30s docker rm -f gerege_nexus_backend gerege_nexus_frontend gerege_nexus_migrate 2>/dev/null || true
+            elif [ "$REMOVE_STATUS" -ne 0 ]; then
+              # Missing containers are expected after an interrupted rollout.
+              echo "Some stateless containers were already absent; continuing."
+            fi
             # `up -d` runs the migrate service to completion first, then swaps
             # the API and frontend over.
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
