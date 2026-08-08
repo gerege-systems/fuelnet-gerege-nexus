@@ -64,6 +64,9 @@ Contact the security team directly:
 | OAuth2 client auth | Mandatory, using constant-time comparison |
 | National integration mocks | Disabled automatically when `ENVIRONMENT=production` |
 | Administrator rights | Installing, enabling or disabling apps and registering integrations require a tenant administrator |
+| Verification client keys | Stored only as a SHA-256 digest; disabling or deleting a client refuses its key from the very next request |
+| Single-use links | A verification link is claimed by one conditional `UPDATE`; a spent, expired or invented token is answered `410` alike |
+| Redirect control | Destinations must be HTTPS (HTTP only for localhost in development), carry no credentials, and sit on the client's allowlist when it declares one — the platform is not an open redirector |
 
 ---
 

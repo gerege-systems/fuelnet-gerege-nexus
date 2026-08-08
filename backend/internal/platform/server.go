@@ -34,6 +34,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/mailer"
@@ -60,7 +61,9 @@ type Server struct {
 	loginLimiter   *security.IPRateLimiter
 	pollLimiter    *security.IPRateLimiter
 	aiLimiter      *security.IPRateLimiter
+	verifyLimiter  *security.IPRateLimiter
 	asyncMailer    *mailer.AsyncOTPMailer
+	emailVerify    *emailverify.Service
 	copilotSvc     *ai.CopilotService
 	forecaster     *ai.Forecaster
 	eidSvc         *eid.EIDService
@@ -158,14 +161,20 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	devPortalMod := developer_portal.NewDeveloperPortalModule(ssoProvider)
 
 	s := &Server{
-		db:             db,
-		installer:      installer,
-		router:         chi.NewRouter(),
-		sessions:       auth.NewSessionStore(db, auth.DefaultSessionTTL),
-		loginLimiter:   newLoginLimiter(),
-		pollLimiter:    newPollLimiter(),
-		aiLimiter:      security.NewIPRateLimiter(rate.Limit(20.0/60.0), 10),
+		db:           db,
+		installer:    installer,
+		router:       chi.NewRouter(),
+		sessions:     auth.NewSessionStore(db, auth.DefaultSessionTTL),
+		loginLimiter: newLoginLimiter(),
+		pollLimiter:  newPollLimiter(),
+		aiLimiter:    security.NewIPRateLimiter(rate.Limit(20.0/60.0), 10),
+		// The per-caller allowance for /verify/send is metered per client in the
+		// database. This is the cruder guard in front of it: an unauthenticated
+		// flood should not reach the client lookup at all.
+		// One per second sustained, twenty in a burst.
+		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(1), 20),
 		asyncMailer:    asyncMailer,
+		emailVerify:    emailverify.NewService(db, asyncMailer),
 		copilotSvc:     ai.NewCopilotService(db),
 		forecaster:     ai.NewForecaster(db),
 		eidSvc:         eid.NewEIDService(),
@@ -199,7 +208,20 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	// Abandoned connect attempts and the delivery log are the two integration
 	// tables that only ever grow.
 	s.integrationMgr.StartHousekeeping(ctx)
+	// Links nobody followed have to stop being reported as outstanding, and the
+	// verification trail is an audit record with a retention window, not a
+	// mailing list.
+	s.emailVerify.StartHousekeeping(ctx)
 }
+
+// EmailVerification is the platform's shared "prove this address" service.
+//
+// It is exposed rather than kept private because it belongs to every app
+// module, not to the platform's own handlers: a module takes it in its
+// constructor the way gov_services takes the integration manager, and calls
+// Send with its own app id as the source. One flow, one audit trail, one place
+// where token reuse and open redirects are gotten right.
+func (s *Server) EmailVerification() *emailverify.Service { return s.emailVerify }
 
 func (s *Server) Router() *chi.Mux {
 	return s.router
@@ -266,6 +288,21 @@ func (s *Server) setupRoutes() {
 		// a SameSite=Strict session cookie.
 		api.Get("/integrations/oauth/callback", s.handleIntegrationOAuthCallback)
 
+		// Email verification. Both endpoints are outside the authenticated
+		// group on purpose.
+		//
+		// /verify/send is the platform's shared "prove this address" service
+		// offered to callers who have no session here — another platform, a
+		// mobile backend, a partner — authenticated by a client key issued from
+		// Settings. It still accepts a session, so the product's own screens do
+		// not have to hold a key to call it.
+		//
+		// /verify/confirm is the link in the mail. The person following it is
+		// the one being verified and has no account here; the single-use token
+		// is the whole authority.
+		api.With(security.RateLimitMiddleware(s.verifyLimiter)).Post("/verify/send", s.handleVerifySend)
+		api.Get("/verify/confirm", s.handleVerifyConfirm)
+
 		// Protected endpoints
 		api.Group(func(pr chi.Router) {
 			pr.Use(s.authMiddleware)
@@ -283,6 +320,19 @@ func (s *Server) setupRoutes() {
 				ac.Delete("/roles/{id}", s.handleDeleteRole)
 				ac.Put("/roles/{id}/permissions", s.handleSetRolePermissions)
 				ac.Put("/memberships/{id}/roles", s.handleSetMembershipRoles)
+			})
+
+			// Email verification administration. Issuing a key that can send
+			// mail in the tenant's name — and reading who has been written to —
+			// is administrative, so it sits with the rest of the settings
+			// surface rather than with the send endpoint it configures.
+			pr.Route("/admin/email-verification", func(vr chi.Router) {
+				vr.Use(s.requireAdmin)
+				vr.Get("/overview", s.handleEmailVerifyOverview)
+				vr.Get("/clients", s.handleListEmailVerifyClients)
+				vr.Post("/clients", s.handleCreateEmailVerifyClient)
+				vr.Put("/clients/{id}", s.handleUpdateEmailVerifyClient)
+				vr.Delete("/clients/{id}", s.handleDeleteEmailVerifyClient)
 			})
 
 			// AI Copilot & Forecasting

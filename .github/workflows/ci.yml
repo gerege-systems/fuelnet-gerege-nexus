@@ -62,6 +62,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       GOV_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       DOCUMENTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
+      EMAILVERIFY_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -94,6 +95,17 @@ jobs:
             | tee /tmp/documents.log
           if grep -q -- '--- SKIP' /tmp/documents.log; then
             echo "::error::documents integration tests skipped — DOCUMENTS_TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
+      - name: Fail if the email verification integration tests were skipped
+        # Same reasoning again: single-use links are enforced by one conditional
+        # UPDATE, and a skipped test is how that stops being true without
+        # anybody noticing.
+        run: |
+          go test -run 'TestALinkIsGoodExactlyOnce' -v ./internal/platform/emailverify/... \
+            | tee /tmp/emailverify.log
+          if grep -q -- '--- SKIP' /tmp/emailverify.log; then
+            echo "::error::email verification integration tests skipped — EMAILVERIFY_TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
 

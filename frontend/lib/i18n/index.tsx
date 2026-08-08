@@ -13,6 +13,7 @@ import { billing } from "./addons/billing";
 import { contacts } from "./addons/contacts";
 import { developer } from "./addons/developer";
 import { documents } from "./addons/documents";
+import { emailverify } from "./addons/emailverify";
 import { esign } from "./addons/esign";
 import { gov } from "./addons/gov";
 import { integrations } from "./addons/integrations";
@@ -82,6 +83,7 @@ const dictionary = {
   ...contacts,
   ...developer,
   ...documents,
+  ...emailverify,
   ...esign,
   ...gov,
   ...integrations,

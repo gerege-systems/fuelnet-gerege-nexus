@@ -103,6 +103,11 @@ from **Settings → Appearance**. See the
 - **Built-in OAuth2 / OIDC provider**
   (`/.well-known/openid-configuration`) issuing client-credentials tokens to
   third-party systems.
+- **Email verification** (`platform/emailverify`) — one shared flow for proving
+  an address: single-use links, per-tenant API client keys, hourly allowances
+  and a redirect allowlist. App modules call it in process; outside systems call
+  `POST /api/v1/verify/send` with a key. Administered under Settings → Email
+  verification.
 
 > **Note.** Mock mode for E-ID, DAN and XYP is a development convenience only.
 > With `ENVIRONMENT=production` it is disabled automatically, so a fabricated
@@ -268,6 +273,9 @@ See [`.env.example`](../.env.example) for the complete list.
 | `GET` | `/api/v1/menus` | Menus for the tenant's enabled apps |
 | `GET` | `/api/v1/store/apps` | App store listing |
 | `POST` | `/api/v1/store/apps/{slug}/install` | Install an app (admin) |
+| `POST` | `/api/v1/verify/send` | Issue an email verification link (client key or session) |
+| `GET` | `/api/v1/verify/confirm` | Honour the link in the mail — good exactly once |
+| `GET/POST/PUT/DELETE` | `/api/v1/admin/email-verification/*` | Verification overview and API clients (admin) |
 | `POST` | `/oauth2/token` | OAuth2 client credentials token |
 
 Session tokens travel either in the HttpOnly cookie or as

@@ -100,6 +100,12 @@ d'exploitation des microservices.
 - **Fournisseur OAuth2 / OIDC intégré**
   (`/.well-known/openid-configuration`) délivrant des jetons
   client-credentials à des systèmes tiers.
+- **Vérification d'e-mail** (`platform/emailverify`) — un flux partagé pour
+  prouver une adresse : liens à usage unique, clés client API par locataire,
+  quotas horaires et liste blanche de redirections. Les modules applicatifs
+  l'appellent en interne ; les systèmes tiers appellent
+  `POST /api/v1/verify/send` avec une clé. Administré dans Paramètres →
+  Vérification d'e-mail.
 
 > **Remarque.** Le mode simulé (mock) pour E-ID, DAN et XYP est une commodité de
 > développement uniquement. Avec `ENVIRONMENT=production` il est désactivé
@@ -270,6 +276,9 @@ Voir [`.env.example`](../.env.example) pour la liste complète.
 | `GET` | `/api/v1/menus` | Menus des applications activées pour le locataire |
 | `GET` | `/api/v1/store/apps` | Liste du magasin d'applications |
 | `POST` | `/api/v1/store/apps/{slug}/install` | Installer une application (admin) |
+| `POST` | `/api/v1/verify/send` | Émettre un lien de vérification d'e-mail (clé client ou session) |
+| `GET` | `/api/v1/verify/confirm` | Honorer le lien reçu par e-mail — valable une seule fois |
+| `GET/POST/PUT/DELETE` | `/api/v1/admin/email-verification/*` | Vue d'ensemble des vérifications et clients API (admin) |
 | `POST` | `/oauth2/token` | Jeton OAuth2 client credentials |
 
 Les jetons de session circulent soit dans le cookie HttpOnly, soit via
