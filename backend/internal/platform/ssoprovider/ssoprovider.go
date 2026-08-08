@@ -415,7 +415,17 @@ func (s *SSOProvider) HandleTokenEndpoint(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	scope := strings.Join(client.Scopes, " ")
+	grantedScopes := client.Scopes
+	if requested := strings.Fields(r.FormValue("scope")); len(requested) > 0 {
+		for _, scope := range requested {
+			if !slices.Contains(client.Scopes, scope) {
+				writeOAuthError(w, http.StatusBadRequest, "invalid_scope", "requested scope is not enabled for this client")
+				return
+			}
+		}
+		grantedScopes = requested
+	}
+	scope := strings.Join(grantedScopes, " ")
 	accessToken, err := s.issueToken(r.Context(), client.ClientID, client.ClientID, scope, tokenTTL)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue token")
