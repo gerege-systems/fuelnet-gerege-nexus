@@ -11,6 +11,9 @@ package developer_portal
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
@@ -87,6 +90,7 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 		RedirectURIs []string `json:"redirect_uris"`
 		Scopes       []string `json:"scopes"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
 		return
@@ -100,12 +104,26 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	if len(req.Scopes) == 0 {
 		req.Scopes = []string{"openid", "profile", "erp.read"}
 	}
+	allowedScopes := []string{"openid", "profile", "email", "erp.read", "erp.write"}
+	for _, scope := range req.Scopes {
+		if !slices.Contains(allowedScopes, scope) {
+			http.Error(w, `{"error":"unsupported OAuth scope"}`, http.StatusBadRequest)
+			return
+		}
+	}
+	for _, raw := range req.RedirectURIs {
+		u, parseErr := url.Parse(strings.TrimSpace(raw))
+		if parseErr != nil || u.Host == "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
+			http.Error(w, `{"error":"redirect URI must use HTTPS (HTTP is allowed only for localhost)"}`, http.StatusBadRequest)
+			return
+		}
+	}
 
 	client := &ssoprovider.OAuth2Client{
 		ClientName:   req.ClientName,
 		RedirectURIs: req.RedirectURIs,
 		Scopes:       req.Scopes,
-		GrantTypes:   []string{"authorization_code", "client_credentials"},
+		GrantTypes:   []string{"client_credentials"},
 	}
 
 	if err := m.ssoProvider.RegisterTenantClient(r.Context(), tenantID, client); err != nil {
