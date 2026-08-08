@@ -226,6 +226,11 @@ jobs:
             echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
             docker compose -f docker-compose.prod.yml pull
+            # A previously interrupted Compose recreate can leave a stopped
+            # container holding one of our explicit container names. Remove
+            # only the stateless application services before bringing the new
+            # revision up; PostgreSQL and its production volume stay running.
+            docker compose -f docker-compose.prod.yml rm -sf backend frontend migrate
             # `up -d` runs the migrate service to completion first, then swaps
             # the API and frontend over.
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
