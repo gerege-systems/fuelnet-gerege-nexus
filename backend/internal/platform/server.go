@@ -167,7 +167,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
 	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
 
-	ssoProvider := ssoprovider.NewSSOProvider()
+	ssoProvider := ssoprovider.NewSSOProvider(db)
 	devPortalMod := developer_portal.NewDeveloperPortalModule(ssoProvider)
 
 	s := &Server{
@@ -209,6 +209,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.esignMod.StartHousekeeping(ctx)
 	s.eidMN.StartHousekeeping(ctx)
+	// Abandoned connect attempts and the delivery log are the two integration
+	// tables that only ever grow.
+	s.integrationMgr.StartHousekeeping(ctx)
 }
 
 func (s *Server) Router() *chi.Mux {
@@ -229,6 +232,7 @@ func (s *Server) setupRoutes() {
 		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Tenant-ID"},
 		AllowCredentials: true,
 	}))
+	r.Use(security.CSRFMiddleware)
 
 	// Infrastructure
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -307,8 +311,10 @@ func (s *Server) setupRoutes() {
 			pr.With(s.requireAdmin).Post("/admin/ai/knowledge", s.handleAICreateKnowledge)
 
 			// XYP State Information Exchange System (xyp.gerege.mn)
-			pr.Post("/xyp/citizen", s.handleXYPCitizenQuery)
-			pr.Post("/xyp/company", s.handleXYPCompanyQuery)
+			// XYP responses contain authoritative citizen/company data. Merely
+			// belonging to a tenant is not enough authority to query that data.
+			pr.With(rbac.RequirePermission(s.permissions, "xyp.citizen.read")).Post("/xyp/citizen", s.handleXYPCitizenQuery)
+			pr.With(rbac.RequirePermission(s.permissions, "xyp.company.read")).Post("/xyp/company", s.handleXYPCompanyQuery)
 
 			// External Integrations Manager (admin-only: a connector target URL
 			// makes the server issue arbitrary outbound requests, and an OAuth
@@ -480,12 +486,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var isAdmin bool
 	err := s.db.QueryRow(r.Context(),
 		`SELECT u.id, u.password_hash, u.name,
-		        (u.is_admin OR EXISTS (
+		        EXISTS (
 		            SELECT 1 FROM membership_roles mr
 		            JOIN roles r ON r.id=mr.role_id
 		            WHERE mr.membership_id=m.id AND r.tenant_id=m.tenant_id
 		              AND r.code='admin' AND r.active
-		        )) AS is_admin,
+		        ) AS is_admin,
 		        m.tenant_id
 		 FROM users u
 		 JOIN memberships m ON m.user_id = u.id
@@ -510,7 +516,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token":      token,
 		"expires_at": expiresAt,
 		"user": map[string]any{
 			"id":        userID,
@@ -1348,7 +1353,7 @@ func (s *Server) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
 	audit.Record(r.Context(), tenantID, userID, "auth.eid_app_login_success", "eid", map[string]any{"verified": true, "method": "eid-app"})
-	writeJSON(w, http.StatusOK, map[string]any{"state": result.State, "token": token, "expires_at": expiresAt, "identity": result.Identity})
+	writeJSON(w, http.StatusOK, map[string]any{"state": result.State, "expires_at": expiresAt, "identity": result.Identity})
 }
 
 func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
@@ -1408,7 +1413,6 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token":      token,
 		"expires_at": expiresAt,
 		"identity":   identity,
 		"user": map[string]any{
@@ -1474,7 +1478,6 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"token":       token,
 		"expires_at":  expiresAt,
 		"dan_profile": profile,
 		"user": map[string]any{
@@ -1508,7 +1511,8 @@ func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.Record(r.Context(), tenantID, "system", "xyp.citizen_queried", "xyp", map[string]any{"reg_number": req.RegNumber})
+	claims, _ := auth.UserFromContext(r.Context())
+	audit.Record(r.Context(), tenantID, claims.UserID, "xyp.citizen_queried", "xyp", map[string]any{"reg_number": req.RegNumber})
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
@@ -1535,7 +1539,8 @@ func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.Record(r.Context(), tenantID, "system", "xyp.company_queried", "xyp", map[string]any{"company_reg": req.CompanyReg})
+	claims, _ := auth.UserFromContext(r.Context())
+	audit.Record(r.Context(), tenantID, claims.UserID, "xyp.company_queried", "xyp", map[string]any{"company_reg": req.CompanyReg})
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
@@ -1569,17 +1574,28 @@ func (r integrationSaveRequest) toSave() integration.SaveRequest {
 	}
 }
 
-// integrationError maps a manager error onto a status. A connector that belongs
-// to another tenant is reported as missing, not as forbidden: the distinction
-// would confirm the id exists.
+// integrationError maps a manager error onto a status.
+//
+// A connector that belongs to another tenant is reported as missing, not as
+// forbidden: the distinction would confirm the id exists. Everything the
+// administrator can act on carries its own sentence; everything else is a 500
+// with the detail in the log rather than in the browser, which is where a
+// driver's message about a constraint belongs.
 func integrationError(w http.ResponseWriter, err error) {
+	var invalid *integration.InvalidError
 	switch {
 	case errors.Is(err, integration.ErrNotFound):
 		writeJSONError(w, http.StatusNotFound, "integration not found")
-	case errors.Is(err, integration.ErrNoEncryptionKey):
+	case errors.Is(err, integration.ErrDuplicateName):
+		writeJSONError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, integration.ErrNoEncryptionKey),
+		errors.Is(err, integration.ErrProviderUnavailable):
 		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
+	case errors.As(err, &invalid):
+		writeJSONError(w, http.StatusBadRequest, invalid.Error())
 	default:
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		slog.Error("integration: request failed", "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "the integration could not be saved")
 	}
 }
 
@@ -1748,14 +1764,25 @@ func (s *Server) handleIntegrationOAuthCallback(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	_, conn, err := s.integrationMgr.CompleteConnect(r.Context(), query.Get("state"), query.Get("code"))
+	res, err := s.integrationMgr.CompleteConnect(r.Context(), query.Get("state"), query.Get("code"))
 	if err != nil {
 		slog.Warn("integration: oauth callback failed", "error", err)
 		http.Redirect(w, r, settingsURL+"?connected=0&reason="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
 
-	http.Redirect(w, r, settingsURL+"?connected=1&name="+url.QueryEscape(conn.Name), http.StatusFound)
+	// Binding an outside account to a tenant is the act this whole flow exists
+	// to perform, and it was the one integration action that left no record.
+	// The actor is the administrator who began the flow, carried here by the
+	// state row — there is no session on this request to read one from.
+	audit.Record(r.Context(), res.TenantID, res.UserID, "integration.connected", "integration",
+		map[string]any{
+			"id":            res.Connector.ID,
+			"provider":      res.Connector.Provider,
+			"account_label": res.Connector.AccountLabel,
+		})
+
+	http.Redirect(w, r, settingsURL+"?connected=1&name="+url.QueryEscape(res.Connector.Name), http.StatusFound)
 }
 
 // writeJSONError emits a JSON error body. Interpolating err.Error() straight

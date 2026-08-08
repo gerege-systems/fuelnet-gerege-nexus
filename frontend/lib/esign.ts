@@ -183,11 +183,8 @@ export class EsignApiError extends Error {
 }
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = typeof window !== "undefined" ? window.localStorage.getItem("session_token") : null;
   const locale = typeof window !== "undefined" ? window.localStorage.getItem("locale") || "mn" : "mn";
-  const headers: Record<string, string> = { "Accept-Language": locale, ...extra };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
+  return { "Accept-Language": locale, ...extra };
 }
 
 /**

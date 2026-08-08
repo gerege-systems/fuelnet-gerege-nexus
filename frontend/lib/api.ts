@@ -1,7 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
 async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : null;
   // Server-owned content (menu labels, app store copy) is translated by the
   // API, so every request carries the locale the user picked.
   const locale = typeof window !== "undefined" ? window.localStorage.getItem("locale") || "mn" : "mn";
@@ -10,10 +9,6 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
     "Accept-Language": locale,
     ...(options.headers as Record<string, string>),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
   const res = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers,
@@ -69,7 +64,9 @@ export interface Integration {
   provider: IntegrationProvider;
   name: string;
   target_url: string;
-  status: "ACTIVE" | "INACTIVE" | "ERROR";
+  /** The administrator's intent. A failure is reported in last_error and does
+   *  not switch the connector off. */
+  status: "ACTIVE" | "INACTIVE";
   config: Record<string, string>;
   account_label: string;
   /** True once an OAuth grant is stored. The token itself never comes back. */
@@ -95,13 +92,13 @@ export interface IntegrationInput {
 export const api = {
   // Auth
   login: (email: string, password: string) =>
-    fetcher<{ token: string; user: any }>("/auth/login", {
+    fetcher<{ expires_at: string; user: any }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
 
   loginWithEID: (code?: string, redirectURI?: string, regNumber?: string, otpCode?: string, authMethod?: string) =>
-    fetcher<{ token: string; user: any; identity: any }>("/auth/eid/login", {
+    fetcher<{ expires_at: string; user: any; identity: any }>("/auth/eid/login", {
       method: "POST",
       body: JSON.stringify({ code, redirect_uri: redirectURI, reg_number: regNumber, otp_code: otpCode, auth_method: authMethod }),
     }),
@@ -110,10 +107,10 @@ export const api = {
   startEIDByNationalID: (nationalId:string,callbackUrl = "") => fetcher<{session_id:string;device_link_url?:string;verification_code:string;expires_at:string}>("/auth/eid/start-id",{method:"POST",body:JSON.stringify({national_id:nationalId,callbackUrl})}),
   // The poll is a long poll the API holds open for up to 25s, so the caller
   // passes a signal to drop it the moment the citizen cancels or leaves.
-  pollEID: (sessionId:string,signal?:AbortSignal) => fetcher<{state:string;token?:string;identity?:any}>("/auth/eid/poll",{method:"POST",body:JSON.stringify({session_id:sessionId}),signal}),
+  pollEID: (sessionId:string,signal?:AbortSignal) => fetcher<{state:string;expires_at?:string;identity?:any}>("/auth/eid/poll",{method:"POST",body:JSON.stringify({session_id:sessionId}),signal}),
 
   loginWithDAN: (danToken?: string, regNumber?: string, otpCode?: string) =>
-    fetcher<{ token: string; user: any; dan_profile: any }>("/auth/dan/login", {
+    fetcher<{ expires_at: string; user: any; dan_profile: any }>("/auth/dan/login", {
       method: "POST",
       body: JSON.stringify({ dan_token: danToken, reg_number: regNumber, otp_code: otpCode }),
     }),
@@ -648,11 +645,7 @@ export const api = {
     >("/esign/logs"),
 
   downloadEsignDocument: async (id: string, variant: "original" | "signed"): Promise<Blob> => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : null;
-    const headers: Record<string, string> = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(`${API_BASE}/esign/documents/${id}/download?variant=${variant}`, {
-      headers,
       credentials: "include",
     });
     if (!res.ok) throw new Error("Download failed");

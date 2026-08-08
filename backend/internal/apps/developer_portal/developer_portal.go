@@ -60,19 +60,23 @@ func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddlewar
 }
 
 func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Request) {
-	_, err := tenant.FromContext(r.Context())
+	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"unauthorized tenant context"}`, http.StatusUnauthorized)
 		return
 	}
 
-	clients := m.ssoProvider.ListClients()
+	clients, err := m.ssoProvider.ListTenantClients(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, `{"error":"failed to load OAuth clients"}`, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(clients)
 }
 
 func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
-	_, err := tenant.FromContext(r.Context())
+	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
 		http.Error(w, `{"error":"unauthorized tenant context"}`, http.StatusUnauthorized)
 		return
@@ -104,7 +108,10 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 		GrantTypes:   []string{"authorization_code", "client_credentials"},
 	}
 
-	m.ssoProvider.RegisterClient(client)
+	if err := m.ssoProvider.RegisterTenantClient(r.Context(), tenantID, client); err != nil {
+		http.Error(w, `{"error":"failed to register OAuth client"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

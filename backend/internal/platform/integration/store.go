@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,13 +18,24 @@ import (
 // tenant's connector id reads as absent rather than as forbidden.
 var ErrNotFound = errors.New("integration not found")
 
+// ErrDuplicateName is the unique-name constraint, stated for the person who
+// picked the name. One tenant's connectors are told apart by name — it is what
+// an operator selects a destination by — so two called "Archive" is a way to
+// file a signed document into the wrong account.
+var ErrDuplicateName = errors.New("a connector with this name already exists")
+
 // ConnectorStatus mirrors the CHECK constraint on the table.
+//
+// It is the administrator's intent and nothing else. It used to double as the
+// last delivery outcome — a failure wrote ERROR into it — which switched the
+// connector off, because every selection predicate here requires ACTIVE. A
+// connector that is switched off is never contacted again, so the success that
+// would have cleared the flag could not happen. Health lives in LastError.
 type ConnectorStatus string
 
 const (
 	StatusActive   ConnectorStatus = "ACTIVE"
 	StatusInactive ConnectorStatus = "INACTIVE"
-	StatusError    ConnectorStatus = "ERROR"
 )
 
 // Connector is one tenant's configured integration.
@@ -142,7 +154,7 @@ func (s *store) create(ctx context.Context, tenantID string, req SaveRequest) (*
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING `+connectorColumns,
 		tenantID, req.Provider, req.Name, req.TargetURL, status, configJSON, sealed))
-	return c, err
+	return c, namedError(err)
 }
 
 func (s *store) update(ctx context.Context, tenantID, id string, req SaveRequest) (*Connector, error) {
@@ -170,7 +182,19 @@ func (s *store) update(ctx context.Context, tenantID, id string, req SaveRequest
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
-	return c, err
+	return c, namedError(err)
+}
+
+// namedError turns the unique-name constraint into something a handler can
+// answer with. Left as a raw driver error it reached the browser as a 400
+// carrying the constraint's own name — which tells an administrator nothing and
+// tells everyone else how the table is built.
+func namedError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return ErrDuplicateName
+	}
+	return err
 }
 
 func (s *store) delete(ctx context.Context, tenantID, id string) error {
@@ -242,9 +266,15 @@ func (s *store) dispatchTargets(ctx context.Context, tenantID string) ([]dispatc
 // noteError records why a connector last failed. Best effort: it runs on paths
 // that are already handling a failure, and a second failure there should not
 // replace the first.
+//
+// It deliberately leaves status alone. Writing 'ERROR' here, as this used to,
+// removed the connector from every dispatch and export query — so a subscriber
+// that answered 503 once received nothing ever again, and the retry that would
+// have proved it healthy was never attempted. A failure is reported, not acted
+// on; only an administrator switches a connector off.
 func (s *store) noteError(ctx context.Context, tenantID, id, detail string) {
 	_, _ = s.db.Exec(ctx,
-		`UPDATE integrations SET last_error = $3, status = 'ERROR', updated_at = NOW()
+		`UPDATE integrations SET last_error = $3, updated_at = NOW()
 		  WHERE id = $1 AND tenant_id = $2`, id, tenantID, detail)
 }
 
@@ -273,12 +303,13 @@ func (t tokenBundle) expired() bool {
 	return !t.ExpiresAt.IsZero() && time.Now().Add(time.Minute).After(t.ExpiresAt)
 }
 
-func (s *store) saveTokens(ctx context.Context, tenantID, id string, tok tokenBundle, accountLabel string) error {
-	raw, err := json.Marshal(tok)
-	if err != nil {
-		return err
-	}
-	sealed, err := seal(raw)
+// saveGrant records a newly authorised account.
+//
+// This is the connect: an administrator has just come back from a consent
+// screen, so the account is named, the connector is switched on and the moment
+// it happened is stamped.
+func (s *store) saveGrant(ctx context.Context, tenantID, id string, tok tokenBundle, accountLabel string) error {
+	sealed, err := sealTokens(tok)
 	if err != nil {
 		return err
 	}
@@ -296,6 +327,39 @@ func (s *store) saveTokens(ctx context.Context, tenantID, id string, tok tokenBu
 		return ErrNotFound
 	}
 	return nil
+}
+
+// refreshTokens replaces the stored bundle with a renewed one and touches
+// nothing else.
+//
+// Refreshing used to go through the same statement as connecting, which reset
+// connected_at every time an access token was renewed — so "connected since"
+// drifted forward by the hour and stopped meaning when the account was
+// authorised, which is the one question that column answers.
+func (s *store) refreshTokens(ctx context.Context, tenantID, id string, tok tokenBundle) error {
+	sealed, err := sealTokens(tok)
+	if err != nil {
+		return err
+	}
+	tag, err := s.db.Exec(ctx,
+		`UPDATE integrations SET oauth_ciphertext = $3, updated_at = NOW()
+		  WHERE id = $1 AND tenant_id = $2`,
+		id, tenantID, sealed)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func sealTokens(tok tokenBundle) ([]byte, error) {
+	raw, err := json.Marshal(tok)
+	if err != nil {
+		return nil, err
+	}
+	return seal(raw)
 }
 
 func (s *store) tokens(ctx context.Context, tenantID, id string) (tokenBundle, error) {
@@ -360,6 +424,21 @@ func (s *store) recordDelivery(ctx context.Context, tenantID, integrationID, kin
 		     (tenant_id, integration_id, kind, reference, outcome, detail, external_id, external_url)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tenantID, integrationID, kind, reference, outcome, detail, externalID, externalURL)
+}
+
+// deleteDeliveriesBefore prunes the delivery log.
+//
+// It is append-only and written to on every event, every export and every
+// meeting, so without this it is the table that grows without limit. The
+// horizon is long enough to answer for a disclosure after the fact, which is
+// what the log is for.
+func (s *store) deleteDeliveriesBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	tag, err := s.db.Exec(ctx,
+		`DELETE FROM integration_deliveries WHERE created_at < $1`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (s *store) deliveries(ctx context.Context, tenantID string, limit int) ([]Delivery, error) {

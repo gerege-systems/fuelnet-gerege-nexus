@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
@@ -34,9 +35,16 @@ func exportFilename(title, fallbackID string) string {
 		name = fallbackID
 	}
 	// Leave room for the extension inside the 255-byte limit every one of these
-	// filesystems enforces.
+	// filesystems enforces. The cut is on a character boundary: a Mongolian
+	// title is two bytes per letter, so name[:200] would routinely end halfway
+	// through one and leave invalid UTF-8 in a filename that then travels
+	// through JSON to Drive and through a header to Dropbox.
 	if len(name) > 200 {
-		name = strings.TrimSpace(name[:200])
+		cut := 200
+		for cut > 0 && !utf8.RuneStart(name[cut]) {
+			cut--
+		}
+		name = strings.TrimSpace(name[:cut])
 	}
 	if !strings.EqualFold(filepath.Ext(name), ".pdf") {
 		name += ".pdf"
@@ -93,8 +101,13 @@ func (m *Module) exportDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		IntegrationID string `json:"integration_id"`
 	}
 	// A body is optional: without one the document goes to every automatic
-	// destination, which is what the retry case wants.
-	_ = decodeLargeJSON(r, &req)
+	// destination, which is what the retry case wants. A body that is present
+	// but unreadable is not treated as absent — that would widen a request for
+	// one destination into a copy to all of them.
+	if err := decodeOptionalJSON(r, &req); err != nil {
+		writeDomainError(w, err)
+		return
+	}
 
 	pdf, filename, err := m.store.documentPDF(r.Context(), tenantID, id, "signed")
 	if err != nil {

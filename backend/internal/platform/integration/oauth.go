@@ -12,7 +12,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -97,54 +99,67 @@ func (m *Manager) BeginConnect(ctx context.Context, tenantID, userID, id string)
 	return spec.AuthURL + "?" + q.Encode(), nil
 }
 
-// CompleteConnect redeems an authorization code and stores the grant.
+// ConnectResult is what a completed grant leaves the caller to act on.
 //
-// It returns the tenant the connector belongs to, so the callback — which
-// arrives from the provider with no session of its own — knows where to send
-// the browser afterwards.
-func (m *Manager) CompleteConnect(ctx context.Context, state, code string) (tenantID string, conn *Connector, err error) {
+// The callback arrives from the provider with no session of its own, so
+// everything the platform knows about who this is comes out of the redeemed
+// state row: the tenant it belongs to, and the administrator who started it.
+// UserID is the reason the row records one — binding an outside account to a
+// tenant is exactly the kind of act the audit log exists for, and without this
+// it was the one integration action that went unrecorded.
+type ConnectResult struct {
+	TenantID  string
+	UserID    string
+	Connector *Connector
+}
+
+// CompleteConnect redeems an authorization code and stores the grant.
+func (m *Manager) CompleteConnect(ctx context.Context, state, code string) (*ConnectResult, error) {
 	if state == "" || code == "" {
-		return "", nil, errors.New("the provider did not return a state and code")
+		return nil, errors.New("the provider did not return a state and code")
 	}
 
 	// Redeem the state: the DELETE ... RETURNING makes it single-use even if
 	// two callbacks arrive at once, which is what makes a leaked state useless
 	// after the first attempt.
-	var integrationID, userID string
-	err = m.store.db.QueryRow(ctx,
+	var tenantID, integrationID, userID string
+	err := m.store.db.QueryRow(ctx,
 		`DELETE FROM integration_oauth_states
 		  WHERE state = $1 AND expires_at > NOW()
 		 RETURNING tenant_id::text, integration_id::text, user_id::text`, state).
 		Scan(&tenantID, &integrationID, &userID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil, errors.New("this authorization link has expired or was already used")
+		return nil, errors.New("this authorization link has expired or was already used")
 	}
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	conn, err = m.store.get(ctx, tenantID, integrationID)
+	conn, err := m.store.get(ctx, tenantID, integrationID)
 	if err != nil {
-		return tenantID, nil, err
+		return nil, err
 	}
 	spec, err := SpecFor(conn.Provider)
 	if err != nil {
-		return tenantID, nil, err
+		return nil, err
 	}
 
 	tok, err := m.exchangeCode(ctx, spec, code)
 	if err != nil {
 		m.store.noteError(ctx, tenantID, conn.ID, err.Error())
-		return tenantID, conn, err
+		return nil, err
 	}
 
 	label := m.accountLabel(ctx, conn.Provider, tok.AccessToken)
-	if err := m.store.saveTokens(ctx, tenantID, conn.ID, tok, label); err != nil {
-		return tenantID, conn, err
+	if err := m.store.saveGrant(ctx, tenantID, conn.ID, tok, label); err != nil {
+		return nil, err
 	}
 
 	conn, err = m.store.get(ctx, tenantID, integrationID)
-	return tenantID, conn, err
+	if err != nil {
+		return nil, err
+	}
+	return &ConnectResult{TenantID: tenantID, UserID: userID, Connector: conn}, nil
 }
 
 // exchangeCode swaps an authorization code for tokens.
@@ -256,18 +271,74 @@ func (m *Manager) accessToken(ctx context.Context, tenantID string, conn *Connec
 	if !tok.expired() {
 		return tok.AccessToken, nil
 	}
+	return m.refreshAccess(ctx, tenantID, conn, spec, tok.AccessToken)
+}
+
+// refreshAccess exchanges the refresh token for a new access token, once.
+//
+// The lock is per connector, and the stored bundle is re-read under it. Two
+// exports starting together both saw the same expired token and both refreshed
+// it, which is two round trips for one renewal and a last-write-wins race over
+// the row — harmless with a provider that reuses refresh tokens and a lost
+// grant with one that rotates them. Whoever gets the lock second finds the
+// token already replaced and uses it.
+//
+// stale is the token that turned out to be unusable. Comparing against it is
+// what makes this safe to call both for an expiry the caller predicted and for
+// a rejection the provider announced.
+func (m *Manager) refreshAccess(ctx context.Context, tenantID string, conn *Connector,
+	spec Spec, stale string) (string, error) {
+
+	lock, _ := m.refreshLocks.LoadOrStore(conn.ID, &sync.Mutex{})
+	mu := lock.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
+	tok, err := m.store.tokens(ctx, tenantID, conn.ID)
+	if err != nil {
+		return "", err
+	}
+	if tok.AccessToken != stale && tok.AccessToken != "" {
+		// Someone else refreshed while this call waited for the lock.
+		return tok.AccessToken, nil
+	}
 	if tok.RefreshToken == "" {
 		return "", fmt.Errorf(
 			"the %s grant has expired and carries no refresh token — reconnect the account", conn.Provider)
 	}
+
 	refreshed, err := m.refresh(ctx, spec, tok.RefreshToken)
 	if err != nil {
 		return "", err
 	}
-	if err := m.store.saveTokens(ctx, tenantID, conn.ID, refreshed, ""); err != nil {
+	if err := m.store.refreshTokens(ctx, tenantID, conn.ID, refreshed); err != nil {
 		return "", err
 	}
 	return refreshed.AccessToken, nil
+}
+
+// tokenAfterRejection answers what to do when a provider refuses the token.
+//
+// A stored token can stop working before it is due to: the provider returned no
+// expires_in and this code therefore never treated it as expiring, an
+// administrator revoked and re-granted, or the clock disagreed. Without this
+// the connector stayed broken until somebody reconnected it by hand, because
+// nothing in the flow ever asked whether the token was the problem.
+//
+// It refreshes at most once — refresh returning a token the provider also
+// rejects is a grant that is genuinely gone, and retrying that is a loop.
+func (m *Manager) tokenAfterRejection(ctx context.Context, tenantID string, conn *Connector,
+	spec Spec, used string, err error) (string, bool) {
+
+	var refusal *providerError
+	if !errors.As(err, &refusal) || refusal.Status != http.StatusUnauthorized {
+		return "", false
+	}
+	fresh, refreshErr := m.refreshAccess(ctx, tenantID, conn, spec, used)
+	if refreshErr != nil || fresh == used {
+		return "", false
+	}
+	return fresh, true
 }
 
 // accountLabel asks the provider whose account was just connected. It is
@@ -342,9 +413,25 @@ func (m *Manager) SweepOAuthStates(ctx context.Context) (int64, error) {
 	return tag.RowsAffected(), nil
 }
 
+// truncate cuts a string to at most n bytes without splitting a character.
+//
+// s[:n] on its own produces invalid UTF-8 whenever the cut lands inside a
+// multi-byte rune, and these strings are written to the database: Postgres
+// refuses an invalid byte sequence outright. A provider error message with a
+// Cyrillic word near the limit therefore failed the UPDATE that records the
+// failure — and noteError deliberately ignores its own errors, so the failure
+// disappeared instead of being reported. The same cut names the account a
+// document is about to be filed in.
 func truncate(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
 	if len(s) <= n {
 		return s
+	}
+	// Back up to the start of the rune the cut landed in the middle of.
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
 	return s[:n]
 }

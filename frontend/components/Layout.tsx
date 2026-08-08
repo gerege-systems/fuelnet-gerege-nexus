@@ -85,7 +85,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   // resetAccess before navigating: /login is a client-side route, so the cached
   // identity would otherwise still be the signed-out user's when the next
   // person signs in at this tab.
-  async function logout(){try{await api.logout()}catch{}localStorage.removeItem("session_token");resetAccess();router.push("/login")}
+  async function logout(){try{await api.logout()}catch{}resetAccess();router.push("/login")}
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},

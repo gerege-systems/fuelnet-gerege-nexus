@@ -234,7 +234,6 @@ export class GovApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? window.localStorage.getItem("session_token") : null;
   const locale = typeof window !== "undefined" ? window.localStorage.getItem("locale") || "mn" : "mn";
 
   const headers: Record<string, string> = {
@@ -242,8 +241,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     "Accept-Language": locale,
     ...(init.headers as Record<string, string>),
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" });
   if (!res.ok) {
     let message = "Request failed";
