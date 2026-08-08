@@ -3,21 +3,25 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package emailverify proves that somebody controls an email address, for
- * every app module in the binary and for callers outside it.
+ * Package emailverify proves that somebody controls an email address, for every
+ * app module in the binary, through the hosted verification service.
  */
 
 package emailverify
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"net/mail"
 	"net/url"
 	"os"
@@ -25,69 +29,61 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/mailer"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Why this is platform furniture rather than an app module.
+// Why this is platform furniture rather than an app module, and why it sends
+// nothing itself.
 //
 // Contacts wants an address proven before it trusts it, Documents wants it
-// before a signing link leaves for an outsider, Gov Services wants it before it
-// answers a citizen at one, and a platform running next to Gerege Nexus wants
-// the same thing over HTTP for people who never sign in here at all. Every one
-// of those is the same three steps — issue a single-use link, mail it, honour
-// it once — and every copy of those three steps is another place to get token
-// reuse or an open redirect wrong.
+// before a signing link leaves for an outsider, and Gov Services wants it
+// before it answers a citizen at one. That is one capability, so it lives in
+// the platform and every module reaches it the same way.
 //
-// So there is one implementation, in-process for modules (Service.Send) and
-// over HTTP for everyone else (POST /api/v1/verify/send with a client key),
-// writing one audit trail an administrator can actually read.
+// The mail itself is somebody else's problem on purpose. Delivering mail that
+// arrives is not a matter of holding an SMTP password: it is SPF, DKIM, DMARC,
+// reverse DNS and a sending reputation, maintained continuously. enigma.mn runs
+// that, so this platform holds no mailbox credential, composes no message and
+// owns no sender address. It asks for a link to be sent and finds out when it
+// was followed.
+//
+// What stays here is what only this platform can know: which module asked, for
+// whom, why, and whether the person came back.
 
 const (
-	// KeyPrefix marks a verification client key on sight, so a key pasted into
-	// the wrong field is recognisable — and so the send endpoint can tell a
-	// client key from a session bearer token without trying both.
-	KeyPrefix = "evk_"
+	// DefaultProviderURL is the hosted service. Overridable so a deployment can
+	// point at its own instance.
+	DefaultProviderURL = "https://enigma.mn/api/verify"
 
-	// keyPrefixLength is how much of the key is kept in the clear. It covers
-	// "evk_" plus eight characters: enough to tell two keys apart on screen,
-	// far short of enough to use one.
-	keyPrefixLength = 12
+	// AdminURL is where the keys are administered — deliberately not here.
+	// A key belongs to the sending service, not to this database.
+	AdminURL = "https://admin.enigma.mn"
 
-	// DefaultTTL is how long a link stays good. Long enough for somebody who
-	// reads their mail the next morning, short enough that a link forwarded
-	// into a mailing-list archive stops working.
-	DefaultTTL = 24 * time.Hour
+	// LinkTTL mirrors the hosted service's own 24-hour expiry. It is not
+	// authoritative — the service decides — but a local row has to stop being
+	// reported as outstanding at some point, and this is when.
+	LinkTTL = 24 * time.Hour
 
-	// MaxTTL bounds what a caller may ask for.
-	MaxTTL = 7 * 24 * time.Hour
-
-	// DefaultHourlyLimit is what a new client gets until an administrator says
-	// otherwise.
-	DefaultHourlyLimit = 60
-
-	// TenantHourlyLimit caps sends that carry no client key — app modules and
-	// the portal's own test send. Nothing here is metered per caller, so this
-	// is what stands between a loop bug and a tenant's domain being classified
-	// as a mail source worth blocking.
+	// TenantHourlyLimit caps what one tenant can ask for in an hour.
+	//
+	// The whole platform now sends under one key, so a loop in one module
+	// spends an allowance every other module shares. This is the local guard in
+	// front of that: it is not the provider's limit, it is ours.
 	TenantHourlyLimit = 500
 
-	// ResendInterval is the pause enforced per recipient. Verification mail is
-	// requested by whoever holds the key, addressed to somebody who did not ask
-	// for it, which is the shape of a mail-bombing tool.
+	// ResendInterval is the pause enforced per recipient. The provider allows
+	// five sends an hour to one address; asking again a second later is a
+	// mail-bombing tool either way, so the pause is here rather than only
+	// there — a 429 we can avoid provoking is one we do not have to explain.
 	ResendInterval = 60 * time.Second
 
 	// Retention is how long the record of a verification is kept. It is an
 	// audit trail of who was asked to prove what, not a mailing list.
 	Retention = 90 * 24 * time.Hour
-)
 
-// ClientStatus mirrors the CHECK constraint on email_verification_clients.
-type ClientStatus string
-
-const (
-	ClientActive   ClientStatus = "ACTIVE"
-	ClientDisabled ClientStatus = "DISABLED"
+	// upstreamTimeout bounds the call to the provider. It is a request a person
+	// is waiting on, and a hung socket must not become a hung page.
+	upstreamTimeout = 10 * time.Second
 )
 
 // Status mirrors the CHECK constraint on email_verifications.
@@ -100,32 +96,32 @@ const (
 )
 
 var (
-	// ErrClientNotFound covers both "no such client" and "belongs to another
-	// tenant". Every lookup is tenant-scoped, so a neighbour's id reads as
-	// absent rather than as forbidden.
-	ErrClientNotFound = errors.New("verification client not found")
+	// ErrNotConfigured means no key was supplied, so nothing can be sent. It is
+	// an operator's problem, not the caller's, and is reported as such.
+	ErrNotConfigured = errors.New("EMAIL_VERIFY_API_KEY is not set, so verification mail cannot be requested")
 
-	// ErrDuplicateName is the unique-name constraint, said for the person who
-	// picked the name. The name is what a key is revoked by during an incident.
-	ErrDuplicateName = errors.New("a verification client with this name already exists")
+	// ErrOriginNotHTTPS is the other way this is misconfigured: the provider
+	// refuses a plain-HTTP return address, so a deployment whose PUBLIC_ORIGIN
+	// is HTTP cannot use the service at all. Saying so beats a bare 400 from
+	// somebody else's API.
+	ErrOriginNotHTTPS = errors.New("the verification service accepts only an HTTPS return address, so PUBLIC_ORIGIN must be HTTPS")
 
-	// ErrUnauthorizedKey is returned for an unknown, malformed or disabled key.
-	// The three are one answer on purpose: telling a caller their key exists
-	// but is switched off confirms the key.
-	ErrUnauthorizedKey = errors.New("unknown or disabled verification client key")
+	// ErrUnauthorizedKey is the provider refusing our key: wrong, revoked, or
+	// disabled at admin.enigma.mn. Nothing a caller did.
+	ErrUnauthorizedKey = errors.New("the verification service rejected this platform's API key")
 
-	// ErrLinkSpent covers a link that was already followed, has expired, or
-	// never existed. A caller holding a token learns only that it is no longer
-	// good for anything.
+	// ErrUpstream is a failure at the provider — it could not send, or it could
+	// not be reached. Retryable, unlike everything else here.
+	ErrUpstream = errors.New("the verification service could not send the message")
+
+	// ErrLinkSpent covers a return that was already honoured, has expired, or
+	// never existed. One answer for all three, so somebody holding a stale link
+	// learns only that it is no longer good.
 	ErrLinkSpent = errors.New("this verification link is no longer valid")
-
-	// ErrMailUnavailable means the message could not even be accepted for
-	// delivery, so no link was issued. It is not a silent drop.
-	ErrMailUnavailable = errors.New("verification mail could not be queued for delivery")
 )
 
 // InvalidError is a caller mistake worth quoting back: a malformed address, a
-// redirect that is not allowed. It maps to 400.
+// destination that is not allowed. It maps to 400.
 type InvalidError struct{ msg string }
 
 func (e *InvalidError) Error() string { return e.msg }
@@ -143,32 +139,16 @@ type RateLimitedError struct {
 
 func (e *RateLimitedError) Error() string { return e.msg }
 
-// Client is one issued key. The key itself exists exactly once, in the response
-// that creates it; Secret is empty on every later read because the database
-// holds only its hash.
-type Client struct {
-	ID                   string       `json:"id"`
-	TenantID             string       `json:"tenant_id"`
-	Name                 string       `json:"name"`
-	KeyPrefix            string       `json:"key_prefix"`
-	Status               ClientStatus `json:"status"`
-	HourlyLimit          int          `json:"hourly_limit"`
-	AllowedRedirectHosts []string     `json:"allowed_redirect_hosts"`
-	LastUsedAt           *time.Time   `json:"last_used_at,omitempty"`
-	CreatedAt            time.Time    `json:"created_at"`
-	UpdatedAt            time.Time    `json:"updated_at"`
-
-	// Secret is the full key, returned once at creation and never again.
-	Secret string `json:"secret,omitempty"`
-}
-
-// Verification is one issued link. The token is not a field: the row holds a
-// hash of it, so reading this table does not let anyone complete somebody
-// else's verification.
+// Verification is one link this platform asked for.
+//
+// It holds no token: the token is the provider's, and lives only in the mail.
+// What is stored here is a hash of the single-use reference *we* put in the
+// return address, which is how the click that comes back is matched to the
+// request that caused it.
 type Verification struct {
-	ID          string     `json:"id"`
-	TenantID    string     `json:"tenant_id"`
-	ClientID    string     `json:"client_id,omitempty"`
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	// Source names who asked: an app module id, or "portal".
 	Source      string     `json:"source"`
 	Purpose     string     `json:"purpose,omitempty"`
 	Email       string     `json:"email"`
@@ -183,28 +163,20 @@ type Verification struct {
 type Request struct {
 	Email string
 
-	// RedirectURL is where the recipient lands after following the link. Empty
-	// means the platform answers the click itself.
+	// RedirectURL is where the person is sent once they have come back to this
+	// platform and the verification has been recorded. Empty means this
+	// platform answers the click with a page of its own.
 	RedirectURL string
 
 	// Purpose is the caller's own label — "signup", "contact_invite" — carried
-	// through to the audit trail and back to the caller. It is not interpreted.
+	// into the audit trail and back to the caller. It is not interpreted.
 	Purpose string
 
-	// Source names who asked: an app module id for an in-process call, the
-	// client name for a keyed one, "portal" for the settings screen. It is kept
-	// on the row so history survives the client being deleted.
+	// Source names who asked. Empty is recorded as "platform".
 	Source string
-
-	// Locale picks the language of the mail. Empty falls back to Mongolian, the
-	// platform's source language.
-	Locale string
 
 	// ClientIP is recorded for the audit trail. Empty is fine.
 	ClientIP string
-
-	// TTL overrides DefaultTTL, bounded by MaxTTL.
-	TTL time.Duration
 }
 
 // Stats is the Overview screen's header.
@@ -221,42 +193,61 @@ type Stats struct {
 type Overview struct {
 	Stats  Stats          `json:"stats"`
 	Recent []Verification `json:"recent"`
-	// SendURL and ConfirmURL are what a developer has to paste into their own
-	// integration, derived here from PUBLIC_ORIGIN so the screen never has to
-	// guess the deployment's public address.
-	SendURL    string `json:"send_url"`
-	ConfirmURL string `json:"confirm_url"`
-	// MailConfigured is false when SMTP was never set up, in which case mail is
-	// logged instead of sent. Saying so beats letting an administrator conclude
-	// the feature is broken.
-	MailConfigured bool `json:"mail_configured"`
+
+	// Configured is whether a key is present at all. The key itself is never
+	// echoed — not a prefix of it, not a length: nothing on this screen needs
+	// it, and a browser is not where it belongs.
+	Configured bool `json:"configured"`
+	// Reachable is the provider's own health check, and Health is what it said
+	// when it was not. An administrator seeing no verifications should be able
+	// to tell "nobody asked" from "the service is down".
+	Reachable bool   `json:"reachable"`
+	Health    string `json:"health,omitempty"`
+
+	ProviderURL string `json:"provider_url"`
+	AdminURL    string `json:"admin_url"`
+	// ReturnURL is what the provider sends people back to. Useful to an
+	// administrator diagnosing a deployment whose PUBLIC_ORIGIN is wrong.
+	ReturnURL string `json:"return_url"`
 }
 
-// Mailer is the outbound side. mailer.AsyncOTPMailer satisfies it: the send is
-// queued rather than performed inline, because an SMTP conversation is slower
-// than any caller should have to wait on a request that has already succeeded.
-type Mailer interface {
-	EnqueueMessage(msg mailer.EmailMessage) bool
-}
-
-// Service is the whole capability. One instance is built by the platform server
-// and handed to whatever needs it — handlers, and app modules by constructor.
+// Service is the whole capability: a client of the hosted service plus this
+// platform's own record of what it asked for.
 type Service struct {
-	store  *store
-	mailer Mailer
+	store *store
+	http  *http.Client
 }
 
-// NewService builds the service over a database pool and an outbound mailer.
-func NewService(db *pgxpool.Pool, m Mailer) *Service {
-	return &Service{store: &store{db: db}, mailer: m}
+// NewService builds the service over a database pool.
+func NewService(db *pgxpool.Pool) *Service {
+	return &Service{
+		store: &store{db: db},
+		http:  &http.Client{Timeout: upstreamTimeout},
+	}
 }
+
+// ProviderURL is the hosted service's base address.
+func ProviderURL() string {
+	if custom := strings.TrimRight(strings.TrimSpace(os.Getenv("EMAIL_VERIFY_BASE_URL")), "/"); custom != "" {
+		return custom
+	}
+	return DefaultProviderURL
+}
+
+// apiKey is the platform's credential with the provider. It is read at call
+// time rather than captured at construction so that rotating it is a restart of
+// nothing, and it is never returned to any caller.
+func apiKey() string { return strings.TrimSpace(os.Getenv("EMAIL_VERIFY_API_KEY")) }
+
+// Configured reports whether this deployment can ask for mail at all.
+func Configured() bool { return apiKey() != "" }
 
 // PublicOrigin is the address a recipient's browser can reach.
 //
-// It is read from PUBLIC_ORIGIN rather than from the incoming request for the
-// same reason the OAuth redirect URI is: the link goes in an email that outlives
-// the request, and taking the host from a request lets a forged Host header
-// point every verification link at somebody else's server.
+// It is read from PUBLIC_ORIGIN rather than from the incoming request: the
+// return address is handed to somebody else's service and outlives the request,
+// and taking the host from a request would let a forged Host header point every
+// verification return at another server.
 func PublicOrigin() string {
 	origin := strings.TrimRight(strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")), "/")
 	if origin == "" {
@@ -265,15 +256,14 @@ func PublicOrigin() string {
 	return origin
 }
 
-// ConfirmURL is the endpoint the mailed link points at.
-func ConfirmURL() string { return PublicOrigin() + "/api/v1/verify/confirm" }
+// ReturnURL is where the provider sends people once they have confirmed.
+func ReturnURL() string { return PublicOrigin() + "/api/v1/verify/landed" }
 
-// SendURL is the endpoint an outside caller posts to.
-func SendURL() string { return PublicOrigin() + "/api/v1/verify/send" }
-
-// Send issues a link and queues the mail. This is the entry point for app
-// modules: a module takes *Service in its constructor, the way gov_services
-// takes the integration manager, and calls this with its own app id as Source.
+// Send asks the provider for a link and records what was asked.
+//
+// This is the entry point for app modules: a module takes *Service in its
+// constructor, the way gov_services takes the integration manager, and calls
+// this with its own app id as the source.
 //
 //	v, err := m.emailVerify.Send(ctx, tenantID, emailverify.Request{
 //	    Email:   contact.Email,
@@ -281,53 +271,31 @@ func SendURL() string { return PublicOrigin() + "/api/v1/verify/send" }
 //	    Purpose: "contact_invite",
 //	})
 func (s *Service) Send(ctx context.Context, tenantID string, req Request) (*Verification, error) {
-	return s.send(ctx, tenantID, nil, req)
-}
-
-// SendForClient is the keyed path. The client's own hourly allowance and
-// redirect allowlist apply, and the send is attributed to it.
-func (s *Service) SendForClient(ctx context.Context, client *Client, req Request) (*Verification, error) {
-	if client == nil {
-		return nil, ErrUnauthorizedKey
-	}
-	if req.Source == "" {
-		req.Source = client.Name
-	}
-	return s.send(ctx, client.TenantID, client, req)
-}
-
-func (s *Service) send(ctx context.Context, tenantID string, client *Client, req Request) (*Verification, error) {
 	if strings.TrimSpace(tenantID) == "" {
 		return nil, invalid("a tenant is required")
+	}
+	if !Configured() {
+		return nil, ErrNotConfigured
+	}
+	// The provider refuses a plain-HTTP return address, and the failure would
+	// otherwise arrive as a 400 about a URL the caller never wrote.
+	if !strings.HasPrefix(PublicOrigin(), "https://") && config.IsProduction() {
+		return nil, ErrOriginNotHTTPS
 	}
 
 	address, err := NormalizeEmail(req.Email)
 	if err != nil {
 		return nil, err
 	}
-
-	var allowedHosts []string
-	if client != nil {
-		allowedHosts = client.AllowedRedirectHosts
-	}
-	redirect, err := ValidateRedirect(req.RedirectURL, allowedHosts)
+	destination, err := ValidateRedirect(req.RedirectURL)
 	if err != nil {
 		return nil, err
 	}
-
-	ttl := req.TTL
-	if ttl <= 0 {
-		ttl = DefaultTTL
-	}
-	if ttl > MaxTTL {
-		return nil, invalid("a verification link may not live longer than %d hours", int(MaxTTL.Hours()))
-	}
-
-	if err := s.checkQuota(ctx, tenantID, client, address); err != nil {
+	if err := s.checkQuota(ctx, tenantID, address); err != nil {
 		return nil, err
 	}
 
-	token, err := randomToken()
+	ref, err := randomRef()
 	if err != nil {
 		return nil, err
 	}
@@ -337,74 +305,181 @@ func (s *Service) send(ctx context.Context, tenantID string, client *Client, req
 		source = "platform"
 	}
 
+	// The row is written before the provider is called, because the return
+	// address has to name it. A request the provider refuses is withdrawn
+	// below rather than left behind as a verification nobody was asked for.
 	verification, err := s.store.insertVerification(ctx, newVerification{
 		TenantID:    tenantID,
-		Client:      client,
 		Source:      truncate(source, 128),
 		Purpose:     truncate(strings.TrimSpace(req.Purpose), 64),
 		Email:       address,
-		TokenHash:   hashSecret(token),
-		RedirectURL: redirect,
+		RefHash:     hashSecret(ref),
+		RedirectURL: destination,
 		RequestedIP: truncate(req.ClientIP, 64),
-		ExpiresAt:   time.Now().Add(ttl),
+		ExpiresAt:   time.Now().Add(LinkTTL),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	message := composeMessage(address, ConfirmURL()+"?token="+url.QueryEscape(token), verification.ExpiresAt, req.Locale)
-	if !s.mailer.EnqueueMessage(message) {
-		// The row is the link. If the mail was never accepted for delivery,
-		// leaving the row behind would show a verification on the Overview
-		// screen that nobody was ever asked to complete.
+	expiresAt, err := s.requestSend(ctx, address, ReturnURL()+"?ref="+url.QueryEscape(ref))
+	if err != nil {
 		if delErr := s.store.deleteVerification(ctx, verification.ID); delErr != nil {
-			slog.Error("emailverify: could not withdraw an unsent verification",
+			slog.Error("emailverify: could not withdraw a request the provider refused",
 				"id", verification.ID, "error", delErr)
 		}
-		return nil, ErrMailUnavailable
+		return nil, err
 	}
-
-	if client != nil {
-		if err := s.store.touchClient(ctx, client.ID); err != nil {
-			// Losing "last used at" is not worth failing a send that happened.
-			slog.Warn("emailverify: could not record client usage", "client_id", client.ID, "error", err)
+	if !expiresAt.IsZero() {
+		// The provider owns the deadline; ours was a placeholder.
+		if updated, updErr := s.store.setExpiry(ctx, verification.ID, expiresAt); updErr == nil {
+			verification = updated
+		} else {
+			slog.Warn("emailverify: could not record the provider's expiry",
+				"id", verification.ID, "error", updErr)
 		}
 	}
-
 	return verification, nil
 }
 
-// checkQuota applies the two limits that stand between this endpoint and a
-// mail-bombing tool: how much one caller may send in an hour, and how often one
-// recipient may be written to at all.
-func (s *Service) checkQuota(ctx context.Context, tenantID string, client *Client, address string) error {
+// sendResponse is the provider's answer. Only expires_at is of any use to us —
+// ok is implied by the status code, and the address is the one we sent.
+type sendResponse struct {
+	OK        bool   `json:"ok"`
+	Email     string `json:"email"`
+	ExpiresAt string `json:"expires_at"`
+	Error     string `json:"error"`
+}
+
+// requestSend performs the call and turns the provider's status codes into this
+// package's errors. The mapping is the contract: 400 and 401 are final, 429 and
+// 5xx are worth retrying, and anything unrecognised is treated as upstream
+// rather than as success.
+func (s *Service) requestSend(ctx context.Context, address, returnURL string) (time.Time, error) {
+	payload, err := json.Marshal(map[string]string{
+		"email":        address,
+		"redirect_url": returnURL,
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		ProviderURL()+"/send", bytes.NewReader(payload))
+	if err != nil {
+		return time.Time{}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey())
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	res, err := s.http.Do(httpReq)
+	if err != nil {
+		slog.Error("emailverify: the verification service could not be reached", "error", err)
+		return time.Time{}, ErrUpstream
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	// Bounded: the body is a small JSON object, and an unbounded read here
+	// would make somebody else's server able to exhaust this one's memory.
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 8<<10))
+	var answer sendResponse
+	_ = json.Unmarshal(body, &answer)
+
+	switch res.StatusCode {
+	case http.StatusOK, http.StatusCreated, http.StatusAccepted:
+		if answer.ExpiresAt == "" {
+			return time.Time{}, nil
+		}
+		expiresAt, parseErr := time.Parse(time.RFC3339, answer.ExpiresAt)
+		if parseErr != nil {
+			// Not worth failing a send that happened; the local placeholder
+			// deadline stands.
+			slog.Warn("emailverify: the service returned an expiry we could not read",
+				"expires_at", answer.ExpiresAt)
+			return time.Time{}, nil
+		}
+		return expiresAt, nil
+
+	case http.StatusBadRequest:
+		// The caller's input, in the provider's words where it gave any.
+		switch answer.Error {
+		case "invalid_email":
+			return time.Time{}, invalid("the email address is not valid")
+		case "redirect_url_must_be_https":
+			// The return address is ours, not the caller's, so this is a
+			// deployment fault dressed as a caller fault.
+			return time.Time{}, ErrOriginNotHTTPS
+		default:
+			return time.Time{}, invalid("the verification service refused the request: %s", firstLine(answer.Error, body))
+		}
+
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return time.Time{}, ErrUnauthorizedKey
+
+	case http.StatusTooManyRequests:
+		return time.Time{}, &RateLimitedError{
+			RetryAfter: retryAfterHeader(res, time.Hour),
+			msg:        "the verification service is rate limiting this address",
+		}
+
+	default:
+		slog.Error("emailverify: the verification service failed",
+			"status", res.StatusCode, "body", firstLine(answer.Error, body))
+		return time.Time{}, ErrUpstream
+	}
+}
+
+// Confirm honours a return from the provider, exactly once.
+//
+// The reference is single-use *here* even though the token was single-use
+// there: the return address travels in the mail and then through a browser's
+// history, so replaying it must not be able to re-assert a verification. The
+// claim is one conditional UPDATE, so two clicks arriving together cannot both
+// win.
+//
+// What this proves is bounded, and worth stating plainly: the provider only
+// redirects after it has honoured its own token, so a return carrying a live
+// reference means the address was confirmed. It is not a server-to-server
+// signal — there is no webhook yet — so it is trusted exactly as far as the
+// single-use reference allows and no further.
+func (s *Service) Confirm(ctx context.Context, ref string) (*Verification, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, ErrLinkSpent
+	}
+	return s.store.claimVerification(ctx, hashSecret(ref))
+}
+
+// Health asks the provider whether it is up. Unauthenticated by its own design.
+func (s *Service) Health(ctx context.Context) error {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, ProviderURL()+"/health", nil)
+	if err != nil {
+		return err
+	}
+	res, err := s.http.Do(httpReq)
+	if err != nil {
+		return ErrUpstream
+	}
+	defer func() { _ = res.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4<<10))
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: health check answered %d", ErrUpstream, res.StatusCode)
+	}
+	return nil
+}
+
+// checkQuota is the local guard in front of a shared key.
+func (s *Service) checkQuota(ctx context.Context, tenantID, address string) error {
 	since := time.Now().Add(-time.Hour)
 
-	if client != nil {
-		limit := client.HourlyLimit
-		if limit <= 0 {
-			limit = DefaultHourlyLimit
-		}
-		used, oldest, err := s.store.countClientSends(ctx, client.ID, since)
-		if err != nil {
-			return err
-		}
-		if used >= limit {
-			return &RateLimitedError{
-				RetryAfter: retryAfter(oldest),
-				msg:        fmt.Sprintf("this client may send %d verifications per hour", limit),
-			}
-		}
-	} else {
-		used, oldest, err := s.store.countTenantSends(ctx, tenantID, since)
-		if err != nil {
-			return err
-		}
-		if used >= TenantHourlyLimit {
-			return &RateLimitedError{
-				RetryAfter: retryAfter(oldest),
-				msg:        fmt.Sprintf("this tenant may send %d verifications per hour", TenantHourlyLimit),
-			}
+	used, oldest, err := s.store.countTenantSends(ctx, tenantID, since)
+	if err != nil {
+		return err
+	}
+	if used >= TenantHourlyLimit {
+		return &RateLimitedError{
+			RetryAfter: retryAfter(oldest),
+			msg:        fmt.Sprintf("this tenant may request %d verifications per hour", TenantHourlyLimit),
 		}
 	}
 
@@ -416,8 +491,7 @@ func (s *Service) checkQuota(ctx context.Context, tenantID string, client *Clien
 		if wait := ResendInterval - time.Since(*last); wait > 0 {
 			// The timestamp came from the database's clock and the comparison
 			// is against this process's. A database a second ahead would
-			// otherwise produce a wait longer than the interval itself, which
-			// is a number we would then be asking a caller to obey.
+			// otherwise produce a wait longer than the interval itself.
 			if wait > ResendInterval {
 				wait = ResendInterval
 			}
@@ -428,143 +502,6 @@ func (s *Service) checkQuota(ctx context.Context, tenantID string, client *Clien
 		}
 	}
 	return nil
-}
-
-// retryAfter turns the oldest send inside the window into how long until it
-// leaves the window and frees an allowance.
-func retryAfter(oldest *time.Time) time.Duration {
-	if oldest == nil {
-		return time.Minute
-	}
-	wait := time.Until(oldest.Add(time.Hour))
-	if wait < time.Minute {
-		return time.Minute
-	}
-	// The timestamp is the database's, the comparison is this process's; a
-	// skew between them must not turn into a wait longer than the window.
-	if wait > time.Hour {
-		return time.Hour
-	}
-	return wait
-}
-
-// Confirm honours a token exactly once.
-//
-// The claim is a single conditional UPDATE rather than a read followed by a
-// write: two clicks arriving together — a mail client prefetching the link
-// while the recipient also clicks it — must not both succeed.
-func (s *Service) Confirm(ctx context.Context, token string) (*Verification, error) {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil, ErrLinkSpent
-	}
-	verification, err := s.store.claimVerification(ctx, hashSecret(token))
-	if err != nil {
-		return nil, err
-	}
-	return verification, nil
-}
-
-// Authenticate resolves a presented client key.
-//
-// The lookup is by the key's SHA-256, which is what the table stores: the key
-// never exists in the database, so a dump of it is not a set of working
-// credentials. A disabled client is refused here, which is what makes disabling
-// take effect on the next request rather than whenever something expires.
-func (s *Service) Authenticate(ctx context.Context, key string) (*Client, error) {
-	key = strings.TrimSpace(key)
-	if !strings.HasPrefix(key, KeyPrefix) || len(key) < keyPrefixLength+8 {
-		return nil, ErrUnauthorizedKey
-	}
-	client, err := s.store.clientByKeyHash(ctx, hashSecret(key))
-	if err != nil {
-		return nil, err
-	}
-	if client.Status != ClientActive {
-		return nil, ErrUnauthorizedKey
-	}
-	return client, nil
-}
-
-// ListClients returns one tenant's keys, newest first. No secret comes back.
-func (s *Service) ListClients(ctx context.Context, tenantID string) ([]Client, error) {
-	return s.store.listClients(ctx, tenantID)
-}
-
-// ClientInput is the settings form.
-type ClientInput struct {
-	Name                 string
-	Status               ClientStatus
-	HourlyLimit          int
-	AllowedRedirectHosts []string
-}
-
-// CreateClient issues a key. The returned Client carries Secret; it is the only
-// time it exists outside the caller's own storage, which is why the screen
-// shows it once and says so.
-func (s *Service) CreateClient(ctx context.Context, tenantID string, in ClientInput) (*Client, error) {
-	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return nil, invalid("a client name is required")
-	}
-	if len(name) > 255 {
-		return nil, invalid("the client name is too long")
-	}
-	hosts, err := normalizeHosts(in.AllowedRedirectHosts)
-	if err != nil {
-		return nil, err
-	}
-	limit := in.HourlyLimit
-	if limit <= 0 {
-		limit = DefaultHourlyLimit
-	}
-	if limit > 100000 {
-		return nil, invalid("the hourly limit is unreasonably high")
-	}
-
-	secret, err := randomKey()
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := s.store.insertClient(ctx, tenantID, name, secret[:keyPrefixLength], hashSecret(secret), limit, hosts)
-	if err != nil {
-		return nil, err
-	}
-	client.Secret = secret
-	return client, nil
-}
-
-// UpdateClient changes the name, the switch, the allowance or the allowlist. It
-// never re-issues the key: a key that has to change is a key that is deleted and
-// replaced, so nothing that was revoked can quietly come back.
-func (s *Service) UpdateClient(ctx context.Context, tenantID, id string, in ClientInput) (*Client, error) {
-	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return nil, invalid("a client name is required")
-	}
-	status := in.Status
-	if status != ClientActive && status != ClientDisabled {
-		return nil, invalid("status must be ACTIVE or DISABLED")
-	}
-	hosts, err := normalizeHosts(in.AllowedRedirectHosts)
-	if err != nil {
-		return nil, err
-	}
-	limit := in.HourlyLimit
-	if limit <= 0 {
-		limit = DefaultHourlyLimit
-	}
-	if limit > 100000 {
-		return nil, invalid("the hourly limit is unreasonably high")
-	}
-	return s.store.updateClient(ctx, tenantID, id, name, status, limit, hosts)
-}
-
-// DeleteClient revokes a key permanently. The verifications it sent stay, with
-// their source label, because the audit trail is about what was asked of whom.
-func (s *Service) DeleteClient(ctx context.Context, tenantID, id string) error {
-	return s.store.deleteClient(ctx, tenantID, id)
 }
 
 // Overview is the settings screen in one request.
@@ -583,17 +520,34 @@ func (s *Service) Overview(ctx context.Context, tenantID string, limit int) (*Ov
 	if stats.Total > 0 {
 		stats.VerifiedPct = float64(stats.Verified) / float64(stats.Total) * 100
 	}
-	return &Overview{
-		Stats:          *stats,
-		Recent:         recent,
-		SendURL:        SendURL(),
-		ConfirmURL:     ConfirmURL(),
-		MailConfigured: strings.TrimSpace(os.Getenv("SMTP_HOST")) != "",
-	}, nil
+
+	overview := &Overview{
+		Stats:       *stats,
+		Recent:      recent,
+		Configured:  Configured(),
+		ProviderURL: ProviderURL(),
+		AdminURL:    AdminURL,
+		ReturnURL:   ReturnURL(),
+	}
+	// The health check is a network call on a screen load, so it is bounded
+	// tightly: a slow provider should make this screen say "unreachable", not
+	// make it hang.
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.Health(healthCtx); err != nil {
+		overview.Health = err.Error()
+	} else {
+		overview.Reachable = true
+	}
+	return overview, nil
 }
 
 // StartHousekeeping ages out links nobody followed and drops history past the
 // retention window. Both run until ctx is cancelled at shutdown.
+//
+// Without a webhook, a link that was confirmed but whose return never reached
+// us is indistinguishable from one nobody opened. Both end up EXPIRED here,
+// which is the honest reading: this platform did not see it happen.
 func (s *Service) StartHousekeeping(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(15 * time.Minute)
@@ -627,8 +581,8 @@ func (s *Service) sweep(ctx context.Context) {
 
 // NormalizeEmail accepts one plain address and returns it lowercased.
 //
-// A display name ("Ops <ops@example.com>") is refused rather than unwrapped:
-// the address is going into a header this package writes, and accepting
+// A display name ("Ops <ops@example.com>") is refused rather than unwrapped.
+// The address is handed to a sending service as a recipient, and accepting
 // anything with structure in it is how a second recipient gets appended.
 func NormalizeEmail(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
@@ -651,18 +605,18 @@ func NormalizeEmail(raw string) (string, error) {
 	return strings.ToLower(address.Address), nil
 }
 
-// ValidateRedirect decides where a recipient may be sent after they click.
+// ValidateRedirect decides where a person may be sent after they come back.
 //
-// This endpoint hands out redirects from the platform's own domain, so an
-// unchecked destination makes Gerege Nexus an open redirector — the thing a
-// phishing link needs to look like it came from here. Hence: HTTPS only (HTTP
-// is tolerated for localhost outside production, where a developer has no
-// certificate), no embedded credentials, and, when the client declares an
-// allowlist, a host that is on it.
-func ValidateRedirect(raw string, allowedHosts []string) (string, error) {
+// The provider returns them to this platform; this platform then forwards them
+// wherever the calling module asked. That second hop is a redirect issued from
+// our own domain, so an unchecked destination makes Gerege Nexus the open
+// redirector a phishing link wants to borrow — HTTPS only (HTTP is tolerated
+// for localhost outside production, where a developer has no certificate), and
+// no embedded credentials.
+func ValidateRedirect(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		// No destination is a legitimate choice: the platform answers the
+		// No destination is a legitimate choice: this platform answers the
 		// click itself and the caller reads the outcome from its own records.
 		return "", nil
 	}
@@ -687,84 +641,70 @@ func ValidateRedirect(raw string, allowedHosts []string) (string, error) {
 	default:
 		return "", invalid("the redirect URL must use HTTPS (HTTP is allowed only for localhost in development)")
 	}
-	if len(allowedHosts) > 0 {
-		permitted := false
-		for _, candidate := range allowedHosts {
-			if strings.EqualFold(candidate, host) {
-				permitted = true
-				break
-			}
-		}
-		if !permitted {
-			return "", invalid("%s is not an allowed redirect host for this client", host)
-		}
-	}
 	return trimmed, nil
 }
 
-// normalizeHosts cleans the allowlist an administrator typed. A whole URL is
-// accepted and reduced to its host, because that is what people paste.
-func normalizeHosts(raw []string) ([]string, error) {
-	hosts := make([]string, 0, len(raw))
-	seen := map[string]struct{}{}
-	for _, entry := range raw {
-		candidate := strings.ToLower(strings.TrimSpace(entry))
-		if candidate == "" {
-			continue
-		}
-		if strings.Contains(candidate, "/") {
-			parsed, err := url.Parse(candidate)
-			if err != nil || parsed.Hostname() == "" {
-				return nil, invalid("%q is not a host name", entry)
-			}
-			candidate = parsed.Hostname()
-		}
-		if strings.ContainsAny(candidate, " ,\r\n@:") {
-			return nil, invalid("%q is not a host name", entry)
-		}
-		if _, duplicate := seen[candidate]; duplicate {
-			continue
-		}
-		seen[candidate] = struct{}{}
-		hosts = append(hosts, candidate)
+// retryAfter turns the oldest request inside the window into how long until it
+// leaves the window and frees an allowance.
+func retryAfter(oldest *time.Time) time.Duration {
+	if oldest == nil {
+		return time.Minute
 	}
-	return hosts, nil
+	wait := time.Until(oldest.Add(time.Hour))
+	if wait < time.Minute {
+		return time.Minute
+	}
+	// The timestamp is the database's, the comparison is this process's; a skew
+	// between them must not turn into a wait longer than the window.
+	if wait > time.Hour {
+		return time.Hour
+	}
+	return wait
 }
 
-// randomKey mints a client key: the prefix that identifies it plus 32 bytes of
-// randomness, URL-safe so it survives being pasted into a header or a config
-// file by hand.
-func randomKey() (string, error) {
-	raw, err := randomBytes(32)
-	if err != nil {
-		return "", err
+// retryAfterHeader reads the provider's own Retry-After when it sent one, so a
+// caller is told the real wait rather than our guess at it.
+func retryAfterHeader(res *http.Response, fallback time.Duration) time.Duration {
+	raw := strings.TrimSpace(res.Header.Get("Retry-After"))
+	if raw == "" {
+		return fallback
 	}
-	return KeyPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+	if seconds, err := time.ParseDuration(raw + "s"); err == nil && seconds > 0 {
+		return seconds
+	}
+	if when, err := http.ParseTime(raw); err == nil {
+		if wait := time.Until(when); wait > 0 {
+			return wait
+		}
+	}
+	return fallback
 }
 
-// randomToken mints the token that goes in the mailed link. Same size as a key:
-// it is a bearer credential for exactly one act.
-func randomToken() (string, error) {
-	raw, err := randomBytes(32)
-	if err != nil {
-		return "", err
+// firstLine keeps a provider's message out of a browser when it is not a short,
+// recognisable code — a stack trace or an HTML error page is for the log.
+func firstLine(code string, body []byte) string {
+	if code != "" {
+		return code
 	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
+	text := strings.TrimSpace(string(body))
+	if index := strings.IndexAny(text, "\r\n"); index >= 0 {
+		text = text[:index]
+	}
+	return truncate(text, 200)
 }
 
-func randomBytes(n int) ([]byte, error) {
-	buf := make([]byte, n)
+// randomRef mints the single-use reference carried in the return address.
+func randomRef() (string, error) {
+	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
-		return nil, fmt.Errorf("emailverify: could not read random bytes: %w", err)
+		return "", fmt.Errorf("emailverify: could not read random bytes: %w", err)
 	}
-	return buf, nil
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// hashSecret is what the database stores for both keys and tokens. SHA-256
-// rather than bcrypt on purpose: these are full-entropy random strings, not
-// passwords, so there is nothing for a work factor to defend against — and the
-// hash is looked up on every send, where a deliberate slowdown would be the
-// rate limit nobody asked for.
+// hashSecret is what the database stores for the reference. SHA-256 rather than
+// bcrypt on purpose: it is a full-entropy random string, not a password, so
+// there is nothing for a work factor to defend against.
 func hashSecret(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])

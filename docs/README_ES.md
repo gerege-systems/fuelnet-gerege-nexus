@@ -100,11 +100,11 @@ los microservicios.
   (`/.well-known/openid-configuration`) que emite tokens de tipo
   client-credentials a sistemas de terceros.
 - **Verificación de correo electrónico** (`platform/emailverify`) — un único
-  flujo para demostrar una dirección: enlaces de un solo uso, claves de cliente
-  API por inquilino, cupos por hora y lista de destinos de redirección
-  permitidos. Los módulos de aplicación lo llaman en proceso; los sistemas
-  externos llaman a `POST /api/v1/verify/send` con una clave. Se administra en
-  Ajustes → Verificación de correo.
+  flujo para demostrar una dirección, que cada módulo de aplicación llama en
+  proceso. El correo lo envía el servicio alojado (`enigma.mn`), de modo que la
+  plataforma no guarda credenciales de buzón ni posee dirección de remitente. La
+  verificación se registra cuando la persona vuelve, y ese retorno sirve una
+  sola vez. Visible en Ajustes → Verificación de correo.
 
 > **Nota.** El modo simulado (mock) de E-ID, DAN y XYP es únicamente una
 > comodidad de desarrollo. Con `ENVIRONMENT=production` se desactiva
@@ -275,9 +275,9 @@ Consulte [`.env.example`](../.env.example) para la lista completa.
 | `GET` | `/api/v1/menus` | Menús de las aplicaciones habilitadas del inquilino |
 | `GET` | `/api/v1/store/apps` | Listado de la tienda de aplicaciones |
 | `POST` | `/api/v1/store/apps/{slug}/install` | Instalar una aplicación (admin) |
-| `POST` | `/api/v1/verify/send` | Emitir un enlace de verificación de correo (clave de cliente o sesión) |
-| `GET` | `/api/v1/verify/confirm` | Atender el enlace del correo — sirve una sola vez |
-| `GET/POST/PUT/DELETE` | `/api/v1/admin/email-verification/*` | Resumen de verificaciones y clientes de API (admin) |
+| `POST` | `/api/v1/verify/send` | Solicitar un enlace de verificación al servicio alojado |
+| `GET` | `/api/v1/verify/landed` | Recibir a quien ha confirmado — sirve una sola vez |
+| `GET` | `/api/v1/admin/email-verification/overview` | Historial de verificaciones y estado del servicio (admin) |
 | `POST` | `/oauth2/token` | Token OAuth2 de client credentials |
 
 Los tokens de sesión viajan en la cookie HttpOnly o como
