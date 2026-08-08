@@ -118,16 +118,27 @@ _, err := m.emailVerify.Send(ctx, tenantID, emailverify.Request{
     Source:      m.ID(),          // kept on the row, so the audit trail names you
     Purpose:     "invoice_portal_invite",
     RedirectURL: "https://portal.example/invited", // optional; HTTPS only
-    Locale:      config.LocaleFromRequest(r),
 })
 ```
 
-The service issues a single-use link, mails it in the recipient's language,
-enforces the sending limits, and records the attempt where an administrator can
-see it under **Settings → Email verification**. `Send` returns a
-`*emailverify.RateLimitedError` (carrying `RetryAfter`) or an
-`*emailverify.InvalidError` for a bad address or destination — map them onto
-`429` and `400` rather than reporting them as server failures.
+The mail is sent by the hosted verification service — this platform holds no
+mailbox credential and composes no message. `Send` asks for the link, records
+the request, and enforces the local sending limits. When the recipient follows
+the link they come back to `/api/v1/verify/landed`, the verification is marked
+confirmed exactly once, and they are forwarded to the `RedirectURL` you named.
+
+Map the errors rather than reporting them all as server failures:
+
+| Error | Meaning | Answer |
+| --- | --- | --- |
+| `*emailverify.InvalidError` | a bad address or destination | `400` |
+| `*emailverify.RateLimitedError` | carries `RetryAfter` | `429` |
+| `ErrNotConfigured`, `ErrOriginNotHTTPS`, `ErrUnauthorizedKey` | this deployment's configuration, not the request | `503` |
+| `ErrUpstream` | the service could not send or could not be reached; retryable | `502` |
+
+There is no webhook yet, so a verification is recorded only when the person
+returns here. Treat `PENDING` as "we have not seen them come back", not as
+"they ignored it".
 
 ### Step 4: Create App Manifest JSON
 Add a manifest file in `catalog/manifests/invoices.json`:

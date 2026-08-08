@@ -21,37 +21,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ([`internal/platform/emailverify`](backend/internal/platform/emailverify)):
   proving that somebody controls an address is not one module's business.
   Contacts wants it before it trusts an address, Documents before a signing link
-  leaves for an outsider, Gov Services before it answers a citizen at one, and a
-  platform running next to Gerege Nexus wants the same thing over HTTP. Each of
-  those is the same three steps — issue a single-use link, mail it, honour it
-  once — and each private copy is another place to get token reuse or an open
-  redirect wrong. App modules take the service in their constructor the way
-  `gov_services` takes the integration manager and call
-  `emailverify.Service.Send`; outside callers post to `/api/v1/verify/send`.
-- **API clients, per tenant** (migration `00026`): a key issued from the
-  settings screen, stored only as a SHA-256 — the key exists in exactly one
-  response, the one that creates it. Disabling or deleting a client refuses its
-  key from the very next request. Each client carries its own hourly allowance
-  and, optionally, a redirect allowlist.
-- **The link is good exactly once**: the claim is a single conditional `UPDATE`,
-  so a mail client prefetching the link cannot race the recipient into two
-  successes. A spent, expired or invented token is `410` — one answer for all
-  three, so a caller holding a token learns only that it is no longer good.
-- **The platform is not an open redirector**: a destination must be HTTPS (HTTP
-  is tolerated for localhost outside production), carry no credentials, and be
-  on the client's allowlist when it declares one. It is checked when the link is
-  issued, not when it is followed — by then the mail has gone.
-- **Mail bombing has a cost**: an hourly allowance per client, a per-tenant cap
-  for in-process callers that hold no key, and a one-minute pause per recipient,
-  each answered with `429` and a `Retry-After` somebody can actually obey.
-- **Settings → Email verification**: what has been sent and by whom, the
-  verified rate, and the keys — with the new key shown once, loudly, because
-  there is no second chance to read it. The screen says so when SMTP is not
-  configured, since mail that is only logged looks exactly like mail that was
-  sent.
-- **The verification mail and the page after the click exist in all seven
-  platform languages.** They are read outside the product, by somebody who may
-  never have seen it.
+  leaves for an outsider, Gov Services before it answers a citizen at one. Each
+  is the same act, so it lives in the platform: an app module takes the service
+  in its constructor the way `gov_services` takes the integration manager and
+  calls `emailverify.Service.Send` with its own app id as the source.
+- **The mail is sent by a hosted service, deliberately.** Delivering mail that
+  arrives is not a matter of holding an SMTP password: it is SPF, DKIM, DMARC,
+  reverse DNS and a sending reputation, maintained continuously. enigma.mn runs
+  that, so this platform holds no mailbox credential, composes no message and
+  owns no sender address. What stays here is what only this platform can know —
+  which module asked, for whom, why, and whether the person came back.
+- **The return is good exactly once** (migrations `00026`, `00027`): the request
+  carries a single-use reference in the return address, stored as a SHA-256, and
+  claimed by one conditional `UPDATE`. A browser reloading the landing page
+  races itself, and a reference that travelled through a mailbox and a browser's
+  history must not be replayable. A spent, expired or invented reference is
+  `410` alike.
+- **The platform is not an open redirector**: the onward destination is
+  validated when the request is made — HTTPS only (HTTP tolerated for localhost
+  outside production), no embedded credentials — not when somebody arrives, by
+  which time the mail has gone.
+- **Mail bombing has a cost**: a per-tenant hourly allowance in front of the
+  shared key and a one-minute pause per recipient, answered `429` with a
+  `Retry-After` somebody can obey — a limit we can avoid provoking upstream is
+  one we do not have to explain. A request the service refuses withdraws its own
+  row, so the Overview screen never shows a verification nobody was asked for.
+- **Errors say who has to act**: a bad address is `400`, a missing key or an
+  HTTP `PUBLIC_ORIGIN` or a rejected key is `503` (this deployment, not the
+  request), and a failure at the service is `502` and retryable. An answer
+  nobody documented is never read as success.
+- **Settings → Email verification**: whether the service is reachable, what has
+  been asked for and by whom, the verified rate, and a test send. No key
+  management — keys belong to the sending service and are administered there,
+  and this platform's copy is a server-side environment variable that never
+  reaches a browser.
+- **The page shown after a click exists in all seven platform languages.** It is
+  read outside the product, by somebody who may never have seen it.
+- **Known limitation, stated on the screen**: the service has no webhook yet, so
+  a verification is recorded only when the person returns here. Somebody who
+  confirms on another device and never comes back stays `PENDING`. That is the
+  honest reading — this platform did not see it happen — and it is what the
+  Overview screen says rather than something the code knows and the operator
+  does not.
 
 ### Added — PDF E-Sign v2: eID Mongolia qualified remote signing
 

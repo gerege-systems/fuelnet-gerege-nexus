@@ -1,14 +1,21 @@
 package emailverify
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-// The address goes into a header this package writes. Anything with structure
-// in it — a display name, a comma, a newline — is a way to append a recipient
-// or a header of the caller's choosing, so it is refused rather than cleaned up.
+// The address is handed to a sending service as a recipient. Anything with
+// structure in it — a display name, a comma, a newline — is a way to append a
+// second recipient, so it is refused rather than cleaned up.
 func TestNormalizeEmailRefusesAnythingButAPlainAddress(t *testing.T) {
 	valid := map[string]string{
 		"user@example.com":       "user@example.com",
@@ -44,9 +51,9 @@ func TestNormalizeEmailRefusesAnythingButAPlainAddress(t *testing.T) {
 	}
 }
 
-// The confirm endpoint hands out redirects from the platform's own domain. An
-// unchecked destination is what turns Gerege Nexus into the open redirector a
-// phishing link wants to borrow.
+// The landing endpoint forwards people onward from this platform's own domain.
+// An unchecked destination is what turns Gerege Nexus into the open redirector
+// a phishing link wants to borrow.
 func TestValidateRedirectRefusesWhatWouldMakeUsAnOpenRedirector(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "development")
 
@@ -58,7 +65,7 @@ func TestValidateRedirectRefusesWhatWouldMakeUsAnOpenRedirector(t *testing.T) {
 		"http://127.0.0.1:3000/verified",
 	}
 	for _, input := range accepted {
-		if _, err := ValidateRedirect(input, nil); err != nil {
+		if _, err := ValidateRedirect(input); err != nil {
 			t.Errorf("ValidateRedirect(%q) returned %v, want it accepted", input, err)
 		}
 	}
@@ -73,7 +80,7 @@ func TestValidateRedirectRefusesWhatWouldMakeUsAnOpenRedirector(t *testing.T) {
 		"data:text/html,<script>alert(1)</script>",
 	}
 	for _, input := range rejected {
-		if _, err := ValidateRedirect(input, nil); err == nil {
+		if _, err := ValidateRedirect(input); err == nil {
 			t.Errorf("ValidateRedirect(%q) accepted it, want a refusal", input)
 		}
 	}
@@ -83,134 +90,306 @@ func TestValidateRedirectRefusesWhatWouldMakeUsAnOpenRedirector(t *testing.T) {
 // resolving "localhost" is resolving something on its own host.
 func TestValidateRedirectRefusesPlainHTTPInProduction(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "production")
-	if _, err := ValidateRedirect("http://localhost:3000/verified", nil); err == nil {
+	if _, err := ValidateRedirect("http://localhost:3000/verified"); err == nil {
 		t.Fatal("plain HTTP to localhost was accepted in production")
 	}
-	if _, err := ValidateRedirect("https://theirapp.com/verified", nil); err != nil {
+	if _, err := ValidateRedirect("https://theirapp.com/verified"); err != nil {
 		t.Fatalf("HTTPS was refused in production: %v", err)
 	}
 }
 
-// A client may declare where its own recipients are allowed to land. That is
-// what keeps one tenant's key from redirecting people to somebody else's site.
-func TestValidateRedirectHonoursTheClientAllowlist(t *testing.T) {
-	allowed := []string{"theirapp.com", "portal.theirapp.com"}
-
-	if _, err := ValidateRedirect("https://theirapp.com/verified", allowed); err != nil {
-		t.Errorf("an allowlisted host was refused: %v", err)
-	}
-	if _, err := ValidateRedirect("https://PORTAL.THEIRAPP.COM/verified", allowed); err != nil {
-		t.Errorf("host matching must be case-insensitive: %v", err)
-	}
-	if _, err := ValidateRedirect("https://elsewhere.example/verified", allowed); err == nil {
-		t.Error("a host outside the allowlist was accepted")
-	}
-	// A subdomain is not the host that was allowed. Matching by suffix would
-	// let evil-theirapp.com through.
-	if _, err := ValidateRedirect("https://evil-theirapp.com/verified", allowed); err == nil {
-		t.Error("a host that merely looks like an allowlisted one was accepted")
-	}
-}
-
-// An administrator pastes what they have: sometimes a host, sometimes a whole
-// URL. Both mean the same allowlist entry.
-func TestNormalizeHosts(t *testing.T) {
-	got, err := normalizeHosts([]string{" TheirApp.com ", "https://portal.theirapp.com/return", "", "theirapp.com"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := []string{"theirapp.com", "portal.theirapp.com"}
-	if len(got) != len(want) {
-		t.Fatalf("normalizeHosts returned %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("normalizeHosts returned %v, want %v", got, want)
-		}
-	}
-	if _, err := normalizeHosts([]string{"not a host"}); err == nil {
-		t.Error("a host name with a space in it was accepted")
-	}
-}
-
-// A key is recognisable on sight, unique, and never equal to its own stored
-// hash — the last of which is the whole point of storing the hash.
-func TestKeysAreUniqueAndStoredOnlyAsHashes(t *testing.T) {
+// The reference is a bearer credential for exactly one act, and the database
+// holds only its hash — so the table cannot be read back into a working link.
+func TestReferencesAreUniqueAndStoredOnlyAsHashes(t *testing.T) {
 	seen := map[string]struct{}{}
 	for i := 0; i < 64; i++ {
-		key, err := randomKey()
+		ref, err := randomRef()
 		if err != nil {
-			t.Fatalf("randomKey failed: %v", err)
+			t.Fatalf("randomRef failed: %v", err)
 		}
-		if !strings.HasPrefix(key, KeyPrefix) {
-			t.Fatalf("key %q does not carry the %q prefix", key, KeyPrefix)
+		if _, duplicate := seen[ref]; duplicate {
+			t.Fatalf("randomRef repeated itself: %q", ref)
 		}
-		if len(key) <= keyPrefixLength+8 {
-			t.Fatalf("key %q is too short to be refused by Authenticate's length guard", key)
-		}
-		if _, duplicate := seen[key]; duplicate {
-			t.Fatalf("randomKey repeated itself: %q", key)
-		}
-		seen[key] = struct{}{}
+		seen[ref] = struct{}{}
 
-		hash := hashSecret(key)
-		if hash == key {
-			t.Fatal("the stored hash is the key itself")
+		hash := hashSecret(ref)
+		if hash == ref {
+			t.Fatal("the stored hash is the reference itself")
 		}
 		if len(hash) != 64 {
 			t.Fatalf("hash is %d characters, the column holds 64", len(hash))
 		}
-		if hashSecret(key) != hash {
-			t.Fatal("hashing the same key twice gave two answers")
+		if hashSecret(ref) != hash {
+			t.Fatal("hashing the same reference twice gave two answers")
 		}
 	}
 }
 
-func TestTokensAreUnique(t *testing.T) {
-	seen := map[string]struct{}{}
-	for i := 0; i < 64; i++ {
-		token, err := randomToken()
-		if err != nil {
-			t.Fatalf("randomToken failed: %v", err)
-		}
-		if strings.HasPrefix(token, KeyPrefix) {
-			t.Fatalf("token %q looks like a client key", token)
-		}
-		if _, duplicate := seen[token]; duplicate {
-			t.Fatalf("randomToken repeated itself: %q", token)
-		}
-		seen[token] = struct{}{}
+// Where the service is asked to send people back to. It comes from
+// PUBLIC_ORIGIN, never from a request: it is handed to another service and
+// outlives the call, so a forged Host header must not be able to point it.
+func TestReturnURLIsBuiltFromPublicOrigin(t *testing.T) {
+	t.Setenv("PUBLIC_ORIGIN", "https://nexus.gerege.mn/")
+	if got := ReturnURL(); got != "https://nexus.gerege.mn/api/v1/verify/landed" {
+		t.Errorf("ReturnURL() = %q", got)
+	}
+
+	t.Setenv("PUBLIC_ORIGIN", "")
+	if got := ReturnURL(); !strings.HasPrefix(got, "http://localhost:8080/") {
+		t.Errorf("unset PUBLIC_ORIGIN gave %q, want the local development default", got)
 	}
 }
 
-// The mail is read outside the product, by somebody who may never have seen it.
-// Every language the platform claims to speak has to have wording for it, and
-// the link has to survive into the body.
-func TestComposeMessageSpeaksEveryPlatformLanguage(t *testing.T) {
-	const link = "https://nexus.gerege.mn/api/v1/verify/confirm?token=abc"
-	deadline := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+func TestProviderURLIsOverridable(t *testing.T) {
+	t.Setenv("EMAIL_VERIFY_BASE_URL", "")
+	if got := ProviderURL(); got != DefaultProviderURL {
+		t.Errorf("ProviderURL() = %q, want the default %q", got, DefaultProviderURL)
+	}
+	t.Setenv("EMAIL_VERIFY_BASE_URL", "https://verify.internal/api/verify/")
+	if got := ProviderURL(); got != "https://verify.internal/api/verify" {
+		t.Errorf("ProviderURL() = %q, want the trailing slash trimmed", got)
+	}
+}
 
-	for _, locale := range []string{"mn", "ar", "zh", "en", "fr", "ru", "es"} {
-		msg := composeMessage("user@example.com", link, deadline, locale)
-		if msg.Subject == "" {
-			t.Errorf("%s has no subject", locale)
+// Without a key nothing can be sent, and that is an operator's problem rather
+// than the caller's — worth its own error so the screen can say which.
+func TestConfiguredFollowsTheKey(t *testing.T) {
+	t.Setenv("EMAIL_VERIFY_API_KEY", "")
+	if Configured() {
+		t.Error("Configured() is true with no key set")
+	}
+	t.Setenv("EMAIL_VERIFY_API_KEY", "   ")
+	if Configured() {
+		t.Error("Configured() is true for a key of spaces")
+	}
+	t.Setenv("EMAIL_VERIFY_API_KEY", "evk_test")
+	if !Configured() {
+		t.Error("Configured() is false with a key set")
+	}
+}
+
+// stubProvider stands in for the hosted service and records what it was asked,
+// so a test can assert on the request as well as on the answer.
+type stubProvider struct {
+	mu         sync.Mutex
+	status     int
+	body       string
+	retryAfter string
+	payload    map[string]string
+	calls      int
+	server     *httptest.Server
+}
+
+func newStubProvider(t *testing.T, status int, body string) *stubProvider {
+	t.Helper()
+	stub := &stubProvider{status: status, body: body}
+	stub.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
 		}
-		if !strings.Contains(msg.Body, link) {
-			t.Errorf("%s body does not carry the link", locale)
+		var payload map[string]string
+		_ = json.NewDecoder(io.LimitReader(r.Body, 8<<10)).Decode(&payload)
+
+		stub.mu.Lock()
+		stub.calls++
+		stub.payload = payload
+		status, body, retryAfter := stub.status, stub.body, stub.retryAfter
+		stub.mu.Unlock()
+
+		if r.Header.Get("Authorization") != "Bearer evk_test" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			return
 		}
-		if !strings.Contains(msg.Body, "2026-08-09 12:00 UTC") {
-			t.Errorf("%s body does not state the deadline: %s", locale, msg.Body)
+		if retryAfter != "" {
+			w.Header().Set("Retry-After", retryAfter)
 		}
-		if msg.To != "user@example.com" {
-			t.Errorf("%s addressed %q", locale, msg.To)
-		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(stub.server.Close)
+	t.Setenv("EMAIL_VERIFY_BASE_URL", stub.server.URL)
+	t.Setenv("EMAIL_VERIFY_API_KEY", "evk_test")
+	return stub
+}
+
+func (s *stubProvider) seen() (int, map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls, s.payload
+}
+
+// requestSend is where somebody else's status codes become this package's
+// errors, and that mapping is the contract every caller reads: a bad address is
+// final, a rejected key is the operator's problem, a rate limit and a failure
+// upstream are worth retrying.
+func TestUpstreamStatusCodesBecomeErrorsCallersCanActOn(t *testing.T) {
+	cases := []struct {
+		name       string
+		status     int
+		body       string
+		retryAfter string
+		assert     func(t *testing.T, err error)
+	}{
+		{
+			name: "a malformed address is the caller's mistake", status: http.StatusBadRequest,
+			body: `{"error":"invalid_email"}`,
+			assert: func(t *testing.T, err error) {
+				var invalidErr *InvalidError
+				if !errors.As(err, &invalidErr) {
+					t.Fatalf("got %v, want an InvalidError", err)
+				}
+			},
+		},
+		{
+			// The return address is ours, not the caller's, so this is a
+			// deployment fault arriving dressed as a caller fault.
+			name: "a refused return address is our deployment", status: http.StatusBadRequest,
+			body: `{"error":"redirect_url_must_be_https"}`,
+			assert: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrOriginNotHTTPS) {
+					t.Fatalf("got %v, want ErrOriginNotHTTPS", err)
+				}
+			},
+		},
+		{
+			name: "a rejected key is not the caller's fault", status: http.StatusUnauthorized,
+			body: `{"error":"unauthorized"}`,
+			assert: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrUnauthorizedKey) {
+					t.Fatalf("got %v, want ErrUnauthorizedKey", err)
+				}
+			},
+		},
+		{
+			name: "a rate limit carries the provider's own wait", status: http.StatusTooManyRequests,
+			body: `{"error":"rate_limited"}`, retryAfter: "90",
+			assert: func(t *testing.T, err error) {
+				var limited *RateLimitedError
+				if !errors.As(err, &limited) {
+					t.Fatalf("got %v, want a RateLimitedError", err)
+				}
+				if limited.RetryAfter != 90*time.Second {
+					t.Fatalf("Retry-After is %v, want the provider's 90s", limited.RetryAfter)
+				}
+			},
+		},
+		{
+			name: "a failure to send is retryable", status: http.StatusBadGateway,
+			body: `{"error":"send_failed"}`,
+			assert: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrUpstream) {
+					t.Fatalf("got %v, want ErrUpstream", err)
+				}
+			},
+		},
+		{
+			// An answer nobody documented must not be read as success: that is
+			// how a verification nobody was asked for gets recorded.
+			name: "an unrecognised answer is not success", status: http.StatusTeapot, body: `nope`,
+			assert: func(t *testing.T, err error) {
+				if !errors.Is(err, ErrUpstream) {
+					t.Fatalf("got %v, want ErrUpstream", err)
+				}
+			},
+		},
 	}
 
-	// An unknown language falls back to Mongolian, the source language, rather
-	// than to an empty subject.
-	fallback := composeMessage("user@example.com", link, deadline, "ko")
-	if fallback.Subject != wordings["mn"].subject {
-		t.Errorf("an unsupported locale produced %q, want the Mongolian subject", fallback.Subject)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := newStubProvider(t, tc.status, tc.body)
+			stub.retryAfter = tc.retryAfter
+			svc := &Service{http: &http.Client{Timeout: upstreamTimeout}}
+			_, err := svc.requestSend(context.Background(), "user@example.com", "https://nexus.test/api/v1/verify/landed?ref=abc")
+			tc.assert(t, err)
+		})
+	}
+}
+
+// The happy path: the request carries the address and our return URL, and the
+// provider's own deadline is what comes back.
+func TestASuccessfulSendCarriesTheReturnAddressAndTheProvidersExpiry(t *testing.T) {
+	stub := newStubProvider(t, http.StatusOK,
+		`{"ok":true,"email":"user@example.com","expires_at":"2026-08-09T12:00:00Z"}`)
+	svc := &Service{http: &http.Client{Timeout: upstreamTimeout}}
+
+	expiresAt, err := svc.requestSend(context.Background(), "user@example.com",
+		"https://nexus.test/api/v1/verify/landed?ref=abc")
+	if err != nil {
+		t.Fatalf("requestSend: %v", err)
+	}
+	if !expiresAt.Equal(time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("expiry came back as %v", expiresAt)
+	}
+
+	calls, payload := stub.seen()
+	if calls != 1 {
+		t.Fatalf("the provider was called %d times", calls)
+	}
+	if payload["email"] != "user@example.com" {
+		t.Errorf("the provider was asked to write to %q", payload["email"])
+	}
+	if payload["redirect_url"] != "https://nexus.test/api/v1/verify/landed?ref=abc" {
+		t.Errorf("the return address sent was %q", payload["redirect_url"])
+	}
+}
+
+// An expiry we cannot read is not worth failing a send that already happened —
+// the local placeholder deadline stands.
+func TestAnUnreadableExpiryDoesNotFailASendThatHappened(t *testing.T) {
+	newStubProvider(t, http.StatusOK, `{"ok":true,"expires_at":"next tuesday"}`)
+	svc := &Service{http: &http.Client{Timeout: upstreamTimeout}}
+
+	expiresAt, err := svc.requestSend(context.Background(), "user@example.com", "https://nexus.test/return")
+	if err != nil {
+		t.Fatalf("requestSend: %v", err)
+	}
+	if !expiresAt.IsZero() {
+		t.Fatalf("expiry came back as %v, want the zero time so the placeholder stands", expiresAt)
+	}
+}
+
+// A provider that cannot be reached at all is the same class of failure as one
+// that answers 502: retryable, and never silently a success.
+func TestAnUnreachableProviderIsUpstream(t *testing.T) {
+	t.Setenv("EMAIL_VERIFY_API_KEY", "evk_test")
+	// Reserved for documentation use and therefore not routable.
+	t.Setenv("EMAIL_VERIFY_BASE_URL", "http://192.0.2.1:9")
+	svc := &Service{http: &http.Client{Timeout: 250 * time.Millisecond}}
+
+	if _, err := svc.requestSend(context.Background(), "user@example.com", "https://nexus.test/return"); !errors.Is(err, ErrUpstream) {
+		t.Fatalf("got %v, want ErrUpstream", err)
+	}
+}
+
+func TestHealthReportsWhatTheProviderSaid(t *testing.T) {
+	stub := newStubProvider(t, http.StatusOK, `{"ok":true}`)
+	svc := &Service{http: &http.Client{Timeout: upstreamTimeout}}
+	if err := svc.Health(context.Background()); err != nil {
+		t.Fatalf("a healthy provider reported %v", err)
+	}
+
+	stub.server.Close()
+	if err := svc.Health(context.Background()); !errors.Is(err, ErrUpstream) {
+		t.Fatalf("a provider that is down reported %v, want ErrUpstream", err)
+	}
+}
+
+// Retry-After has to be a number the caller can obey. Zero, or a negative
+// duration from a window that has already passed, is an instruction to retry
+// immediately — which is what the limit exists to prevent.
+func TestRetryAfterIsAlwaysWorthWaiting(t *testing.T) {
+	if got := retryAfter(nil); got < time.Minute {
+		t.Errorf("retryAfter(nil) = %v, want at least a minute", got)
+	}
+	longPast := time.Now().Add(-3 * time.Hour)
+	if got := retryAfter(&longPast); got < time.Minute {
+		t.Errorf("retryAfter(long past) = %v, want at least a minute", got)
+	}
+	justNow := time.Now()
+	if got := retryAfter(&justNow); got < 50*time.Minute || got > time.Hour {
+		t.Errorf("retryAfter(now) = %v, want close to the full hour", got)
 	}
 }
 
@@ -227,41 +406,5 @@ func TestResultPageSpeaksEveryPlatformLanguage(t *testing.T) {
 	spentTitle, _ := ResultPage("en", false)
 	if confirmedTitle == spentTitle {
 		t.Error("a confirmed link and a spent one produce the same page")
-	}
-}
-
-// Retry-After has to be a number the caller can obey. Zero, or a negative
-// duration from a window that has already passed, is an instruction to retry
-// immediately — which is what the limit exists to prevent.
-func TestRetryAfterIsAlwaysWorthWaiting(t *testing.T) {
-	if got := retryAfter(nil); got < time.Minute {
-		t.Errorf("retryAfter(nil) = %v, want at least a minute", got)
-	}
-	longPast := time.Now().Add(-3 * time.Hour)
-	if got := retryAfter(&longPast); got < time.Minute {
-		t.Errorf("retryAfter(long past) = %v, want at least a minute", got)
-	}
-	justNow := time.Now()
-	got := retryAfter(&justNow)
-	if got < 50*time.Minute || got > time.Hour {
-		t.Errorf("retryAfter(now) = %v, want close to the full hour", got)
-	}
-}
-
-// PUBLIC_ORIGIN is what the link in the mail is built from. It is deliberately
-// not taken from the request: the link outlives the request, and a forged Host
-// header would otherwise point every verification at somebody else's server.
-func TestLinksAreBuiltFromPublicOrigin(t *testing.T) {
-	t.Setenv("PUBLIC_ORIGIN", "https://nexus.gerege.mn/")
-	if got := ConfirmURL(); got != "https://nexus.gerege.mn/api/v1/verify/confirm" {
-		t.Errorf("ConfirmURL() = %q", got)
-	}
-	if got := SendURL(); got != "https://nexus.gerege.mn/api/v1/verify/send" {
-		t.Errorf("SendURL() = %q", got)
-	}
-
-	t.Setenv("PUBLIC_ORIGIN", "")
-	if got := ConfirmURL(); !strings.HasPrefix(got, "http://localhost:8080/") {
-		t.Errorf("unset PUBLIC_ORIGIN gave %q, want the local development default", got)
 	}
 }

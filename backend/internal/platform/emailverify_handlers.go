@@ -16,7 +16,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
@@ -25,21 +24,21 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
-	"github.com/go-chi/chi/v5"
 )
 
 // Email verification.
 //
-// Two audiences meet on the same endpoint. A platform outside Gerege Nexus
-// presents a client key it was issued here; a screen inside the product is
-// already carrying a session. Both want the same act performed against the same
-// tenant, so they share one endpoint and one audit trail rather than growing a
-// second, subtly different implementation for internal callers.
+// The mail is sent by the hosted service; this platform asks for it and finds
+// out when the link was followed. Two endpoints, and only one of them is for
+// a person: /verify/send is called by a signed-in screen (app modules call the
+// Go API directly), and /verify/landed is where the recipient's browser arrives
+// after the service has honoured its own token.
 
 // emailVerifyError maps a service error onto a status.
 //
-// A rate limit answers with Retry-After, because "too many requests" without a
-// number is something an integrator can only respond to by guessing.
+// The distinction that matters to an integrator is retryable versus not: a rate
+// limit and an upstream failure will work later, a malformed address will not,
+// and a missing key is nobody's fault but the operator's.
 func emailVerifyError(w http.ResponseWriter, err error) {
 	var invalid *emailverify.InvalidError
 	var limited *emailverify.RateLimitedError
@@ -49,125 +48,77 @@ func emailVerifyError(w http.ResponseWriter, err error) {
 	case errors.As(err, &limited):
 		w.Header().Set("Retry-After", strconv.Itoa(int(limited.RetryAfter.Round(time.Second).Seconds())))
 		writeJSONError(w, http.StatusTooManyRequests, limited.Error())
-	case errors.Is(err, emailverify.ErrUnauthorizedKey):
-		writeJSONError(w, http.StatusUnauthorized, "unknown or disabled client key")
-	case errors.Is(err, emailverify.ErrClientNotFound):
-		writeJSONError(w, http.StatusNotFound, "verification client not found")
-	case errors.Is(err, emailverify.ErrDuplicateName):
-		writeJSONError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, emailverify.ErrNotConfigured),
+		errors.Is(err, emailverify.ErrOriginNotHTTPS),
+		errors.Is(err, emailverify.ErrUnauthorizedKey):
+		// All three are this deployment's configuration, not the request's.
+		// 503 says "not right now, and not because of what you sent".
+		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, emailverify.ErrUpstream):
+		writeJSONError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, emailverify.ErrLinkSpent):
 		writeJSONError(w, http.StatusGone, err.Error())
-	case errors.Is(err, emailverify.ErrMailUnavailable):
-		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 	default:
 		slog.Error("emailverify: request failed", "error", err)
 		writeJSONError(w, http.StatusInternalServerError, "the verification request could not be completed")
 	}
 }
 
-// clientKeyFromRequest returns a presented verification client key, if the
-// Authorization header carries one.
-//
-// The prefix is what tells it apart from a session bearer token, which arrives
-// in the same header. Without that check a client key would be handed to the
-// session store, fail to resolve, and the caller would be told their key is an
-// expired session.
-func clientKeyFromRequest(r *http.Request) string {
-	const bearer = "Bearer "
-	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	if len(header) <= len(bearer) || !strings.EqualFold(header[:len(bearer)], bearer) {
-		return ""
-	}
-	token := strings.TrimSpace(header[len(bearer):])
-	if !strings.HasPrefix(token, emailverify.KeyPrefix) {
-		return ""
-	}
-	return token
-}
-
 type verifySendRequest struct {
 	Email       string `json:"email"`
 	RedirectURL string `json:"redirect_url"`
 	Purpose     string `json:"purpose"`
-	Locale      string `json:"locale"`
 }
 
-// handleVerifySend issues a verification link and queues the mail.
+// handleVerifySend asks the hosted service for a link.
 //
-// It sits outside the authenticated group because the majority of its callers
-// are not browsers and hold no session. Authority comes from a client key, and
-// falls back to the session for the settings screen's own test send — that
-// fallback is what keeps the product from having to call itself over HTTP with
-// a key it issued to itself.
+// It is inside the authenticated group: the caller is one of this platform's
+// own screens. A system outside Gerege Nexus does not come through here at all
+// — it holds its own key with the verification service and calls that service
+// directly, which is why this platform no longer issues keys.
 func (s *Server) handleVerifySend(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := tenant.FromContext(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var req verifySendRequest
 	if decodeLimitedJSON(r, &req, 8<<10) != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid verification request")
 		return
 	}
 
-	locale := req.Locale
-	if locale == "" {
-		locale = config.LocaleFromRequest(r)
-	}
-	base := emailverify.Request{
+	claims, _ := auth.UserFromContext(r.Context())
+	verification, err := s.emailVerify.Send(r.Context(), tenantID, emailverify.Request{
 		Email:       req.Email,
 		RedirectURL: req.RedirectURL,
 		Purpose:     req.Purpose,
-		Locale:      locale,
+		Source:      "portal",
 		ClientIP:    security.ClientIP(r),
-	}
-
-	if key := clientKeyFromRequest(r); key != "" {
-		client, err := s.emailVerify.Authenticate(r.Context(), key)
-		if err != nil {
-			emailVerifyError(w, err)
-			return
-		}
-		verification, err := s.emailVerify.SendForClient(r.Context(), client, base)
-		if err != nil {
-			emailVerifyError(w, err)
-			return
-		}
-		audit.Record(r.Context(), client.TenantID, "client:"+client.ID, "emailverify.send", "email_verification",
-			map[string]any{"id": verification.ID, "client": client.Name, "purpose": verification.Purpose})
-		writeJSON(w, http.StatusOK, verification)
-		return
-	}
-
-	// No client key: this must be somebody signed in. The session is resolved
-	// here rather than by authMiddleware because the route is shared with the
-	// keyed callers above, and mounting it inside the protected group would
-	// close it to them.
-	claims, err := s.sessions.Resolve(r.Context(), auth.TokenFromRequest(r))
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "a verification client key or an active session is required")
-		return
-	}
-	base.Source = "portal"
-	verification, err := s.emailVerify.Send(r.Context(), claims.TenantID, base)
+	})
 	if err != nil {
 		emailVerifyError(w, err)
 		return
 	}
-	audit.Record(r.Context(), claims.TenantID, claims.UserID, "emailverify.send", "email_verification",
+	audit.Record(r.Context(), tenantID, claims.UserID, "emailverify.send", "email_verification",
 		map[string]any{"id": verification.ID, "purpose": verification.Purpose})
 	writeJSON(w, http.StatusOK, verification)
 }
 
-// handleVerifyConfirm honours the link in the mail.
+// handleVerifyLanded receives the person the verification service sends back.
 //
-// Unauthenticated by design: the person clicking is the one being verified, and
-// they have no account here. The token in the query is the whole authority, it
-// is good exactly once, and a spent one is 410 rather than a redirect — sending
-// somebody onward on a link that proved nothing is how a stale forward turns
-// into an accepted address.
-func (s *Server) handleVerifyConfirm(w http.ResponseWriter, r *http.Request) {
+// Unauthenticated by design: whoever is arriving has just proved an address,
+// not signed in, and may have no account here at all. The single-use reference
+// in the query is the whole authority, and it is claimed exactly once — the
+// return address travels through a mailbox and then a browser's history, so a
+// replay of it must not be able to re-assert anything.
+func (s *Server) handleVerifyLanded(w http.ResponseWriter, r *http.Request) {
 	locale := config.LocaleFromRequest(r)
-	verification, err := s.emailVerify.Confirm(r.Context(), r.URL.Query().Get("token"))
+	verification, err := s.emailVerify.Confirm(r.Context(), r.URL.Query().Get("ref"))
 	if err != nil {
 		if !errors.Is(err, emailverify.ErrLinkSpent) {
-			slog.Error("emailverify: confirm failed", "error", err)
+			slog.Error("emailverify: landing failed", "error", err)
 			writeVerifyPage(w, http.StatusInternalServerError, locale, false)
 			return
 		}
@@ -178,9 +129,8 @@ func (s *Server) handleVerifyConfirm(w http.ResponseWriter, r *http.Request) {
 	audit.Record(r.Context(), verification.TenantID, "recipient", "emailverify.confirmed", "email_verification",
 		map[string]any{"id": verification.ID, "source": verification.Source, "purpose": verification.Purpose})
 
-	// The destination was validated when the link was issued, against the rules
-	// in force then and the client's allowlist. It is not re-derived from
-	// anything in this request.
+	// The destination was validated when the request was made, against the
+	// rules in force then. It is not re-derived from anything in this request.
 	if verification.RedirectURL != "" {
 		http.Redirect(w, r, verification.RedirectURL, http.StatusFound)
 		return
@@ -208,10 +158,8 @@ h1{font-size:20px;margin:0 0 12px}p{color:#475569;font-size:14px;line-height:1.6
 		html.EscapeString(locale), html.EscapeString(title), html.EscapeString(title), html.EscapeString(body))
 }
 
-// Client administration. Issuing a key that can send mail in the tenant's name
-// is an administrative act, so these sit behind requireAdmin with the rest of
-// the settings surface.
-
+// handleEmailVerifyOverview is the settings screen in one request: what has
+// been asked for, and whether the service that sends it is reachable.
 func (s *Server) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
@@ -230,97 +178,4 @@ func (s *Server) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, overview)
-}
-
-func (s *Server) handleListEmailVerifyClients(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	clients, err := s.emailVerify.ListClients(r.Context(), tenantID)
-	if err != nil {
-		emailVerifyError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, clients)
-}
-
-type emailVerifyClientRequest struct {
-	Name                 string   `json:"name"`
-	Status               string   `json:"status"`
-	HourlyLimit          int      `json:"hourly_limit"`
-	AllowedRedirectHosts []string `json:"allowed_redirect_hosts"`
-}
-
-func (r emailVerifyClientRequest) toInput() emailverify.ClientInput {
-	return emailverify.ClientInput{
-		Name:                 r.Name,
-		Status:               emailverify.ClientStatus(strings.ToUpper(strings.TrimSpace(r.Status))),
-		HourlyLimit:          r.HourlyLimit,
-		AllowedRedirectHosts: r.AllowedRedirectHosts,
-	}
-}
-
-func (s *Server) handleCreateEmailVerifyClient(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	var req emailVerifyClientRequest
-	if decodeLimitedJSON(r, &req, 16<<10) != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid client configuration")
-		return
-	}
-	client, err := s.emailVerify.CreateClient(r.Context(), tenantID, req.toInput())
-	if err != nil {
-		emailVerifyError(w, err)
-		return
-	}
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "emailverify.client.create", "email_verification_client",
-		map[string]any{"id": client.ID, "name": client.Name})
-	// The only response that carries the key. There is no endpoint that reads
-	// it back, because the database does not have it.
-	writeJSON(w, http.StatusCreated, client)
-}
-
-func (s *Server) handleUpdateEmailVerifyClient(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	var req emailVerifyClientRequest
-	if decodeLimitedJSON(r, &req, 16<<10) != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid client configuration")
-		return
-	}
-	client, err := s.emailVerify.UpdateClient(r.Context(), tenantID, chi.URLParam(r, "id"), req.toInput())
-	if err != nil {
-		emailVerifyError(w, err)
-		return
-	}
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "emailverify.client.update", "email_verification_client",
-		map[string]any{"id": client.ID, "status": client.Status})
-	writeJSON(w, http.StatusOK, client)
-}
-
-func (s *Server) handleDeleteEmailVerifyClient(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	id := chi.URLParam(r, "id")
-	if err := s.emailVerify.DeleteClient(r.Context(), tenantID, id); err != nil {
-		emailVerifyError(w, err)
-		return
-	}
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "emailverify.client.delete", "email_verification_client",
-		map[string]any{"id": id})
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

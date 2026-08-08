@@ -168,13 +168,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		loginLimiter: newLoginLimiter(),
 		pollLimiter:  newPollLimiter(),
 		aiLimiter:    security.NewIPRateLimiter(rate.Limit(20.0/60.0), 10),
-		// The per-caller allowance for /verify/send is metered per client in the
-		// database. This is the cruder guard in front of it: an unauthenticated
-		// flood should not reach the client lookup at all.
-		// One per second sustained, twenty in a burst.
+		// Every send is a call to somebody else's service on a shared key, so
+		// there is a cruder guard in front of the per-tenant allowance the
+		// service itself applies: one per second sustained, twenty in a burst.
 		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(1), 20),
 		asyncMailer:    asyncMailer,
-		emailVerify:    emailverify.NewService(db, asyncMailer),
+		emailVerify:    emailverify.NewService(db),
 		copilotSvc:     ai.NewCopilotService(db),
 		forecaster:     ai.NewForecaster(db),
 		eidSvc:         eid.NewEIDService(),
@@ -219,8 +218,9 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 // It is exposed rather than kept private because it belongs to every app
 // module, not to the platform's own handlers: a module takes it in its
 // constructor the way gov_services takes the integration manager, and calls
-// Send with its own app id as the source. One flow, one audit trail, one place
-// where token reuse and open redirects are gotten right.
+// Send with its own app id as the source. The mail itself is sent by the hosted
+// verification service — this platform holds no mailbox credential — and what
+// is kept here is which module asked, for whom, and whether they came back.
 func (s *Server) EmailVerification() *emailverify.Service { return s.emailVerify }
 
 func (s *Server) Router() *chi.Mux {
@@ -288,20 +288,11 @@ func (s *Server) setupRoutes() {
 		// a SameSite=Strict session cookie.
 		api.Get("/integrations/oauth/callback", s.handleIntegrationOAuthCallback)
 
-		// Email verification. Both endpoints are outside the authenticated
-		// group on purpose.
-		//
-		// /verify/send is the platform's shared "prove this address" service
-		// offered to callers who have no session here — another platform, a
-		// mobile backend, a partner — authenticated by a client key issued from
-		// Settings. It still accepts a session, so the product's own screens do
-		// not have to hold a key to call it.
-		//
-		// /verify/confirm is the link in the mail. The person following it is
-		// the one being verified and has no account here; the single-use token
-		// is the whole authority.
-		api.With(security.RateLimitMiddleware(s.verifyLimiter)).Post("/verify/send", s.handleVerifySend)
-		api.Get("/verify/confirm", s.handleVerifyConfirm)
+		// Where the verification service returns somebody who has just proved
+		// an address. Unauthenticated on purpose: they have not signed in, and
+		// may have no account here at all. The single-use reference in the
+		// query is the whole authority — see handleVerifyLanded.
+		api.Get("/verify/landed", s.handleVerifyLanded)
 
 		// Protected endpoints
 		api.Group(func(pr chi.Router) {
@@ -322,18 +313,15 @@ func (s *Server) setupRoutes() {
 				ac.Put("/memberships/{id}/roles", s.handleSetMembershipRoles)
 			})
 
-			// Email verification administration. Issuing a key that can send
-			// mail in the tenant's name — and reading who has been written to —
-			// is administrative, so it sits with the rest of the settings
-			// surface rather than with the send endpoint it configures.
-			pr.Route("/admin/email-verification", func(vr chi.Router) {
-				vr.Use(s.requireAdmin)
-				vr.Get("/overview", s.handleEmailVerifyOverview)
-				vr.Get("/clients", s.handleListEmailVerifyClients)
-				vr.Post("/clients", s.handleCreateEmailVerifyClient)
-				vr.Put("/clients/{id}", s.handleUpdateEmailVerifyClient)
-				vr.Delete("/clients/{id}", s.handleDeleteEmailVerifyClient)
-			})
+			// Asking the verification service to write to an address spends a
+			// credential the whole platform shares, so it is a signed-in act.
+			// App modules do not come through here — they hold the service and
+			// call it in process.
+			pr.With(security.RateLimitMiddleware(s.verifyLimiter)).Post("/verify/send", s.handleVerifySend)
+
+			// Who has been written to is an administrative read: it is a list
+			// of people's addresses and what they were asked to prove.
+			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
 			// AI Copilot & Forecasting
 			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/copilot", s.handleAICopilot)

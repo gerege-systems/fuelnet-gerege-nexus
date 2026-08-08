@@ -80,32 +80,15 @@ export interface Integration {
 }
 
 /**
- * Email verification — the platform's shared "prove this address" service.
+ * Email verification — proving an address, through the hosted service.
  *
- * A client is a key issued to a caller outside the browser. The key exists in
- * exactly one response, the one that creates it: `secret` is present there and
- * absent from every later read, because the server keeps only its hash.
+ * The platform holds no mailbox credential and issues no keys of its own: it
+ * asks the verification service for a link and finds out when the person came
+ * back. The service key is a server-side secret and never reaches this code.
  */
-export interface EmailVerifyClient {
-  id: string;
-  name: string;
-  /** The first characters of the key, kept so two keys can be told apart. */
-  key_prefix: string;
-  status: "ACTIVE" | "DISABLED";
-  hourly_limit: number;
-  /** Empty means any HTTPS destination is allowed. */
-  allowed_redirect_hosts: string[];
-  last_used_at?: string;
-  created_at: string;
-  updated_at: string;
-  /** Present only in the response that creates the client. */
-  secret?: string;
-}
-
 export interface EmailVerification {
   id: string;
-  client_id?: string;
-  /** Who asked: a client name, an app module id, or "portal". */
+  /** Who asked: an app module id, or "portal". */
   source: string;
   purpose?: string;
   email: string;
@@ -126,17 +109,14 @@ export interface EmailVerifyOverview {
     verified_pct: number;
   };
   recent: EmailVerification[];
-  send_url: string;
-  confirm_url: string;
-  /** False when SMTP was never configured — mail is logged, not sent. */
-  mail_configured: boolean;
-}
-
-export interface EmailVerifyClientInput {
-  name: string;
-  status?: "ACTIVE" | "DISABLED";
-  hourly_limit?: number;
-  allowed_redirect_hosts?: string[];
+  /** Whether a service key is present at all. The key itself never comes back. */
+  configured: boolean;
+  /** The service's own health check, and what it said when it failed. */
+  reachable: boolean;
+  health?: string;
+  provider_url: string;
+  admin_url: string;
+  return_url: string;
 }
 
 export interface IntegrationInput {
@@ -714,32 +694,14 @@ export const api = {
 
   // Email verification.
   //
-  // The keys are write-once: createEmailVerifyClient is the only call that ever
-  // returns one, and there is no call that reads one back, because the server
-  // stores only its hash. Losing it means issuing a new one.
+  // There is no key management here any more: keys belong to the sending
+  // service and are administered there. What this platform keeps is the record
+  // of what it asked for.
   getEmailVerifyOverview: (limit = 25) =>
     fetcher<EmailVerifyOverview>(`/admin/email-verification/overview?limit=${limit}`),
 
-  getEmailVerifyClients: () => fetcher<EmailVerifyClient[]>("/admin/email-verification/clients"),
-
-  createEmailVerifyClient: (data: EmailVerifyClientInput) =>
-    fetcher<EmailVerifyClient>("/admin/email-verification/clients", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  updateEmailVerifyClient: (id: string, data: EmailVerifyClientInput) =>
-    fetcher<EmailVerifyClient>(`/admin/email-verification/clients/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-
-  deleteEmailVerifyClient: (id: string) =>
-    fetcher<{ status: string }>(`/admin/email-verification/clients/${id}`, { method: "DELETE" }),
-
-  // The same endpoint outside callers use, reached with the session instead of
-  // a client key — so the screen can prove the flow works end to end without
-  // the product having to hold a key it issued to itself.
+  // Ask the service for a link. App modules call the Go service directly; this
+  // is for the product's own screens.
   sendEmailVerification: (data: { email: string; redirect_url?: string; purpose?: string }) =>
     fetcher<EmailVerification>("/verify/send", { method: "POST", body: JSON.stringify(data) }),
 

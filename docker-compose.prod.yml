@@ -109,6 +109,12 @@ services:
       ESIGN_TOKEN: ${ESIGN_TOKEN:-}
       DAN_MOCK_MODE: ${DEMO_MODE:-false}
       XYP_MOCK_MODE: ${DEMO_MODE:-false}
+      # Email verification runs through a hosted service, so this deployment
+      # holds no mailbox credential for it — only the key that identifies this
+      # platform to that service. Left empty, no verification mail can be
+      # requested and the settings screen says exactly that.
+      EMAIL_VERIFY_API_KEY: ${EMAIL_VERIFY_API_KEY:-}
+      EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL:-}
       # Integration connectors. Without the key the server refuses to store a
       # credential rather than storing it in the clear, so Drive, Dropbox and
       # Meet simply cannot be saved — which is the visible failure, not a
