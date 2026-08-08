@@ -131,12 +131,9 @@ func checkTargetHost(host string) error {
 	if name == "localhost" || strings.HasSuffix(name, ".localhost") {
 		return invalid("the target URL points at this server itself")
 	}
-	addr, err := netip.ParseAddr(name)
-	if err != nil {
-		// A name. Whether it is internal is decided when it resolves.
-		return nil
-	}
-	if addressIsInternal(addr) {
+	// A host that does not parse as an address is a name, and whether a name is
+	// internal is decided when it resolves — by the dialer, not here.
+	if addr, err := netip.ParseAddr(name); err == nil && addressIsInternal(addr) {
 		return invalid(
 			"the target URL points inside the deployment's own network (%s), which this server "+
 				"will not be asked to reach on a tenant's behalf", addr)

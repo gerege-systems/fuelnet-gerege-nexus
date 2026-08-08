@@ -10,7 +10,9 @@
 package ssoprovider
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -24,6 +26,9 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type OAuth2Client struct {
@@ -37,6 +42,7 @@ type OAuth2Client struct {
 	GrantTypes   []string  `json:"grant_types"`
 	Scopes       []string  `json:"scopes"`
 	CreatedAt    time.Time `json:"created_at"`
+	secretHash   string
 }
 
 // Redacted returns a copy safe to serialise to API consumers.
@@ -63,9 +69,10 @@ type SSOProvider struct {
 	issuer  string
 	clients map[string]*OAuth2Client
 	tokens  map[string]*TokenIntrospection
+	db      *pgxpool.Pool
 }
 
-func NewSSOProvider() *SSOProvider {
+func NewSSOProvider(pools ...*pgxpool.Pool) *SSOProvider {
 	issuer := os.Getenv("SSO_ISSUER")
 	if issuer == "" {
 		// The issuer is baked into every token already granted and into the
@@ -81,6 +88,9 @@ func NewSSOProvider() *SSOProvider {
 		issuer:  issuer,
 		clients: make(map[string]*OAuth2Client),
 		tokens:  make(map[string]*TokenIntrospection),
+	}
+	if len(pools) > 0 {
+		provider.db = pools[0]
 	}
 
 	// Bootstrap the built-in developer-portal client. Its secret used to be a
@@ -99,7 +109,10 @@ func NewSSOProvider() *SSOProvider {
 			"client_id", "gerege-dev-portal", "client_secret", secret)
 	}
 
-	provider.RegisterClient(&OAuth2Client{
+	// The built-in client is intentionally memory-backed. Tenant-created
+	// clients are durable; this operator-owned bootstrap identity comes from
+	// deployment configuration on every replica.
+	provider.registerMemoryClient(&OAuth2Client{
 		ID:           "cli_01",
 		ClientID:     "gerege-dev-portal",
 		ClientSecret: secret,
@@ -122,6 +135,10 @@ func NewSSOProvider() *SSOProvider {
 }
 
 func (s *SSOProvider) RegisterClient(client *OAuth2Client) {
+	s.registerMemoryClient(client)
+}
+
+func (s *SSOProvider) registerMemoryClient(client *OAuth2Client) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if client.ID == "" {
@@ -135,6 +152,31 @@ func (s *SSOProvider) RegisterClient(client *OAuth2Client) {
 	}
 	client.CreatedAt = time.Now()
 	s.clients[client.ClientID] = client
+}
+
+// RegisterTenantClient persists one tenant's client. Only a SHA-256 digest of
+// the high-entropy generated secret is stored, so a database leak cannot mint
+// tokens as that client.
+func (s *SSOProvider) RegisterTenantClient(ctx context.Context, tenantID string, client *OAuth2Client) error {
+	if s.db == nil {
+		s.registerMemoryClient(client)
+		return nil
+	}
+	if client.ID == "" {
+		client.ID = uuid.NewString()
+	}
+	if client.ClientID == "" {
+		client.ClientID = "app_" + generateRandomString(16)
+	}
+	if client.ClientSecret == "" {
+		client.ClientSecret = "sec_" + generateRandomString(32)
+	}
+	client.CreatedAt = time.Now()
+	_, err := s.db.Exec(ctx, `INSERT INTO oauth2_clients
+		(id,tenant_id,client_id,client_secret_hash,client_name,redirect_uris,grant_types,scopes,created_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, client.ID, tenantID, client.ClientID,
+		hashSecret(client.ClientSecret), client.ClientName, client.RedirectURIs, client.GrantTypes, client.Scopes, client.CreatedAt)
+	return err
 }
 
 // ListClients returns every registered client with its secret redacted. The
@@ -152,6 +194,27 @@ func (s *SSOProvider) ListClients() []*OAuth2Client {
 	return list
 }
 
+func (s *SSOProvider) ListTenantClients(ctx context.Context, tenantID string) ([]*OAuth2Client, error) {
+	if s.db == nil {
+		return s.ListClients(), nil
+	}
+	rows, err := s.db.Query(ctx, `SELECT id::text,client_id,client_name,redirect_uris,grant_types,scopes,created_at
+		FROM oauth2_clients WHERE tenant_id=$1 ORDER BY client_id`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := make([]*OAuth2Client, 0)
+	for rows.Next() {
+		c := &OAuth2Client{}
+		if err := rows.Scan(&c.ID, &c.ClientID, &c.ClientName, &c.RedirectURIs, &c.GrantTypes, &c.Scopes, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, rows.Err()
+}
+
 func (s *SSOProvider) GetClient(clientID string) (*OAuth2Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -162,10 +225,35 @@ func (s *SSOProvider) GetClient(clientID string) (*OAuth2Client, error) {
 	return client, nil
 }
 
+func (s *SSOProvider) getClient(ctx context.Context, clientID string) (*OAuth2Client, error) {
+	if c, err := s.GetClient(clientID); err == nil {
+		return c, nil
+	}
+	if s.db == nil {
+		return nil, errors.New("client not found")
+	}
+	c := &OAuth2Client{}
+	err := s.db.QueryRow(ctx, `SELECT id::text,client_id,client_secret_hash,client_name,redirect_uris,grant_types,scopes,created_at
+		FROM oauth2_clients WHERE client_id=$1`, clientID).Scan(&c.ID, &c.ClientID, &c.secretHash, &c.ClientName, &c.RedirectURIs, &c.GrantTypes, &c.Scopes, &c.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("client not found")
+	}
+	return c, err
+}
+
 // IssueToken generates a new OAuth2 Access Token
 func (s *SSOProvider) IssueToken(clientID, sub, scope string, duration time.Duration) (string, error) {
+	return s.issueToken(context.Background(), clientID, sub, scope, duration)
+}
+
+func (s *SSOProvider) issueToken(ctx context.Context, clientID, sub, scope string, duration time.Duration) (string, error) {
 	token := "hydra_at_" + generateRandomString(32)
 	exp := time.Now().Add(duration).Unix()
+	if s.db != nil {
+		_, err := s.db.Exec(ctx, `INSERT INTO oauth2_access_tokens(token_hash,client_id,subject,scope,expires_at)
+			VALUES($1,$2,$3,$4,to_timestamp($5))`, hashSecret(token), clientID, sub, scope, exp)
+		return token, err
+	}
 
 	s.mu.Lock()
 	s.tokens[token] = &TokenIntrospection{
@@ -183,6 +271,18 @@ func (s *SSOProvider) IssueToken(clientID, sub, scope string, duration time.Dura
 
 // IntrospectToken inspects token validity (ORY Hydra standard)
 func (s *SSOProvider) IntrospectToken(token string) *TokenIntrospection {
+	return s.introspectToken(context.Background(), token)
+}
+
+func (s *SSOProvider) introspectToken(ctx context.Context, token string) *TokenIntrospection {
+	if s.db != nil {
+		res := &TokenIntrospection{TokenType: "Bearer"}
+		err := s.db.QueryRow(ctx, `SELECT client_id,subject,scope,extract(epoch from expires_at)::bigint
+			FROM oauth2_access_tokens WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>NOW()`, hashSecret(token)).
+			Scan(&res.ClientID, &res.Sub, &res.Scope, &res.Exp)
+		res.Active = err == nil
+		return res
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -200,6 +300,19 @@ func (s *SSOProvider) IntrospectToken(token string) *TokenIntrospection {
 
 // RevokeToken invalidates an issued token
 func (s *SSOProvider) RevokeToken(token string) bool {
+	return s.revokeToken(context.Background(), token)
+}
+
+func (s *SSOProvider) revokeToken(ctx context.Context, token string) bool {
+	return s.revokeTokenForClient(ctx, token, "")
+}
+
+func (s *SSOProvider) revokeTokenForClient(ctx context.Context, token, clientID string) bool {
+	if s.db != nil {
+		tag, err := s.db.Exec(ctx, `UPDATE oauth2_access_tokens SET revoked_at=NOW()
+			WHERE token_hash=$1 AND revoked_at IS NULL AND ($2='' OR client_id=$2)`, hashSecret(token), clientID)
+		return err == nil && tag.RowsAffected() > 0
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.tokens[token]; ok {
@@ -247,11 +360,20 @@ func (s *SSOProvider) HandleJWKS(w http.ResponseWriter, r *http.Request) {
 // — skipped verification entirely when the request omitted the secret, so any
 // caller who knew a client_id could mint access tokens.
 func (s *SSOProvider) AuthenticateClient(clientID, clientSecret string) (*OAuth2Client, error) {
-	client, err := s.GetClient(clientID)
+	return s.authenticateClient(context.Background(), clientID, clientSecret)
+}
+
+func (s *SSOProvider) authenticateClient(ctx context.Context, clientID, clientSecret string) (*OAuth2Client, error) {
+	client, err := s.getClient(ctx, clientID)
 	if err != nil {
 		return nil, ErrInvalidClient
 	}
-	if subtle.ConstantTimeCompare([]byte(client.ClientSecret), []byte(clientSecret)) != 1 {
+	want := client.ClientSecret
+	got := clientSecret
+	if client.secretHash != "" {
+		want, got = client.secretHash, hashSecret(clientSecret)
+	}
+	if subtle.ConstantTimeCompare([]byte(want), []byte(got)) != 1 {
 		return nil, ErrInvalidClient
 	}
 	return client, nil
@@ -269,7 +391,7 @@ func (s *SSOProvider) HandleTokenEndpoint(w http.ResponseWriter, r *http.Request
 		clientSecret = r.FormValue("client_secret")
 	}
 
-	client, err := s.AuthenticateClient(clientID, clientSecret)
+	client, err := s.authenticateClient(r.Context(), clientID, clientSecret)
 	if err != nil {
 		w.Header().Set("WWW-Authenticate", `Basic realm="oauth2"`)
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
@@ -294,7 +416,7 @@ func (s *SSOProvider) HandleTokenEndpoint(w http.ResponseWriter, r *http.Request
 	}
 
 	scope := strings.Join(client.Scopes, " ")
-	accessToken, err := s.IssueToken(client.ClientID, client.ClientID, scope, tokenTTL)
+	accessToken, err := s.issueToken(r.Context(), client.ClientID, client.ClientID, scope, tokenTTL)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue token")
 		return
@@ -319,12 +441,12 @@ func (s *SSOProvider) HandleIntrospectEndpoint(w http.ResponseWriter, r *http.Re
 		clientID = r.FormValue("client_id")
 		clientSecret = r.FormValue("client_secret")
 	}
-	if _, err := s.AuthenticateClient(clientID, clientSecret); err != nil {
+	if _, err := s.authenticateClient(r.Context(), clientID, clientSecret); err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return
 	}
 
-	res := s.IntrospectToken(r.FormValue("token"))
+	res := s.introspectToken(r.Context(), r.FormValue("token"))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -337,12 +459,12 @@ func (s *SSOProvider) HandleRevokeEndpoint(w http.ResponseWriter, r *http.Reques
 		clientID = r.FormValue("client_id")
 		clientSecret = r.FormValue("client_secret")
 	}
-	if _, err := s.AuthenticateClient(clientID, clientSecret); err != nil {
+	if _, err := s.authenticateClient(r.Context(), clientID, clientSecret); err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return
 	}
 
-	s.RevokeToken(r.FormValue("token"))
+	s.revokeTokenForClient(r.Context(), r.FormValue("token"), clientID)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -357,6 +479,11 @@ func writeOAuthError(w http.ResponseWriter, status int, code, description string
 }
 
 const tokenTTL = 1 * time.Hour
+
+func hashSecret(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
 
 // generateRandomString returns n hex characters of crypto/rand output.
 //

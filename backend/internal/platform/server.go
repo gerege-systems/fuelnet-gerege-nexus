@@ -167,7 +167,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
 	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
 
-	ssoProvider := ssoprovider.NewSSOProvider()
+	ssoProvider := ssoprovider.NewSSOProvider(db)
 	devPortalMod := developer_portal.NewDeveloperPortalModule(ssoProvider)
 
 	s := &Server{

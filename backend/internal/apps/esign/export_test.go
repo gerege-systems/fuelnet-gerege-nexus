@@ -1,6 +1,7 @@
 package esign
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -62,8 +63,8 @@ func TestDecodeOptionalJSONSeparatesAnAbsentBodyFromABrokenOne(t *testing.T) {
 			if err == nil {
 				t.Fatalf("decodeOptionalJSON accepted %q as an absent body", tc.raw)
 			}
-			domainErr, ok := err.(*Error)
-			if !ok {
+			var domainErr *Error
+			if !errors.As(err, &domainErr) {
 				t.Fatalf("error is %T, want *Error so the handler answers with a code", err)
 			}
 			if domainErr.Code != "INVALID_BODY" {
