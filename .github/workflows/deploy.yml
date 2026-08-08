@@ -230,7 +230,10 @@ jobs:
             # container holding one of our explicit container names. Remove
             # only the stateless application services before bringing the new
             # revision up; PostgreSQL and its production volume stay running.
-            docker compose -f docker-compose.prod.yml rm -sf backend frontend migrate
+            # Do not ask Compose for a graceful stop here: a wedged frontend
+            # previously held that wait until the SSH action's 10-minute
+            # timeout. These containers are stateless and safe to force-remove.
+            docker rm -f gerege_nexus_backend gerege_nexus_frontend gerege_nexus_migrate 2>/dev/null || true
             # `up -d` runs the migrate service to completion first, then swaps
             # the API and frontend over.
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
