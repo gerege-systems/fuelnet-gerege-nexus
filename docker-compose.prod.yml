@@ -152,22 +152,23 @@ services:
         condition: service_healthy
 
 volumes:
-  # The key is rebranded; the physical volume deliberately is not.
+  # `name` pins the physical volume, decoupling the data from the deploy
+  # directory: Compose otherwise derives a volume name from the project, which
+  # comes from the directory, so moving the stack would silently bring Postgres
+  # up on an empty data directory — healthy container, initdb, migrations, no
+  # tenants. Pinning it is what makes that move safe.
   #
-  # Compose scopes a volume with the project name, which is derived from the
-  # directory the stack is deployed from. So two separate things would each be
-  # enough to bring Postgres up on an empty data directory — renaming this key,
-  # and moving the deploy directory from /opt/open-gerege-mn-erp. Either one
-  # loses the production database, and neither announces itself: the container
-  # starts healthy, initdb runs, migrations apply, and the result is an empty
-  # tenant.
+  # The pin was `open-gerege-mn-erp_platform_erp_postgres_data` until
+  # 2026-08-08, a name inherited from two rebrands ago. It was renamed to match
+  # the container names and the sibling stacks sharing this host
+  # (gerege_nexus_*, gerege_sso_*, gerege_salus_*), so that three products no
+  # longer carry three unrelated naming schemes for the same kind of thing.
   #
-  # `name` pins the physical volume to the one the live deployment already
-  # uses, so it is the same volume before and after the rebrand no matter where
-  # the stack runs from. A fresh install just creates it under this name.
-  #
-  # Renaming the volume itself is a data migration, not an edit: stop the stack,
-  # `docker run --rm -v old:/from -v new:/to alpine cp -a /from/. /to/`, repoint
-  # this field, restart, and only then remove the old volume.
+  # That rename was a data migration, not an edit: the stack was stopped, the
+  # data copied with
+  # `docker run --rm -v old:/from -v new:/to alpine cp -a /from/. /to/`, this
+  # field repointed, the stack restarted and row counts verified against a
+  # pg_dump taken first. The old volume was kept. Renaming it again costs the
+  # same steps — changing this line on its own gives you an empty database.
   gerege_nexus_postgres_data:
-    name: open-gerege-mn-erp_platform_erp_postgres_data
+    name: gerege_nexus_platform_postgres_data
