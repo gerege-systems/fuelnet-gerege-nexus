@@ -93,6 +93,57 @@ func TestValidateRejectsWhatCannotWork(t *testing.T) {
 	}
 }
 
+// Status says what the administrator wants, so those are the only two values it
+// takes. ERROR used to be a third, written by the delivery code when something
+// failed — which switched the connector off, because every selection query
+// requires ACTIVE. It is not a status a caller may set either: reaching the
+// CHECK constraint would answer a form submission with a raw Postgres message.
+func TestValidateAcceptsOnlyTheTwoIntentStatuses(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "key-for-validation-tests")
+	resetKeyForTest()
+
+	base := func(status ConnectorStatus) SaveRequest {
+		return SaveRequest{
+			Provider: ProviderWebhook, Name: "Subscriber",
+			TargetURL: "https://a.example.mn/hook", Status: status,
+		}
+	}
+
+	// Unset means on: a connector nobody switched off is one that works.
+	req := base("")
+	if err := validate(&req); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if req.Status != StatusActive {
+		t.Fatalf("an unset status became %q, want %s", req.Status, StatusActive)
+	}
+
+	// Case and stray whitespace come from hand-written API clients, not attacks.
+	req = base(" active ")
+	if err := validate(&req); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if req.Status != StatusActive {
+		t.Fatalf("%q was not normalised, got %q", " active ", req.Status)
+	}
+
+	req = base(StatusInactive)
+	if err := validate(&req); err != nil {
+		t.Fatalf("validate rejected %s: %v", StatusInactive, err)
+	}
+
+	for _, bad := range []ConnectorStatus{"ERROR", "PAUSED", "DELETED"} {
+		req = base(bad)
+		err := validate(&req)
+		if err == nil {
+			t.Fatalf("validate accepted status %q", bad)
+		}
+		if !strings.Contains(err.Error(), "status must be") {
+			t.Fatalf("error %q does not say which values are allowed", err)
+		}
+	}
+}
+
 // An OAuth connector has no URL to type. Accepting one would suggest the upload
 // goes somewhere it does not.
 func TestValidateClearsTheTargetURLOnOAuthProviders(t *testing.T) {

@@ -237,6 +237,11 @@ export default function IntegrationsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {integrations.map((item) => {
             const oauth = OAUTH_PROVIDERS.includes(item.provider);
+            // A connector that is switched on but whose last attempt failed is
+            // shown as failing without being shown as off: the server keeps
+            // trying it, and the two states have different remedies. status is
+            // the administrator's switch; last_error is how it went.
+            const health = item.status !== "ACTIVE" ? "off" : item.last_error ? "failing" : "ok";
             return (
               <div
                 key={item.id}
@@ -257,19 +262,21 @@ export default function IntegrationsPage() {
                     </div>
                     <span
                       className={`inline-flex items-center space-x-1 text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${
-                        item.status === "ACTIVE"
+                        health === "ok"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : item.status === "ERROR"
+                          : health === "failing"
                             ? "bg-red-50 text-red-700 border border-red-200"
                             : "bg-amber-50 text-amber-700 border border-amber-200"
                       }`}
                     >
-                      {item.status === "ACTIVE" ? (
+                      {health === "ok" ? (
                         <CheckCircle2 className="w-3.5 h-3.5" />
+                      ) : health === "failing" ? (
+                        <AlertTriangle className="w-3.5 h-3.5" />
                       ) : (
                         <ShieldAlert className="w-3.5 h-3.5" />
                       )}
-                      <span>{item.status}</span>
+                      <span>{health === "failing" ? "ERROR" : item.status}</span>
                     </span>
                   </div>
 

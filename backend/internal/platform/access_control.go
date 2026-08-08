@@ -104,7 +104,9 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 
 	members := make([]accessMember, 0)
 	rows, err = s.db.Query(r.Context(), `
-		SELECT m.id::text,u.id::text,u.name,u.email,u.is_admin,
+		SELECT m.id::text,u.id::text,u.name,u.email,
+		       EXISTS (SELECT 1 FROM membership_roles amr JOIN roles ar ON ar.id=amr.role_id
+		               WHERE amr.membership_id=m.id AND ar.tenant_id=m.tenant_id AND ar.code='admin' AND ar.active),
 		       COALESCE(array_agg(r.id::text ORDER BY r.name) FILTER (WHERE r.id IS NOT NULL),'{}')
 		FROM memberships m JOIN users u ON u.id=m.user_id
 		LEFT JOIN membership_roles mr ON mr.membership_id=m.id

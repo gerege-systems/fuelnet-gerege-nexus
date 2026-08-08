@@ -102,7 +102,7 @@ func seedInitialData(ctx context.Context, db *pgxpool.Pool) {
 
 	if _, err := db.Exec(ctx,
 		`INSERT INTO users (id, email, password_hash, name, is_admin)
-		 VALUES ($1, $2, $3, 'System Admin', TRUE)
+		 VALUES ($1, $2, $3, 'System Admin', FALSE)
 		 ON CONFLICT (email) DO NOTHING`, demoUserID, demoEmail, passHash); err != nil {
 		slog.Error("failed to seed admin user", "error", err)
 		return

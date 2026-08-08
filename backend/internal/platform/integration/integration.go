@@ -24,8 +24,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -48,6 +50,18 @@ type EventPayload struct {
 type Manager struct {
 	store      *store
 	httpClient *http.Client
+
+	// deliverySlots bounds how many webhook deliveries are in flight for the
+	// whole process. Dispatch used to start one goroutine per subscriber with
+	// nothing holding them back, so a tenant with two hundred subscribers — or
+	// a burst of events across tenants — opened as many sockets at once as the
+	// numbers happened to multiply out to.
+	deliverySlots chan struct{}
+
+	// refreshLocks serialises token renewal per connector, keyed by connector
+	// id. See refreshAccess: two exports starting together otherwise both
+	// refreshed the same grant and raced to store the result.
+	refreshLocks sync.Map
 }
 
 func NewManager(db *pgxpool.Pool) *Manager {
@@ -56,7 +70,8 @@ func NewManager(db *pgxpool.Pool) *Manager {
 		// Uploading a signed PDF is not a 10-second operation over a bad link,
 		// so this is looser than the old webhook-only client. Individual calls
 		// still carry their own context deadline.
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient:    newHTTPClient(60 * time.Second),
+		deliverySlots: make(chan struct{}, maxConcurrentDeliveries),
 	}
 }
 
@@ -115,6 +130,22 @@ func (m *Manager) Disconnect(ctx context.Context, tenantID, id string) error {
 	return m.store.disconnect(ctx, tenantID, id)
 }
 
+// InvalidError is a request the person who submitted it can fix by submitting
+// something else: a name they left blank, a provider that does not exist, a URL
+// pointing at the deployment's own network.
+//
+// It exists so the API layer can tell those apart from a database that is
+// down. Everything used to arrive there as a bare error and come back as a 400
+// carrying its text, which answered an outage with "bad request" and handed the
+// browser whatever the driver happened to say.
+type InvalidError struct{ Message string }
+
+func (e *InvalidError) Error() string { return e.Message }
+
+func invalid(format string, args ...any) error {
+	return &InvalidError{Message: fmt.Sprintf(format, args...)}
+}
+
 // validate normalises and checks a save request. It runs before both create and
 // update so the two cannot drift apart.
 func validate(req *SaveRequest) error {
@@ -125,13 +156,26 @@ func validate(req *SaveRequest) error {
 	req.Name = strings.TrimSpace(req.Name)
 	req.TargetURL = strings.TrimSpace(req.TargetURL)
 	if req.Name == "" {
-		return fmt.Errorf("a connector needs a name")
+		return invalid("a connector needs a name")
 	}
 	if len(req.Name) > 255 {
-		return fmt.Errorf("the connector name is too long")
+		return invalid("the connector name is too long")
 	}
 	if req.Config == nil {
 		req.Config = map[string]string{}
+	}
+
+	// Status is the administrator's intent, so only the two values that express
+	// one are accepted. Checking it here rather than letting the CHECK
+	// constraint reject it turns a raw Postgres message returned to the browser
+	// into a sentence about the field that was wrong.
+	req.Status = ConnectorStatus(strings.ToUpper(strings.TrimSpace(string(req.Status))))
+	switch req.Status {
+	case "":
+		req.Status = StatusActive
+	case StatusActive, StatusInactive:
+	default:
+		return invalid("status must be %s or %s", StatusActive, StatusInactive)
 	}
 
 	if spec.OAuth {
@@ -150,18 +194,23 @@ func validate(req *SaveRequest) error {
 	}
 
 	if req.TargetURL == "" {
-		return fmt.Errorf("a %s connector needs a target URL", spec.Provider)
+		return invalid("a %s connector needs a target URL", spec.Provider)
 	}
 	parsed, err := url.Parse(req.TargetURL)
 	if err != nil || parsed.Host == "" {
-		return fmt.Errorf("the target URL is not a valid absolute URL")
+		return invalid("the target URL is not a valid absolute URL")
 	}
 	// The server makes the outbound request, so whoever can save a connector
-	// chooses where this process connects. Restricting the scheme keeps that on
-	// ordinary web protocols; the endpoint being administrator-only is the real
-	// control.
+	// chooses where this process connects — and a tenant administrator is not
+	// the operator of the deployment. The scheme keeps that on ordinary web
+	// protocols; checkTargetHost keeps it off the deployment's own network. The
+	// binding check is at dial time (see network.go), because a hostname
+	// resolves later and can resolve elsewhere.
 	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return fmt.Errorf("the target URL must be http or https")
+		return invalid("the target URL must be http or https")
+	}
+	if err := checkTargetHost(parsed.Hostname()); err != nil {
+		return err
 	}
 	if req.Secret != "" && !EncryptionConfigured() {
 		return ErrNoEncryptionKey
@@ -171,9 +220,34 @@ func validate(req *SaveRequest) error {
 
 // ─── Webhook dispatch ────────────────────────────────────────────────────────
 
-// dispatchTimeout bounds one webhook delivery. Delivery does not inherit the
-// caller's cancellation (see DispatchEvent), so it needs a deadline of its own.
+// dispatchTimeout bounds one attempt at a webhook delivery. Delivery does not
+// inherit the caller's cancellation (see DispatchEvent), so it needs a deadline
+// of its own.
 const dispatchTimeout = 15 * time.Second
+
+// maxConcurrentDeliveries caps outbound webhook calls across the process, and
+// deliveryQueueWait is how long a delivery waits for a turn before giving up.
+//
+// Waiting forever would be the unbounded goroutine problem wearing a different
+// coat: under a burst the parked deliveries would pile up invisibly. Giving up
+// puts the overload in the delivery log, where it can be read.
+const (
+	maxConcurrentDeliveries = 8
+	deliveryQueueWait       = 30 * time.Second
+)
+
+// deliveryBackoff is the wait before each retry, so a delivery is attempted
+// len(deliveryBackoff)+1 times.
+//
+// A subscriber that is restarting, rate-limiting or briefly unreachable is the
+// ordinary case, and dropping the event on the first refusal is what made a
+// deployment feel unreliable. Retries are safe for the subscriber to absorb
+// because every attempt carries the same EventID, which is what a receiver
+// deduplicates on.
+//
+// It is a variable so the tests can exercise the retry path without waiting
+// twelve seconds for it.
+var deliveryBackoff = []time.Duration{2 * time.Second, 10 * time.Second}
 
 // DispatchEvent posts an event to the tenant's active webhook subscribers.
 //
@@ -186,6 +260,12 @@ func (m *Manager) DispatchEvent(ctx context.Context, tenantID string, payload Ev
 	}
 	if payload.TenantID != tenantID {
 		return fmt.Errorf("event tenant %q does not match the dispatching tenant", payload.TenantID)
+	}
+	// Retries resend the same body, so the event needs an identity a subscriber
+	// can deduplicate on. An unstamped event would arrive as two different
+	// events on the retry, which is worse than the failure being retried.
+	if payload.EventID == "" {
+		payload.EventID = uuid.NewString()
 	}
 	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -207,54 +287,124 @@ func (m *Manager) DispatchEvent(ctx context.Context, tenantID string, payload Ev
 	sendCtx := context.WithoutCancel(ctx)
 
 	for _, t := range targets {
-		go func(t dispatchTarget) {
-			reqCtx, cancel := context.WithTimeout(sendCtx, dispatchTimeout)
-			defer cancel()
-
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, t.url, bytes.NewReader(bodyBytes))
-			if err != nil {
-				m.store.noteError(sendCtx, tenantID, t.id, err.Error())
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
-			// X-ERP-* are legacy compatibility header names, kept through the
-			// Gerege Nexus rebrand. Subscribers read these exact names and
-			// verify the signature against them; renaming would break every
-			// existing endpoint silently. A Nexus-named alias would need
-			// dual-emission and a deprecation window, not a rename.
-			req.Header.Set("X-ERP-Event", payload.EventType)
-
-			if t.secret != "" {
-				mac := hmac.New(sha256.New, []byte(t.secret))
-				mac.Write(bodyBytes)
-				req.Header.Set("X-ERP-Signature", hex.EncodeToString(mac.Sum(nil)))
-			}
-
-			resp, err := m.httpClient.Do(req)
-			if err != nil {
-				m.store.noteError(sendCtx, tenantID, t.id, err.Error())
-				m.store.recordDelivery(sendCtx, tenantID, t.id, "event", payload.EventType,
-					"FAILED", err.Error(), "", "")
-				return
-			}
-			// Drain before closing so the connection returns to the pool
-			// instead of being torn down after every event.
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-			_ = resp.Body.Close()
-
-			if resp.StatusCode >= 300 {
-				detail := fmt.Sprintf("subscriber answered %d", resp.StatusCode)
-				m.store.noteError(sendCtx, tenantID, t.id, detail)
-				m.store.recordDelivery(sendCtx, tenantID, t.id, "event", payload.EventType,
-					"FAILED", detail, "", "")
-				return
-			}
-			m.store.noteSuccess(sendCtx, tenantID, t.id)
-			m.store.recordDelivery(sendCtx, tenantID, t.id, "event", payload.EventType, "OK", "", "", "")
-		}(t)
+		go m.deliver(sendCtx, tenantID, t, payload, bodyBytes)
 	}
 
 	return nil
+}
+
+// deliver sends one event to one subscriber, retrying what is worth retrying.
+//
+// The outcome is written once, at the end, so the delivery log holds one row
+// per event per subscriber rather than one row per attempt — the log is read to
+// answer "did this reach them", and three rows for one event does not answer it.
+func (m *Manager) deliver(ctx context.Context, tenantID string, t dispatchTarget,
+	payload EventPayload, body []byte) {
+
+	select {
+	case m.deliverySlots <- struct{}{}:
+		defer func() { <-m.deliverySlots }()
+	case <-time.After(deliveryQueueWait):
+		const detail = "gave up waiting for an outbound delivery slot"
+		m.store.noteError(ctx, tenantID, t.id, detail)
+		m.store.recordDelivery(ctx, tenantID, t.id, "event", payload.EventType, "FAILED", detail, "", "")
+		return
+	}
+
+	var detail string
+	attempts := len(deliveryBackoff) + 1
+	for attempt := range attempts {
+		if attempt > 0 {
+			select {
+			case <-time.After(deliveryBackoff[attempt-1]):
+			case <-ctx.Done():
+				detail = fmt.Sprintf("%s (gave up after %d attempts)", detail, attempt)
+				m.store.noteError(ctx, tenantID, t.id, detail)
+				m.store.recordDelivery(ctx, tenantID, t.id, "event", payload.EventType,
+					"FAILED", detail, "", "")
+				return
+			}
+		}
+
+		retryable, failure := m.attemptDelivery(ctx, t, payload, body)
+		if failure == "" {
+			m.store.noteSuccess(ctx, tenantID, t.id)
+			m.store.recordDelivery(ctx, tenantID, t.id, "event", payload.EventType,
+				"OK", deliveredAfter(attempt), "", "")
+			return
+		}
+		detail = failure
+		// A subscriber that answered 404 or 401 will answer the same way in ten
+		// seconds. Retrying it is noise for them and a delay for the report.
+		if !retryable {
+			break
+		}
+	}
+
+	m.store.noteError(ctx, tenantID, t.id, detail)
+	m.store.recordDelivery(ctx, tenantID, t.id, "event", payload.EventType, "FAILED", detail, "", "")
+}
+
+// attemptDelivery makes one POST. It returns whether the failure is worth
+// another attempt, and the failure itself — empty when the subscriber accepted
+// the event.
+func (m *Manager) attemptDelivery(ctx context.Context, t dispatchTarget,
+	payload EventPayload, body []byte) (retryable bool, failure string) {
+
+	reqCtx, cancel := context.WithTimeout(ctx, dispatchTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, t.url, bytes.NewReader(body))
+	if err != nil {
+		// A URL this malformed will not improve on a second reading.
+		return false, err.Error()
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// X-ERP-* are legacy compatibility header names, kept through the Gerege
+	// Nexus rebrand. Subscribers read these exact names and verify the
+	// signature against them; renaming would break every existing endpoint
+	// silently. A Nexus-named alias would need dual-emission and a deprecation
+	// window, not a rename.
+	req.Header.Set("X-ERP-Event", payload.EventType)
+
+	if t.secret != "" {
+		mac := hmac.New(sha256.New, []byte(t.secret))
+		mac.Write(body)
+		req.Header.Set("X-ERP-Signature", hex.EncodeToString(mac.Sum(nil)))
+	}
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		// Refused, reset, timed out, DNS not answering yet — all of which are
+		// routinely temporary. The exception is the network guard: an address
+		// inside the deployment will still be inside it on the next attempt.
+		return !strings.Contains(err.Error(), "refused to connect to"), err.Error()
+	}
+	// Drain before closing so the connection returns to the pool instead of
+	// being torn down after every event.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	_ = resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return retryableStatus(resp.StatusCode), fmt.Sprintf("subscriber answered %d", resp.StatusCode)
+	}
+	return false, ""
+}
+
+// retryableStatus reports whether a status says "not now" rather than "no".
+func retryableStatus(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests:
+		return true
+	}
+	return code >= 500
+}
+
+func deliveredAfter(attempt int) string {
+	if attempt == 0 {
+		return ""
+	}
+	return fmt.Sprintf("delivered on attempt %d", attempt+1)
 }
 
 // ─── Capability dispatch ─────────────────────────────────────────────────────
@@ -292,14 +442,22 @@ func (m *Manager) ExportFile(ctx context.Context, tenantID, integrationID, filen
 		return nil, err
 	}
 
-	var res *ExportResult
-	switch conn.Provider {
-	case ProviderGoogleDrive:
-		res, err = m.driveUpload(ctx, token, conn, filename, content)
-	case ProviderDropbox:
-		res, err = m.dropboxUpload(ctx, token, conn, filename, content)
-	default:
-		err = fmt.Errorf("no file export implementation for %s", conn.Provider)
+	upload := func(token string) (*ExportResult, error) {
+		switch conn.Provider {
+		case ProviderGoogleDrive:
+			return m.driveUpload(ctx, token, conn, filename, content)
+		case ProviderDropbox:
+			return m.dropboxUpload(ctx, token, conn, filename, content)
+		}
+		return nil, fmt.Errorf("no file export implementation for %s", conn.Provider)
+	}
+
+	res, err := upload(token)
+	// A token can stop working before it was due to. One refresh and one retry
+	// turns that into a delivery instead of an administrator wondering why a
+	// connector that says Connected refuses to file anything.
+	if fresh, retry := m.tokenAfterRejection(ctx, tenantID, conn, spec, token, err); retry {
+		res, err = upload(fresh)
 	}
 	if err != nil {
 		m.store.noteError(ctx, tenantID, conn.ID, err.Error())
@@ -377,7 +535,13 @@ func (m *Manager) CreateMeeting(ctx context.Context, tenantID, integrationID, ti
 		return nil, err
 	}
 
-	meeting, err := m.googleMeetCreate(ctx, token, conn, title, startsAt, duration)
+	book := func(token string) (*Meeting, error) {
+		return m.googleMeetCreate(ctx, token, conn, title, startsAt, duration)
+	}
+	meeting, err := book(token)
+	if fresh, retry := m.tokenAfterRejection(ctx, tenantID, conn, spec, token, err); retry {
+		meeting, err = book(fresh)
+	}
 	if err != nil {
 		m.store.noteError(ctx, tenantID, conn.ID, err.Error())
 		m.store.recordDelivery(ctx, tenantID, conn.ID, "meeting", reference, "FAILED", err.Error(), "", "")

@@ -114,6 +114,11 @@ services:
       # Meet simply cannot be saved — which is the visible failure, not a
       # silent one. Generate with: openssl rand -base64 32
       INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      # A connector target is an address a tenant types in and this server
+      # connects to, from inside the network. Addresses that belong to the
+      # deployment — loopback, private, link-local, the cloud metadata service —
+      # are refused unless a self-hosted operator deliberately allows them.
+      INTEGRATION_ALLOW_PRIVATE_TARGETS: ${INTEGRATION_ALLOW_PRIVATE_TARGETS:-false}
       # OAuth clients belong to whoever operates this deployment, not to each
       # tenant: the consent screen is this platform's. Leave them empty and the
       # providers report themselves unavailable with the reason, instead of

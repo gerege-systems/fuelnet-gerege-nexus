@@ -1,10 +1,16 @@
 package integration
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 )
+
+// ErrProviderUnavailable is a provider this deployment cannot offer because
+// nobody has registered an OAuth client for it. It is a gap in the deployment,
+// not in the request, and the message names the variables to set.
+var ErrProviderUnavailable = errors.New("this provider is not configured for this deployment")
 
 // Provider identifies what a connector talks to.
 type Provider string
@@ -118,7 +124,7 @@ var specs = map[Provider]Spec{
 func SpecFor(p Provider) (Spec, error) {
 	spec, ok := specs[p]
 	if !ok {
-		return Spec{}, fmt.Errorf("unknown integration provider %q", p)
+		return Spec{}, invalid("unknown integration provider %q", p)
 	}
 	return spec, nil
 }
@@ -141,9 +147,11 @@ func (s Spec) Credentials() (id, secret string, err error) {
 	id = strings.TrimSpace(os.Getenv(s.ClientIDEnv))
 	secret = strings.TrimSpace(os.Getenv(s.ClientSecretEnv))
 	if id == "" || secret == "" {
-		return "", "", fmt.Errorf(
-			"provider %s is not available: set %s and %s",
-			s.Provider, s.ClientIDEnv, s.ClientSecretEnv)
+		// Wrapped rather than plain, because the API layer answers this
+		// differently: it is not the administrator's form that is wrong, it is
+		// the deployment that has not been given a client to speak with.
+		return "", "", fmt.Errorf("%w: provider %s needs %s and %s",
+			ErrProviderUnavailable, s.Provider, s.ClientIDEnv, s.ClientSecretEnv)
 	}
 	return id, secret, nil
 }

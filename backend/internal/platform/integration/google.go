@@ -178,6 +178,20 @@ func (m *Manager) googleMeetCreate(ctx context.Context, accessToken string, conn
 	return &Meeting{JoinURL: join, ExternalID: out.ID}, nil
 }
 
+// providerError is a refusal from the provider rather than a failure to reach
+// it. The status is kept as a number and not only as prose so that a caller can
+// tell "your token is no longer valid" from "that folder does not exist" — the
+// first is worth refreshing and retrying, the second is not.
+type providerError struct {
+	Provider string
+	Status   int
+	Body     string
+}
+
+func (e *providerError) Error() string {
+	return fmt.Sprintf("%s answered %d: %s", e.Provider, e.Status, e.Body)
+}
+
 // doJSON performs a request and returns the body, turning a non-2xx into an
 // error that carries the provider's own explanation.
 func (m *Manager) doJSON(req *http.Request, provider string) ([]byte, error) {
@@ -192,8 +206,11 @@ func (m *Manager) doJSON(req *http.Request, provider string) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s answered %d: %s", provider, resp.StatusCode,
-			strings.TrimSpace(truncate(string(body), 400)))
+		return nil, &providerError{
+			Provider: provider,
+			Status:   resp.StatusCode,
+			Body:     strings.TrimSpace(truncate(string(body), 400)),
+		}
 	}
 	return body, nil
 }

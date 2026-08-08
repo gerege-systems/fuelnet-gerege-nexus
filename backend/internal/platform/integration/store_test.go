@@ -273,3 +273,106 @@ func TestNamesAreUniquePerTenantAndNotGlobally(t *testing.T) {
 		t.Fatalf("another tenant could not reuse the name: %v", err)
 	}
 }
+
+// A failed delivery must not switch the connector off.
+//
+// noteError used to write status = 'ERROR', and every selection query requires
+// ACTIVE — so a subscriber that answered 503 once was dropped from
+// dispatchTargets permanently. Nothing contacted it again, which meant the
+// success that would have cleared the flag could never happen: one bad minute
+// silently unsubscribed a tenant until an administrator noticed and re-saved
+// the row. The failure is now recorded and the connector is still a target.
+func TestAFailedDeliveryDoesNotSwitchTheConnectorOff(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "failure-does-not-disable-test-key")
+	resetKeyForTest()
+
+	pool := testPool(t)
+	m := NewManager(pool)
+	ctx := context.Background()
+	tenantID := newTenant(t, pool)
+
+	created, err := m.Create(ctx, tenantID, SaveRequest{
+		Provider: ProviderWebhook, Name: "Flaky subscriber", TargetURL: "https://flaky.example.mn/hook",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	m.store.noteError(ctx, tenantID, created.ID, "subscriber answered 503")
+
+	after, err := m.Get(ctx, tenantID, created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if after.Status != StatusActive {
+		t.Fatalf("a failed delivery left the connector %s, want %s", after.Status, StatusActive)
+	}
+	if after.LastError != "subscriber answered 503" {
+		t.Fatalf("the failure was not recorded: last_error is %q", after.LastError)
+	}
+
+	// The regression itself: it is still somewhere the next event goes.
+	targets, err := m.store.dispatchTargets(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("dispatchTargets: %v", err)
+	}
+	found := false
+	for _, target := range targets {
+		if target.id == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("a subscriber that failed once is no longer sent events, so it can never recover")
+	}
+
+	// And the next success clears the recorded failure.
+	m.store.noteSuccess(ctx, tenantID, created.ID)
+	recovered, err := m.Get(ctx, tenantID, created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if recovered.LastError != "" {
+		t.Fatalf("a success left the old failure in place: %q", recovered.LastError)
+	}
+	if recovered.LastPingAt == nil {
+		t.Fatal("a success did not record when it happened")
+	}
+	if recovered.Status != StatusActive {
+		t.Fatalf("connector is %s after a success, want %s", recovered.Status, StatusActive)
+	}
+}
+
+// Switching a connector off is the administrator's decision and still works.
+// The fix above removes the machine's ability to do it, not the operator's.
+func TestAnAdministratorCanStillSwitchAConnectorOff(t *testing.T) {
+	t.Setenv(encryptionKeyEnv, "administrator-switch-test-key")
+	resetKeyForTest()
+
+	pool := testPool(t)
+	m := NewManager(pool)
+	ctx := context.Background()
+	tenantID := newTenant(t, pool)
+
+	created, err := m.Create(ctx, tenantID, SaveRequest{
+		Provider: ProviderWebhook, Name: "Paused subscriber", TargetURL: "https://paused.example.mn/hook",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := m.Update(ctx, tenantID, created.ID, SaveRequest{
+		Name: "Paused subscriber", TargetURL: "https://paused.example.mn/hook", Status: StatusInactive,
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	targets, err := m.store.dispatchTargets(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("dispatchTargets: %v", err)
+	}
+	for _, target := range targets {
+		if target.id == created.ID {
+			t.Fatal("a connector the administrator switched off is still being sent events")
+		}
+	}
+}
