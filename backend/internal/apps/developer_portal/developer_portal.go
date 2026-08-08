@@ -113,7 +113,9 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	}
 	for _, raw := range req.RedirectURIs {
 		u, parseErr := url.Parse(strings.TrimSpace(raw))
-		if parseErr != nil || u.Host == "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
+		localhostHTTP := u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1")
+		allowedTransport := u.Scheme == "https" || localhostHTTP
+		if parseErr != nil || u.Host == "" || !allowedTransport {
 			http.Error(w, `{"error":"redirect URI must use HTTPS (HTTP is allowed only for localhost)"}`, http.StatusBadRequest)
 			return
 		}
