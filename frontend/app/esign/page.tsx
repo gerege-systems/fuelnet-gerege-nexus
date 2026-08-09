@@ -22,15 +22,8 @@ import {
 import { useI18n } from "@/lib/i18n";
 import EidSignView from "@/components/esign/EidSignView";
 import SignaturePad from "@/components/esign/SignaturePad";
-import {
-  Badge,
-  Banner,
-  EmptyState,
-  Loading,
-  PageHeader,
-  useErrorMessage,
-  formatBytes,
-} from "@/components/esign/shared";
+import { Banner, EmptyState, Loading, PageHeader } from "@/components/ui";
+import { Badge, useErrorMessage, formatBytes } from "@/components/esign/shared";
 
 /**
  * The documents screen. Two things live here because they are two answers to
@@ -55,7 +48,7 @@ export default function EsignPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [signDoc, setSignDoc] = useState<EsignDocument | null>(null);
 
-  const report = useCallback((err: unknown) => setError(describe(err, t("base.message.error"))), [t]);
+  const report = useCallback((err: unknown) => setError(describe(err, t("base.message.error"))), [describe, t]);
 
   const load = useCallback(async () => {
     try {

@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { Banner } from "@/components/ui";
 import {
-  AlertTriangle,
   Ban,
   CheckCircle,
   Clock,
@@ -15,7 +15,6 @@ import {
   Send,
   ShieldCheck,
   Users,
-  X,
   XCircle,
 } from "lucide-react";
 
@@ -214,57 +213,15 @@ export function SignatureCell({ doc }: { doc: DocumentRecord }) {
   return <span className="text-slate-400 italic">{t("documents.state.pending_signature")}</span>;
 }
 
-/** The heading every Documents screen opens with. */
-export function SectionHeader({
-  icon,
-  title,
-  subtitle,
-  actions,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  actions?: React.ReactNode;
-}) {
-  return (
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          {icon}
-          {title}
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
-      </div>
-      {actions}
-    </header>
-  );
-}
-
+/**
+ * The outcome of an action, as a screen holds it in state.
+ *
+ * `type` is the shared Banner's tone, so a screen renders one with
+ * `<Banner tone={message.type} message={message.text} />`.
+ */
 export interface ActionMessage {
   type: "success" | "error";
   text: string;
-}
-
-export function Banner({ message, onDismiss }: { message: ActionMessage; onDismiss: () => void }) {
-  const { t } = useI18n();
-  const error = message.type === "error";
-  return (
-    <div
-      className={`p-4 rounded-lg flex items-start space-x-3 text-sm font-medium border ${
-        error ? "bg-red-50 border-red-200 text-red-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
-      }`}
-    >
-      {error ? (
-        <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-      ) : (
-        <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-      )}
-      <span className="flex-1">{message.text}</span>
-      <button onClick={onDismiss} aria-label={t("base.action.close")}>
-        <X className="w-4 h-4" />
-      </button>
-    </div>
-  );
 }
 
 /**
@@ -538,9 +495,8 @@ export function SignatureDialog({
         <p className="text-xs text-slate-500 mb-4 truncate">{doc.title}</p>
 
         {failure && (
-          <div className="mb-4 p-3 rounded-lg border border-red-200 bg-red-50 text-red-800 text-xs flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{failure}</span>
+          <div className="mb-4">
+            <Banner tone="error" message={failure} />
           </div>
         )}
 

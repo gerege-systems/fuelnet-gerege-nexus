@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { ActionMessage, Banner, SectionHeader } from "@/components/documents/shared";
+import { Banner, PageHeader } from "@/components/ui";
+import { ActionMessage } from "@/components/documents/shared";
 import { Archive, Save } from "lucide-react";
 
 interface Rule {
@@ -32,31 +34,22 @@ export default function DocumentRetentionPage() {
   const { can } = useAccess();
   const mayManage = can("documents.manage");
 
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<ActionMessage | null>(null);
 
   // A failed load left the three tiles saying "0 filed · 0 past their term · 0 rules
-  // set" — a claim about the tenant, made out of rows the page never received.
-  const [loadFailed, setLoadFailed] = useState(false);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      setRules((await api.getRetentionRules()) || []);
-      setLoadFailed(false);
-    } catch (err: any) {
-      setLoadFailed(true);
-      setMessage({ type: "error", text: err?.message || t("documents.message.retention_failed") });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  // set" — a claim about the tenant, made out of rows the page never received. That
+  // is what `failed` is read for below.
+  const {
+    data: rules,
+    loading,
+    failed: loadFailed,
+    setData: setRules,
+  } = useResource(async () => (await api.getRetentionRules()) || [], {
+    initial: [] as Rule[],
+    onError: (err: any) =>
+      setMessage({ type: "error", text: err?.message || t("documents.message.retention_failed") }),
+  });
 
   const edit = (docType: string, patch: Partial<Rule>) =>
     setRules((current) => current.map((r) => (r.doc_type === docType ? { ...r, ...patch } : r)));
@@ -113,13 +106,13 @@ export default function DocumentRetentionPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
+      <PageHeader
         icon={<Archive className="w-7 h-7 text-indigo-600" />}
         title={t("documents.menu.retention")}
         subtitle={t("documents.view.retention_hint")}
       />
 
-      {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
+      {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}
 
       <section className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="p-4 bg-white border border-slate-200 rounded-xl">

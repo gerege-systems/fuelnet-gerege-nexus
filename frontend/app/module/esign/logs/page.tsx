@@ -4,15 +4,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Download, ScrollText, Search } from "lucide-react";
 import { esign, saveBlob, type LogFilter, type SignatureLogEntry } from "@/lib/esign";
 import { useI18n } from "@/lib/i18n";
-import {
-  Banner,
-  EmptyState,
-  Loading,
-  OutcomeBadge,
-  PageHeader,
-  Pager,
-  useErrorMessage,
-} from "@/components/esign/shared";
+import { Banner, EmptyState, Loading, PageHeader } from "@/components/ui";
+import { OutcomeBadge, Pager, useErrorMessage } from "@/components/esign/shared";
 
 const PAGE_SIZE = 50;
 
@@ -49,7 +42,7 @@ export default function EsignLogsPage() {
         setLoading(false);
       }
     },
-    [t],
+    [describe, t],
   );
 
   useEffect(() => {

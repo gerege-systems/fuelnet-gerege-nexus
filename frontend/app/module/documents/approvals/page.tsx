@@ -1,21 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import {
-  Banner,
-  DocumentRecord,
-  PENDING,
-  RowActions,
-  SectionHeader,
-  SignatureDialog,
-  SignatureHistoryButton,
-  SignatureHistoryDialog,
-  SignatureProgress,
-  useDocumentActions,
-} from "@/components/documents/shared";
+import { Banner, PageHeader } from "@/components/ui";
+import { DocumentRecord, PENDING, RowActions, SignatureDialog, SignatureHistoryButton, SignatureHistoryDialog, SignatureProgress, useDocumentActions } from "@/components/documents/shared";
 import { ListChecks } from "lucide-react";
 
 /**
@@ -121,9 +112,7 @@ export default function DocumentApprovalsPage() {
 
   const { isBusy, message, setMessage, succeed, fail, reject } = useDocumentActions(loadData);
 
-  useEffect(() => {
-    loadSpan(PAGE);
-  }, []);
+  useLoadOnMount(() => loadSpan(PAGE));
 
   const pending = useMemo(() => documents.filter((doc) => doc.status === PENDING), [documents]);
 
@@ -144,13 +133,13 @@ export default function DocumentApprovalsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
+      <PageHeader
         icon={<ListChecks className="w-7 h-7 text-indigo-600" />}
         title={t("documents.menu.approvals")}
         subtitle={t("documents.view.approvals_hint")}
       />
 
-      {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
+      {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}
 
       {/* With no rows there is no table footer to carry this, and a refresh that failed
           after an action is exactly when there are none: the news that the list is stale

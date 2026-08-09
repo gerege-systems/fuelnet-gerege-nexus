@@ -53,13 +53,13 @@ export const LOCALES: { code: Locale; label: string; flag: string; rtl?: boolean
  * to hand everybody by default.
  */
 export const DEFAULT_LOCALES: Locale[] = ["mn", "en"];
-export const OPTIONAL_LOCALES: Locale[] = LOCALES.map((l) => l.code).filter(
+const OPTIONAL_LOCALES: Locale[] = LOCALES.map((l) => l.code).filter(
   (code) => !DEFAULT_LOCALES.includes(code),
 );
 
 const STORAGE_KEY = "locale";
 const ENABLED_STORAGE_KEY = "locales.enabled";
-export const DEFAULT_LOCALE: Locale = "mn";
+const DEFAULT_LOCALE: Locale = "mn";
 
 /**
  * The dictionary, assembled from one file per module the way Odoo gives each

@@ -1,22 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import {
-  Banner,
-  DocumentRecord,
-  PENDING,
-  RowActions,
-  SignatureCell,
-  SignatureDialog,
-  SignatureHistoryButton,
-  SignatureHistoryDialog,
-  SignatureProgress,
-  StatusBadge,
-  useDocumentActions,
-} from "@/components/documents/shared";
+import { Banner } from "@/components/ui";
+import { DocumentRecord, PENDING, RowActions, SignatureCell, SignatureDialog, SignatureHistoryButton, SignatureHistoryDialog, SignatureProgress, StatusBadge, useDocumentActions } from "@/components/documents/shared";
 import { FileText, Pencil, Plus } from "lucide-react";
 
 export default function DocumentsPage() {
@@ -140,9 +130,7 @@ export default function DocumentsPage() {
 
   const { isBusy, message, setMessage, succeed, fail, route, reject } = useDocumentActions(loadData);
 
-  useEffect(() => {
-    loadSpan(PAGE, filterRef.current);
-  }, []);
+  useLoadOnMount(() => loadSpan(PAGE, filterRef.current));
 
   // Which row's title is being corrected, and what has been typed into it. A title may
   // be fixed until the first signature: creating a document routes it immediately, which
@@ -224,7 +212,7 @@ export default function DocumentsPage() {
         )}
       </div>
 
-      {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
+      {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}
 
       {/* With no rows there is no table footer to carry this, and a refresh that failed
           after an action is exactly when there are none: the news that the list is stale

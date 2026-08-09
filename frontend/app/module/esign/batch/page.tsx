@@ -4,16 +4,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, FileText, Layers, Play, Plus, Smartphone, XCircle } from "lucide-react";
 import { esign, type Batch, type EsignDocument } from "@/lib/esign";
 import { useI18n } from "@/lib/i18n";
-import {
-  BatchBadge,
-  Banner,
-  Card,
-  EmptyState,
-  ItemBadge,
-  Loading,
-  PageHeader,
-  useErrorMessage,
-} from "@/components/esign/shared";
+import { Banner, EmptyState, Loading, PageHeader } from "@/components/ui";
+import { BatchBadge, Card, ItemBadge, useErrorMessage } from "@/components/esign/shared";
 
 /**
  * Batch signing.
@@ -39,7 +31,7 @@ export default function EsignBatchPage() {
     } catch (err) {
       setError(describe(err, t("base.message.error")));
     }
-  }, [t]);
+  }, [describe, t]);
 
   useEffect(() => {
     (async () => {
@@ -365,7 +357,7 @@ function CreateBatchModal({
       .then((page) => setDocuments(page.items || []))
       .catch((err) => setError(describe(err, t("base.message.error"))))
       .finally(() => setLoading(false));
-  }, [t]);
+  }, [describe, t]);
 
   const toggle = (id: string) => {
     const next = new Set(picked);

@@ -4,7 +4,8 @@ import React, { useEffect, useState } from "react";
 import { Save, ShieldCheck } from "lucide-react";
 import { esign, type Policy } from "@/lib/esign";
 import { useI18n } from "@/lib/i18n";
-import { Banner, Card, Loading, PageHeader, useErrorMessage } from "@/components/esign/shared";
+import { Banner, Loading, PageHeader } from "@/components/ui";
+import { Card, useErrorMessage } from "@/components/esign/shared";
 
 /**
  * Signing policy — the rules that decide what counts as a valid signature here.
@@ -29,7 +30,7 @@ export default function EsignPoliciesPage() {
       .then((settings) => setPolicy(settings.policy))
       .catch((err) => setError(describe(err, t("base.message.error"))))
       .finally(() => setLoading(false));
-  }, [t]);
+  }, [describe, t]);
 
   const update = (patch: Partial<Policy>) => setPolicy((current) => (current ? { ...current, ...patch } : current));
 

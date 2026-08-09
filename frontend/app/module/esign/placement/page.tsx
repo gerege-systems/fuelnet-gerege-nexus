@@ -4,7 +4,8 @@ import React, { useEffect, useState } from "react";
 import { Move, RotateCcw, Save } from "lucide-react";
 import { esign, type Placement } from "@/lib/esign";
 import { useI18n } from "@/lib/i18n";
-import { Banner, Card, Loading, PageHeader, useErrorMessage } from "@/components/esign/shared";
+import { Banner, Loading, PageHeader } from "@/components/ui";
+import { Card, useErrorMessage } from "@/components/esign/shared";
 
 /** A4 in PostScript points — the page the preview and the limits are drawn to. */
 const A4_WIDTH = 595;
@@ -34,7 +35,7 @@ export default function EsignPlacementPage() {
       .then((settings) => setPlacement(settings.placement))
       .catch((err) => setError(describe(err, t("base.message.error"))))
       .finally(() => setLoading(false));
-  }, [t]);
+  }, [describe, t]);
 
   const update = (patch: Partial<Placement>) =>
     setPlacement((current) => (current ? { ...current, ...patch } : current));

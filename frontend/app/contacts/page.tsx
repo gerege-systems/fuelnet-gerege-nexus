@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/useResource";
 import { useI18n } from "@/lib/i18n";
-import { Users, Plus, Mail, Phone, Building, CheckCircle, XCircle } from "lucide-react";
+import { Users, Plus, Mail, CheckCircle, XCircle } from "lucide-react";
 
 interface Contact {
   id: string;
@@ -16,26 +17,17 @@ interface Contact {
 
 export default function ContactsPage() {
   const { t } = useI18n();
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", active: true });
   const [error, setError] = useState("");
 
-  const loadContacts = async () => {
-    try {
-      const data = await api.getContacts();
-      setContacts(data || []);
-    } catch (err: any) {
-      setError(err.message || t("contacts.message.load_failed"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadContacts();
-  }, []);
+  const { data: contacts, loading, reload: loadContacts } = useResource(
+    async () => (await api.getContacts()) || [],
+    {
+      initial: [] as Contact[],
+      onError: (err: any) => setError(err.message || t("contacts.message.load_failed")),
+    },
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
