@@ -25,9 +25,8 @@ import (
 )
 
 func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -129,9 +128,8 @@ func (s *Server) handleGetStoreApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

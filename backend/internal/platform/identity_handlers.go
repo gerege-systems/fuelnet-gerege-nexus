@@ -265,9 +265,8 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -293,9 +292,8 @@ func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

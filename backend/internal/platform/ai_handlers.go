@@ -23,9 +23,8 @@ import (
 )
 
 func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -51,9 +50,8 @@ func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	var req ai.CopilotRequest
@@ -136,9 +134,8 @@ func (s *Server) handleAITranslate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, 401, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
@@ -164,9 +161,8 @@ func (s *Server) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, items)
 }
 func (s *Server) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, 401, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	key := chi.URLParam(r, "key")
@@ -182,7 +178,7 @@ func (s *Server) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "content is required")
 		return
 	}
-	_, err = s.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
+	_, err := s.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save AI prompt")
 		return
@@ -190,9 +186,8 @@ func (s *Server) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, map[string]string{"status": "saved"})
 }
 func (s *Server) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, 401, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	rows, err := s.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
@@ -218,9 +213,8 @@ func (s *Server) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, items)
 }
 func (s *Server) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, 401, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -233,7 +227,7 @@ func (s *Server) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var id string
-	err = s.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
+	err := s.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save knowledge")
 		return
@@ -247,9 +241,8 @@ func decodeLimitedJSON(r *http.Request, dst any, max int64) error {
 func aiStatus(error) int { return http.StatusBadGateway }
 
 func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

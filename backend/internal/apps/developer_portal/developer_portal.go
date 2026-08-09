@@ -62,9 +62,8 @@ func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddlewar
 }
 
 func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized tenant context")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -78,9 +77,8 @@ func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Re
 }
 
 func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized tenant context")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

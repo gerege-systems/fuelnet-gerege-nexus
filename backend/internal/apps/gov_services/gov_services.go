@@ -245,9 +245,8 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 // ─── Service passport ────────────────────────────────────────────────────────
 
 func (m *Module) listServicesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -348,9 +347,8 @@ func (m *Module) createServiceHandler(w http.ResponseWriter, r *http.Request) {
 // ─── Applications ────────────────────────────────────────────────────────────
 
 func (m *Module) listApplicationsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -498,9 +496,8 @@ func (m *Module) cancelApplicationHandler(w http.ResponseWriter, r *http.Request
 	})
 }
 func (m *Module) timelineHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -538,9 +535,8 @@ func (m *Module) timelineHandler(w http.ResponseWriter, r *http.Request) {
 // ─── Officer queue ───────────────────────────────────────────────────────────
 
 func (m *Module) officerQueueHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -635,9 +631,8 @@ func (m *Module) decideHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 func (m *Module) listAppointmentsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

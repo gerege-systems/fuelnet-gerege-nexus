@@ -80,9 +80,8 @@ func integrationError(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) handleListIntegrations(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	list, err := s.integrationMgr.List(r.Context(), tenantID)
@@ -105,9 +104,8 @@ func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	var req integrationSaveRequest
@@ -127,9 +125,8 @@ func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	var req integrationSaveRequest
@@ -149,9 +146,8 @@ func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -169,9 +165,8 @@ func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request)
 // send the administrator to. It returns the URL rather than redirecting so the
 // caller is an ordinary fetch from the settings screen.
 func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	claims, _ := auth.UserFromContext(r.Context())
@@ -184,9 +179,8 @@ func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -204,9 +198,8 @@ func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Requ
 // signed document reaching an outside account is a disclosure, and the record
 // of it is the only thing that can answer for it afterwards.
 func (s *Server) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	limit := 50
