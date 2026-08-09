@@ -78,9 +78,8 @@ type verifySendRequest struct {
 // — it holds its own key with the verification service and calls that service
 // directly, which is why this platform no longer issues keys.
 func (s *Server) handleVerifySend(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -162,9 +161,8 @@ h1{font-size:20px;margin:0 0 12px}p{color:#475569;font-size:14px;line-height:1.6
 // handleEmailVerifyOverview is the settings screen in one request: what has
 // been asked for, and whether the service that sends it is reachable.
 func (s *Server) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 	limit := 25

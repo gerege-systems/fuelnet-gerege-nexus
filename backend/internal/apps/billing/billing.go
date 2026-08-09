@@ -83,9 +83,8 @@ func (m *BillingModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(h
 }
 
 func (m *BillingModule) listInvoicesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -99,9 +98,8 @@ func (m *BillingModule) listInvoicesHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (m *BillingModule) createInvoiceHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Integration, IntegrationProvider, api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { Banner, LoadingBlock, Modal, fieldClass } from "@/components/ui";
 import {
   Activity, AlertTriangle, CheckCircle2, Cloud, Globe, HardDrive, Link2, Plus,
   RefreshCw, Share2, ShieldAlert, Trash2, Unlink, Video,
@@ -206,29 +207,17 @@ export default function IntegrationsPage() {
       </div>
 
       {banner && (
-        <div
-          role="status"
-          className={`p-4 text-sm rounded-lg border ${
-            banner.kind === "ok"
-              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-              : "bg-red-50 border-red-200 text-red-700"
-          }`}
-        >
-          {banner.text}
-        </div>
+        <Banner tone={banner.kind === "ok" ? "success" : "error"} message={banner.text} />
       )}
 
       {/* Without a key the server refuses to store a credential, so say that
           here rather than letting the save fail with the same message. */}
       {!encryptionReady && (
-        <div className="p-4 text-sm rounded-lg border bg-amber-50 border-amber-200 text-amber-800 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{t("integrations.message.encryption_missing")}</span>
-        </div>
+        <Banner tone="warning" message={t("integrations.message.encryption_missing")} />
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("integrations.message.loading")}</div>
+        <LoadingBlock label={t("integrations.message.loading")} />
       ) : integrations.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm">
           {t("integrations.message.empty")}
@@ -340,146 +329,144 @@ export default function IntegrationsPage() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.view.create_title")}</h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {t("integrations.field.type")}
-                </label>
-                <select
-                  value={form.provider}
-                  onChange={(e) => setForm({ ...form, provider: e.target.value as IntegrationProvider })}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  {(Object.keys(PROVIDER_LABEL_KEYS) as IntegrationProvider[]).map((provider) => {
-                    const info = providerInfo(provider);
-                    return (
-                      <option key={provider} value={provider} disabled={info ? !info.available : false}>
-                        {t(PROVIDER_LABEL_KEYS[provider])}
-                        {info && !info.available ? " — " + t("integrations.state.unavailable") : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-                {selected && !selected.available && (
-                  <p className="mt-1 text-[11px] text-amber-700">{selected.reason}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {t("integrations.field.name")} *
-                </label>
-                <input
-                  type="text"
-                  placeholder={t("integrations.field.name_placeholder")}
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  required
-                />
-              </div>
-
-              {!isOAuth && (
-                <>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      {t("integrations.field.target_url")} *
-                    </label>
-                    <input
-                      type="url"
-                      placeholder="https://api.example.com/webhooks"
-                      value={form.target_url}
-                      onChange={(e) => setForm({ ...form, target_url: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      {t("integrations.field.secret")}
-                    </label>
-                    <input
-                      type="password"
-                      placeholder={t("integrations.field.secret_placeholder")}
-                      value={form.secret_key}
-                      onChange={(e) => setForm({ ...form, secret_key: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </>
+        <Modal className="max-h-[90vh] overflow-y-auto">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.view.create_title")}</h2>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t("integrations.field.type")}
+              </label>
+              <select
+                value={form.provider}
+                onChange={(e) => setForm({ ...form, provider: e.target.value as IntegrationProvider })}
+                className={fieldClass}
+              >
+                {(Object.keys(PROVIDER_LABEL_KEYS) as IntegrationProvider[]).map((provider) => {
+                  const info = providerInfo(provider);
+                  return (
+                    <option key={provider} value={provider} disabled={info ? !info.available : false}>
+                      {t(PROVIDER_LABEL_KEYS[provider])}
+                      {info && !info.available ? " — " + t("integrations.state.unavailable") : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              {selected && !selected.available && (
+                <p className="mt-1 text-[11px] text-amber-700">{selected.reason}</p>
               )}
+            </div>
 
-              {(form.provider === "google_drive" || form.provider === "dropbox") && (
-                <>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      {form.provider === "google_drive"
-                        ? t("integrations.field.drive_folder")
-                        : t("integrations.field.dropbox_folder")}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={
-                        form.provider === "google_drive"
-                          ? t("integrations.field.drive_folder_placeholder")
-                          : t("integrations.field.dropbox_folder_placeholder")
-                      }
-                      value={form.folder}
-                      onChange={(e) => setForm({ ...form, folder: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <label className="flex items-start gap-2 text-xs text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={form.auto_export}
-                      onChange={(e) => setForm({ ...form, auto_export: e.target.checked })}
-                      className="mt-0.5"
-                    />
-                    <span>{t("integrations.field.auto_export")}</span>
-                  </label>
-                </>
-              )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t("integrations.field.name")} *
+              </label>
+              <input
+                type="text"
+                placeholder={t("integrations.field.name_placeholder")}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className={fieldClass}
+                required
+              />
+            </div>
 
-              {form.provider === "google_meet" && (
+            {!isOAuth && (
+              <>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    {t("integrations.field.calendar_id")}
+                    {t("integrations.field.target_url")} *
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://api.example.com/webhooks"
+                    value={form.target_url}
+                    onChange={(e) => setForm({ ...form, target_url: e.target.value })}
+                    className={fieldClass}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {t("integrations.field.secret")}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={t("integrations.field.secret_placeholder")}
+                    value={form.secret_key}
+                    onChange={(e) => setForm({ ...form, secret_key: e.target.value })}
+                    className={fieldClass}
+                  />
+                </div>
+              </>
+            )}
+
+            {(form.provider === "google_drive" || form.provider === "dropbox") && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {form.provider === "google_drive"
+                      ? t("integrations.field.drive_folder")
+                      : t("integrations.field.dropbox_folder")}
                   </label>
                   <input
                     type="text"
-                    placeholder="primary"
-                    value={form.calendar_id}
-                    onChange={(e) => setForm({ ...form, calendar_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    placeholder={
+                      form.provider === "google_drive"
+                        ? t("integrations.field.drive_folder_placeholder")
+                        : t("integrations.field.dropbox_folder_placeholder")
+                    }
+                    value={form.folder}
+                    onChange={(e) => setForm({ ...form, folder: e.target.value })}
+                    className={fieldClass}
                   />
-                  <p className="mt-1 text-[11px] text-slate-500">{t("integrations.message.meet_via_calendar")}</p>
                 </div>
-              )}
+                <label className="flex items-start gap-2 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.auto_export}
+                    onChange={(e) => setForm({ ...form, auto_export: e.target.checked })}
+                    className="mt-0.5"
+                  />
+                  <span>{t("integrations.field.auto_export")}</span>
+                </label>
+              </>
+            )}
 
-              {isOAuth && <p className="text-[11px] text-slate-500">{t("integrations.message.connect_after_save")}</p>}
-
-              <div className="flex items-center space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
-                >
-                  {t("base.action.cancel")}
-                </button>
-                <button
-                  type="submit"
-                  className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
-                >
-                  {t("integrations.action.register")}
-                </button>
+            {form.provider === "google_meet" && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {t("integrations.field.calendar_id")}
+                </label>
+                <input
+                  type="text"
+                  placeholder="primary"
+                  value={form.calendar_id}
+                  onChange={(e) => setForm({ ...form, calendar_id: e.target.value })}
+                  className={fieldClass}
+                />
+                <p className="mt-1 text-[11px] text-slate-500">{t("integrations.message.meet_via_calendar")}</p>
               </div>
-            </form>
-          </div>
-        </div>
+            )}
+
+            {isOAuth && <p className="text-[11px] text-slate-500">{t("integrations.message.connect_after_save")}</p>}
+
+            <div className="flex items-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs"
+              >
+                {t("base.action.cancel")}
+              </button>
+              <button
+                type="submit"
+                className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs"
+              >
+                {t("integrations.action.register")}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

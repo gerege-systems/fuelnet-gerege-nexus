@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Move, RotateCcw, Save } from "lucide-react";
 import { esign, type Placement } from "@/lib/esign";
 import { useI18n } from "@/lib/i18n";
-import { Banner, Loading, PageHeader } from "@/components/ui";
+import { Banner, Loading, PageHeader, fieldClass } from "@/components/ui";
 import { Card, useErrorMessage } from "@/components/esign/shared";
 
 /** A4 in PostScript points — the page the preview and the limits are drawn to. */
@@ -123,7 +123,7 @@ export default function EsignPlacementPage() {
                 min={0}
                 value={placement.page_number}
                 onChange={(event) => update({ page_number: Number(event.target.value) })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className={fieldClass}
               />
               <p className="text-[11px] text-slate-500 mt-1">{t("esign.field.page_number_hint")}</p>
             </div>
@@ -137,7 +137,7 @@ export default function EsignPlacementPage() {
                 value={placement.text}
                 maxLength={120}
                 onChange={(event) => update({ text: event.target.value })}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className={fieldClass}
               />
             </div>
 
@@ -224,7 +224,7 @@ function NumberField({
         max={max}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+        className={fieldClass}
       />
       {hint && <p className="text-[11px] text-slate-500 mt-1">{hint}</p>}
     </div>

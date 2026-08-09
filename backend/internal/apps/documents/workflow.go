@@ -583,9 +583,8 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 }
 
 func (m *DocumentsModule) listWorkflowsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -598,9 +597,8 @@ func (m *DocumentsModule) listWorkflowsHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -635,9 +633,8 @@ func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Req
 }
 
 func (m *DocumentsModule) routeDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -654,9 +651,8 @@ func (m *DocumentsModule) routeDocumentHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (m *DocumentsModule) listDocumentStepsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 
@@ -673,9 +669,8 @@ func (m *DocumentsModule) listDocumentStepsHandler(w http.ResponseWriter, r *htt
 }
 
 func (m *DocumentsModule) listSignaturesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := tenant.FromContext(r.Context())
-	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
 		return
 	}
 

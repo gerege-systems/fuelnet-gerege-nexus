@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useResource } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { Banner, PageHeader } from "@/components/ui";
+import { Banner, LoadingBlock, PageHeader, TableCard, rowActionClass } from "@/components/ui";
 import { ActionMessage } from "@/components/documents/shared";
 import { Archive, Save } from "lucide-react";
 
@@ -134,7 +134,7 @@ export default function DocumentRetentionPage() {
       </section>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
+        <LoadingBlock label={t("documents.message.loading")} />
       ) : loadFailed ? (
         // The server answers with a row for every document type, so an empty table
         // could only mean the load failed — and rendering the headers over nothing
@@ -143,73 +143,70 @@ export default function DocumentRetentionPage() {
           {t("documents.message.retention_failed")}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase">
-              <tr>
-                <th className="px-4 py-3">{t("base.field.type")}</th>
-                <th className="px-4 py-3">{t("documents.field.retain_years")}</th>
-                <th className="px-4 py-3">{t("documents.field.retention_note")}</th>
-                <th className="px-4 py-3">{t("documents.stat.filed")}</th>
-                <th className="px-4 py-3">{t("documents.stat.past_term")}</th>
-                <th className="px-4 py-3 text-right">{t("base.field.actions")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rules.map((rule) => (
-                <tr key={rule.doc_type} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono font-semibold text-slate-900">{rule.doc_type}</td>
-                  <td className="px-4 py-3">
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={rule.retain_years || ""}
-                      disabled={!mayManage}
-                      onChange={(e) => edit(rule.doc_type, { retain_years: Number(e.target.value) })}
-                      className="w-20 px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={rule.note}
-                      disabled={!mayManage}
-                      onChange={(e) => edit(rule.doc_type, { note: e.target.value })}
-                      className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{rule.total ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {rule.expired === undefined ? (
-                      <span className="text-slate-400">—</span>
-                    ) : rule.expired > 0 ? (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                        {rule.expired}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">0</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {mayManage ? (
-                      <button
-                        onClick={() => save(rule)}
-                        disabled={busy === rule.doc_type || !rule.retain_years}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{t("base.action.save")}</span>
-                      </button>
-                    ) : (
-                      <span className="text-slate-300 text-[11px]">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TableCard
+          head={
+            <tr>
+              <th className="px-4 py-3">{t("base.field.type")}</th>
+              <th className="px-4 py-3">{t("documents.field.retain_years")}</th>
+              <th className="px-4 py-3">{t("documents.field.retention_note")}</th>
+              <th className="px-4 py-3">{t("documents.stat.filed")}</th>
+              <th className="px-4 py-3">{t("documents.stat.past_term")}</th>
+              <th className="px-4 py-3 text-right">{t("base.field.actions")}</th>
+            </tr>
+          }
+        >
+          {rules.map((rule) => (
+            <tr key={rule.doc_type} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-mono font-semibold text-slate-900">{rule.doc_type}</td>
+              <td className="px-4 py-3">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={rule.retain_years || ""}
+                  disabled={!mayManage}
+                  onChange={(e) => edit(rule.doc_type, { retain_years: Number(e.target.value) })}
+                  className="w-20 px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </td>
+              <td className="px-4 py-3">
+                <input
+                  type="text"
+                  value={rule.note}
+                  disabled={!mayManage}
+                  onChange={(e) => edit(rule.doc_type, { note: e.target.value })}
+                  className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </td>
+              <td className="px-4 py-3 text-slate-500">{rule.total ?? "—"}</td>
+              <td className="px-4 py-3">
+                {rule.expired === undefined ? (
+                  <span className="text-slate-400">—</span>
+                ) : rule.expired > 0 ? (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    {rule.expired}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">0</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-right">
+                {mayManage ? (
+                  <button
+                    onClick={() => save(rule)}
+                    disabled={busy === rule.doc_type || !rule.retain_years}
+                    className={rowActionClass}
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{t("base.action.save")}</span>
+                  </button>
+                ) : (
+                  <span className="text-slate-300 text-[11px]">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </TableCard>
       )}
 
       <p className="text-xs text-slate-500">{t("documents.message.retention_no_deletion")}</p>

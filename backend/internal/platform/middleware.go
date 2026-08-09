@@ -62,9 +62,8 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return s.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tenantID, err := tenant.FromContext(r.Context())
-			if err != nil {
-				httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+			tenantID, ok := tenant.Require(w, r)
+			if !ok {
 				return
 			}
 
@@ -76,7 +75,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 			cacheKey := memo.Key(tenantID, appID)
 			enabled, cached := s.appGate.Get(cacheKey)
 			if !cached {
-				err = s.db.QueryRow(r.Context(),
+				err := s.db.QueryRow(r.Context(),
 					`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
 					tenantID, appID).Scan(&enabled)
 				// Only a definite answer is kept. A database that is down would

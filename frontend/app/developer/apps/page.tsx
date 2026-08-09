@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Code2, Shield, Plus, CheckCircle2, Copy } from "lucide-react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { fieldClass } from "@/components/ui";
 
 interface OAuth2Client {
   id: string;
@@ -179,7 +180,7 @@ export default function DeveloperAppsPage() {
                     placeholder="e.g. My External Mobile App"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className={fieldClass}
                     required
                   />
                 </div>
@@ -189,7 +190,7 @@ export default function DeveloperAppsPage() {
                     type="text"
                     value={redirectURIs}
                     onChange={(e) => setRedirectURIs(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                    className={`${fieldClass} font-mono`}
                     required
                   />
                 </div>
