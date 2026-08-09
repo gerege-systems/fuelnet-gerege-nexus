@@ -43,7 +43,7 @@ func ValidateRedirectURI(raw string) error {
 	}
 	host := strings.ToLower(u.Hostname())
 	loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
-	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+	if u.Scheme != "https" && (u.Scheme != "http" || !loopback) {
 		return errors.New("redirect URI must use HTTPS")
 	}
 	if loopback {

@@ -59,25 +59,32 @@ type Guard struct {
 
 // Install attaches the binding to a pool configuration. It must be called
 // before the pool is created, and takes effect only once Probe succeeds.
+//
+// PrepareConn rather than the older BeforeAcquire: the two cannot coexist —
+// pgxpool ignores BeforeAcquire entirely when PrepareConn is set — so a library
+// or a later change that reaches for the current hook would silently switch
+// this one off, and the isolation would be gone with nothing to show for it.
 func (g *Guard) Install(cfg *pgxpool.Config) {
-	cfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+	cfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
 		if !g.enabled.Load() {
-			return true
+			return true, nil
 		}
 		role, tenantID := "none", ""
 		if id, err := tenant.FromContext(ctx); err == nil && id != "" {
 			role, tenantID = AppRole, id
 		}
 		if _, err := conn.Exec(ctx, bindStatement, role, tenantID); err != nil {
-			// Refusing the connection destroys it and pgxpool tries another. The
-			// alternative is handing over a connection whose tenant binding is
-			// whatever the previous request left behind, which is the failure
-			// this package exists to prevent.
+			// False destroys the connection rather than handing over one whose
+			// tenant binding is whatever the previous request left behind — the
+			// failure this package exists to prevent. The error travels with it
+			// so the query fails saying why, instead of pgxpool working through
+			// the pool and reporting that it ran out of attempts.
 			slog.Error("dbguard: could not bind the connection to a tenant",
 				"role", role, "error", err)
-			return false
+			return false, fmt.Errorf("dbguard: could not bind the connection to tenant %q: %w",
+				tenantID, err)
 		}
-		return true
+		return true, nil
 	}
 }
 

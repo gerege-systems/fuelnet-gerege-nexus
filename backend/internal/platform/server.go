@@ -101,6 +101,8 @@ func (s *Server) forgetGrants(tenantID string) {
 // NewServer builds the platform. bus may be a local-only one; nothing here
 // requires Redis to be present.
 func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, error) {
+	// #nosec G304 -- APP_CATALOG_PATH is deployment configuration read once at
+	// startup. No request reaches this.
 	catalogData, err := os.ReadFile(catalogPath)
 	if err != nil {
 		return nil, err
