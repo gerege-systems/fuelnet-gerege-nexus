@@ -155,9 +155,24 @@ backend/
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
 frontend/             Next.js 15 (App Router) вэб клиент
+desktop-mac/          Swift Native macOS Desktop Аппликейшн (1:1 macOS App)
 catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
+```
+
+---
+
+## macOS Desktop Аппликейшн (Native Mac App)
+
+Вэб клиенттэй 1:1 ижил боломжтой, macOS-ийн native боломжуудыг (Touch ID, Menu Bar Tray Icon, Global Keyboard Shortcuts, Custom URL Schemes, Native Notifications) дэмжсэн desktop аппликейшн:
+
+```bash
+# macOS бинари компилж Gerege Nexus.app үүсгэх
+make build-mac
+
+# Эсвэл шууд ажиллуулах
+make run-mac
 ```
 
 ---
