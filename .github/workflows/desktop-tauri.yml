@@ -1,0 +1,106 @@
+name: Desktop Shell (Tauri)
+
+# The Tauri shell is the one part of this repository that cannot be proven on a
+# single machine. Half of it is behind `#[cfg(target_os = ...)]` — the native
+# menu icons, the deep-link registration, the window chrome — so code that
+# compiles on macOS can fail to compile on Windows or Linux and nobody finds
+# out until somebody tries to ship an installer. This job builds it on all
+# three.
+#
+# It verifies compilation, lints and unit tests. It does NOT produce installers:
+# bundling needs signing identities the repository does not hold (see the code
+# signing TODO in desktop-tauri/README.md), and an unsigned .dmg or .msi is not
+# something anyone should be handed.
+
+on:
+  push:
+    branches: [main]
+    # A three-OS Rust matrix is expensive and the shell does not depend on the
+    # backend or the web app at compile time, so it only runs when its own
+    # sources move. Note for anyone making this a required check: a path-filtered
+    # workflow reports no status at all on pull requests that miss the filter,
+    # which leaves a required check pending forever. Mark it required only
+    # together with a merge queue or a companion no-op job.
+    paths:
+      - "desktop-tauri/**"
+      - ".github/workflows/desktop-tauri.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "desktop-tauri/**"
+      - ".github/workflows/desktop-tauri.yml"
+
+permissions:
+  contents: read
+
+# Pushing twice to a branch should not leave two full matrices running.
+concurrency:
+  group: desktop-tauri-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop-tauri/src-tauri
+    strategy:
+      # One platform failing is exactly the signal this job exists to produce,
+      # and it is more useful next to the other two results than on its own.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri links against the system webview. On Linux that is WebKitGTK, and
+      # the tray icon needs the AppIndicator library — neither is on the runner
+      # by default. Windows compiles against WebView2's headers, which ship with
+      # the crate, and macOS uses WKWebView from the SDK, so neither needs this.
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # The dependency tree is large (Tauri, reqwest, image codecs); without a
+      # cache every run recompiles roughly a thousand crates on three machines.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-tauri/src-tauri
+          # Keyed per platform so the three matrix legs do not evict each other.
+          key: ${{ matrix.os }}
+
+      # Lint first: it type-checks everything the build would and reports the
+      # whole file rather than stopping at the first hard error.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --locked
+
+      # These cover the pieces that must not drift silently: origin comparison
+      # for the navigation allowlist, the JS string escaping every native→web
+      # value passes through, and the rule that the shell never advertises a
+      # capability it has not implemented.
+      - name: Test
+        run: cargo test --locked

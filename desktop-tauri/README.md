@@ -85,6 +85,13 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+Эдгээрийг [`.github/workflows/desktop-tauri.yml`](../.github/workflows/desktop-tauri.yml)
+нь Linux, Windows, macOS гурван дээр зэрэг ажиллуулна. Бүрхүүлийн ихээхэн хэсэг
+нь `#[cfg(target_os = ...)]`-ийн ард байдаг тул нэг машин дээрх ногоон build нь
+бусад дээр компилдана гэсэн үг биш — тэр цоорхойг энэ workflow хаана. Installer
+(`.dmg` / `.msi` / `.AppImage`) хийхгүй: гарын үсгийн гэрчилгээ репод байхгүй
+(доорх Code signing — TODO-г үз).
+
 ### Серверийн хаягууд
 
 | Горим | Эх сурвалж |
