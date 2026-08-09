@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { api, APP_MENU_CHANGED_EVENT } from "@/lib/api";
 import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
 import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck } from "lucide-react";
@@ -54,18 +55,75 @@ export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);
   const [mobileOpen,setMobileOpen]=useState(false),[mobileMoreOpen,setMobileMoreOpen]=useState(false),[panelOpen,setPanelOpen]=useState(true);
   const [query,setQuery]=useState("");
+  // Бүрхүүлийн доторх хайлт: толгой хэсэг зурагдахгүй тул хайлтын талбар нь
+  // ажлын мужид түр нээгддэг давхарга болно.
+  const [shellSearchOpen,setShellSearchOpen]=useState(false);
+  // Бүрхүүл нэвтрэлтийг барьж авсны дараа өгөгдлөө нэг удаа дахин татахад
+  // хэрэглэгдэнэ.
+  const [authNonce,setAuthNonce]=useState(0);
+  const reLoginTried=useRef(false);
   const pathname=usePathname(),router=useRouter(),{t,locale}=useI18n(),theme=useTheme();
+  const {shell,inShell}=useShell();
   const isPublic=PUBLIC_ROUTES.includes(pathname);
 
   useEffect(()=>setPanelOpen(localStorage.getItem("gerege_sidebar_open")!=="false"),[]);
-  useEffect(()=>{if(isPublic){setLoading(false);return}void(async()=>{try{const [u,m]=await Promise.all([api.getMe(),api.getMenus()]);setUser(u);setMenus(m||[])}catch{router.push("/login")}finally{setLoading(false)}})()},[pathname,router,isPublic,locale]);
+  useEffect(()=>{
+    if(isPublic){setLoading(false);return}
+    let cancelled=false;
+    void(async()=>{
+      try{
+        const [u,m]=await Promise.all([api.getMe(),api.getMenus()]);
+        if(cancelled)return;
+        reLoginTried.current=false;
+        setUser(u);setMenus(m||[]);
+      }catch{
+        if(cancelled)return;
+        // Бүрхүүл дотор /login гэдэг web хуудас байхгүй — нэвтрэлтийг native
+        // тал эзэмшдэг. Тэр барьж авч чадвал өгөгдлөө дахин татна; дэмжихгүй,
+        // алдсан эсвэл хариу буцаахгүй бол хуучин зан төлөв рүү шилжинэ.
+        // reLoginTried нь дахин нэвтэрсэн ч session хүчингүй хэвээр байх үед
+        // мөчлөг үүсгэхээс сэргийлнэ.
+        if(!reLoginTried.current){
+          reLoginTried.current=true;
+          const result=await invokeShell(SHELL_METHODS.AUTH_RE_LOGIN);
+          if(cancelled)return;
+          if(result.ok){setAuthNonce(n=>n+1);return}
+        }
+        router.push("/login");
+      }finally{
+        if(!cancelled)setLoading(false);
+      }
+    })();
+    return()=>{cancelled=true};
+  },[pathname,router,isPublic,locale,authNonce]);
   useEffect(()=>{
     if(isPublic)return;
-    const refreshMenus=()=>{void api.getMenus().then(m=>setMenus(m||[])).catch(()=>{})};
+    const refreshMenus=()=>{
+      void api.getMenus().then(m=>setMenus(m||[])).catch(()=>{});
+      // Native цэс нь яг энэ жагсаалтаас баригддаг тул бүрхүүлд ч дуулгана.
+      if(shell)void shell.invoke(SHELL_METHODS.MENU_CHANGED,{}).catch(()=>{});
+    };
     window.addEventListener(APP_MENU_CHANGED_EVENT,refreshMenus);
     return()=>window.removeEventListener(APP_MENU_CHANGED_EVENT,refreshMenus);
-  },[isPublic,locale]);
-  useEffect(()=>{setMobileOpen(false);setMobileMoreOpen(false)},[pathname]);
+  },[isPublic,locale,shell]);
+  // Бүрхүүлийн цэс, toolbar, deep link зэрэг нь ижил гэрээгээр л ажлын мужтай
+  // ярина: шилжилт нь SPA-гийн router-ээр, хайлт нь энд байгаа индексээр.
+  useEffect(()=>{
+    if(!shell)return;
+    const offNavigate=shell.on(SHELL_EVENTS.NAVIGATE,payload=>{
+      const path=(payload as ShellNavigatePayload|null)?.path;
+      // Зөвхөн апп доторх зам — бүрхүүлээс ирсэн ч гадаад URL руу router.push
+      // хийхгүй. "//host" нь протокол-харьцангуй гадаад хаяг тул мөн хасагдана.
+      if(typeof path==="string"&&path.startsWith("/")&&!path.startsWith("//"))router.push(path);
+    });
+    const offSearch=shell.on(SHELL_EVENTS.SEARCH,payload=>{
+      const incoming=(payload as ShellSearchPayload|null)?.query;
+      if(typeof incoming!=="string")return;
+      setQuery(incoming);setShellSearchOpen(true);
+    });
+    return()=>{offNavigate();offSearch()};
+  },[shell,router]);
+  useEffect(()=>{setMobileOpen(false);setMobileMoreOpen(false);setShellSearchOpen(false)},[pathname]);
 
   const apps=useMemo<AppNav[]>(()=>{
     const groups=new Map<string,MenuItem[]>();
@@ -99,6 +157,27 @@ export default function Layout({children}:{children:React.ReactNode}){
 
   if(isPublic)return <>{children}</>;
   if(loading)return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-medium">{t("web.message.loading_platform")}</div>;
+
+  // Бүрхүүл дотор: толгой, хажуугийн цэс, мобайл таб, мобайл drawer аль нь ч
+  // зурагдахгүй — тэдгээрийг native тал аль хэдийн эзэмшсэн. Цэс, хэрэглэгчийн
+  // өгөгдөл дээрх fetch хэвээр ажиллаж байгаа (RBAC, хандалт түүнээс хамаарна),
+  // зөвхөн харагдац нь л хасагдана. AICopilot бол ажлын мужийн хэсэг тул үлдэнэ.
+  if(inShell)return <div className="gerege-shell gerege-workarea min-h-screen flex flex-col">
+    <main className="gerege-main flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+    {shellSearchOpen&&<div className="gerege-shell-search" role="dialog" aria-modal="true" aria-label={t("web.view.search_placeholder")}>
+      <button type="button" className="gerege-shell-search-backdrop" aria-label={t("base.action.close")} onClick={()=>{setShellSearchOpen(false);setQuery("")}}/>
+      <div className="gerege-shell-search-panel">
+        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/>
+          <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{
+            if(e.key==="Escape"){setShellSearchOpen(false);setQuery("")}
+            if(e.key==="Enter"&&results[0]){router.push(results[0].path);setShellSearchOpen(false);setQuery("")}
+          }} placeholder={t("web.view.search_placeholder")} className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)]"/>
+        </div>
+        {results.length>0&&<div className="mt-2 space-y-0.5">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setShellSearchOpen(false);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
+      </div>
+    </div>}
+    <AICopilot/>
+  </div>;
 
   const platformMenus=<><MenuGroup title={t("web.group.modules")}>
     <NavLink href="/apps" active={pathname==="/apps"} icon={<LayoutGrid className="w-5 h-5"/>} label={t("web.menu.app_store")}/><NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("web.menu.installed_apps")}/><NavLink href="/settings/ai" active={pathname==="/settings/ai"} icon={<BrainCircuit className="w-5 h-5"/>} label={t("web.menu.ai_settings")}/>
