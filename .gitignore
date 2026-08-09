@@ -25,6 +25,7 @@ frontend/out/
 # Go / Binary outputs
 bin/
 tmp/
+desktop-mac/build/
 *.exe
 *.dll
 *.so

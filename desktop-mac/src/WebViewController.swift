@@ -3,7 +3,20 @@ import WebKit
 import UserNotifications
 
 class WebViewController: NSViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
-    
+
+    // MARK: - Shell contract v1
+
+    static let messageHandlerName = "geregeShell"
+    static let contractVersion = "1.0"
+    static let platform = "macos"
+    /// ЗӨВХӨН энэ бүрхүүлд ҮНЭХЭЭР хэрэгжсэн чадварууд. Хэрэгжүүлээгүй зүйлээ
+    /// зарлавал web тал fallback-аа ажиллуулах боломжгүй болно.
+    static let capabilities = ["biometric", "notify", "badge", "external.open", "print.system", "fs.save"]
+
+    static let eventNavigate = "shell:navigate"
+    static let eventSearch = "shell:search"
+    static let eventMenuRefresh = "shell:menu-refresh"
+
     var webView: WKWebView!
     private var progressView: NSProgressIndicator!
     private var offlineBanner: NSTextField!
@@ -19,43 +32,16 @@ class WebViewController: NSViewController, WKNavigationDelegate, WKUIDelegate, W
         let userContentController = WKUserContentController()
         
         // Register JS Handlers
-        userContentController.add(self, name: "desktopBridge")
-        
-        // Inject GeregeDesktop global object
-        let scriptSource = """
-        window.GeregeDesktop = {
-            isNativeMac: true,
-            version: '1.0.0',
-            authenticateBiometric: function(reason, callbackId) {
-                window.webkit.messageHandlers.desktopBridge.postMessage({
-                    action: 'authenticateBiometric',
-                    reason: reason || 'Баталгаажуулалт шаардлагатай',
-                    callbackId: callbackId
-                });
-            },
-            sendNotification: function(title, body) {
-                window.webkit.messageHandlers.desktopBridge.postMessage({
-                    action: 'sendNotification',
-                    title: title,
-                    body: body
-                });
-            },
-            setBadgeCount: function(count) {
-                window.webkit.messageHandlers.desktopBridge.postMessage({
-                    action: 'setBadgeCount',
-                    count: count
-                });
-            },
-            openExternal: function(url) {
-                window.webkit.messageHandlers.desktopBridge.postMessage({
-                    action: 'openExternal',
-                    url: url
-                });
-            }
-        };
-        console.log('[Gerege Nexus Desktop] Native Mac bridge initialized.');
-        """
-        let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        userContentController.add(self, name: WebViewController.messageHandlerName)
+
+        // Inject the GeregeShell contract (docs/SHELL_CONTRACT.md).
+        //
+        // forMainFrameOnly: true — гүүр нь зөвхөн ажлын мужид хамаарна.
+        // Ямар нэг байдлаар ачаалагдсан iframe (тайлангийн embed, гуравдагч
+        // этгээдийн виджет) биометр, файл, мэдэгдэлд хүрэх шаардлагагүй.
+        let userScript = WKUserScript(source: WebViewController.shellScriptSource,
+                                      injectionTime: .atDocumentStart,
+                                      forMainFrameOnly: true)
         userContentController.addUserScript(userScript)
         
         config.userContentController = userContentController
@@ -216,6 +202,37 @@ class WebViewController: NSViewController, WKNavigationDelegate, WKUIDelegate, W
     
     // MARK: - Navigation Delegate
     
+    /// Гол frame хаашаа очиж болохыг шийднэ.
+    ///
+    /// Бүрхүүл нь платформын ажлын мужийг л агуулна. Гадны хуудас энэ webview-д
+    /// ачаалагдвал манай cookie, session, native гүүрийн хажууд суух тул
+    /// зөвшөөрөгдсөн origin-оос гадуурх бүх шилжилт системийн хөтөч рүү гарна.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        // Дэд frame-үүд гүүрт хүрэхгүй тул энд хязгаарлахгүй — эсрэг тохиолдолд
+        // тайлан, газрын зураг зэрэг embed бүхэн эвдэрнэ.
+        guard navigationAction.targetFrame?.isMainFrame ?? false else {
+            decisionHandler(.allow)
+            return
+        }
+        let scheme = url.scheme?.lowercased() ?? ""
+        // about:blank ба blob: нь баримт үзүүлэх, хэвлэхэд WebKit өөрөө
+        // үүсгэдэг дотоод хаягууд.
+        if scheme == "about" || scheme == "blob" {
+            decisionHandler(.allow)
+            return
+        }
+        if ServerManager.shared.isAllowedNavigation(url) {
+            decisionHandler(.allow)
+            return
+        }
+        decisionHandler(.cancel)
+        NSWorkspace.shared.open(url)
+    }
+
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         progressView.isHidden = false
         progressView.doubleValue = 0.1
@@ -253,53 +270,250 @@ class WebViewController: NSViewController, WKNavigationDelegate, WKUIDelegate, W
     // MARK: - UI Delegate & Popups
     
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if navigationAction.targetFrame == nil || !navigationAction.targetFrame!.isMainFrame {
-            if let url = navigationAction.request.url {
+        // Шинэ цонх нээхгүй: манай апп доторх холбоос энэ л webview-д
+        // үргэлжилнэ, бусад нь системийн хөтчид гарна.
+        if let url = navigationAction.request.url {
+            if ServerManager.shared.isAllowedNavigation(url) {
+                webView.load(navigationAction.request)
+            } else {
                 NSWorkspace.shared.open(url)
             }
         }
         return nil
     }
     
+    // MARK: - Shell bridge (injected script)
+
+    /// window.GeregeShell — гэрээний web талын хэрэгжилт.
+    ///
+    /// Тохиргоог JS дотор мөр залгаж биш, JSON-оор дамжуулж байгаа нь энэ
+    /// файлын нийтлэг дүрэм: native талаас JS руу орох бүх утга JSON-оор
+    /// кодлогдоно.
+    private static var shellScriptSource: String {
+        let config: [String: Any] = [
+            "version": contractVersion,
+            "platform": platform,
+            "capabilities": capabilities,
+            "handler": messageHandlerName,
+        ]
+        let configJSON = (try? JSONSerialization.data(withJSONObject: config, options: []))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+
+        return """
+        (function () {
+          if (window.GeregeShell) { return; }
+          var config = JSON.parse(\(jsStringLiteral(configJSON)));
+          var pending = {};
+          var counter = 0;
+
+          // Native тал БҮХ хариугаа энэ нэг цэгээр буцаана. Хоёр аргумент нь
+          // хоёулаа JSON тул хариу дотор ямар текст ирсэн ч код болж
+          // ажиллах боломжгүй.
+          window.__geregeShellResolve = function (id, payloadJSON) {
+            var entry = pending[id];
+            if (!entry) { return; }
+            delete pending[id];
+            var response;
+            try { response = JSON.parse(payloadJSON); }
+            catch (e) { entry.reject(new Error('shell: буруу хариу')); return; }
+            if (response && response.ok) { entry.resolve(response.value); }
+            else { entry.reject(new Error((response && response.error) || 'shell: invoke амжилтгүй')); }
+          };
+
+          window.__geregeShellEmit = function (name, payloadJSON) {
+            var detail = null;
+            try { detail = payloadJSON ? JSON.parse(payloadJSON) : null; }
+            catch (e) { return; }
+            window.dispatchEvent(new CustomEvent(name, { detail: detail }));
+          };
+
+          window.GeregeShell = Object.freeze({
+            version: config.version,
+            platform: config.platform,
+            capabilities: Object.freeze(config.capabilities.slice()),
+            invoke: function (method, params) {
+              return new Promise(function (resolve, reject) {
+                var id = 'gs' + (++counter);
+                pending[id] = { resolve: resolve, reject: reject };
+                try {
+                  window.webkit.messageHandlers[config.handler].postMessage({
+                    id: id, method: String(method), params: params || {}
+                  });
+                } catch (err) {
+                  delete pending[id];
+                  reject(err instanceof Error ? err : new Error(String(err)));
+                }
+              });
+            },
+            on: function (name, handler) {
+              var listener = function (event) { handler(event.detail); };
+              window.addEventListener(name, listener);
+              return function () { window.removeEventListener(name, listener); };
+            }
+          });
+        })();
+        """
+    }
+
+    /// JS эх бичвэрт шууд суулгаж болох, бүрэн escape хийгдсэн string literal.
+    ///
+    /// Native талаас JS руу дамжих утга бүр үүгээр л явна. Өмнө нь алдааны
+    /// текстийг мөр залгаж дамжуулдаг байсан — тэр текстэд нэг хашилт орвол
+    /// дурын JS ажиллуулах нүх байв.
+    private static func jsStringLiteral(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
+              let wrapped = String(data: data, encoding: .utf8),
+              wrapped.count >= 2 else { return "\"\"" }
+        let literal = String(wrapped.dropFirst().dropLast())
+        // JSON нь U+2028/U+2029-ийг түүхийгээр нь үлдээдэг, JS-ийн хуучин
+        // парсерууд эдгээрийг мөр таслал гэж уншина.
+        return literal
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+    }
+
     // MARK: - JS Bridge (WKScriptMessageHandler)
-    
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "desktopBridge", let body = message.body as? [String: Any] else { return }
-        
-        let action = body["action"] as? String ?? ""
-        
-        switch action {
-        case "authenticateBiometric":
-            let reason = body["reason"] as? String ?? "Тоон гарын үсэг / Баталгаажуулалт"
-            let callbackId = body["callbackId"] as? String
+        guard message.name == WebViewController.messageHandlerName else { return }
+        // Гүүр нь зөвхөн ажлын мужийнх. Скрипт нь main frame-д л inject
+        // хийгддэг ч гэсэн энд дахин шалгаж байгаа нь: гүүрийг эзэмших эрхийг
+        // нэг л газар шийдэж, дараагийн тохиргооны алдаа нүх болохоос
+        // сэргийлнэ.
+        guard message.frameInfo.isMainFrame else { return }
+        // Гол frame ямар нэг замаар гуравдагч этгээдийн хуудсанд очсон бол
+        // native чадварууд түүнд нээлттэй байх ёсгүй.
+        guard let frameURL = message.frameInfo.request.url,
+              ServerManager.shared.isAppOrigin(frameURL) else { return }
+        guard let body = message.body as? [String: Any],
+              let id = body["id"] as? String,
+              let method = body["method"] as? String else { return }
+
+        handle(method: method, params: body["params"] as? [String: Any] ?? [:], id: id)
+    }
+
+    private func handle(method: String, params: [String: Any], id: String) {
+        switch method {
+        case "biometric.authenticate":
+            let reason = params["reason"] as? String ?? "Тоон гарын үсэг / Баталгаажуулалт"
             BiometricAuth.shared.authenticate(reason: reason) { [weak self] success, err in
-                if let cb = callbackId {
-                    let js = "window.GeregeDesktop.onBiometricResult && window.GeregeDesktop.onBiometricResult('\(cb)', \(success), '\(err ?? "")');"
-                    self?.webView.evaluateJavaScript(js, completionHandler: nil)
+                if success {
+                    self?.resolve(id: id, value: ["authenticated": true])
+                } else {
+                    self?.reject(id: id, error: err ?? "Баталгаажуулалт амжилтгүй боллоо")
                 }
             }
-            
-        case "sendNotification":
-            let title = body["title"] as? String ?? "Gerege Nexus"
-            let bodyMsg = body["body"] as? String ?? ""
-            sendNativeNotification(title: title, body: bodyMsg)
-            
-        case "setBadgeCount":
-            let count = body["count"] as? Int ?? 0
+
+        case "notify.show":
+            sendNativeNotification(title: params["title"] as? String ?? "Gerege Nexus",
+                                   body: params["body"] as? String ?? "")
+            resolve(id: id, value: NSNull())
+
+        case "badge.set":
+            let count = params["count"] as? Int ?? 0
             DispatchQueue.main.async {
                 NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
             }
-            
-        case "openExternal":
-            if let urlStr = body["url"] as? String, let url = URL(string: urlStr) {
-                NSWorkspace.shared.open(url)
+            resolve(id: id, value: NSNull())
+
+        case "external.open":
+            // Гадаад хөтөч рүү юу дамжуулж байгаагаа хязгаарлана: file:// эсвэл
+            // бүртгэгдсэн дурын scheme нь webview-гээс код ажиллуулах гарц.
+            guard let raw = params["url"] as? String,
+                  let url = URL(string: raw),
+                  let scheme = url.scheme?.lowercased(),
+                  ["http", "https", "mailto", "tel"].contains(scheme) else {
+                reject(id: id, error: "external.open: зөвшөөрөгдөөгүй URL")
+                return
             }
-            
+            DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+            resolve(id: id, value: NSNull())
+
+        case "print.system":
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let window = self.view.window else {
+                    self?.reject(id: id, error: "print.system: цонх алга")
+                    return
+                }
+                let operation = self.webView.printOperation(with: NSPrintInfo.shared)
+                operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+                self.resolve(id: id, value: NSNull())
+            }
+
+        case "fs.saveAs":
+            // Хэрэглэгчийн сонгосон газарт л бичнэ — замыг web тал заахгүй.
+            let suggested = (params["filename"] as? String ?? "document") as NSString
+            var payload: Data?
+            if let base64 = params["base64"] as? String { payload = Data(base64Encoded: base64) }
+            else if let text = params["text"] as? String { payload = text.data(using: .utf8) }
+            guard let data = payload else {
+                reject(id: id, error: "fs.saveAs: агуулга алга эсвэл буруу base64")
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                let panel = NSSavePanel()
+                panel.nameFieldStringValue = suggested.lastPathComponent
+                panel.begin { result in
+                    guard result == .OK, let url = panel.url else {
+                        self?.reject(id: id, error: "fs.saveAs: цуцлагдсан")
+                        return
+                    }
+                    do {
+                        try data.write(to: url)
+                        self?.resolve(id: id, value: ["path": url.path])
+                    } catch {
+                        self?.reject(id: id, error: error.localizedDescription)
+                    }
+                }
+            }
+
+        case "menu.changed":
+            // macOS-ийн native цэс одоогоор статик тул дахин барих зүйл алга.
+            // Гэвч мэдэгдлийг хүлээн авсан гэдгээ хэлэх нь чухал: web тал үүнийг
+            // алдаа гэж бүртгэх ёсгүй.
+            resolve(id: id, value: NSNull())
+
         default:
-            break
+            // Зарлаагүй method-ыг няцаана — web тал өөрийн fallback-аа
+            // ажиллуулж чадна (жишээ нь auth.reLogin → /login).
+            reject(id: id, error: "shell: дэмжигдээгүй method — \(method)")
         }
     }
-    
+
+    // MARK: - Shell responses & events
+
+    private func resolve(id: String, value: Any) {
+        respond(id: id, payload: ["ok": true, "value": value])
+    }
+
+    private func reject(id: String, error: String) {
+        respond(id: id, payload: ["ok": false, "error": error])
+    }
+
+    private func respond(id: String, payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let js = "window.__geregeShellResolve && window.__geregeShellResolve("
+            + WebViewController.jsStringLiteral(id) + ", "
+            + WebViewController.jsStringLiteral(json) + ");"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
+
+    /// Бүрхүүлээс ажлын муж руу event илгээнэ (цэс, toolbar, deep link).
+    func emit(event: String, payload: [String: Any] = [:]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let js = "window.__geregeShellEmit && window.__geregeShellEmit("
+            + WebViewController.jsStringLiteral(event) + ", "
+            + WebViewController.jsStringLiteral(json) + ");"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
+
+
     private func sendNativeNotification(title: String, body: String) {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in

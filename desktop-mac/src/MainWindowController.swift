@@ -64,7 +64,15 @@ class MainWindowController: NSWindowController, NSWindowDelegate, NSToolbarDeleg
     }
     
     func navigateTo(path: String) {
-        webVC.loadWebClient(path: path)
+        // Ажлын муж аль хэдийн ачаалагдсан бол SPA-гийн router-ээр шилжинэ:
+        // бүтэн дахин ачаалал нь бөглөж байсан маягт, нээлттэй самбарыг устгана.
+        if let current = webVC.webView.url,
+           ServerManager.shared.isAppOrigin(current),
+           path.hasPrefix("/") {
+            webVC.emit(event: WebViewController.eventNavigate, payload: ["path": path])
+        } else {
+            webVC.loadWebClient(path: path)
+        }
     }
     
     // MARK: - NSToolbarDelegate
@@ -188,9 +196,10 @@ class MainWindowController: NSWindowController, NSWindowDelegate, NSToolbarDeleg
     
     @objc func onSearchEntered() {
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !query.isEmpty {
-            let js = "if(window.GeregeDesktop) { window.location.href = '/apps?q=' + encodeURIComponent('\(query)'); }"
-            webVC.webView.evaluateJavaScript(js, completionHandler: nil)
-        }
+        guard !query.isEmpty else { return }
+        // Хайлтын үг гэрээний event-ээр очно. Өмнө нь хайлтын мөрийг шууд JS-д
+        // залгаж URL болгодог байсан — хэрэглэгчийн бичсэн текст код болж
+        // ажиллах боломжтой байв.
+        webVC.emit(event: WebViewController.eventSearch, payload: ["query": query])
     }
 }
