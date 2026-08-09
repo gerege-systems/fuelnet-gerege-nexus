@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { getShell } from "@/lib/shell";
 
 export type ColorMode = "light" | "dark" | "system";
 export type Accent = "neutral" | "cobalt" | "teal" | "violet" | "emerald";
@@ -57,6 +58,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       document.documentElement.dataset.density = preferences.density;
       document.documentElement.dataset.design = preferences.design;
       document.documentElement.style.colorScheme = nextMode;
+      // Бүрхүүлийн доторх харагдац нь хостынхоо платформоос хамаардаг. Хөтөч
+      // дээр атрибут огт үлдэхгүй байх нь чухал — эсрэг тохиолдолд web горим
+      // native дүрмүүдийг өвлөнө.
+      const shell = getShell();
+      if (shell) document.documentElement.dataset.shell = shell.platform;
+      else delete document.documentElement.dataset.shell;
     };
     apply();
     media.addEventListener("change", apply);

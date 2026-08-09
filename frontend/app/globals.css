@@ -134,6 +134,39 @@
   }
 }
 
+/* Native Shell + Web Work Area — бүрхүүл дотор апп нь толгой, хажуугийн цэс,
+   хөлгүйгээр зөвхөн ажлын муж болж рендерлэгддэг тул хэв маягаа хостынхоо
+   системийн хэв маягт ойртуулна. Хөтөч дээр `data-shell` атрибут огт
+   тавигддаггүй тул доорх дүрмүүдийн аль нь ч web горимд идэвхжихгүй.
+
+   Нягтралын дүрмээс ӨМНӨ бичигдсэн: хэрэглэгч "compact"-ыг сонгосон бол
+   бүрхүүлийн үндсэн хэмжээ түүнийг дарж болохгүй. */
+html[data-shell] { font-size: 15px; }
+html[data-shell] body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+/* Дээрээ chrome байхгүй тул ажлын муж цонхны ирмэгээс шууд эхэлнэ. */
+html[data-shell] .gerege-workarea > main { padding: 1rem 1.25rem 1.25rem; }
+
+/* Native толгой хэсгээс ирсэн хайлтын query-г харуулах давхарга. */
+html[data-shell] .gerege-shell-search { position: fixed; inset: 0; z-index: 80; }
+html[data-shell] .gerege-shell-search-backdrop { position: absolute; inset: 0; background: rgb(15 23 42 / 25%); }
+html[data-shell] .gerege-shell-search-panel {
+  position: relative; margin: 3.5rem auto 0; width: min(34rem, calc(100vw - 2rem));
+  padding: 0.75rem; border: 1px solid var(--gerege-border);
+  border-radius: var(--gerege-radius-card); background: var(--gerege-chrome);
+  box-shadow: var(--gerege-shadow-menu);
+}
+
+/* Платформын нюанс — цөөхөн, зөвхөн танигдахуйц ялгаа. */
+html[data-shell="macos"] { --gerege-radius-card: 12px; --gerege-radius-control: 7px; }
+html[data-shell="macos"] ::-webkit-scrollbar { width: 9px; height: 9px; }
+html[data-shell="macos"] ::-webkit-scrollbar-thumb { background: var(--gerege-border); border-radius: 999px; }
+html[data-shell="macos"] ::-webkit-scrollbar-track { background: transparent; }
+html[data-shell="windows"] { --gerege-radius-card: 4px; --gerege-radius-control: 4px; }
+html[data-shell="windows"] ::-webkit-scrollbar { width: 12px; height: 12px; }
+html[data-shell="windows"] ::-webkit-scrollbar-thumb { background: var(--gerege-border); }
+
 html[data-density="compact"] { font-size: 14px; }
 html[data-density="compact"] .gerege-topbar { height: 56px; }
 html[data-density="compact"] main { padding-top: 1rem; padding-bottom: 1rem; }
