@@ -104,6 +104,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path. A path-filtered workflow reports no status on runs that miss its filter,
   so making either a required check needs a merge queue or a companion job.
 
+### Added — Native Shell + Web Work Area
+
+- **The web app now knows whether it is a whole product or part of one.** Inside a
+  native shell, sign-in, the header, the menus and device access belong to the
+  shell; the web app hides its own chrome and renders as a **work area**. In a
+  browser there is no shell, and everything below evaluates to nothing — the
+  browser rendering is unchanged to the pixel, which is the constraint the whole
+  design is built around rather than an afterthought.
+- **One contract, written down** ([`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md)):
+  injection rules, every method's parameters, result and failure, every event's
+  payload, the capability names, the versioning rule (adding is minor, changing is
+  major, and the shell announces its own version), and the security requirements a
+  shell must meet. Two shells written by different people meet here or not at all.
+- **`window.GeregeShell` in TypeScript** ([`frontend/lib/shell.ts`](frontend/lib/shell.ts)):
+  `getShell()` returns `null` during SSR and in a browser, `hasCapability()`,
+  a `useShell()` hook, and `invokeShell()` — an invoke that neither throws nor
+  hangs, because callers mostly need to know whether the shell took the request,
+  and "not supported", "failed" and "never answered" all mean the same thing: run
+  the web fallback. Method, event and capability names are constants, so renaming
+  one is a compiler error rather than a silent no-op.
+- **Chromeless rendering** ([`Layout.tsx`](frontend/components/Layout.tsx)): in a
+  shell the top bar, sidebar, mobile tabs and drawer are not rendered at all, but
+  the menu and user fetches still run — RBAC and access checks depend on them, and
+  only the drawing is removed. The AI assistant stays; it is part of the work area.
+- **Session expiry asks the shell first.** There is no web `/login` page inside a
+  shell, so a 401 calls `auth.reLogin` and falls back to `router.push("/login")`
+  only if the shell will not, cannot, or does not answer — attempted once per
+  session, so a re-login that leaves the session invalid cannot loop.
+- **The two halves talk over the contract, not over URLs.** A menu change tells the
+  shell with `menu.changed` so it can rebuild its native menu; the shell moves the
+  work area with `shell:navigate` (internal paths only — a protocol-relative
+  `//host` is not one) and opens its search with `shell:search`.
+- **Native-leaning styling, scoped by attribute**
+  ([`theme.tsx`](frontend/lib/theme.tsx), [`globals.css`](frontend/app/globals.css)):
+  the shell's platform lands on `<html data-shell>`, which switches the app to the
+  host's system font stack and chrome-free spacing, with a few per-platform
+  touches. The attribute is absent in a browser, so no rule can reach it. The block
+  sits above the density rules on purpose — a person who chose "compact" must not
+  have it overruled by being in a shell.
+
+### Fixed — Security: the macOS shell's JavaScript bridge
+
+- **Native results were concatenated into JavaScript.** The biometric callback was
+  assembled as `onBiometricResult('\(cb)', \(success), '\(err)')`, so a single
+  quote anywhere in a system error message ran as code in the work area. The
+  toolbar search field went the same way, which made anything the user typed a
+  script. Every native→web value is now JSON-encoded and returned through one
+  entry point ([`WebViewController.swift`](desktop-mac/src/WebViewController.swift)).
+- **The bridge was injected into every frame.** `WKUserScript` is now main-frame
+  only, and each message is checked twice — `isMainFrame`, and that the frame's
+  origin matches the platform's web origin. An embedded third-party page has no
+  business reaching biometrics, files or notifications.
+- **The main frame could navigate anywhere.** It is now confined to an explicit
+  allowlist — the web and API origins plus named identity origins — and every other
+  address opens in the system browser rather than beside our session and our
+  bridge. Deployments whose integration consent screens must stay in-app can name
+  those origins in `gerege_nav_allowlist`; unlisted ones continue in the browser
+  rather than breaking.
+- **No functional regression**: tray, toolbar, printing, downloads and
+  `gerege://` deep links continue to work, and deep links and menu items now move
+  the work area through the router instead of reloading it, which no longer
+  discards a half-filled form.
+
 ### Added — Email verification as a platform capability
 
 - **One flow instead of one per app**
