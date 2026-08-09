@@ -812,4 +812,8 @@ export const ar: Record<string, string> = {
   "website.view.trust_eyebrow": "حماية نشطة",
   "website.view.trust_lede": "eID identity → جلسة الخادم → عضوية tenant → RBAC → OIDC client. يتم التحقق من كل رابط على الخادم.",
   "website.view.trust_title": "سلسلة إثبات واحدة، من الهوية إلى الإذن",
+  "pwa.install.title": "التثبيت كتطبيق",
+  "pwa.install.body": "يعمل في نافذته الخاصة بدلاً من علامة تبويب المتصفح.",
+  "pwa.install.action": "تثبيت",
+  "pwa.install.ios": "مشاركة ← إضافة إلى الشاشة الرئيسية",
 };

@@ -812,4 +812,8 @@ export const ru: Record<string, string> = {
   "website.view.trust_eyebrow": "АКТИВНАЯ ЗАЩИТА",
   "website.view.trust_lede": "eID идентификация → сеанс сервера → членство в tenant → RBAC → OIDC клиент. Каждый шаг проверяется на стороне сервера.",
   "website.view.trust_title": "Одна цепочка доказательств, от идентификации до разрешения",
+  "pwa.install.title": "Установить как приложение",
+  "pwa.install.body": "Открывается в собственном окне, а не во вкладке браузера.",
+  "pwa.install.action": "Установить",
+  "pwa.install.ios": "Поделиться → На экран «Домой»",
 };

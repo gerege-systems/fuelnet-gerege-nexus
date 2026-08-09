@@ -812,4 +812,8 @@ export const fr: Record<string, string> = {
   "website.view.trust_eyebrow": "PROTECTION ACTIVE",
   "website.view.trust_lede": "Identité eID → session serveur → appartenance au tenant → RBAC → client OIDC. Chaque maillon est vérifié côté serveur.",
   "website.view.trust_title": "Une seule chaîne de preuve, de l'identité à la permission",
+  "pwa.install.title": "Installer comme application",
+  "pwa.install.body": "S'exécute dans sa propre fenêtre plutôt que dans un onglet.",
+  "pwa.install.action": "Installer",
+  "pwa.install.ios": "Partager → Sur l'écran d'accueil",
 };
