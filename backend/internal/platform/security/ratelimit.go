@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"golang.org/x/time/rate"
 )
 
@@ -69,7 +70,7 @@ func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler
 			ip := ClientIP(r)
 			l := limiter.GetLimiter(ip)
 			if !l.Allow() {
-				http.Error(w, `{"error":"too many requests: rate limit exceeded, try again later"}`, http.StatusTooManyRequests)
+				httpx.Error(w, http.StatusTooManyRequests, "too many requests: rate limit exceeded, try again later")
 				return
 			}
 			next.ServeHTTP(w, r)

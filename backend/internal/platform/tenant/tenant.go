@@ -3,7 +3,6 @@ package tenant
 import (
 	"context"
 	"errors"
-	"net/http"
 )
 
 type contextKey string
@@ -18,22 +17,16 @@ func WithTenantID(ctx context.Context, tenantID string) context.Context {
 }
 
 // FromContext extracts tenant_id from context.
+//
+// There is deliberately no RequireTenantMiddleware here. One existed and was
+// never mounted on a single route, which made it look like a guard the platform
+// relies on. The real guard is authMiddleware, which is the only thing that
+// puts a tenant into the context at all, and appGateMiddleware, which refuses
+// the request when this returns an error.
 func FromContext(ctx context.Context) (string, error) {
 	tenantID, ok := ctx.Value(tenantIDKey).(string)
 	if !ok || tenantID == "" {
 		return "", ErrTenantMissing
 	}
 	return tenantID, nil
-}
-
-// RequireTenantMiddleware ensures a valid tenant ID exists in request context.
-func RequireTenantMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantID, err := FromContext(r.Context())
-		if err != nil || tenantID == "" {
-			http.Error(w, `{"error":"unauthorized: missing tenant context"}`, http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -75,9 +76,6 @@ func NewSessionStore(db *pgxpool.Pool, ttl time.Duration) *SessionStore {
 	}
 	return &SessionStore{db: db, ttl: ttl, idle: IdleTimeoutFromEnv()}
 }
-
-// TTL returns the configured session lifetime.
-func (s *SessionStore) TTL() time.Duration { return s.ttl }
 
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
@@ -210,6 +208,11 @@ func nullableTime(t time.Time) any {
 }
 
 // DeleteExpired purges sessions that can no longer be used.
+//
+// The seven-day grace is not caution about the expiry itself — an expired row
+// stops authenticating the moment it expires — but about the audit question
+// "when did this person last sign in", which is only answerable while the row
+// is still there.
 func (s *SessionStore) DeleteExpired(ctx context.Context) (int64, error) {
 	tag, err := s.db.Exec(ctx,
 		`DELETE FROM sessions WHERE expires_at < NOW() - INTERVAL '7 days'`)
@@ -217,6 +220,46 @@ func (s *SessionStore) DeleteExpired(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+// StartHousekeeping purges long-expired sessions until ctx is cancelled.
+//
+// Without it the table only ever grows: every sign-in writes a row and nothing
+// ever removed one, so the cost of resolving a token climbed with the lifetime
+// of the deployment rather than with the number of people using it.
+func (s *SessionStore) StartHousekeeping(ctx context.Context) {
+	async.Go("session-housekeeping", func() {
+		ticker := time.NewTicker(sessionSweepInterval)
+		defer ticker.Stop()
+		for {
+			s.sweep(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	})
+}
+
+// sessionSweepInterval is deliberately long. Nothing depends on a dead row
+// being gone promptly — it cannot authenticate anyone — so this is a size
+// concern, and sweeping hourly would be a repeated table scan bought for
+// nothing.
+const sessionSweepInterval = 6 * time.Hour
+
+func (s *SessionStore) sweep(ctx context.Context) {
+	sweepCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	purged, err := s.DeleteExpired(sweepCtx)
+	if err != nil {
+		slog.Warn("auth: could not purge expired sessions", "error", err)
+		return
+	}
+	if purged > 0 {
+		slog.Info("auth: purged expired sessions", "count", purged)
+	}
 }
 
 // TokenFromRequest extracts a session token from the cookie or the

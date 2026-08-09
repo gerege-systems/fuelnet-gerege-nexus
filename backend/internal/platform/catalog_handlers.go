@@ -17,6 +17,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
@@ -26,20 +27,20 @@ import (
 func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	menus, err := menu.GetTenantMenus(r.Context(), s.installer, tenantID, config.LocaleFromRequest(r))
 	if err != nil {
-		http.Error(w, `{"error":"failed to fetch menus"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "failed to fetch menus")
 		return
 	}
 	claims, _ := auth.UserFromContext(r.Context())
 	if !claims.IsAdmin {
 		permissions, permissionErr := s.permissions.GetUserPermissions(r.Context(), tenantID, claims.UserID)
 		if permissionErr != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to resolve menu access")
+			httpx.Error(w, http.StatusInternalServerError, "failed to resolve menu access")
 			return
 		}
 		visible := menus[:0]
@@ -86,7 +87,7 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	// disabled apps as never installed, so the UI offered "Install" again.
 	installedStates, err := s.installer.GetInstallationStatesForTenant(r.Context(), tenantID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to load installed apps")
+		httpx.Error(w, http.StatusInternalServerError, "failed to load installed apps")
 		return
 	}
 
@@ -114,13 +115,13 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetStoreApp(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if !security.IsValidSlug(slug) {
-		http.Error(w, `{"error":"invalid app slug format"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
 		return
 	}
 
 	app, ok := s.installer.GetAppBySlug(slug)
 	if !ok {
-		http.Error(w, `{"error":"app not found"}`, http.StatusNotFound)
+		httpx.Error(w, http.StatusNotFound, "app not found")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -130,7 +131,7 @@ func (s *Server) handleGetStoreApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -140,7 +141,7 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		 JOIN apps a ON a.id = ai.app_id
 		 WHERE ai.tenant_id = $1`, tenantID)
 	if err != nil {
-		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer rows.Close()
@@ -163,7 +164,7 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		// Skipping unreadable rows reported a tenant's app as not installed,
 		// and the store then offered to install it again over the top.
 		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion, &item.Status, &item.Enabled, &item.InstalledAt); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to read installed apps")
+			httpx.Error(w, http.StatusInternalServerError, "failed to read installed apps")
 			return
 		}
 		// apps.name is the manifest's English name, and this was the one catalogue
@@ -180,7 +181,7 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to read installed apps")
+		httpx.Error(w, http.StatusInternalServerError, "failed to read installed apps")
 		return
 	}
 
@@ -191,18 +192,18 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if !security.IsValidSlug(slug) {
-		http.Error(w, `{"error":"invalid app slug format"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
 		return
 	}
 
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	if err := s.installer.InstallApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	// The app gate reads a cached copy of this row, so the screen that just
@@ -216,18 +217,18 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if !security.IsValidSlug(slug) {
-		http.Error(w, `{"error":"invalid app slug format"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
 		return
 	}
 
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	if err := s.installer.DisableApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	// The app gate reads a cached copy of this row, so the screen that just
@@ -241,18 +242,18 @@ func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEnableApp(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if !security.IsValidSlug(slug) {
-		http.Error(w, `{"error":"invalid app slug format"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
 		return
 	}
 
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	if err := s.installer.EnableApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	// The app gate reads a cached copy of this row, so the screen that just

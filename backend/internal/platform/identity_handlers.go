@@ -22,6 +22,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
@@ -34,15 +35,15 @@ func (s *Server) handleEIDStart(w http.ResponseWriter, r *http.Request) {
 	}
 	callback, err := validEIDCallback(req.CallbackURL)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid eID callback URL")
+		httpx.Error(w, http.StatusBadRequest, "invalid eID callback URL")
 		return
 	}
 	started, err := s.eidSvc.StartDeviceLink(r.Context(), callback)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "eID Mongolia session could not be started")
+		httpx.Error(w, http.StatusBadGateway, "eID Mongolia session could not be started")
 		return
 	}
-	writeJSON(w, http.StatusOK, started)
+	httpx.JSON(w, http.StatusOK, started)
 }
 
 func (s *Server) handleEIDStartByNationalID(w http.ResponseWriter, r *http.Request) {
@@ -51,20 +52,20 @@ func (s *Server) handleEIDStartByNationalID(w http.ResponseWriter, r *http.Reque
 		CallbackURL string `json:"callbackUrl"`
 	}
 	if decodeLimitedJSON(r, &req, 8<<10) != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	callback, err := validEIDCallback(req.CallbackURL)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid eID callback URL")
+		httpx.Error(w, http.StatusBadRequest, "invalid eID callback URL")
 		return
 	}
 	started, err := s.eidSvc.StartByNationalID(r.Context(), req.NationalID, callback)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Регистрийн дугаар олдсонгүй эсвэл eID апп-д бүртгэлгүй байна")
+		httpx.Error(w, http.StatusBadRequest, "Регистрийн дугаар олдсонгүй эсвэл eID апп-д бүртгэлгүй байна")
 		return
 	}
-	writeJSON(w, http.StatusOK, started)
+	httpx.JSON(w, http.StatusOK, started)
 }
 
 func validEIDCallback(raw string) (string, error) {
@@ -91,20 +92,20 @@ func (s *Server) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 		SessionID string `json:"session_id"`
 	}
 	if decodeLimitedJSON(r, &req, 8<<10) != nil || strings.TrimSpace(req.SessionID) == "" {
-		writeJSONError(w, http.StatusBadRequest, "session_id is required")
+		httpx.Error(w, http.StatusBadRequest, "session_id is required")
 		return
 	}
 	result, err := s.eidSvc.Poll(r.Context(), req.SessionID)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "eID Mongolia session check failed")
+		httpx.Error(w, http.StatusBadGateway, "eID Mongolia session check failed")
 		return
 	}
 	if result.State != "COMPLETE" {
-		writeJSON(w, http.StatusOK, result)
+		httpx.JSON(w, http.StatusOK, result)
 		return
 	}
 	if result.Identity == nil || !result.Identity.VerifiedStatus {
-		writeJSONError(w, http.StatusUnauthorized, "eID identity verification failed")
+		httpx.Error(w, http.StatusUnauthorized, "eID identity verification failed")
 		return
 	}
 	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), result.Identity)
@@ -115,12 +116,12 @@ func (s *Server) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 	s.linkEIDIdentity(r.Context(), userID, result.Identity)
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid-app")
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to establish session")
+		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
 	audit.Record(r.Context(), tenantID, userID, "auth.eid_app_login_success", "eid", map[string]any{"verified": true, "method": "eid-app"})
-	writeJSON(w, http.StatusOK, map[string]any{"state": result.State, "expires_at": expiresAt, "identity": result.Identity})
+	httpx.JSON(w, http.StatusOK, map[string]any{"state": result.State, "expires_at": expiresAt, "identity": result.Identity})
 }
 
 func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +133,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		AuthMethod  eid.AuthMethod `json:"auth_method"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 
@@ -143,7 +144,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	} else if req.RegNumber != "" {
 		identity, err = s.eidSvc.AuthenticateWithMethod(r.Context(), req.RegNumber, req.OTPCode, req.AuthMethod)
 	} else {
-		http.Error(w, `{"error":"missing authorization code or registration number"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "missing authorization code or registration number")
 		return
 	}
 
@@ -154,7 +155,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "E-ID verification failed: " + err.Error()
 		}
-		writeJSONError(w, http.StatusUnauthorized, msg)
+		httpx.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
 
@@ -167,7 +168,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid")
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to establish session")
+		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -200,7 +201,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		OTPCode   string `json:"otp_code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 
@@ -211,7 +212,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 	} else if req.RegNumber != "" {
 		profile, err = s.danSvc.AuthenticateDANCitizen(r.Context(), req.RegNumber, req.OTPCode)
 	} else {
-		http.Error(w, `{"error":"missing dan_token or registration number"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "missing dan_token or registration number")
 		return
 	}
 
@@ -220,7 +221,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "dan.gerege.mn verification failed: " + err.Error()
 		}
-		writeJSONError(w, http.StatusUnauthorized, msg)
+		httpx.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
 
@@ -237,7 +238,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "dan")
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to establish session")
+		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -266,7 +267,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -274,13 +275,13 @@ func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 		RegNumber string `json:"reg_number"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RegNumber == "" {
-		http.Error(w, `{"error":"invalid registration number"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid registration number")
 		return
 	}
 
 	info, err := s.geregeSvc.GetCitizenInfo(r.Context(), req.RegNumber)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
+		httpx.Error(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
 		return
 	}
 
@@ -294,7 +295,7 @@ func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -302,13 +303,13 @@ func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
 		CompanyReg string `json:"company_reg"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CompanyReg == "" {
-		http.Error(w, `{"error":"invalid company registration number"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid company registration number")
 		return
 	}
 
 	info, err := s.geregeSvc.GetCompanyInfo(r.Context(), req.CompanyReg)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
+		httpx.Error(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
 		return
 	}
 

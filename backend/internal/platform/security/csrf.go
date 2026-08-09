@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 )
 
 // CSRFMiddleware rejects cross-site state-changing requests authenticated by
@@ -92,7 +93,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 }
 
 func forbid(w http.ResponseWriter, reason string) {
-	http.Error(w, `{"error":"forbidden: `+reason+`"}`, http.StatusForbidden)
+	httpx.Error(w, http.StatusForbidden, "forbidden: "+reason)
 }
 
 func isSafeMethod(method string) bool {

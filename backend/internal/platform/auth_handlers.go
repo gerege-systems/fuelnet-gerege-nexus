@@ -27,6 +27,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -54,7 +55,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
-		http.Error(w, `{"error":"invalid login credentials"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid login credentials")
 		return
 	}
 
@@ -85,7 +86,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		passwordHash = dummyPasswordHash
 	} else if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "login service unavailable")
+		httpx.Error(w, http.StatusInternalServerError, "login service unavailable")
 		return
 	}
 	passwordOK := auth.CheckPasswordHash(req.Password, passwordHash)
@@ -99,14 +100,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 				 WHERE id=$1`, userID, maxLoginFailures, loginLockoutWindow.String())
 		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
-		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 	_, _ = s.db.Exec(r.Context(), `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "password")
 	if err != nil {
-		http.Error(w, `{"error":"failed to establish session"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -153,21 +154,21 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	revoked, err := s.sessions.RevokeAllForUser(r.Context(), claims.UserID)
 	if err != nil {
 		slog.Error("failed to revoke every session", "user_id", claims.UserID, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to end the other sessions")
+		httpx.Error(w, http.StatusInternalServerError, "failed to end the other sessions")
 		return
 	}
 
 	auth.ClearSessionCookie(w)
 	audit.Record(r.Context(), claims.TenantID, claims.UserID, "auth.logout_everywhere", "session",
 		map[string]any{"revoked": revoked})
-	writeJSON(w, http.StatusOK, map[string]any{"status": "logged_out_everywhere", "revoked": revoked})
+	httpx.JSON(w, http.StatusOK, map[string]any{"status": "logged_out_everywhere", "revoked": revoked})
 }
 
 // Sign-in and eID polling are budgeted separately, because they are different
@@ -227,11 +228,11 @@ func (e signInError) Error() string { return e.msg }
 func reportSignInFailure(w http.ResponseWriter, err error) {
 	var visible signInError
 	if errors.As(err, &visible) {
-		writeJSONError(w, http.StatusForbidden, visible.Error())
+		httpx.Error(w, http.StatusForbidden, visible.Error())
 		return
 	}
 	slog.Error("failed to link verified national identity", "error", err)
-	writeJSONError(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг Gerege Nexus бүртгэлтэй холбож чадсангүй")
+	httpx.Error(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг Gerege Nexus бүртгэлтэй холбож чадсангүй")
 }
 
 // eidLinkingDigest derives the stable, non-PII handle for an eID subject. It
@@ -368,7 +369,7 @@ func (s *Server) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.EI
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 

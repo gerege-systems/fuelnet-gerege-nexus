@@ -14,6 +14,7 @@ import (
 	"net/http"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
@@ -24,13 +25,13 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := auth.TokenFromRequest(r)
 		if token == "" {
-			http.Error(w, `{"error":"unauthorized: missing session token"}`, http.StatusUnauthorized)
+			httpx.Error(w, http.StatusUnauthorized, "unauthorized: missing session token")
 			return
 		}
 
 		claims, err := s.sessions.Resolve(r.Context(), token)
 		if err != nil {
-			http.Error(w, `{"error":"unauthorized: invalid or expired session"}`, http.StatusUnauthorized)
+			httpx.Error(w, http.StatusUnauthorized, "unauthorized: invalid or expired session")
 			return
 		}
 
@@ -47,11 +48,11 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, err := auth.UserFromContext(r.Context())
 		if err != nil {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		if !claims.IsAdmin {
-			http.Error(w, `{"error":"forbidden: tenant administrator role required"}`, http.StatusForbidden)
+			httpx.Error(w, http.StatusForbidden, "forbidden: tenant administrator role required")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -63,7 +64,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 		return s.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenantID, err := tenant.FromContext(r.Context())
 			if err != nil {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 
@@ -87,7 +88,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 			}
 
 			if !enabled {
-				http.Error(w, `{"error":"forbidden: app module `+appID+` is not installed or enabled for this tenant"}`, http.StatusForbidden)
+				httpx.Error(w, http.StatusForbidden, "forbidden: app module "+appID+" is not installed or enabled for this tenant")
 				return
 			}
 

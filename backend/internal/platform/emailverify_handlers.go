@@ -22,6 +22,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
@@ -44,23 +45,23 @@ func emailVerifyError(w http.ResponseWriter, err error) {
 	var limited *emailverify.RateLimitedError
 	switch {
 	case errors.As(err, &invalid):
-		writeJSONError(w, http.StatusBadRequest, invalid.Error())
+		httpx.Error(w, http.StatusBadRequest, invalid.Error())
 	case errors.As(err, &limited):
 		w.Header().Set("Retry-After", strconv.Itoa(int(limited.RetryAfter.Round(time.Second).Seconds())))
-		writeJSONError(w, http.StatusTooManyRequests, limited.Error())
+		httpx.Error(w, http.StatusTooManyRequests, limited.Error())
 	case errors.Is(err, emailverify.ErrNotConfigured),
 		errors.Is(err, emailverify.ErrOriginNotHTTPS),
 		errors.Is(err, emailverify.ErrUnauthorizedKey):
 		// All three are this deployment's configuration, not the request's.
 		// 503 says "not right now, and not because of what you sent".
-		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
+		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, emailverify.ErrUpstream):
-		writeJSONError(w, http.StatusBadGateway, err.Error())
+		httpx.Error(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, emailverify.ErrLinkSpent):
-		writeJSONError(w, http.StatusGone, err.Error())
+		httpx.Error(w, http.StatusGone, err.Error())
 	default:
 		slog.Error("emailverify: request failed", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "the verification request could not be completed")
+		httpx.Error(w, http.StatusInternalServerError, "the verification request could not be completed")
 	}
 }
 
@@ -79,13 +80,13 @@ type verifySendRequest struct {
 func (s *Server) handleVerifySend(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	var req verifySendRequest
 	if decodeLimitedJSON(r, &req, 8<<10) != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid verification request")
+		httpx.Error(w, http.StatusBadRequest, "invalid verification request")
 		return
 	}
 
@@ -103,7 +104,7 @@ func (s *Server) handleVerifySend(w http.ResponseWriter, r *http.Request) {
 	}
 	audit.Record(r.Context(), tenantID, claims.UserID, "emailverify.send", "email_verification",
 		map[string]any{"id": verification.ID, "purpose": verification.Purpose})
-	writeJSON(w, http.StatusOK, verification)
+	httpx.JSON(w, http.StatusOK, verification)
 }
 
 // handleVerifyLanded receives the person the verification service sends back.
@@ -163,7 +164,7 @@ h1{font-size:20px;margin:0 0 12px}p{color:#475569;font-size:14px;line-height:1.6
 func (s *Server) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	limit := 25
@@ -177,5 +178,5 @@ func (s *Server) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Reques
 		emailVerifyError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, overview)
+	httpx.JSON(w, http.StatusOK, overview)
 }
