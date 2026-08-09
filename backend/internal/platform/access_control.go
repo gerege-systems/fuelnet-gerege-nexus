@@ -383,8 +383,16 @@ func collectStrings(ctx context.Context, q querier, sql string, args ...any) ([]
 	return out, rows.Err()
 }
 
+// recordAccessChange writes the audit row for a change to who may do what, and
+// drops the tenant's cached grants.
+//
+// The invalidation lives here rather than in each of the five handlers because
+// every one of them already has to call this — a new mutation that forgets to
+// invalidate would be a role edit that takes half a minute to bite, and the
+// administrator would be looking at a screen that says it already has.
 func (s *Server) recordAccessChange(r *http.Request, actor, action, resource, resourceID string, before, after any) {
 	tenantID, _ := tenant.FromContext(r.Context())
+	s.forgetGrants(tenantID)
 	beforeJSON, _ := json.Marshal(before)
 	afterJSON, _ := json.Marshal(after)
 	_, _ = s.db.Exec(r.Context(), `INSERT INTO access_change_events(tenant_id,actor_user_id,action,resource_type,resource_id,before_state,after_state) VALUES($1,$2,$3,$4,$5,$6,$7)`, tenantID, actor, action, resource, resourceID, beforeJSON, afterJSON)

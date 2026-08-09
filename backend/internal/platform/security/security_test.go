@@ -118,3 +118,23 @@ func TestRateLimitMiddleware(t *testing.T) {
 		t.Fatalf("expected 429 Too Many Requests, got %d", rec3.Code)
 	}
 }
+
+func TestClientIPUsesTrustedProxyBoundary(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "10.0.0.10:4321"
+	req.Header.Set("X-Forwarded-For", "198.51.100.1, 203.0.113.7")
+	req.Header.Set("X-Real-IP", "192.0.2.9")
+
+	t.Setenv("TRUST_PROXY_HEADERS", "")
+	if got := security.ClientIP(req); got != "10.0.0.10" {
+		t.Fatalf("untrusted headers: got %q", got)
+	}
+	t.Setenv("TRUST_PROXY_HEADERS", "true")
+	if got := security.ClientIP(req); got != "192.0.2.9" {
+		t.Fatalf("X-Real-IP: got %q", got)
+	}
+	req.Header.Del("X-Real-IP")
+	if got := security.ClientIP(req); got != "203.0.113.7" {
+		t.Fatalf("right-most XFF: got %q", got)
+	}
+}

@@ -158,11 +158,12 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := s.resolveNationalIdentityUser(r.Context(), identity.Email, identity.RegNumber)
+	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), identity)
 	if err != nil {
 		reportSignInFailure(w, err)
 		return
 	}
+	s.linkEIDIdentity(r.Context(), userID, identity)
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid")
 	if err != nil {
@@ -223,11 +224,16 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := s.resolveNationalIdentityUser(r.Context(), profile.Email, profile.RegNumber)
+	identity := &eid.EIDIdentity{
+		CivilID: profile.CivilID, RegNumber: profile.RegNumber, FirstName: profile.FirstName, LastName: profile.LastName,
+		VerifiedStatus: true,
+	}
+	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), identity)
 	if err != nil {
 		reportSignInFailure(w, err)
 		return
 	}
+	s.linkEIDIdentity(r.Context(), userID, identity)
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "dan")
 	if err != nil {

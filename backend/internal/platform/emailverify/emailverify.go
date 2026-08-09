@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -549,7 +550,7 @@ func (s *Service) Overview(ctx context.Context, tenantID string, limit int) (*Ov
 // us is indistinguishable from one nobody opened. Both end up EXPIRED here,
 // which is the honest reading: this platform did not see it happen.
 func (s *Service) StartHousekeeping(ctx context.Context) {
-	go func() {
+	async.Go("email-verification-housekeeping", func() {
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -560,7 +561,7 @@ func (s *Service) StartHousekeeping(ctx context.Context) {
 			case <-ticker.C:
 			}
 		}
-	}()
+	})
 }
 
 func (s *Service) sweep(ctx context.Context) {

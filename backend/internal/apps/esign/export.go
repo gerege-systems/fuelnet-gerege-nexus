@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/go-chi/chi/v5"
@@ -70,14 +71,14 @@ func (m *Module) exportSignedDocument(ctx context.Context, tenantID, documentID,
 	filename := exportFilename(title, documentID)
 	sendCtx := context.WithoutCancel(ctx)
 
-	go func() {
+	async.Go("esign-export", func() {
 		results := m.exports.ExportFileToAll(sendCtx, tenantID, filename, pdf, documentID)
 		for _, res := range results {
 			slog.Info("esign: signed document exported",
 				"tenant", tenantID, "document", documentID,
 				"connector", res.IntegrationName, "provider", res.Provider)
 		}
-	}()
+	})
 }
 
 // exportDocumentHandler files an already-signed document on demand.

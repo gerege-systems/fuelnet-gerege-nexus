@@ -7,6 +7,8 @@ import (
 	"net/smtp"
 	"sync"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 )
 
 type EmailMessage struct {
@@ -91,7 +93,8 @@ func NewAsyncOTPMailer(syncMailer OTPMailer, workers, queueSize, retries int) *A
 func (m *AsyncOTPMailer) start() {
 	for i := 0; i < m.workers; i++ {
 		m.wg.Add(1)
-		go m.worker(i)
+		workerID := i
+		async.Go("mailer-worker", func() { m.worker(workerID) })
 	}
 }
 
@@ -163,10 +166,10 @@ func (m *AsyncOTPMailer) Shutdown(ctx context.Context) error {
 	m.mu.Unlock()
 
 	done := make(chan struct{})
-	go func() {
+	async.Go("mailer-shutdown-wait", func() {
 		m.wg.Wait()
 		close(done)
-	}()
+	})
 
 	select {
 	case <-done:

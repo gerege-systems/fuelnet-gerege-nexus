@@ -17,20 +17,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/developer_portal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
@@ -38,6 +34,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/mailer"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
@@ -72,18 +69,38 @@ type Server struct {
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
-	billingMod     *billing.BillingModule
-	documentsMod   *documents.DocumentsModule
-	govMod         *gov_services.Module
-	devPortalMod   *developer_portal.DeveloperPortalModule
-	contactsMod    *contacts.Module
-	productsMod    *products.Module
-	inventoryMod   *inventory.Module
-	esignMod       *esign.Module
+	appGate        *memo.Cache[bool]
+	bus            *cache.Bus
+	sharedLogin    *security.SharedLimiter
+	sharedPoll     *security.SharedLimiter
+	sharedAI       *security.SharedLimiter
+	sharedVerify   *security.SharedLimiter
+	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
 }
 
-func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
+// appGateTTL bounds how long the gate keeps believing an app is installed after
+// somebody else's replica has uninstalled it. Installing is rare and deliberate,
+// so this is about the replica that did not serve the button press.
+const appGateTTL = 30 * time.Second
+
+// appGateCacheName is what the invalidation bus knows the gate cache as.
+const appGateCacheName = "appgate"
+
+// forgetAppGate drops one tenant's cached installation answers, here and on
+// every other replica.
+func (s *Server) forgetAppGate(tenantID string) {
+	s.bus.Invalidate(appGateCacheName, memo.Key(tenantID, ""))
+}
+
+// forgetGrants drops one tenant's cached permissions everywhere.
+func (s *Server) forgetGrants(tenantID string) {
+	s.bus.Invalidate(rbac.GrantCacheName, rbac.TenantPrefix(tenantID))
+}
+
+// NewServer builds the platform. bus may be a local-only one; nothing here
+// requires Redis to be present.
+func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, error) {
 	catalogData, err := os.ReadFile(catalogPath)
 	if err != nil {
 		return nil, err
@@ -141,24 +158,17 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	// through it, so it is a dependency of both rather than a peer.
 	integrationMgr := integration.NewManager(db)
 
-	contactsMod := contacts.New(db)
-	productsMod := products.New(db)
-	inventoryMod := inventory.New(db, false) // false = prevent negative stock
-	billingMod := billing.New(db)
-	documentsMod := documents.New(db)
-	govMod := gov_services.New(db, integrationMgr)
 	eidMN, err := eidmongolia.New(db)
 	if err != nil {
 		return nil, fmt.Errorf("eID Mongolia service: %w", err)
 	}
-	esignMod := esign.New(db, gerege.NewEsignService(), eidMN, integrationMgr)
 
 	// Instantiate Async Mailer Queue
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
 	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
 
 	ssoProvider := ssoprovider.NewSSOProvider(db)
-	devPortalMod := developer_portal.NewDeveloperPortalModule(ssoProvider)
+	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
 	s := &Server{
 		db:           db,
@@ -167,11 +177,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		sessions:     auth.NewSessionStore(db, auth.DefaultSessionTTL),
 		loginLimiter: newLoginLimiter(),
 		pollLimiter:  newPollLimiter(),
-		aiLimiter:    security.NewIPRateLimiter(rate.Limit(20.0/60.0), 10),
+		aiLimiter:    security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
-		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(1), 20),
+		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
 		asyncMailer:    asyncMailer,
 		emailVerify:    emailverify.NewService(db),
 		copilotSvc:     ai.NewCopilotService(db),
@@ -182,16 +192,24 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
-		billingMod:     billingMod,
-		documentsMod:   documentsMod,
-		govMod:         govMod,
-		devPortalMod:   devPortalMod,
-		contactsMod:    contactsMod,
-		productsMod:    productsMod,
-		inventoryMod:   inventoryMod,
-		esignMod:       esignMod,
+		appGate:        memo.New[bool](appGateTTL),
+		bus:            bus,
+		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
 	}
+
+	// The bus has to know the caches before a message can arrive for one, and a
+	// message can arrive as soon as the subscriber connects.
+	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
+	s.bus.Register(appGateCacheName, s.appGate)
+
+	// Deployment-wide budgets for the endpoints where a per-replica one is not
+	// a budget at all. Each is nil without Redis, and a nil one allows.
+	client := s.bus.Client()
+	s.sharedLogin = security.NewSharedLimiter(client, "login", loginRatePerMinute, time.Minute)
+	s.sharedPoll = security.NewSharedLimiter(client, "poll", pollRatePerMinute, time.Minute)
+	s.sharedAI = security.NewSharedLimiter(client, "ai", aiRatePerMinute, time.Minute)
+	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
 
 	s.setupRoutes()
 	return s, nil
@@ -202,7 +220,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 // goroutines, and it returns immediately — every job runs until ctx is
 // cancelled at shutdown.
 func (s *Server) StartBackgroundJobs(ctx context.Context) {
-	s.esignMod.StartHousekeeping(ctx)
+	for _, module := range s.backgroundApps {
+		module.StartHousekeeping(ctx)
+	}
 	s.eidMN.StartHousekeeping(ctx)
 	// Abandoned connect attempts and the delivery log are the two integration
 	// tables that only ever grow.
@@ -260,25 +280,29 @@ func (s *Server) setupRoutes() {
 	// Prometheus Metrics Endpoint
 	r.Handle("/metrics", observability.MetricsHandler())
 
-	// ORY Hydra Grade OpenID Connect & OAuth2 Provider Endpoints
-	r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
-	r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
-	r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
-	r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospectEndpoint)
-	r.Post("/oauth2/revoke", s.ssoProvider.HandleRevokeEndpoint)
+	// Opaque SSO tokens are not accepted by the platform API yet. Do not
+	// advertise or mint them accidentally; an operator must explicitly expose
+	// the provider for external resource servers that use introspection.
+	if ssoEndpointsEnabled() {
+		r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
+		r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
+		r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
+		r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospectEndpoint)
+		r.Post("/oauth2/revoke", s.ssoProvider.HandleRevokeEndpoint)
+	}
 
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
 		// Auth with rate limiting
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/login", s.handleLogin)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/login", s.handleEIDLogin)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/start", s.handleEIDStart)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/start-id", s.handleEIDStartByNationalID)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.handleLogin)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.handleEIDLogin)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.handleEIDStart)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.handleEIDStartByNationalID)
 		// Not the login limiter: a citizen polls for as long as it takes them to
 		// reach their phone, and sharing that budget with sign-in attempts made
 		// a busy office throttle itself out of signing in at all.
-		api.With(security.RateLimitMiddleware(s.pollLimiter)).Post("/auth/eid/poll", s.handleEIDPoll)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/dan/login", s.handleDANLogin)
+		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.handleEIDPoll)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.handleDANLogin)
 		api.Post("/auth/logout", s.handleLogout)
 
 		// The OAuth redirect a connected provider sends the browser back to.
@@ -317,18 +341,18 @@ func (s *Server) setupRoutes() {
 			// credential the whole platform shares, so it is a signed-in act.
 			// App modules do not come through here — they hold the service and
 			// call it in process.
-			pr.With(security.RateLimitMiddleware(s.verifyLimiter)).Post("/verify/send", s.handleVerifySend)
+			pr.With(security.SharedRateLimitMiddleware(s.verifyLimiter, s.sharedVerify)).Post("/verify/send", s.handleVerifySend)
 
 			// Who has been written to is an administrative read: it is a list
 			// of people's addresses and what they were asked to prove.
 			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
 			// AI Copilot & Forecasting
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/copilot", s.handleAICopilot)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/chat", s.handleAIChat)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/stt", s.handleAISTT)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/tts", s.handleAITTS)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/translate", s.handleAITranslate)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/copilot", s.handleAICopilot)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/chat", s.handleAIChat)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/stt", s.handleAISTT)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/tts", s.handleAITTS)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/translate", s.handleAITranslate)
 			pr.Get("/ai/stock-forecast", s.handleAIForecast)
 			pr.With(s.requireAdmin).Get("/admin/ai/prompts", s.handleAIListPrompts)
 			pr.With(s.requireAdmin).Put("/admin/ai/prompts/{key}", s.handleAIUpdatePrompt)
@@ -376,19 +400,23 @@ func (s *Server) setupRoutes() {
 	s.registerAppModuleRoutes()
 }
 
+func ssoEndpointsEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("EXPOSE_SSO_ENDPOINTS"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
 // registerAppModuleRoutes mounts every compile-time business module behind the
 // tenant app gate. Billing, Documents and the Developer Portal used to be wired
 // straight into the protected group, so their endpoints stayed reachable for
 // tenants that had never installed the app.
 func (s *Server) registerAppModuleRoutes() {
-	s.contactsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.contacts"))
-	s.productsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.products"))
-	s.inventoryMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.inventory"))
-	s.billingMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.billing"))
-	s.documentsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.documents"))
-	s.govMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.gov_services"))
-	s.devPortalMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.developer_portal"))
-	s.esignMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.esign"))
+	for _, module := range appregistry.List() {
+		module.RegisterRoutes(s.router, s.appGateMiddleware(module.ID()))
+	}
 }
 
 // Handlers

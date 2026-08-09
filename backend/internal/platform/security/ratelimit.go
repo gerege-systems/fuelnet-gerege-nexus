@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"golang.org/x/time/rate"
 )
 
@@ -29,7 +30,7 @@ func NewIPRateLimiter(r rate.Limit, b int) *IPRateLimiter {
 		rate:     r,
 		burst:    b,
 	}
-	go limiter.cleanupVisitors()
+	async.Go("rate-limiter-cleanup", limiter.cleanupVisitors)
 	return limiter
 }
 
@@ -84,14 +85,19 @@ func RateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler
 // declares TRUST_PROXY_HEADERS=true.
 func ClientIP(r *http.Request) string {
 	if trustProxyHeaders() {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			if first, _, ok := strings.Cut(xff, ","); ok {
-				return strings.TrimSpace(first)
-			}
-			return strings.TrimSpace(xff)
-		}
-		if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+		if xrip := validIP(r.Header.Get("X-Real-IP")); xrip != "" {
 			return xrip
+		}
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			// A trusted edge proxy appends the address it received the request
+			// from. The left-most values can already be supplied by the caller;
+			// the right-most value is therefore the only safe single-proxy hop.
+			for idx := len(parts) - 1; idx >= 0; idx-- {
+				if ip := validIP(parts[idx]); ip != "" {
+					return ip
+				}
+			}
 		}
 	}
 
@@ -99,6 +105,14 @@ func ClientIP(r *http.Request) string {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+func validIP(raw string) string {
+	ip := strings.TrimSpace(raw)
+	if net.ParseIP(ip) == nil {
+		return ""
+	}
+	return ip
 }
 
 func trustProxyHeaders() bool {

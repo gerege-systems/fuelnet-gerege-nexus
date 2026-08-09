@@ -19,6 +19,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -30,6 +31,35 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ValidateRedirectURI enforces both transport security and the operator's host
+// allowlist. OAUTH_REDIRECT_HOSTS is a comma-separated list of exact hostnames;
+// subdomains do not inherit trust. Local loopback callbacks remain available
+// for installed development clients.
+func ValidateRedirectURI(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return errors.New("invalid redirect URI")
+	}
+	host := strings.ToLower(u.Hostname())
+	loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
+	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+		return errors.New("redirect URI must use HTTPS")
+	}
+	if loopback {
+		return nil
+	}
+	allowed := os.Getenv("OAUTH_REDIRECT_HOSTS")
+	if strings.TrimSpace(allowed) == "" {
+		allowed = "nexus.gerege.mn"
+	}
+	for _, candidate := range strings.Split(allowed, ",") {
+		if strings.EqualFold(strings.TrimSpace(candidate), host) {
+			return nil
+		}
+	}
+	return errors.New("redirect URI host is not allowed")
+}
 
 type OAuth2Client struct {
 	ID string `json:"id"`
