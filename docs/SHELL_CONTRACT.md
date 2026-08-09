@@ -27,8 +27,8 @@ Native бүрхүүл (Swift/AppKit, дараа Tauri) ба web app хоёрын
 эсвэл `false` буцаана; `data-shell` атрибут `<html>` дээр огт тавигдахгүй.
 
 Web талын хэрэгжилт: [`frontend/lib/shell.ts`](../frontend/lib/shell.ts).
-macOS талын хэрэгжилт:
-[`desktop-mac/src/WebViewController.swift`](../desktop-mac/src/WebViewController.swift).
+Бүрхүүлийн талын хэрэгжилт: [`desktop-tauri/`](../desktop-tauri) — Windows,
+Linux, macOS гурвуулаа нэг кодын сангаас.
 
 ---
 
@@ -226,34 +226,37 @@ payload-ыг шууд дамжуулна.
 
 ---
 
-## 9. macOS бүрхүүлийн одоогийн байдал
+## 9. Бүрхүүлийн одоогийн байдал
+
+Хэрэгжилт нь [`desktop-tauri/`](../desktop-tauri) (Tauri v2 + Rust). Гурван
+платформ нэг кодын сангаас баригдана.
 
 | Зүйл | Утга |
 | --- | --- |
 | `version` | `1.0` |
-| `platform` | `macos` |
-| `capabilities` | `biometric`, `notify`, `badge`, `external.open`, `print.system`, `fs.save` |
-| Хэрэгжсэн method | `biometric.authenticate`, `notify.show`, `badge.set`, `external.open`, `print.system`, `fs.saveAs`, `menu.changed` |
-| Reject хийдэг | `auth.reLogin` — macOS бүрхүүлд native нэвтрэлтийн цонх хараахан алга, тул web тал `/login` руугаа шилжинэ |
-| Илгээдэг event | `shell:navigate` (deep link, цэс, toolbar), `shell:search` (toolbar-ын хайлт) |
-| Илгээдэггүй event | `shell:menu-refresh` — native цэс одоогоор статик |
+| `platform` | build target-аас: `macos`, `windows`, `linux` |
+| `capabilities` | `notify`, `badge`, `external.open`, `print.system`, `fs.save`, `menu.native` |
+| Хэрэгжсэн method | `notify.show`, `badge.set`, `external.open`, `print.system`, `fs.saveAs`, `menu.changed`, `auth.reLogin` |
+| Reject хийдэг | `biometric.authenticate` — desktop дээр хэрэгжилт алга; web тал өөрийн fallback-аа ажиллуулна |
+| Илгээдэг event | `shell:navigate` (deep link, цэс, tray), `shell:search` (⌘/Ctrl+F), `shell:menu-refresh` (цэс дахин баригдсаны дараа) |
 
-`menu.changed` нь хүлээн авагдаад амжилттай хариу буцаана: цэс дахин барих
-зүйл байхгүй ч web тал үүнийг алдаа гэж бүртгэх ёсгүй.
+`secure-store` капабилити зарлагдаагүй: гэрээний v1-д түүнийг ашиглах method
+тодорхойлогдоогүй тул зарлах нь дуудагдах боломжгүй амлалт болно. Хэрэглэх
+шаардлагатай болбол гэрээнд method нэмж, хувилбарыг **minor** болгож өсгөнө.
 
 ### Navigation allowlist-ыг тохируулах
 
-Гол frame-д анхдагчаар зөвшөөрөгдөх origin-ууд: `gerege_web_url`,
-`gerege_api_url` (Тохиргооны цонхноос), мөн eID-ийн танилтын origin-ууд.
-Байгууллага өөрийн интеграцийн OAuth зөвшөөрлийн дэлгэцийг (Google, Dropbox
-гэх мэт) апп дотор үлдээхийг хүсвэл тэдгээрийн origin-ыг таслалаар
-тусгаарлан нэмнэ:
+Гол frame-д анхдагчаар зөвшөөрөгдөх origin-ууд: Web ба API хаяг (dev горимд
+Тохиргооны цонхноос, production-д compile-time тогтмол), мөн eID-ийн танилтын
+origin-ууд. Байгууллага өөрийн интеграцийн OAuth зөвшөөрлийн дэлгэцийг
+(Google, Dropbox гэх мэт) апп дотор үлдээхийг хүсвэл тэдгээрийн origin-ыг
+нэмнэ. Нэмээгүй бол урсгал таслагдахгүй — зөвхөн системийн хөтөч дээр
+үргэлжилнэ.
 
-```bash
-defaults write mn.gerege.nexus.desktop gerege_nav_allowlist "https://accounts.google.com,https://www.dropbox.com"
-```
-
-Нэмээгүй бол урсгал таслагдахгүй — зөвхөн системийн хөтөч дээр үргэлжилнэ.
+> **Анхаар.** Ажлын мужийн origin нь `capabilities/workarea.json`-ы
+> `remote.urls` дотор байх ёстой бөгөөд тэр capability нь `tauri.conf.json`-ы
+> `app.security.capabilities` жагсаалтад бүртгэгдсэн байх ёстой. Аль нэг нь
+> дутвал IPC чимээгүй хаагдаж, гүүр бүхэлдээ ажиллахаа болино.
 
 ---
 
@@ -271,21 +274,20 @@ defaults write mn.gerege.nexus.desktop gerege_nav_allowlist "https://accounts.go
 
 **B. Бүрхүүлийн горимд chrome нуугдсан эсэх**
 
-1. `desktop-mac/build.sh` ажиллуулж, `Gerege Nexus.app`-ыг нээнэ.
+1. `make run-desktop` ажиллуулж, бүрхүүлээр нэвтэрнэ.
 2. Нэвтэрсний дараа `gerege-topbar`, хажуугийн цэс, мобайл таб аль нь ч
    зурагдаагүй; зөвхөн ажлын муж ба AI туслах харагдана.
 3. Апп Стороос модуль асаагаад/унтраагаад цэсний өгөгдөл шинэчлэгдэж байгааг
    шалгана — өгөгдлийн fetch нь зурагдахгүй ч ажиллаж байх ёстой.
 
-**C. `data-shell="macos"` тавигдсан эсэх**
+**C. `data-shell` тавигдсан эсэх**
 
-1. Аппын цонхон дээр баруун товшоод *Inspect Element* (developerExtras
-   идэвхтэй).
-2. Elements: `<html data-shell="macos" ...>`.
+1. Аппын цонхон дээр баруун товшоод *Inspect Element* (dev build).
+2. Elements: `<html data-shell="macos" ...>` — эсвэл `windows` / `linux`.
 3. Console: `getComputedStyle(document.body).fontFamily` — Inter биш,
    системийн фонтоор эхэлсэн байна.
 
-**D. Biometric promise ажиллаж байгаа эсэх**
+**D. Дэмжигдээгүй method няцаагдаж байгаа эсэх**
 
 Console дээр:
 
@@ -293,11 +295,11 @@ Console дээр:
 await window.GeregeShell.invoke("biometric.authenticate", { reason: "Тест" })
 ```
 
-1. Touch ID цонх гарна; амжилттай баталгаажуулбал `{ authenticated: true }`
-   буцна.
-2. Цуцалбал promise **reject** хийж, алдааны текст нь монголоор гарна.
-3. Дэмжигдээгүй method-ыг шалгана:
-   `await window.GeregeShell.invoke("auth.reLogin")` → reject.
+1. Promise **reject** хийнэ — desktop дээр биометр хэрэгжээгүй.
+2. `window.GeregeShell.capabilities` дотор `biometric` байхгүйг шалгана: web
+   тал fallback-аа ажиллуулах болзол нь тэр.
+3. Хэрэгжсэнийг шалгана: `await window.GeregeShell.invoke("notify.show",
+   { title: "Тест" })` → системийн мэдэгдэл гарна.
 
 **E. iframe-ээс гүүр дуудагдахгүй эсэх**
 

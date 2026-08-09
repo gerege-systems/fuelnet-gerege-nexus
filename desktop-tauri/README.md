@@ -10,7 +10,8 @@
 </p>
 
 Гэрээ: [`docs/SHELL_CONTRACT.md`](../docs/SHELL_CONTRACT.md) — өөрчлөгдөхгүй
-спецификац. Лавлагаа хэрэгжилт: [`desktop-mac/`](../desktop-mac) (Swift/AppKit).
+спецификац. Энэ бол түүний цорын ганц хэрэгжилт: гурван платформ нэг кодын
+сангаас.
 
 ---
 
@@ -25,7 +26,8 @@ desktop-tauri/
 │   └── shell.css           Локал цонхнуудын нийтлэг хэв маяг
 └── src-tauri/
     ├── tauri.conf.json     Цонх, CSP, deep link, updater placeholder
-    ├── capabilities/       IPC-ийн эрхүүд + remote origin-ы жагсаалт
+    ├── capabilities/       Аль цонх ямар эрхтэйг хуваарилна
+    ├── permissions/        Апп командуудын ACL тодорхойлолт
     └── src/
         ├── lib.rs          Эхлүүлэлт, plugin, state, deep link
         ├── shell.rs        Гэрээ: inject script, event, capability
@@ -33,7 +35,7 @@ desktop-tauri/
         ├── bridge.rs       API-гийн хүсэлтийн тээвэр (доорхыг үз)
         ├── auth.rs         Имэйл/нууц үг ба eID long-poll
         ├── menus.rs        Сервэрийн цэснээс native цэс
-        ├── health.rs       5 секунд тутмын /healthz шалгалт
+        ├── health.rs       5 секунд тутмын /health шалгалт
         ├── tray.rs         Tray дүрс ба серверийн төлөв
         ├── windows.rs      Цонхнууд ба навигацийн allowlist
         └── config.rs       API/Web хаягийн шийдэл
@@ -107,10 +109,13 @@ cargo tauri build
 
 Хаяг заагаагүй бол `http://localhost:8080` ба `http://localhost:3000`.
 
-> **Анхаар.** Ажлын муж IPC ашиглахын тулд түүний origin нь
-> `src-tauri/capabilities/default.json`-ы `remote.urls` дотор байх ёстой. Энэ
-> жагсаалт нь compile-time. Өөр origin руу байршуулж байгаа бол тэр файлыг
-> хамт засна.
+> **Анхаар — хоёр газар зэрэг зөв байх ёстой.** Ажлын муж IPC ашиглахын тулд
+> түүний origin нь `capabilities/workarea.json`-ы `remote.urls` дотор байхаас
+> гадна тэр capability нь `tauri.conf.json`-ы `app.security.capabilities`
+> жагсаалтад бүртгэгдсэн байх ёстой. Аль нэг нь дутвал Tauri IPC-г чимээгүй
+> хааж, гүүр бүхэлдээ ажиллахаа болино — компиляц, тест, clippy бүгд ногоон
+> хэвээр байна. Жагсаалт нь compile-time тул өөр origin руу байршуулахдаа
+> хоёуланг нь засна.
 
 ### Code signing — TODO
 
@@ -178,6 +183,10 @@ origin**-д харьяалагддаг. Web app (`frontend/lib/api.ts`) зөвх
   газартаа очно.
 - Нэвтрэх хүртэл ажлын мужийн цонх **нуугдмал** байна (webview нь ачаалагдсан
   — тээврийн суваг нээлттэй байх ёстой), хэрэглэгч native login цонхыг л харна.
+- Эхлэхдээ session амьд эсэхийг `/api/v1/auth/me`-ээр шалгана: cookie нь
+  webview-ийн байнгын санд үлддэг тул аппыг нээх бүрд нэвтрэх шаардлагагүй.
+- Inject скрипт өөрийгөө зарлатал гүүр хаалттай: хуудас ачаалагдаагүй байхад
+  илгээсэн хүсэлт хариугүй үлдэж, timeout хүртэл өлгөөстэй байсан.
 
 Локал `ui/` цонхнууд API руу шууд хандахгүй: backend-ийн CORS зөвхөн web
 origin-ыг зөвшөөрдөг тул `tauri://localhost`-оос ирсэн хүсэлт хаагдана.
@@ -190,7 +199,8 @@ origin-ыг зөвшөөрдөг тул `tauri://localhost`-оос ирсэн х
 | --- | --- |
 | Navigation allowlist | Гол frame зөвхөн Web URL-ын origin дотор. Бусад бүх хаяг системийн хөтчөөр (`windows.rs::create_main`) |
 | Bridge зөвхөн main frame | Init script нь `window.top !== window` үед юу ч хийхгүй; Tauri-гийн IPC эрх нь `capabilities`-ээр origin-д уягдсан |
-| Remote origin | `capabilities/default.json` → `remote.urls`; жагсаалтад байхгүй origin IPC дуудаж чадахгүй |
+| Remote origin | `capabilities/workarea.json` → `remote.urls`; жагсаалтад байхгүй origin IPC дуудаж чадахгүй |
+| Хамгийн бага эрх | Ажлын мужид зөвхөн гүүрийн 3 команд (`permissions/workarea.toml`); нэвтрэлт ба тохиргоо локал цонхнуудад үлдэнэ |
 | CSP | `tauri.conf.json` → `app.security.csp`; локал цонхнуудад `frame-src 'none'`, `object-src 'none'` |
 | JSON serialize | Native-аас JS руу орох бүх утга JSON-оор (`shell::js_string_literal`) — текст залгаж код үүсгэхгүй |
 | `external.open` | Зөвхөн `http`, `https`, `mailto`, `tel` |

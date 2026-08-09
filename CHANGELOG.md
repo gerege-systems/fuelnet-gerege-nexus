@@ -15,11 +15,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed — the Swift macOS shell, in favour of one shell for all platforms
+
+- **`desktop-mac/` is gone.** It was the reference implementation of the bridge
+  contract and it did its job: the contract exists because that shell was written
+  first and the second one had to meet it. But once the Tauri shell shipped, macOS
+  had two applications doing the same work, and the Tauri one had outgrown it —
+  native sign-in, session restore, and a menu built from the tenant's own menu
+  rather than a hand-written list. Keeping both meant implementing every contract
+  change twice and running two CI workflows to prove the same thing.
+- **What is actually lost is the `NSToolbar`**, which Tauri cannot draw. Its
+  contents survive elsewhere: the app shortcuts are in the native menu, search is
+  ⌘/Ctrl+F, reload and preferences are menu items, and the server status moved to
+  the tray icon's tooltip when the Tauri shell was written.
+- `make build-mac` / `make run-mac` are now `make build-desktop` /
+  `make run-desktop`, and `.github/workflows/desktop-mac.yml` is removed — the
+  three-platform Tauri workflow already covers what it checked.
+- The entries below that describe `desktop-mac` are left as written. They record
+  what shipped at the time, which is what a changelog is for.
+
+### Fixed — the Tauri shell's bridge was dead on arrival
+
+Found by running the app and signing in — none of it was visible to `cargo build`,
+`clippy -D warnings`, `cargo test`, or the three-platform CI, all of which stayed
+green throughout.
+
+- **The work area could not reach the shell at all.** Tauri's ACL grants app
+  commands to local pages but nothing to a remote origin, and the capability that
+  was supposed to grant them was never listed in `tauri.conf.json`, so it was
+  silently ignored. Every bridge call was rejected, the rejection was swallowed by
+  a `catch`, and the request sat until its 40-second timeout. Both halves are now
+  explicit, and the work area is granted only the three bridge commands — sign-in
+  and preferences stay with the shell's own windows.
+- **Defining any permission closed the door on the local windows too**: once an
+  ACL exists, every app command is subject to it. The shell's own commands are now
+  listed as well.
+- **Every app appeared in the menu bar as "Модуль"**: the submenu was named after
+  the first row the server returned, and the server returns a pathless group
+  header first. A menu bar wants the application's name.
+- **A request made before the work area finished loading hung until it timed out**,
+  because the injected script it evaluates into did not exist yet. The script now
+  announces itself, and the bridge waits for that.
+- **The shell asked for a password on every launch** although the session cookie
+  outlives the process in the webview's store; it now checks `/api/v1/auth/me`
+  first — and, having restored a session, navigates to the work area instead of
+  leaving the person on the sign-in landing page.
+- **The health check was really a port check**: it polled `/healthz`, which this
+  API does not serve, and counted the 404 as healthy. It now polls `/health` and
+  requires a 2xx.
+
 ### Added — Tauri v2 desktop shell ([`desktop-tauri/`](desktop-tauri))
 
 - **A second implementation of one contract, not a second product.** The bridge
   contract ([`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md)) is the
-  specification; [`desktop-mac/`](desktop-mac) is its Swift reference and this is
+  specification; `desktop-mac/` is its Swift reference and this is
   the cross-platform one. Both inject the same `window.GeregeShell`, so the web
   app cannot tell them apart — it hides its own chrome and renders as a work area
   either way, and in a browser neither exists and nothing changes.
@@ -48,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   full reload. macOS maps a small set of icon names to native symbols and leaves
   the rest bare, which is steadier than half-matching them.
 - **Server health lives on the tray icon**, checked every 5 s the way
-  [`ServerManager.swift`](desktop-mac/src/ServerManager.swift) does it. Tauri has
+  `ServerManager.swift` does it. Tauri has
   no native status bar and drawing an HTML one under the work area would put the
   shell inside the page it is supposed to stay out of. Being offline opens a
   native window that says what has to be running, not an alert that vanishes when
@@ -89,7 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PNGs. Added `icon.ico` — sizes below 256 packed as classic DIB entries, since
   some resource compilers reject an all-PNG `.ico` — and `icon.icns` for macOS
   bundling.
-- **[`desktop-mac.yml`](.github/workflows/desktop-mac.yml) compiles the Swift
+- **`desktop-mac.yml` compiles the Swift
   shell** and then checks the two things a successful `swiftc` cannot: that
   `build.sh` still names every file under `src/` (a source missing from that fixed
   list is not a compile error — it is code that silently never ships), and that
@@ -151,7 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quote anywhere in a system error message ran as code in the work area. The
   toolbar search field went the same way, which made anything the user typed a
   script. Every native→web value is now JSON-encoded and returned through one
-  entry point ([`WebViewController.swift`](desktop-mac/src/WebViewController.swift)).
+  entry point (`WebViewController.swift`).
 - **The bridge was injected into every frame.** `WKUserScript` is now main-frame
   only, and each message is checked twice — `isMainFrame`, and that the frame's
   origin matches the platform's web origin. An embedded third-party page has no

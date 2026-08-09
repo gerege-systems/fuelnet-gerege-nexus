@@ -1,9 +1,14 @@
 //! Серверийн эрүүл мэндийн хяналт.
 //!
-//! `desktop-mac/src/ServerManager.swift`-ийн логикийг давтана: 5 секунд тутам
-//! API-гийн `/healthz` ба Web-ийн үндсэн хаягийг татаж, хариу ирж байвал
-//! ажиллаж байна гэж үзнэ. 404 хүртэлх хариуг "хүрч байна" гэж тооцдог нь
-//! санаатай — Next.js-ийн үндсэн хаяг 404 буцааж болох ч сервер нь амьд.
+//! 5 секунд тутам API ба Web серверийг татаж, амьд эсэхийг шалгана.
+//!
+//! API-гийн эрүүл мэндийн хаяг нь `/health` (`server.go`) — өмнө нь энд
+//! `/healthz` бичигдсэн байсан бөгөөд тэр нь 404 буцаадаг. 404-ийг "хүрч
+//! байна" гэж тоолдог байсан тул алдаа нь нуугдаж, шалгалт нь бодитоор зөвхөн
+//! порт нээлттэй эсэхийг хардаг байв. Одоо API-гаас 2xx шаардана.
+//!
+//! Web талд бол статус нь чухал биш: Next.js-ийн үндсэн хаяг 404 буцааж болох
+//! ч сервер нь амьд. Тэнд хариу ирсэн эсэх нь л хангалттай.
 //!
 //! Энэ шалгалт нь webview-гээр биш, Rust-аас шууд явна: ажлын муж ачаалагдаж
 //! чадаагүй үед л энэ мэдээлэл хамгийн их хэрэгтэй байдаг.
@@ -57,8 +62,8 @@ pub fn start(app: AppHandle) {
                 let state = tauri::Manager::state::<crate::AppState>(&app);
                 state.config.get()
             };
-            let api_ok = probe(&client, &endpoints.api("/healthz")).await;
-            let web_ok = probe(&client, &endpoints.web_url).await;
+            let api_ok = probe(&client, &endpoints.api("/health"), true).await;
+            let web_ok = probe(&client, &endpoints.web_url, false).await;
 
             {
                 let state = tauri::Manager::state::<crate::AppState>(&app);
@@ -76,12 +81,15 @@ pub fn start(app: AppHandle) {
     });
 }
 
-/// Хариу ирсэн эсэх нь чухал, статус нь биш: 200-404 бол сервер хүрч байна.
-async fn probe(client: &reqwest::Client, url: &str) -> bool {
+/// `strict` үед зөвхөн 2xx-ийг хүлээн авна; эс бөгөөс хариу ирсэн нь хангалттай.
+async fn probe(client: &reqwest::Client, url: &str, strict: bool) -> bool {
     match client.get(url).send().await {
         Ok(response) => {
-            let status = response.status().as_u16();
-            (200..=404).contains(&status)
+            if strict {
+                response.status().is_success()
+            } else {
+                response.status().as_u16() < 500
+            }
         }
         Err(_) => false,
     }

@@ -156,8 +156,7 @@ backend/
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
 frontend/             Next.js 15 (App Router) вэб клиент
-desktop-mac/          Swift/AppKit macOS бүрхүүл (гэрээний лавлагаа хэрэгжилт)
-desktop-tauri/        Tauri v2 бүрхүүл (Windows, Linux, macOS)
+desktop-tauri/        Tauri v2 native бүрхүүл (Windows, Linux, macOS)
 catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
@@ -173,45 +172,30 @@ docs/                 Баримт бичиг ба орчуулгууд
 рендерлэгдэнэ. Хөтчөөр орвол бүрхүүл байхгүй тул вэб клиент урьдын адил бүрэн
 аппликейшн хэвээрээ ажиллана.
 
-Хоёр бүрхүүл нэг гэрээг хэрэгжүүлдэг —
+Бүрхүүл ба вэб клиентийн хооронд бичигдсэн гэрээ бий —
 [`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md) нь `window.GeregeShell`-ийн
 method, event, capability, хувилбарын дүрэм, аюулгүй байдлын шаардлагыг
-тодорхойлно. Вэб клиент хоёрыг ялгаж танихгүй.
+тодорхойлно. Вэб клиент бүрхүүлийн дотоод бүтцийг мэдэхгүй — зөвхөн гэрээг л
+мэднэ.
 
-| Бүрхүүл | Платформ | Байдал |
-| --- | --- | --- |
-| [`desktop-mac/`](desktop-mac) | macOS | Swift/AppKit + WKWebView — гэрээний лавлагаа хэрэгжилт |
-| [`desktop-tauri/`](desktop-tauri) | Windows, Linux, macOS | Tauri v2 + Rust |
-
-### macOS (Swift)
-
-Touch ID, menu bar tray, global shortcut, `gerege://` URL scheme, native
-мэдэгдэл:
-
-```bash
-make build-mac      # Gerege Nexus.app үүсгэнэ
-make run-mac        # шууд ажиллуулна
-```
-
-### Tauri (Windows / Linux / macOS)
+Бүрхүүл нь [`desktop-tauri/`](desktop-tauri) дотор, гурван платформд нэг
+кодын сангаас баригдана: Windows, Linux, macOS.
 
 Native нэвтрэлтийн цонх (имэйл/нууц үг ба eID QR), сервэрээс баригдах native
 цэс, tray дээрх серверийн төлөв, `gerege://` deep link:
 
 ```bash
-cd desktop-tauri/src-tauri
-cargo tauri dev     # хөгжүүлэлтийн горим (backend ба frontend ажиллаж байх ёстой)
-cargo build         # компиляц
+make run-desktop    # хөгжүүлэлтийн горим (backend ба frontend ажиллаж байх ёстой)
+make build-desktop  # компиляц
 ```
 
 Платформ бүрийн урьдчилсан шаардлага, серверийн хаягийг compile-time тогтмол
 болгох арга, code signing болон auto-update-ийн TODO-нуудыг
 [`desktop-tauri/README.md`](desktop-tauri/README.md)-ээс үзнэ үү.
 
-> Хоёр бүрхүүлийн компиляцыг CI шалгана:
-> [`desktop-mac.yml`](.github/workflows/desktop-mac.yml) (macOS) ба
-> [`desktop-tauri.yml`](.github/workflows/desktop-tauri.yml) (Linux, Windows,
-> macOS). Аль нь ч гарын үсэгтэй installer гаргахгүй.
+> Компиляцыг гурван платформ дээр CI шалгана:
+> [`desktop-tauri.yml`](.github/workflows/desktop-tauri.yml). Installer
+> гаргахгүй — гарын үсгийн гэрчилгээ репод байхгүй.
 
 ---
 

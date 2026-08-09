@@ -25,7 +25,7 @@ frontend/out/
 # Go / Binary outputs
 bin/
 tmp/
-desktop-mac/build/
+desktop-tauri/src-tauri/target/
 *.exe
 *.dll
 *.so

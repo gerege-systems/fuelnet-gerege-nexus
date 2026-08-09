@@ -135,8 +135,7 @@ fn write_prefs_file(endpoints: &Endpoints) -> Result<(), String> {
 }
 
 /// "scheme://host:port" — жиших боломжтой origin. Стандарт порт бичигдсэн
-/// эсэхээс үл хамааран ижил утга буцаана (desktop-mac-ийн ServerManager-тэй
-/// ижил дүрэм).
+/// эсэхээс үл хамааран ижил утга буцаана.
 pub fn origin_of(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;
     let scheme = scheme.to_ascii_lowercase();

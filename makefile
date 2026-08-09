@@ -1,4 +1,4 @@
-.PHONY: dev-backend dev-frontend up down migrate seed test build build-mac run-mac
+.PHONY: dev-backend dev-frontend up down migrate seed test build build-desktop run-desktop
 
 DATABASE_URL ?= postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable
 
@@ -26,10 +26,10 @@ test:
 build:
 	cd backend && go build ./...
 	cd frontend && npm run build
-	./desktop-mac/build.sh
+	cd desktop-tauri/src-tauri && cargo build
 
-build-mac:
-	./desktop-mac/build.sh
+build-desktop:
+	cd desktop-tauri/src-tauri && cargo build
 
-run-mac:
-	open "desktop-mac/build/Gerege Nexus.app"
+run-desktop:
+	cd desktop-tauri/src-tauri && cargo run
