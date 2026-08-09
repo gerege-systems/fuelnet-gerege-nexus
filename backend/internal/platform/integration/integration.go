@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -287,7 +288,8 @@ func (m *Manager) DispatchEvent(ctx context.Context, tenantID string, payload Ev
 	sendCtx := context.WithoutCancel(ctx)
 
 	for _, t := range targets {
-		go m.deliver(sendCtx, tenantID, t, payload, bodyBytes)
+		target := t
+		async.Go("integration-delivery", func() { m.deliver(sendCtx, tenantID, target, payload, bodyBytes) })
 	}
 
 	return nil

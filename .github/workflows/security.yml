@@ -29,7 +29,6 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        continue-on-error: true
         run: govulncheck ./...
 
   gosec:
@@ -46,7 +45,7 @@ jobs:
       # source → flags antipatterns (hardcoded creds, weak crypto,
       # SQL injection patterns, unsafe file perms, etc.).
       - name: Run gosec
-        uses: securego/gosec@master
+        uses: securego/gosec@c9453023c4e81ebdb6dde29e22d9cd5e2285fb16 # v2.22.8
         with:
           # G104 (errcheck) is noisy and golangci-lint already covers it.
           # G404 (math/rand) is only used for circuit-breaker jitter — never

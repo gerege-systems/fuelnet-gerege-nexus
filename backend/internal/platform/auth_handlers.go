@@ -25,15 +25,30 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/time/rate"
 )
 
+const (
+	maxLoginBody       = 8 << 10
+	maxLoginFailures   = 5
+	loginLockoutWindow = 15 * time.Minute
+)
+
+var dummyPasswordHash = func() string {
+	hash, err := auth.HashPassword("constant-time-missing-user-placeholder")
+	if err != nil {
+		panic(err)
+	}
+	return hash
+}()
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -48,8 +63,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// tenant from one sign-in to the next — and the session, its audit trail
 	// and every subsequent read are scoped to whichever it picked. Oldest
 	// membership first makes it the same tenant every time.
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	var userID, passwordHash, tenantID, name string
 	var isAdmin bool
+	var lockedUntil pgtype.Timestamptz
 	err := s.db.QueryRow(r.Context(),
 		`SELECT u.id, u.password_hash, u.name,
 		        EXISTS (
@@ -58,18 +75,34 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		            WHERE mr.membership_id=m.id AND r.tenant_id=m.tenant_id
 		              AND r.code='admin' AND r.active
 		        ) AS is_admin,
-		        m.tenant_id
+		        m.tenant_id, u.locked_until
 		 FROM users u
 		 JOIN memberships m ON m.user_id = u.id
-		 WHERE u.email = $1
+		 WHERE lower(u.email) = $1
 		 ORDER BY m.created_at, m.tenant_id
-		 LIMIT 1`, req.Email).Scan(&userID, &passwordHash, &name, &isAdmin, &tenantID)
+		 LIMIT 1`, req.Email).Scan(&userID, &passwordHash, &name, &isAdmin, &tenantID, &lockedUntil)
 
-	if err != nil || !auth.CheckPasswordHash(req.Password, passwordHash) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		passwordHash = dummyPasswordHash
+	} else if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "login service unavailable")
+		return
+	}
+	passwordOK := auth.CheckPasswordHash(req.Password, passwordHash)
+	locked := lockedUntil.Valid && lockedUntil.Time.After(time.Now())
+	if !passwordOK || locked {
+		if userID != "" && !locked {
+			_, _ = s.db.Exec(r.Context(),
+				`UPDATE users SET
+				 failed_login_attempts=failed_login_attempts+1,
+				 locked_until=CASE WHEN failed_login_attempts+1 >= $2 THEN NOW()+$3::interval ELSE locked_until END
+				 WHERE id=$1`, userID, maxLoginFailures, loginLockoutWindow.String())
+		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
 		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
 		return
 	}
+	_, _ = s.db.Exec(r.Context(), `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "password")
 	if err != nil {
@@ -161,49 +194,6 @@ func reportSignInFailure(w http.ResponseWriter, err error) {
 	writeJSONError(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг Gerege Nexus бүртгэлтэй холбож чадсангүй")
 }
 
-// resolveNationalIdentityUser maps a verified national identity (E-ID / DAN)
-// onto a local platform user.
-//
-// The previous implementation ran `SELECT id FROM users LIMIT 1` and granted
-// is_admin unconditionally, i.e. any successful gateway response logged the
-// caller in as an arbitrary — in practice the seeded admin — account.
-func (s *Server) resolveNationalIdentityUser(ctx context.Context, email, regNumber string) (userID, tenantID string, err error) {
-	if email != "" {
-		err = s.db.QueryRow(ctx,
-			`SELECT u.id::text, m.tenant_id::text
-			   FROM users u
-			   JOIN memberships m ON m.user_id = u.id
-			  WHERE lower(u.email) = lower($1)
-			  ORDER BY m.created_at, m.tenant_id
-			  LIMIT 1`, email).Scan(&userID, &tenantID)
-		if err == nil {
-			return userID, tenantID, nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return "", "", err
-		}
-	}
-
-	if config.IsProduction() {
-		return "", "", signInError{fmt.Sprintf("no Gerege Nexus user is linked to national identity %s", regNumber)}
-	}
-
-	// Development convenience only: fall back to the seeded demo account so
-	// the documented mock login flow keeps working locally.
-	err = s.db.QueryRow(ctx,
-		`SELECT u.id::text, m.tenant_id::text
-		   FROM users u
-		   JOIN memberships m ON m.user_id = u.id
-		  ORDER BY u.created_at
-		  LIMIT 1`).Scan(&userID, &tenantID)
-	if err != nil {
-		return "", "", fmt.Errorf("no platform user available for national identity login: %w", err)
-	}
-	slog.Warn("national identity login fell back to the demo account",
-		"reg_number", regNumber, "email", email)
-	return userID, tenantID, nil
-}
-
 // eidLinkingDigest derives the stable, non-PII handle for an eID subject. It
 // doubles as the synthetic account's password preimage, so its length is not
 // cosmetic: bcrypt rejects anything over 72 bytes outright, and a suffix that
@@ -263,17 +253,25 @@ func (s *Server) linkEIDIdentity(ctx context.Context, userID string, identity *e
 // identifier. JIT provisioning is opt-in per tenant and always receives the
 // standard user role through the membership_default_role database trigger.
 func (s *Server) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.EIDIdentity) (userID, tenantID string, err error) {
-	if identity.Email != "" {
-		if userID, tenantID, err = s.resolveNationalIdentityUser(ctx, identity.Email, identity.RegNumber); err == nil {
-			return userID, tenantID, nil
-		}
-	}
 	subject := strings.TrimSpace(identity.CivilID)
 	if subject == "" {
 		subject = strings.TrimSpace(identity.RegNumber)
 	}
 	if subject == "" {
 		return "", "", errors.New("eID identity carries neither a civil ID nor a registration number")
+	}
+	personEtsi := eidmongolia.PersonEtsi(subject)
+	err = s.db.QueryRow(ctx,
+		`SELECT i.user_id::text, m.tenant_id::text
+		   FROM user_eid_identities i
+		   JOIN memberships m ON m.user_id=i.user_id
+		  WHERE i.person_etsi=$1
+		  ORDER BY m.created_at, m.tenant_id LIMIT 1`, personEtsi).Scan(&userID, &tenantID)
+	if err == nil {
+		return userID, tenantID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", "", err
 	}
 	linkingKey := os.Getenv("EID_RP_SECRET")
 	if linkingKey == "" {

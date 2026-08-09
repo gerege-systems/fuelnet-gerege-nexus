@@ -17,19 +17,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/developer_portal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
@@ -72,14 +67,7 @@ type Server struct {
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
-	billingMod     *billing.BillingModule
-	documentsMod   *documents.DocumentsModule
-	govMod         *gov_services.Module
-	devPortalMod   *developer_portal.DeveloperPortalModule
-	contactsMod    *contacts.Module
-	productsMod    *products.Module
-	inventoryMod   *inventory.Module
-	esignMod       *esign.Module
+	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
 }
 
@@ -141,24 +129,17 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 	// through it, so it is a dependency of both rather than a peer.
 	integrationMgr := integration.NewManager(db)
 
-	contactsMod := contacts.New(db)
-	productsMod := products.New(db)
-	inventoryMod := inventory.New(db, false) // false = prevent negative stock
-	billingMod := billing.New(db)
-	documentsMod := documents.New(db)
-	govMod := gov_services.New(db, integrationMgr)
 	eidMN, err := eidmongolia.New(db)
 	if err != nil {
 		return nil, fmt.Errorf("eID Mongolia service: %w", err)
 	}
-	esignMod := esign.New(db, gerege.NewEsignService(), eidMN, integrationMgr)
 
 	// Instantiate Async Mailer Queue
 	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
 	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
 
 	ssoProvider := ssoprovider.NewSSOProvider(db)
-	devPortalMod := developer_portal.NewDeveloperPortalModule(ssoProvider)
+	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
 	s := &Server{
 		db:           db,
@@ -182,14 +163,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
-		billingMod:     billingMod,
-		documentsMod:   documentsMod,
-		govMod:         govMod,
-		devPortalMod:   devPortalMod,
-		contactsMod:    contactsMod,
-		productsMod:    productsMod,
-		inventoryMod:   inventoryMod,
-		esignMod:       esignMod,
+		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
 	}
 
@@ -202,7 +176,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 // goroutines, and it returns immediately — every job runs until ctx is
 // cancelled at shutdown.
 func (s *Server) StartBackgroundJobs(ctx context.Context) {
-	s.esignMod.StartHousekeeping(ctx)
+	for _, module := range s.backgroundApps {
+		module.StartHousekeeping(ctx)
+	}
 	s.eidMN.StartHousekeeping(ctx)
 	// Abandoned connect attempts and the delivery log are the two integration
 	// tables that only ever grow.
@@ -260,12 +236,16 @@ func (s *Server) setupRoutes() {
 	// Prometheus Metrics Endpoint
 	r.Handle("/metrics", observability.MetricsHandler())
 
-	// ORY Hydra Grade OpenID Connect & OAuth2 Provider Endpoints
-	r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
-	r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
-	r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
-	r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospectEndpoint)
-	r.Post("/oauth2/revoke", s.ssoProvider.HandleRevokeEndpoint)
+	// Opaque SSO tokens are not accepted by the platform API yet. Do not
+	// advertise or mint them accidentally; an operator must explicitly expose
+	// the provider for external resource servers that use introspection.
+	if ssoEndpointsEnabled() {
+		r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
+		r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
+		r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
+		r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospectEndpoint)
+		r.Post("/oauth2/revoke", s.ssoProvider.HandleRevokeEndpoint)
+	}
 
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
@@ -376,19 +356,23 @@ func (s *Server) setupRoutes() {
 	s.registerAppModuleRoutes()
 }
 
+func ssoEndpointsEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("EXPOSE_SSO_ENDPOINTS"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
 // registerAppModuleRoutes mounts every compile-time business module behind the
 // tenant app gate. Billing, Documents and the Developer Portal used to be wired
 // straight into the protected group, so their endpoints stayed reachable for
 // tenants that had never installed the app.
 func (s *Server) registerAppModuleRoutes() {
-	s.contactsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.contacts"))
-	s.productsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.products"))
-	s.inventoryMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.inventory"))
-	s.billingMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.billing"))
-	s.documentsMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.documents"))
-	s.govMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.gov_services"))
-	s.devPortalMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.developer_portal"))
-	s.esignMod.RegisterRoutes(s.router, s.appGateMiddleware("io.example.esign"))
+	for _, module := range appregistry.List() {
+		module.RegisterRoutes(s.router, s.appGateMiddleware(module.ID()))
+	}
 }
 
 // Handlers

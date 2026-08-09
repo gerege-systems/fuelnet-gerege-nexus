@@ -34,6 +34,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"golang.org/x/time/rate"
@@ -132,6 +133,7 @@ type DocumentsModule struct {
 	db     *pgxpool.Pool
 	eidSvc *eid.EIDService
 	danSvc *dan.DANService
+	perms  *rbac.SQLPermissionStore
 
 	// Whether this cluster has an ICU collation for the title search to lean on. See
 	// titleMatch: without one, a Cyrillic search is case-sensitive on a database
@@ -179,6 +181,7 @@ func New(db *pgxpool.Pool) *DocumentsModule {
 		db:          db,
 		eidSvc:      eid.NewEIDService(),
 		danSvc:      dan.NewDANService(),
+		perms:       rbac.NewSQLPermissionStore(db),
 		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
 	}
 	appregistry.Register(m)
@@ -236,37 +239,40 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 	r.Route("/api/v1/documents", func(dr chi.Router) {
 		dr.Use(tenantAuthMiddleware)
 		dr.Use(limitBody)
-		dr.Get("/", m.listDocumentsHandler)
-		dr.Post("/", m.createDocumentHandler)
+		read := rbac.RequirePermission(m.perms, "documents.read")
+		manage := rbac.RequirePermission(m.perms, "documents.manage")
+		sign := rbac.RequirePermission(m.perms, "documents.sign")
+		dr.With(read).Get("/", m.listDocumentsHandler)
+		dr.With(manage).Post("/", m.createDocumentHandler)
 
 		// Templates a document is started from.
-		dr.Get("/templates", m.listTemplatesHandler)
-		dr.Post("/templates", m.createTemplateHandler)
-		dr.Put("/templates/{id}", m.updateTemplateHandler)
-		dr.Delete("/templates/{id}", m.deleteTemplateHandler)
-		dr.Post("/templates/{id}/use", m.useTemplateHandler)
+		dr.With(read).Get("/templates", m.listTemplatesHandler)
+		dr.With(manage).Post("/templates", m.createTemplateHandler)
+		dr.With(manage).Put("/templates/{id}", m.updateTemplateHandler)
+		dr.With(manage).Delete("/templates/{id}", m.deleteTemplateHandler)
+		dr.With(manage).Post("/templates/{id}/use", m.useTemplateHandler)
 
 		// How a document type may be signed.
-		dr.Get("/policies", m.listSignaturePoliciesHandler)
-		dr.Put("/policies/{docType}", m.saveSignaturePolicyHandler)
+		dr.With(read).Get("/policies", m.listSignaturePoliciesHandler)
+		dr.With(manage).Put("/policies/{docType}", m.saveSignaturePolicyHandler)
 
 		// Who must sign it, in order.
-		dr.Get("/workflows", m.listWorkflowsHandler)
-		dr.Put("/workflows/{docType}", m.saveWorkflowHandler)
+		dr.With(read).Get("/workflows", m.listWorkflowsHandler)
+		dr.With(manage).Put("/workflows/{docType}", m.saveWorkflowHandler)
 
 		// How long it is kept.
-		dr.Get("/retention", m.listRetentionRulesHandler)
-		dr.Put("/retention/{docType}", m.saveRetentionRuleHandler)
+		dr.With(read).Get("/retention", m.listRetentionRulesHandler)
+		dr.With(manage).Put("/retention/{docType}", m.saveRetentionRuleHandler)
 
 		// A single document. Static segments above win over {id} in chi's trie,
 		// so "templates" and "policies" are never read as document ids.
-		dr.Get("/{id}/signatures", m.listSignaturesHandler)
-		dr.Get("/{id}/steps", m.listDocumentStepsHandler)
+		dr.With(read).Get("/{id}/signatures", m.listSignaturesHandler)
+		dr.With(read).Get("/{id}/steps", m.listDocumentStepsHandler)
 		// Correcting a title is authoring, not approving, so it is checked against
 		// documents.manage like the rest of this group — the path carries no /sign.
-		dr.Put("/{id}/title", m.renameDocumentHandler)
-		dr.Post("/{id}/route", m.routeDocumentHandler)
-		dr.Post("/{id}/reject", m.rejectDocumentHandler)
+		dr.With(manage).Put("/{id}/title", m.renameDocumentHandler)
+		dr.With(manage).Post("/{id}/route", m.routeDocumentHandler)
+		dr.With(sign).Post("/{id}/reject", m.rejectDocumentHandler)
 
 		// Signing is per channel, because the channels are not the same shape.
 		// E-ID is an approval the citizen gives on their own device, so it takes
@@ -278,16 +284,16 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// pushes nothing, but it is budgeted with the same bucket because it is still an
 		// authentication attempt against a real person's credentials.
 		if m.signLimiter != nil {
-			dr.With(security.RateLimitMiddleware(m.signLimiter)).
+			dr.With(sign, security.RateLimitMiddleware(m.signLimiter)).
 				Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
-			dr.With(security.RateLimitMiddleware(m.signLimiter)).
+			dr.With(sign, security.RateLimitMiddleware(m.signLimiter)).
 				Post("/{id}/sign/dan", m.signWithDANHandler)
 		} else {
 			// A module built by hand in a test has no limiter; the routes still work.
-			dr.Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
-			dr.Post("/{id}/sign/dan", m.signWithDANHandler)
+			dr.With(sign).Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
+			dr.With(sign).Post("/{id}/sign/dan", m.signWithDANHandler)
 		}
-		dr.Post("/{id}/sign/eid/poll", m.pollEIDSignatureHandler)
+		dr.With(sign).Post("/{id}/sign/eid/poll", m.pollEIDSignatureHandler)
 	})
 }
 

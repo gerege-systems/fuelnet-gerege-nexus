@@ -2,6 +2,8 @@ module github.com/gerege-systems/open-gerege-nexus/backend
 
 go 1.26
 
+toolchain go1.26.5
+
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/gerege-systems/open-gerege-core v1.10.0

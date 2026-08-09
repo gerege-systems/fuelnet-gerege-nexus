@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 )
 
 // Two tables here only ever grow on their own.
@@ -28,7 +30,7 @@ const (
 // It returns immediately, and it sweeps once on the way in: a deployment that
 // restarts more often than the interval would otherwise never sweep at all.
 func (m *Manager) StartHousekeeping(ctx context.Context) {
-	go func() {
+	async.Go("integration-housekeeping", func() {
 		m.sweepOnce(ctx)
 
 		ticker := time.NewTicker(housekeepingInterval)
@@ -41,7 +43,7 @@ func (m *Manager) StartHousekeeping(ctx context.Context) {
 				m.sweepOnce(ctx)
 			}
 		}
-	}()
+	})
 }
 
 // sweepOnce is bounded so a slow database cannot pile one sweep on top of the

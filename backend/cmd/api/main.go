@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
@@ -126,13 +127,13 @@ func main() {
 		IdleTimeout:       idleTimeout,
 	}
 
-	go func() {
+	async.Go("http-server", func() {
 		slog.Info("starting Gerege Nexus API server", "port", port)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server listener error", "error", err)
 			os.Exit(1)
 		}
-	}()
+	})
 
 	// Graceful shutdown handling
 	stop := make(chan os.Signal, 1)
