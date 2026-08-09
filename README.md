@@ -54,6 +54,7 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 - [Үндсэн боломжууд](#үндсэн-боломжууд)
 - [Бэлэн бизнес аппликейшнүүд](#бэлэн-бизнес-аппликейшнүүд)
 - [Төслийн бүтэц](#төслийн-бүтэц)
+- [Desktop бүрхүүлүүд](#desktop-бүрхүүлүүд)
 - [Ажиллуулах заавар](#ажиллуулах-заавар)
 - [Тохиргооны хувьсагчид](#тохиргооны-хувьсагчид)
 - [API-н тойм](#api-н-тойм)
@@ -155,7 +156,8 @@ backend/
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
 frontend/             Next.js 15 (App Router) вэб клиент
-desktop-mac/          Swift Native macOS Desktop Аппликейшн (1:1 macOS App)
+desktop-mac/          Swift/AppKit macOS бүрхүүл (гэрээний лавлагаа хэрэгжилт)
+desktop-tauri/        Tauri v2 бүрхүүл (Windows, Linux, macOS)
 catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
@@ -163,17 +165,53 @@ docs/                 Баримт бичиг ба орчуулгууд
 
 ---
 
-## macOS Desktop Аппликейшн (Native Mac App)
+## Desktop бүрхүүлүүд
 
-Вэб клиенттэй 1:1 ижил боломжтой, macOS-ийн native боломжуудыг (Touch ID, Menu Bar Tray Icon, Global Keyboard Shortcuts, Custom URL Schemes, Native Notifications) дэмжсэн desktop аппликейшн:
+Архитектур нь **Native Shell + Web Work Area**: native бүрхүүл нь нэвтрэлт,
+толгой хэсэг, цэс, tray, төхөөрөмжийн хандалтыг эзэмшинэ; вэб клиент нь бүрхүүл
+дотор ажиллахдаа өөрийн chrome-оо нуугаад зөвхөн **ажлын муж** болж
+рендерлэгдэнэ. Хөтчөөр орвол бүрхүүл байхгүй тул вэб клиент урьдын адил бүрэн
+аппликейшн хэвээрээ ажиллана.
+
+Хоёр бүрхүүл нэг гэрээг хэрэгжүүлдэг —
+[`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md) нь `window.GeregeShell`-ийн
+method, event, capability, хувилбарын дүрэм, аюулгүй байдлын шаардлагыг
+тодорхойлно. Вэб клиент хоёрыг ялгаж танихгүй.
+
+| Бүрхүүл | Платформ | Байдал |
+| --- | --- | --- |
+| [`desktop-mac/`](desktop-mac) | macOS | Swift/AppKit + WKWebView — гэрээний лавлагаа хэрэгжилт |
+| [`desktop-tauri/`](desktop-tauri) | Windows, Linux, macOS | Tauri v2 + Rust |
+
+### macOS (Swift)
+
+Touch ID, menu bar tray, global shortcut, `gerege://` URL scheme, native
+мэдэгдэл:
 
 ```bash
-# macOS бинари компилж Gerege Nexus.app үүсгэх
-make build-mac
-
-# Эсвэл шууд ажиллуулах
-make run-mac
+make build-mac      # Gerege Nexus.app үүсгэнэ
+make run-mac        # шууд ажиллуулна
 ```
+
+### Tauri (Windows / Linux / macOS)
+
+Native нэвтрэлтийн цонх (имэйл/нууц үг ба eID QR), сервэрээс баригдах native
+цэс, tray дээрх серверийн төлөв, `gerege://` deep link:
+
+```bash
+cd desktop-tauri/src-tauri
+cargo tauri dev     # хөгжүүлэлтийн горим (backend ба frontend ажиллаж байх ёстой)
+cargo build         # компиляц
+```
+
+Платформ бүрийн урьдчилсан шаардлага, серверийн хаягийг compile-time тогтмол
+болгох арга, code signing болон auto-update-ийн TODO-нуудыг
+[`desktop-tauri/README.md`](desktop-tauri/README.md)-ээс үзнэ үү.
+
+> Хоёр бүрхүүлийн компиляцыг CI шалгана:
+> [`desktop-mac.yml`](.github/workflows/desktop-mac.yml) (macOS) ба
+> [`desktop-tauri.yml`](.github/workflows/desktop-tauri.yml) (Linux, Windows,
+> macOS). Аль нь ч гарын үсэгтэй installer гаргахгүй.
 
 ---
 
@@ -350,6 +388,7 @@ CI нь push ба pull request бүр дээр lint, тест, frontend build, D
 | [Баримт бичгийн төв](docs/README.md) | Бүх баримтын индекс ба орчуулгууд |
 | [Архитектурын тодорхойлолт](docs/ARCHITECTURE_SPECIFICATION.md) | Платформын давхаргууд ба шийдвэрүүд |
 | [Модуль хөгжүүлэх заавар](docs/MODULE_AUTHORING_GUIDE.md) | Шинэ апп модуль бичих алхмууд |
+| [Bridge Contract v1](docs/SHELL_CONTRACT.md) | Native бүрхүүл ба вэб ажлын мужийн гэрээ |
 | [Хамтран ажиллах заавар](CONTRIBUTING.md) | Хувь нэмэр оруулах журам |
 | [Аюулгүй байдлын бодлого](SECURITY.md) | Эмзэг байдал мэдээлэх |
 | [Ёс зүйн дүрэм](CODE_OF_CONDUCT.md) | Хамт олны хэм хэмжээ |
