@@ -3,8 +3,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { EmailVerification, EmailVerifyOverview, api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { Banner, LoadingBlock, fieldClass } from "@/components/ui";
 import {
-  AlertTriangle, CheckCircle2, Clock, ExternalLink, Info, KeyRound, MailCheck,
+  CheckCircle2, Clock, ExternalLink, Info, KeyRound, MailCheck,
   RefreshCw, Send, XCircle,
 } from "lucide-react";
 
@@ -93,29 +94,17 @@ export default function EmailVerificationPage() {
       </div>
 
       {banner && (
-        <div
-          role="status"
-          className={`p-4 text-sm rounded-lg border ${
-            banner.kind === "ok"
-              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-              : "bg-red-50 border-red-200 text-red-700"
-          }`}
-        >
-          {banner.text}
-        </div>
+        <Banner tone={banner.kind === "ok" ? "success" : "error"} message={banner.text} />
       )}
 
       {/* A missing key and an unreachable service look identical from the
           outside — nothing arrives — so they are told apart here. */}
       {overview && !overview.configured && (
-        <div className="p-4 text-sm rounded-lg border bg-amber-50 border-amber-200 text-amber-800 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{t("emailverify.message.not_configured")}</span>
-        </div>
+        <Banner tone="warning" message={t("emailverify.message.not_configured")} />
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("emailverify.message.loading")}</div>
+        <LoadingBlock label={t("emailverify.message.loading")} />
       ) : (
         <>
           <section className="bg-white border border-slate-200 rounded-xl p-5">
@@ -201,14 +190,14 @@ export default function EmailVerificationPage() {
                   value={testEmail}
                   onChange={(e) => setTestEmail(e.target.value)}
                   placeholder="user@example.com"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className={fieldClass}
                 />
                 <input
                   type="url"
                   value={testRedirect}
                   onChange={(e) => setTestRedirect(e.target.value)}
                   placeholder="https://theirapp.com/verified"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className={fieldClass}
                 />
                 <button
                   type="submit"

@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useResource } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { Banner, PageHeader } from "@/components/ui";
+import { Banner, LoadingBlock, PageHeader, rowActionClass } from "@/components/ui";
 import { ActionMessage } from "@/components/documents/shared";
 import { Plus, Save, Trash2, Workflow as WorkflowIcon } from "lucide-react";
 
@@ -112,7 +112,7 @@ export default function DocumentWorkflowsPage() {
       {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}
 
       {loading ? (
-        <div className="py-12 text-center text-slate-400">{t("documents.message.loading")}</div>
+        <LoadingBlock label={t("documents.message.loading")} />
       ) : loadFailed ? (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
           {t("documents.message.workflows_failed")}
@@ -143,7 +143,7 @@ export default function DocumentWorkflowsPage() {
                       onClick={() => save(chain)}
                       disabled={busy === chain.doc_type || chain.steps.some((s) => !s.name.trim())}
                       title={chain.steps.some((s) => !s.name.trim()) ? t("documents.message.step_needs_name") : undefined}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                      className={rowActionClass}
                     >
                       <Save className="w-3.5 h-3.5" />
                       <span>{t("base.action.save")}</span>
