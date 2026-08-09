@@ -812,4 +812,8 @@ export const zh: Record<string, string> = {
   "website.view.trust_eyebrow": "主动保护",
   "website.view.trust_lede": "eID identity → 服务器 session → tenant membership → RBAC → OIDC client。每个环节都在服务器端进行检查。",
   "website.view.trust_title": "从身份到权限的单一证明链",
+  "pwa.install.title": "安装为应用",
+  "pwa.install.body": "在独立窗口中运行，而不是浏览器标签页。",
+  "pwa.install.action": "安装",
+  "pwa.install.ios": "分享 → 添加到主屏幕",
 };

@@ -166,6 +166,12 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      # The service worker sits in front of every request the app makes, and
+      # this platform's requests carry tenant data. It is written so that /api
+      # is never cached; this asserts that rather than trusting a handful of
+      # early returns to survive editing.
+      - name: Check the service worker caches nothing personal
+        run: npm run pwa:check
       - name: Build
         run: npm run build
 
