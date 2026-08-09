@@ -21,6 +21,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -90,6 +91,13 @@ func main() {
 	poolConfig.MinConns = 5
 	poolConfig.MaxConnIdleTime = 15 * time.Minute
 
+	// Bind every pooled connection to the tenant its caller is acting for, so
+	// the row-level policies from migration 00029 apply. Installed before the
+	// pool exists because it is a property of how connections are handed out;
+	// it stays dormant until Probe confirms the database can enforce it.
+	guard := &dbguard.Guard{}
+	guard.Install(poolConfig)
+
 	db, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		slog.Error("failed to connect to postgres pool", "error", err)
@@ -97,9 +105,25 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := db.Ping(ctx); err != nil {
-		slog.Warn("database ping failed on startup", "error", err)
+	databaseReachable := db.Ping(ctx) == nil
+	if !databaseReachable {
+		slog.Warn("database unreachable on startup; continuing, /ready reports it")
 	} else {
+		// Before anything else touches the pool: a probe that ran alongside
+		// live queries could leave a connection carrying a role nothing had
+		// asked for.
+		probeCtx, cancelProbe := context.WithTimeout(ctx, 10*time.Second)
+		err := guard.Probe(probeCtx, db)
+		cancelProbe()
+		if err != nil {
+			// The guard could not be switched on safely. That is a deployment
+			// fault — the migrations are present but the login role cannot
+			// reach the app role — and running on one layer while the schema
+			// says there are two is the state worth refusing to start in.
+			slog.Error("failed to enable row-level tenant isolation", "error", err)
+			os.Exit(1)
+		}
+
 		// Restores the documented demo login (admin@example.com). Skipped in
 		// production unless SEED_DEMO_DATA is set explicitly.
 		seedInitialData(ctx, db)
@@ -116,6 +140,15 @@ func main() {
 	// a sweep in flight is not left holding a database connection.
 	jobsCtx, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
+	if !databaseReachable {
+		// The probe above had nothing to talk to. Without this the process
+		// would serve every request for the rest of its life with tenant
+		// isolation switched off, because the one thing that switches it on
+		// already ran and failed.
+		async.Go("dbguard-probe-retry", func() {
+			guard.ProbeUntilEnabled(jobsCtx, db, 15*time.Second)
+		})
+	}
 	srv.StartBackgroundJobs(jobsCtx)
 
 	httpSrv := &http.Server{

@@ -52,6 +52,16 @@ services:
     restart: unless-stopped
     pull_policy: always
     environment:
+      # The API switches into the unprivileged gerege_nexus_app role for the
+      # duration of every tenant-scoped query (see internal/platform/dbguard),
+      # so the row-level policies from migration 00029 apply even though this
+      # connects as the owner. That protects against a handler that forgets its
+      # WHERE tenant_id, which is what the policies are for.
+      #
+      # It does not protect against the process itself: whoever can run code
+      # here can also RESET ROLE. To close that too, create a login role that
+      # owns nothing, GRANT gerege_nexus_app TO it, and point this at it —
+      # nothing in the application changes.
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/platform_db?sslmode=disable
       PORT: 8080
       ENVIRONMENT: production
