@@ -15,6 +15,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
@@ -63,13 +64,13 @@ func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddlewar
 func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized tenant context"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized tenant context")
 		return
 	}
 
 	clients, err := m.ssoProvider.ListTenantClients(r.Context(), tenantID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to load OAuth clients"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "failed to load OAuth clients")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -79,7 +80,7 @@ func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Re
 func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized tenant context"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized tenant context")
 		return
 	}
 
@@ -90,12 +91,12 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 
 	if req.ClientName == "" {
-		http.Error(w, `{"error":"client_name is required"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "client_name is required")
 		return
 	}
 
@@ -105,13 +106,13 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	allowedScopes := []string{"openid", "profile", "email", "erp.read", "erp.write"}
 	for _, scope := range req.Scopes {
 		if !slices.Contains(allowedScopes, scope) {
-			http.Error(w, `{"error":"unsupported OAuth scope"}`, http.StatusBadRequest)
+			httpx.Error(w, http.StatusBadRequest, "unsupported OAuth scope")
 			return
 		}
 	}
 	for _, raw := range req.RedirectURIs {
 		if err := ssoprovider.ValidateRedirectURI(raw); err != nil {
-			http.Error(w, `{"error":"redirect URI is not allowed"}`, http.StatusBadRequest)
+			httpx.Error(w, http.StatusBadRequest, "redirect URI is not allowed")
 			return
 		}
 	}
@@ -124,7 +125,7 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	}
 
 	if err := m.ssoProvider.RegisterTenantClient(r.Context(), tenantID, client); err != nil {
-		http.Error(w, `{"error":"failed to register OAuth client"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "failed to register OAuth client")
 		return
 	}
 

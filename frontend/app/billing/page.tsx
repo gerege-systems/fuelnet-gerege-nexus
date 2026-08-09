@@ -1,32 +1,20 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/useResource";
 import { useI18n } from "@/lib/i18n";
 import { CreditCard, Plus, Receipt, CheckCircle, Clock } from "lucide-react";
 
 export default function BillingPage() {
   const { t } = useI18n();
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ contact_name: "", amount: "" });
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getInvoices();
-      setInvoices(data || []);
-    } catch (err) {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const { data: invoices, loading, reload: loadData } = useResource(
+    async () => (await api.getInvoices()) || [],
+    { initial: [] as any[] },
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

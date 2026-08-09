@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { Settings, ShieldCheck, Clock, Power, PowerOff } from "lucide-react";
+import { Settings, Clock } from "lucide-react";
 
 interface InstalledApp {
   id: string;

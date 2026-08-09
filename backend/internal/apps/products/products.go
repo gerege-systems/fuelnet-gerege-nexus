@@ -8,6 +8,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -68,7 +69,7 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -76,7 +77,7 @@ func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, tenant_id, sku, name, price, active, created_at, updated_at 
 		 FROM products WHERE tenant_id = $1 ORDER BY name ASC`, tenantID)
 	if err != nil {
-		http.Error(w, `{"error":"database error"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer rows.Close()
@@ -85,7 +86,7 @@ func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p Product
 		if err := rows.Scan(&p.ID, &p.TenantID, &p.SKU, &p.Name, &p.Price, &p.Active, &p.CreatedAt, &p.UpdatedAt); err != nil {
-			http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+			httpx.Error(w, http.StatusInternalServerError, "scan error")
 			return
 		}
 		list = append(list, p)
@@ -93,7 +94,7 @@ func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 	// A broken stream ends the loop exactly like a complete one; without this
 	// a truncated list goes out under a 200.
 	if err := rows.Err(); err != nil {
-		http.Error(w, `{"error":"scan error"}`, http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "scan error")
 		return
 	}
 
@@ -104,7 +105,7 @@ func (m *Module) listProductsHandler(w http.ResponseWriter, r *http.Request) {
 func (m *Module) createProductHandler(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -115,7 +116,7 @@ func (m *Module) createProductHandler(w http.ResponseWriter, r *http.Request) {
 		Active bool    `json:"active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SKU == "" || req.Name == "" {
-		http.Error(w, `{"error":"invalid product payload, sku and name required"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid product payload, sku and name required")
 		return
 	}
 
@@ -127,7 +128,7 @@ func (m *Module) createProductHandler(w http.ResponseWriter, r *http.Request) {
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		id, claims.TenantID, req.SKU, req.Name, req.Price, req.Active, now, now)
 	if err != nil {
-		http.Error(w, `{"error":"sku already exists or DB error"}`, http.StatusConflict)
+		httpx.Error(w, http.StatusConflict, "sku already exists or DB error")
 		return
 	}
 
@@ -150,7 +151,7 @@ func (m *Module) createProductHandler(w http.ResponseWriter, r *http.Request) {
 func (m *Module) updateProductHandler(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -162,7 +163,7 @@ func (m *Module) updateProductHandler(w http.ResponseWriter, r *http.Request) {
 		Active bool    `json:"active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
+		httpx.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 
@@ -172,7 +173,7 @@ func (m *Module) updateProductHandler(w http.ResponseWriter, r *http.Request) {
 		 WHERE id = $6 AND tenant_id = $7`,
 		req.SKU, req.Name, req.Price, req.Active, now, id, claims.TenantID)
 	if err != nil || res.RowsAffected() == 0 {
-		http.Error(w, `{"error":"product not found or unauthorized"}`, http.StatusNotFound)
+		httpx.Error(w, http.StatusNotFound, "product not found or unauthorized")
 		return
 	}
 

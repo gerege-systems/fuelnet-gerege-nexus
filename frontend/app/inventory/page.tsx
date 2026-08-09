@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/useResource";
 import { useI18n } from "@/lib/i18n";
-import { Boxes, Warehouse as WarehouseIcon, ArrowUpRight, Plus, Sliders, History } from "lucide-react";
+import { Boxes, Warehouse as WarehouseIcon, Sliders, History } from "lucide-react";
 
 interface Warehouse {
   id: string;
@@ -36,12 +37,6 @@ interface StockMovement {
 
 export default function InventoryPage() {
   const { t } = useI18n();
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
-  const [movements, setMovements] = useState<StockMovement[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const [showWhModal, setShowWhModal] = useState(false);
   const [whForm, setWhForm] = useState({ code: "", name: "", address: "" });
 
@@ -51,28 +46,35 @@ export default function InventoryPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const loadData = async () => {
-    try {
-      const [wh, prod, stock, mov] = await Promise.all([
+  // The four lists are one screen's worth of stock, so they are fetched and held
+  // together: a page that showed levels from this minute against warehouses from
+  // the last one would be reporting a state the tenant was never in.
+  const { data: inventory, loading, reload: loadData } = useResource(
+    async () => {
+      const [warehouses, products, stockLevels, movements] = await Promise.all([
         api.getWarehouses(),
         api.getProducts(),
         api.getStockLevels(),
         api.getStockMovements(),
       ]);
-      setWarehouses(wh || []);
-      setProducts(prod || []);
-      setStockLevels(stock || []);
-      setMovements(mov || []);
-    } catch (err: any) {
-      setError(err.message || t("inventory.message.load_failed"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+      return {
+        warehouses: warehouses || [],
+        products: products || [],
+        stockLevels: stockLevels || [],
+        movements: movements || [],
+      };
+    },
+    {
+      initial: { warehouses: [], products: [], stockLevels: [], movements: [] } as {
+        warehouses: Warehouse[];
+        products: Product[];
+        stockLevels: StockLevel[];
+        movements: StockMovement[];
+      },
+      onError: (err: any) => setError(err.message || t("inventory.message.load_failed")),
+    },
+  );
+  const { warehouses, products, stockLevels, movements } = inventory;
 
   const handleCreateWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();

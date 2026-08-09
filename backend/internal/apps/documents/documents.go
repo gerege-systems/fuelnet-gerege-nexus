@@ -22,21 +22,21 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 )
 
@@ -229,7 +229,7 @@ const bodyLimit = 64 << 10 // 64 KB, sixteen times the largest real request
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ContentLength > bodyLimit {
-			writeError(w, http.StatusRequestEntityTooLarge,
+			httpx.Error(w, http.StatusRequestEntityTooLarge,
 				fmt.Sprintf("the request body is larger than %d bytes", bodyLimit))
 			return
 		}
@@ -303,7 +303,7 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -320,7 +320,7 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 	if raw := strings.TrimSpace(query.Get("after_at")); raw != "" {
 		at, parseErr := time.Parse(time.RFC3339Nano, raw)
 		if parseErr != nil {
-			writeError(w, http.StatusBadRequest, "after_at must be an RFC3339 timestamp")
+			httpx.Error(w, http.StatusBadRequest, "after_at must be an RFC3339 timestamp")
 			return
 		}
 		filter.AfterAt = at
@@ -328,27 +328,27 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 	// Both halves name one row, so one without the other would silently page from
 	// somewhere nobody asked for.
 	if (filter.AfterID == "") != filter.AfterAt.IsZero() {
-		writeError(w, http.StatusBadRequest, "after_at and after_id go together")
+		httpx.Error(w, http.StatusBadRequest, "after_at and after_id go together")
 		return
 	}
 	page, err := m.ListDocuments(r.Context(), tenantID, filter, limit, offset)
 	if errors.Is(err, ErrInvalidDocument) {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to fetch documents", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch documents")
+		httpx.Error(w, http.StatusInternalServerError, "failed to fetch documents")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, page)
+	httpx.JSON(w, http.StatusOK, page)
 }
 
 func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -357,7 +357,7 @@ func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.R
 		DocType string `json:"doc_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Title == "" {
-		writeError(w, http.StatusBadRequest, "invalid document parameters: title is required")
+		httpx.Error(w, http.StatusBadRequest, "invalid document parameters: title is required")
 		return
 	}
 
@@ -367,13 +367,13 @@ func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, doc)
+	httpx.JSON(w, http.StatusCreated, doc)
 }
 
 func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -383,41 +383,41 @@ func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Requ
 		OTPCode   string `json:"otp_code"`   // Нэг удаагийн нууц код
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RegNumber == "" {
-		writeError(w, http.StatusBadRequest, "invalid signature request: reg_number is required")
+		httpx.Error(w, http.StatusBadRequest, "invalid signature request: reg_number is required")
 		return
 	}
 
 	doc, err := m.SignWithDAN(r.Context(), tenantID, docID, req.RegNumber, req.OTPCode)
 	switch {
 	case errors.Is(err, ErrNotSignable):
-		writeError(w, http.StatusConflict, err.Error())
+		httpx.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrAlreadySigned):
-		writeError(w, http.StatusConflict, err.Error())
+		httpx.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrProviderUnavailable):
 		// The gateway, not the caller. Same 503 the E-ID routes give, and for the same
 		// reason: it is worth trying again, and it is not something the operator did.
-		writeError(w, http.StatusServiceUnavailable, err.Error())
+		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
 		return
 	case errors.Is(err, ErrSignatureRejected):
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
 		// A storage failure is ours, not the caller's: report it as one and keep
 		// the driver's message out of the response.
 		slog.ErrorContext(r.Context(), "failed to sign document through DAN", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to sign document")
+		httpx.Error(w, http.StatusInternalServerError, "failed to sign document")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, doc)
+	httpx.JSON(w, http.StatusOK, doc)
 }
 
 func (m *DocumentsModule) renameDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -425,31 +425,31 @@ func (m *DocumentsModule) renameDocumentHandler(w http.ResponseWriter, r *http.R
 		Title string `json:"title"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid rename request: title is required")
+		httpx.Error(w, http.StatusBadRequest, "invalid rename request: title is required")
 		return
 	}
 
 	doc, err := m.RenameDocument(r.Context(), tenantID, chi.URLParam(r, "id"), req.Title)
 	switch {
 	case errors.Is(err, ErrTitleFrozen):
-		writeError(w, http.StatusConflict, err.Error())
+		httpx.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrInvalidDocument):
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
 		slog.ErrorContext(r.Context(), "failed to rename document", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to rename document")
+		httpx.Error(w, http.StatusInternalServerError, "failed to rename document")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, doc)
+	httpx.JSON(w, http.StatusOK, doc)
 }
 
 func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -457,14 +457,14 @@ func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.R
 	doc, err := m.RejectDocument(r.Context(), tenantID, docID)
 	switch {
 	case errors.Is(err, ErrNotSignable):
-		writeError(w, http.StatusConflict, err.Error())
+		httpx.Error(w, http.StatusConflict, err.Error())
 		return
 	case err != nil:
-		writeError(w, http.StatusInternalServerError, "failed to reject document")
+		httpx.Error(w, http.StatusInternalServerError, "failed to reject document")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, doc)
+	httpx.JSON(w, http.StatusOK, doc)
 }
 
 // textFault says why a string cannot be stored as Postgres text, or "" when it can.
@@ -1255,16 +1255,6 @@ func isConstraintViolation(err error, name string) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == name
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
-}
-
 // writeWriteFailure sorts a failed write into the class its caller can act on:
 // what they sent (400 with the reason), a collision with somebody else's change
 // (409, retryable), or ours (500 with a fixed message, the driver's own text
@@ -1274,11 +1264,11 @@ func writeError(w http.ResponseWriter, status int, message string) {
 func writeWriteFailure(ctx context.Context, w http.ResponseWriter, err error, whatFailed string) {
 	switch {
 	case errors.Is(err, ErrInvalidDocument), errors.Is(err, ErrInvalidConfiguration):
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpx.Error(w, http.StatusBadRequest, err.Error())
 	case isUniqueViolation(err):
-		writeError(w, http.StatusConflict, "this was changed by someone else at the same time — reload and try again")
+		httpx.Error(w, http.StatusConflict, "this was changed by someone else at the same time — reload and try again")
 	default:
 		slog.ErrorContext(ctx, whatFailed, "error", err)
-		writeError(w, http.StatusInternalServerError, whatFailed)
+		httpx.Error(w, http.StatusInternalServerError, whatFailed)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -104,6 +105,5 @@ func writeTooManyRequests(w http.ResponseWriter, retryAfter time.Duration) {
 	if retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
 	}
-	http.Error(w, `{"error":"too many requests: rate limit exceeded, try again later"}`,
-		http.StatusTooManyRequests)
+	httpx.Error(w, http.StatusTooManyRequests, "too many requests: rate limit exceeded, try again later")
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { api } from "@/lib/api";
+import { useResource } from "@/lib/useResource";
 import { useI18n } from "@/lib/i18n";
-import { Package, Plus, DollarSign, Tag, CheckCircle, XCircle } from "lucide-react";
+import { Package, Plus, CheckCircle, XCircle } from "lucide-react";
 
 interface Product {
   id: string;
@@ -15,26 +16,17 @@ interface Product {
 
 export default function ProductsPage() {
   const { t } = useI18n();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ sku: "", name: "", price: 0, active: true });
   const [error, setError] = useState("");
 
-  const loadProducts = async () => {
-    try {
-      const data = await api.getProducts();
-      setProducts(data || []);
-    } catch (err: any) {
-      setError(err.message || t("products.message.load_failed"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
+  const { data: products, loading, reload: loadProducts } = useResource(
+    async () => (await api.getProducts()) || [],
+    {
+      initial: [] as Product[],
+      onError: (err: any) => setError(err.message || t("products.message.load_failed")),
+    },
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

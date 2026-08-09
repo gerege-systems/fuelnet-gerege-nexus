@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { ActionMessage, Banner, SectionHeader } from "@/components/documents/shared";
+import { Banner, PageHeader } from "@/components/ui";
+import { ActionMessage } from "@/components/documents/shared";
 import { Files, Plus, Save, Trash2, Wand2 } from "lucide-react";
 
 interface Template {
@@ -98,9 +100,7 @@ export default function DocumentTemplatesPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useLoadOnMount(loadData);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,13 +213,13 @@ export default function DocumentTemplatesPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
+      <PageHeader
         icon={<Files className="w-7 h-7 text-indigo-600" />}
         title={t("documents.menu.templates")}
         subtitle={t("documents.view.templates_hint")}
       />
 
-      {message && <Banner message={message} onDismiss={() => setMessage(null)} />}
+      {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}
 
       {mayManage && (
         <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-4 grid gap-3 md:grid-cols-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Code2, Key, Shield, Plus, CheckCircle2, Copy } from "lucide-react";
+import { Code2, Shield, Plus, CheckCircle2, Copy } from "lucide-react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 

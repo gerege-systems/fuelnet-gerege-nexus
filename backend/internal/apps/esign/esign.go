@@ -31,17 +31,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // FileExporter is the part of the integration manager this module needs: a way
@@ -206,12 +206,6 @@ func (m *Module) log(r *http.Request, entry logEntry) {
 
 // ─── Responses ───────────────────────────────────────────────────────────────
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
 // writeDomainError maps a domain error onto its status and machine code. An
 // unrecognised error is reported as a generic internal failure and logged,
 // rather than having its text — which may quote an upstream body carrying
@@ -223,11 +217,11 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		if status == 0 {
 			status = http.StatusBadRequest
 		}
-		writeJSON(w, status, map[string]string{"error": domain.Message, "code": domain.Code})
+		httpx.JSON(w, status, map[string]string{"error": domain.Message, "code": domain.Code})
 		return
 	}
 	slog.Error("esign: unhandled error", "error", err)
-	writeJSON(w, http.StatusInternalServerError, map[string]string{
+	httpx.JSON(w, http.StatusInternalServerError, map[string]string{
 		"error": "internal error", "code": "INTERNAL",
 	})
 }

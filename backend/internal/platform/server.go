@@ -32,8 +32,8 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/mailer"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
@@ -51,15 +51,19 @@ import (
 const PlatformVersion = "1.0.0"
 
 type Server struct {
-	db             *pgxpool.Pool
-	installer      *appinstaller.AppInstaller
-	router         *chi.Mux
-	sessions       *auth.SessionStore
-	loginLimiter   *security.IPRateLimiter
-	pollLimiter    *security.IPRateLimiter
-	aiLimiter      *security.IPRateLimiter
-	verifyLimiter  *security.IPRateLimiter
-	asyncMailer    *mailer.AsyncOTPMailer
+	db            *pgxpool.Pool
+	installer     *appinstaller.AppInstaller
+	router        *chi.Mux
+	sessions      *auth.SessionStore
+	loginLimiter  *security.IPRateLimiter
+	pollLimiter   *security.IPRateLimiter
+	aiLimiter     *security.IPRateLimiter
+	verifyLimiter *security.IPRateLimiter
+	// emailVerify is the shared "prove this address" service. It belongs to
+	// every app module rather than to the platform's own handlers, so when a
+	// module needs it, the accessor to add is one line — it is unexported now
+	// only because no module has asked yet, and an exported accessor nobody
+	// called read as a dependency the modules already had.
 	emailVerify    *emailverify.Service
 	copilotSvc     *ai.CopilotService
 	forecaster     *ai.Forecaster
@@ -165,10 +169,6 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		return nil, fmt.Errorf("eID Mongolia service: %w", err)
 	}
 
-	// Instantiate Async Mailer Queue
-	syncMailer := mailer.NewSyncOTPMailer(os.Getenv("SMTP_HOST"), os.Getenv("SMTP_PORT"), os.Getenv("SMTP_FROM"), os.Getenv("SMTP_PASSWORD"))
-	asyncMailer := mailer.NewAsyncOTPMailer(syncMailer, 2, 64, 3)
-
 	ssoProvider := ssoprovider.NewSSOProvider(db)
 	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
@@ -184,7 +184,6 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
 		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
-		asyncMailer:    asyncMailer,
 		emailVerify:    emailverify.NewService(db),
 		copilotSvc:     ai.NewCopilotService(db),
 		forecaster:     ai.NewForecaster(db),
@@ -226,6 +225,8 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 		module.StartHousekeeping(ctx)
 	}
 	s.eidMN.StartHousekeeping(ctx)
+	// Every sign-in writes a session row and nothing else ever removes one.
+	s.sessions.StartHousekeeping(ctx)
 	// Abandoned connect attempts and the delivery log are the two integration
 	// tables that only ever grow.
 	s.integrationMgr.StartHousekeeping(ctx)
@@ -234,16 +235,6 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	// mailing list.
 	s.emailVerify.StartHousekeeping(ctx)
 }
-
-// EmailVerification is the platform's shared "prove this address" service.
-//
-// It is exposed rather than kept private because it belongs to every app
-// module, not to the platform's own handlers: a module takes it in its
-// constructor the way gov_services takes the integration manager, and calls
-// Send with its own app id as the source. The mail itself is sent by the hosted
-// verification service — this platform holds no mailbox credential — and what
-// is kept here is which module asked, for whom, and whether they came back.
-func (s *Server) EmailVerification() *emailverify.Service { return s.emailVerify }
 
 func (s *Server) Router() *chi.Mux {
 	return s.router
@@ -272,7 +263,7 @@ func (s *Server) setupRoutes() {
 	})
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.Ping(r.Context()); err != nil {
-			http.Error(w, `{"status":"error","message":"database unreachable"}`, http.StatusServiceUnavailable)
+			httpx.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "error", "message": "database unreachable"})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

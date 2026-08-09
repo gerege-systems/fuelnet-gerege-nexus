@@ -11,6 +11,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/go-chi/chi/v5"
 )
@@ -150,5 +151,5 @@ func (m *Module) exportDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	audit.Record(r.Context(), tenantID, actor.UserID, "esign.document_exported", "esign", map[string]any{
 		"document_id": id, "destinations": len(results),
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"exported": results})
+	httpx.JSON(w, http.StatusOK, map[string]any{"exported": results})
 }

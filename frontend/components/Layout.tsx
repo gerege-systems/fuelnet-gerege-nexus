@@ -80,7 +80,7 @@ export default function Layout({children}:{children:React.ReactNode}){
     {label:t("web.menu.installed_apps"),app:t("web.label.platform"),path:"/settings/apps",icon:"settings"},
     {label:t("web.menu.email_verification"),app:t("web.label.platform"),path:"/settings/email-verification",icon:"mail-check"},
     ...apps.flatMap(app=>app.menus.filter(m=>m.path).map(m=>({label:m.label,app:app.name,path:m.path!,icon:m.icon})))
-  ],[apps,locale,t]);
+  ],[apps,t]);
   const results=query.trim()?searchIndex.filter(x=>(x.label+" "+x.app).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0,8):[];
 
   function togglePanel(){if(window.matchMedia("(min-width:901px)").matches){setPanelOpen(v=>{localStorage.setItem("gerege_sidebar_open",String(!v));return !v})}else setMobileOpen(v=>!v)}

@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Appointment, GovService, gov } from "@/lib/gov";
 import { useI18n } from "@/lib/i18n";
-import { Banner, EmptyState, Loading, PageHeader, describeError } from "@/components/gov/shared";
+import { Banner, EmptyState, Loading, PageHeader } from "@/components/ui";
+import { describeError } from "@/components/gov/shared";
 import { CalendarClock, Plus } from "lucide-react";
 
 /** In-person visit slots. Backed by /gov/appointments, which has existed since

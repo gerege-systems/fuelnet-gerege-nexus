@@ -22,10 +22,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/go-chi/chi/v5"
 )
 
 func (m *Module) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
@@ -51,10 +51,10 @@ func (m *Module) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	// screen still reads it that way, so paginated callers opt in explicitly
 	// rather than every existing client breaking on an envelope.
 	if r.URL.Query().Get("paginated") == "true" {
-		writeJSON(w, http.StatusOK, Page[Document]{Items: list, Total: total, Limit: limit, Offset: offset})
+		httpx.JSON(w, http.StatusOK, Page[Document]{Items: list, Total: total, Limit: limit, Offset: offset})
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpx.JSON(w, http.StatusOK, list)
 }
 
 func (m *Module) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +67,7 @@ func (m *Module) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, doc)
+	httpx.JSON(w, http.StatusOK, doc)
 }
 
 // uploadDocumentHandler takes a base64 payload. It is the original intake and
@@ -183,7 +183,7 @@ func (m *Module) storeUpload(w http.ResponseWriter, r *http.Request, tenantID st
 		"title":       doc.Title,
 		"bytes":       len(pdf),
 	})
-	writeJSON(w, http.StatusCreated, doc)
+	httpx.JSON(w, http.StatusCreated, doc)
 }
 
 func (m *Module) downloadDocumentHandler(w http.ResponseWriter, r *http.Request) {

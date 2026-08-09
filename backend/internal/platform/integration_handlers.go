@@ -20,6 +20,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
@@ -64,39 +65,39 @@ func integrationError(w http.ResponseWriter, err error) {
 	var invalid *integration.InvalidError
 	switch {
 	case errors.Is(err, integration.ErrNotFound):
-		writeJSONError(w, http.StatusNotFound, "integration not found")
+		httpx.Error(w, http.StatusNotFound, "integration not found")
 	case errors.Is(err, integration.ErrDuplicateName):
-		writeJSONError(w, http.StatusConflict, err.Error())
+		httpx.Error(w, http.StatusConflict, err.Error())
 	case errors.Is(err, integration.ErrNoEncryptionKey),
 		errors.Is(err, integration.ErrProviderUnavailable):
-		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
+		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
 	case errors.As(err, &invalid):
-		writeJSONError(w, http.StatusBadRequest, invalid.Error())
+		httpx.Error(w, http.StatusBadRequest, invalid.Error())
 	default:
 		slog.Error("integration: request failed", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "the integration could not be saved")
+		httpx.Error(w, http.StatusInternalServerError, "the integration could not be saved")
 	}
 }
 
 func (s *Server) handleListIntegrations(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	list, err := s.integrationMgr.List(r.Context(), tenantID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to load integrations")
+		httpx.Error(w, http.StatusInternalServerError, "failed to load integrations")
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpx.JSON(w, http.StatusOK, list)
 }
 
 // handleIntegrationProviders tells the screen which connectors this deployment
 // can actually offer, so an administrator is not given a form for a provider
 // whose OAuth client was never configured.
 func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpx.JSON(w, http.StatusOK, map[string]any{
 		"providers":             integration.Catalog(),
 		"encryption_configured": integration.EncryptionConfigured(),
 		"redirect_uri":          integration.RedirectURI(),
@@ -106,12 +107,12 @@ func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	var req integrationSaveRequest
 	if decodeLimitedJSON(r, &req, 32<<10) != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid integration configuration")
+		httpx.Error(w, http.StatusBadRequest, "invalid integration configuration")
 		return
 	}
 	conn, err := s.integrationMgr.Create(r.Context(), tenantID, req.toSave())
@@ -122,18 +123,18 @@ func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 	claims, _ := auth.UserFromContext(r.Context())
 	audit.Record(r.Context(), tenantID, claims.UserID, "integration.create", "integration",
 		map[string]any{"id": conn.ID, "provider": conn.Provider})
-	writeJSON(w, http.StatusCreated, conn)
+	httpx.JSON(w, http.StatusCreated, conn)
 }
 
 func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	var req integrationSaveRequest
 	if decodeLimitedJSON(r, &req, 32<<10) != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid integration configuration")
+		httpx.Error(w, http.StatusBadRequest, "invalid integration configuration")
 		return
 	}
 	conn, err := s.integrationMgr.Update(r.Context(), tenantID, chi.URLParam(r, "id"), req.toSave())
@@ -144,13 +145,13 @@ func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request)
 	claims, _ := auth.UserFromContext(r.Context())
 	audit.Record(r.Context(), tenantID, claims.UserID, "integration.update", "integration",
 		map[string]any{"id": conn.ID})
-	writeJSON(w, http.StatusOK, conn)
+	httpx.JSON(w, http.StatusOK, conn)
 }
 
 func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -161,7 +162,7 @@ func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request)
 	claims, _ := auth.UserFromContext(r.Context())
 	audit.Record(r.Context(), tenantID, claims.UserID, "integration.delete", "integration",
 		map[string]any{"id": id})
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // handleConnectIntegration starts the OAuth grant and answers with the URL to
@@ -170,7 +171,7 @@ func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	claims, _ := auth.UserFromContext(r.Context())
@@ -179,13 +180,13 @@ func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request
 		integrationError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"authorization_url": authURL})
+	httpx.JSON(w, http.StatusOK, map[string]string{"authorization_url": authURL})
 }
 
 func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -196,7 +197,7 @@ func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Requ
 	claims, _ := auth.UserFromContext(r.Context())
 	audit.Record(r.Context(), tenantID, claims.UserID, "integration.disconnect", "integration",
 		map[string]any{"id": id})
-	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
 // handleIntegrationDeliveries returns what has recently left the platform. A
@@ -205,7 +206,7 @@ func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := tenant.FromContext(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	limit := 50
@@ -216,10 +217,10 @@ func (s *Server) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Requ
 	}
 	list, err := s.integrationMgr.Deliveries(r.Context(), tenantID, limit)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to load delivery history")
+		httpx.Error(w, http.StatusInternalServerError, "failed to load delivery history")
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpx.JSON(w, http.StatusOK, list)
 }
 
 // handleIntegrationOAuthCallback receives the provider's redirect.
