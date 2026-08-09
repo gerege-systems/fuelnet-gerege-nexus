@@ -642,8 +642,26 @@ func ValidateRedirect(raw string) (string, error) {
 	default:
 		return "", invalid("the redirect URL must use HTTPS (HTTP is allowed only for localhost in development)")
 	}
+
+	// HTTPS was never the part that mattered. The link goes out in a mail, over
+	// this platform's name, and /verify/landed then forwards the person
+	// wherever it says — so an unchecked destination makes nexus.gerege.mn the
+	// redirector a phishing link wants to borrow, and the recipient sees a
+	// government hostname in the mail they were told to trust.
+	//
+	// Any signed-in member of any tenant could choose that destination. The
+	// allowlist moves the choice to whoever operates the deployment.
+	if !config.HostAllowed(host, config.RedirectHosts(redirectHostsEnv)) {
+		return "", invalid(
+			"the redirect URL must point at this platform or a host named in %s (%s does not qualify)",
+			redirectHostsEnv, host)
+	}
 	return trimmed, nil
 }
+
+// redirectHostsEnv names the extra hostnames a verification link may return to.
+// PUBLIC_ORIGIN is always allowed without being listed.
+const redirectHostsEnv = "EMAIL_VERIFY_REDIRECT_HOSTS"
 
 // retryAfter turns the oldest request inside the window into how long until it
 // leaves the window and frees an allowance.

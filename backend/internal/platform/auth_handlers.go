@@ -140,6 +140,36 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "logged_out"})
 }
 
+// handleLogoutEverywhere ends every session the caller holds.
+//
+// Logging out ends the session in front of you. This is for the one you left
+// somewhere else — a machine in an office you have left, a desktop client on a
+// laptop that was taken — and it is the only thing on the platform that answers
+// that, short of an administrator disabling the account.
+//
+// It is inside the authenticated group, so the caller is proving they hold one
+// of the sessions they are ending. The cookie here is cleared too: the session
+// it names is among those just revoked.
+func (s *Server) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	revoked, err := s.sessions.RevokeAllForUser(r.Context(), claims.UserID)
+	if err != nil {
+		slog.Error("failed to revoke every session", "user_id", claims.UserID, "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to end the other sessions")
+		return
+	}
+
+	auth.ClearSessionCookie(w)
+	audit.Record(r.Context(), claims.TenantID, claims.UserID, "auth.logout_everywhere", "session",
+		map[string]any{"revoked": revoked})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "logged_out_everywhere", "revoked": revoked})
+}
+
 // Sign-in and eID polling are budgeted separately, because they are different
 // things happening at different rates.
 //

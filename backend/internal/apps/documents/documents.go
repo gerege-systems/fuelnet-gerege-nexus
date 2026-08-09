@@ -133,7 +133,10 @@ type DocumentsModule struct {
 	db     *pgxpool.Pool
 	eidSvc *eid.EIDService
 	danSvc *dan.DANService
-	perms  *rbac.SQLPermissionStore
+	// The interface rather than the concrete store, so the route table can be
+	// tested against a stub. What each route is checked against is the part of
+	// this module most easily changed by accident and least visible when it is.
+	perms rbac.PermissionStore
 
 	// Whether this cluster has an ICU collation for the title search to lean on. See
 	// titleMatch: without one, a Cyrillic search is case-sensitive on a database

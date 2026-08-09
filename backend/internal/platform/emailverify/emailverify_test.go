@@ -56,6 +56,10 @@ func TestNormalizeEmailRefusesAnythingButAPlainAddress(t *testing.T) {
 // a phishing link wants to borrow.
 func TestValidateRedirectRefusesWhatWouldMakeUsAnOpenRedirector(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "development")
+	// This test is about the shape of a URL — scheme, credentials, CRLF, whether
+	// it is absolute at all. Which hosts are permitted is a separate question,
+	// answered in redirect_test.go, so the host used here is simply listed.
+	t.Setenv("EMAIL_VERIFY_REDIRECT_HOSTS", "theirapp.com")
 
 	accepted := []string{
 		"",
@@ -90,6 +94,7 @@ func TestValidateRedirectRefusesWhatWouldMakeUsAnOpenRedirector(t *testing.T) {
 // resolving "localhost" is resolving something on its own host.
 func TestValidateRedirectRefusesPlainHTTPInProduction(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "production")
+	t.Setenv("EMAIL_VERIFY_REDIRECT_HOSTS", "theirapp.com")
 	if _, err := ValidateRedirect("http://localhost:3000/verified"); err == nil {
 		t.Fatal("plain HTTP to localhost was accepted in production")
 	}
