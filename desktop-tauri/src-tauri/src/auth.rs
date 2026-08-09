@@ -357,3 +357,34 @@ async fn handle_poll_state(app: &AppHandle, result: &HttpResult, ticket: u64) ->
         _ => Some(false),
     }
 }
+
+/// Өмнөх session амьд эсэхийг шалгана.
+///
+/// Cookie нь webview-ийн байнгын санд үлддэг тул аппыг дахин нээх бүрд
+/// нэвтрэх шаардлагагүй. Хариу 200 бол ажлын мужийг шууд гаргана.
+pub async fn restore_session(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    let Some(main) = app.get_webview_window(MAIN_WINDOW) else {
+        return false;
+    };
+    let locale = state.auth.locale();
+    let Ok(result) = state
+        .bridge
+        .request(&main, "GET", "/api/v1/auth/me", None, &locale)
+        .await
+    else {
+        return false;
+    };
+    if !result.is_success() {
+        return false;
+    }
+    if let Err(err) = main.show() {
+        eprintln!("auth: гол цонх нээгдсэнгүй: {err}");
+    }
+    // Цонх нь Web URL-ын үндэс дээр ачаалагддаг бөгөөд тэр нь нэвтрэлтийн
+    // landing хуудас. Session амьд байхад хэрэглэгчийг тэнд үлдээх нь
+    // "нэвтэрсэн атлаа нэвтрэх хуудас харах" болно.
+    crate::shell::navigate(app, "/apps");
+    crate::menus::rebuild(app).await;
+    true
+}

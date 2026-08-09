@@ -36,6 +36,13 @@ pub fn create_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .min_inner_size(900.0, 600.0)
         .visible(false)
         .initialization_script(crate::shell::init_script(&endpoints))
+        .on_page_load(|webview, payload| {
+            // Шинэ хуудас ачаалагдаж эхлэхэд өмнөх inject скрипт алга болно.
+            // Скрипт өөрийгөө дахин зарлатал гүүрийг хаалттай гэж үзнэ.
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                webview.app_handle().state::<AppState>().bridge.mark_not_ready();
+            }
+        })
         .on_navigation(move |target| {
             let target = target.to_string();
             // Дотоод схемүүд — WebKit/WebView2 өөрсдөө үүсгэдэг хаягууд.

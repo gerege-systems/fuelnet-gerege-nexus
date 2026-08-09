@@ -144,6 +144,9 @@ pub fn shell_http_result(state: State<'_, AppState>, result: HttpResult) {
 #[tauri::command]
 pub fn shell_locale(state: State<'_, AppState>, locale: String) {
     state.auth.set_locale(&locale);
+    // Энэ дуудлага нь inject скрипт ажилласны шууд нотолгоо: түүнээс өмнө
+    // гүүрээр хүсэлт илгээх нь утгагүй.
+    state.bridge.mark_ready();
 }
 
 #[tauri::command]
@@ -191,3 +194,4 @@ pub fn offline_retry(app: AppHandle) {
 pub fn open_preferences(app: AppHandle) {
     crate::windows::open_preferences(&app);
 }
+

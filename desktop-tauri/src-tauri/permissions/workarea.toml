@@ -1,0 +1,32 @@
+# Аль цонх юу дуудаж болохыг тодорхойлно.
+#
+# Tauri-гийн ACL нь эрхийн тодорхойлолт огт байхгүй үед апп командуудыг локал
+# цонхнуудад чөлөөтэй нээдэг. Гэвч ганц ч эрх тодорхойлмогц бүх апп команд
+# ACL-ийн дор орно — тэр үеэс эхлэн ЗӨВШӨӨРӨӨГҮЙ бүхэн хаалттай. Тиймээс
+# доорх хоёр багц нь бүрэн байх ёстой.
+
+# Ажлын муж бол манай сервэрээс ирсэн хуудас боловч бүрхүүлийн бүх боломжийг
+# нээх шаардлагагүй: түүнд гэрээний гүүр л хэрэгтэй. `auth_*`, `prefs_*` энд
+# байхгүй нь санаатай — нэвтрэлт ба тохиргоо бол локал цонхнуудын ажил.
+[[permission]]
+identifier = "allow-workarea-bridge"
+description = "Гэрээний гүүр: shell_invoke, түүний HTTP тээвэр ба хэлний мэдэгдэл."
+commands.allow = [
+  "shell_invoke",
+  "shell_http_result",
+  "shell_locale",
+]
+
+# Бүрхүүлийн өөрийн локал цонхнууд (login, prefs, offline).
+[[permission]]
+identifier = "allow-shell-windows"
+description = "Нэвтрэлт, тохиргоо, offline цонхнуудын командууд."
+commands.allow = [
+  "auth_password_login",
+  "auth_eid_start",
+  "auth_cancel",
+  "prefs_get",
+  "prefs_set",
+  "offline_retry",
+  "open_preferences",
+]

@@ -41,7 +41,11 @@ pub struct MenuRow {
     pub order: i64,
 }
 
-/// Апп бүрийн цэс: эхний замтай мөр нь аппын үндсэн хуудас.
+/// Апп бүрийн цэс.
+///
+/// `name` нь ЗААВАЛ `app_name` байна — цэсний мөрийн шошго биш. Сервэрийн
+/// хариунд апп бүр "Модуль", "Тохиргоо" гэсэн бүлгийн толгой мөрүүдтэй ирдэг
+/// тул эхний мөрөөр нэрлэвэл цэсний мөр бүхэлдээ "Модуль" болж хувирна.
 struct AppGroup {
     name: String,
     rows: Vec<MenuRow>,
@@ -106,12 +110,6 @@ fn group(rows: Vec<MenuRow>) -> Vec<AppGroup> {
     }
     for group in &mut groups {
         group.rows.sort_by_key(|row| row.order);
-        // Аппын нэрийг эхний мөрийн шошгоор нэрлэнэ — Layout.tsx-ийн адил.
-        if let Some(first) = group.rows.first() {
-            if !first.label.is_empty() {
-                group.name = first.label.clone();
-            }
-        }
     }
     groups
 }

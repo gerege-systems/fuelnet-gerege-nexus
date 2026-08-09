@@ -1,16 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Бүрхүүлийн цонхнуудад хэрэгтэй хамгийн бага эрхүүд.",
-  "windows": ["main", "login", "offline", "prefs"],
-  "remote": {
-    "urls": [
-      "http://localhost:3000",
-      "http://localhost:3000/*",
-      "http://127.0.0.1:3000",
-      "http://127.0.0.1:3000/*"
-    ]
-  },
+  "description": "Бүрхүүлийн өөрийн локал цонхнууд — нэвтрэлт, тохиргоо, offline.",
+  "windows": [
+    "login",
+    "offline",
+    "prefs"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -18,6 +14,7 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:webview:allow-webview-close",
-    "deep-link:default"
+    "deep-link:default",
+    "allow-shell-windows"
   ]
 }

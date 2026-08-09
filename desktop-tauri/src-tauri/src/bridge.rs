@@ -15,7 +15,7 @@
 //! webview зөвхөн тээвэр.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -29,6 +29,11 @@ use crate::shell::js_string_literal;
 /// Сервер нь /auth/eid/poll-ыг 25 секунд хүртэл нээлттэй барьдаг тул хүлээлт нь
 /// түүнээс тодорхой урт байх ёстой.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(40);
+/// Ажлын муж ачаалагдахыг хүлээх дээд хугацаа. Хуудас ачаалагдтал inject
+/// хийсэн скрипт байхгүй тул түүнээс өмнөх eval чимээгүй алга болж, хүсэлт
+/// 40 секунд өлгөөстэй үлддэг байсан.
+const READY_TIMEOUT: Duration = Duration::from_secs(20);
+const READY_POLL: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HttpResult {
@@ -69,11 +74,34 @@ impl HttpResult {
 pub struct HttpBridge {
     pending: Mutex<HashMap<String, oneshot::Sender<HttpResult>>>,
     counter: AtomicU64,
+    /// Ажлын мужийн inject скрипт ажилласан эсэх.
+    ready: AtomicBool,
 }
 
 impl HttpBridge {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Inject скрипт өөрийгөө зарлахад дуудагдана.
+    pub fn mark_ready(&self) {
+        self.ready.store(true, Ordering::SeqCst);
+    }
+
+    /// Хуудас дахин ачаалагдахад скрипт дахин ажиллах хүртэл гүүр хаалттай.
+    pub fn mark_not_ready(&self) {
+        self.ready.store(false, Ordering::SeqCst);
+    }
+
+    async fn wait_ready(&self) -> bool {
+        let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
+        while !self.ready.load(Ordering::SeqCst) {
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(READY_POLL).await;
+        }
+        true
     }
 
     /// Webview-ээр дамжуулан API руу хүсэлт илгээж, хариуг хүлээнэ.
@@ -85,6 +113,9 @@ impl HttpBridge {
         body: Option<serde_json::Value>,
         locale: &str,
     ) -> Result<HttpResult, String> {
+        if !self.wait_ready().await {
+            return Err("bridge: ажлын муж бэлэн болсонгүй".into());
+        }
         let id = format!("gh{}", self.counter.fetch_add(1, Ordering::Relaxed));
         let (sender, receiver) = oneshot::channel();
 

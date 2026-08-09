@@ -97,14 +97,19 @@ pub fn run() {
 
             // Ажлын муж эхлээд нуугдмал: нэвтрэлт бол бүрхүүлийн үүрэг.
             windows::create_main(&handle)?;
-            windows::open_login(&handle);
 
             if let Err(err) = tray::build(&handle) {
                 eprintln!("setup: tray үүсгэж чадсангүй: {err}");
             }
-            // Цэс нь эхлээд суурь хэлбэрээрээ баригдана; нэвтэрсний дараа
-            // сервертэй тааруулж дахин барина.
-            menus::schedule_rebuild(&handle);
+
+            // Өмнөх session амьд бол шууд ажлын муж руу; үгүй бол нэвтрэлт.
+            let startup = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if !auth::restore_session(&startup).await {
+                    windows::open_login(&startup);
+                    menus::schedule_rebuild(&startup);
+                }
+            });
 
             register_deep_links(&handle);
             health::start(handle);
