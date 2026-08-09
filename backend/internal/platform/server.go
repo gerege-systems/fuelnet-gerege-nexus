@@ -325,6 +325,10 @@ func (s *Server) setupRoutes() {
 			pr.Use(s.authMiddleware)
 
 			pr.Get("/auth/me", s.handleMe)
+			// Ending the session in front of you needs no proof beyond the
+			// cookie; ending the ones you cannot see is a decision about an
+			// account, so it sits behind authentication with the rest.
+			pr.Post("/auth/logout-all", s.handleLogoutEverywhere)
 			pr.Get("/menus", s.handleMenus)
 
 			// Tenant access control. Mutations are deliberately admin-only;

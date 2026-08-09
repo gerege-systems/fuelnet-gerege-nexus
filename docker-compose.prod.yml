@@ -146,6 +146,12 @@ services:
       # platform to that service. Left empty, no verification mail can be
       # requested and the settings screen says exactly that.
       EMAIL_VERIFY_API_KEY: ${EMAIL_VERIFY_API_KEY:-}
+      # Extra hostnames a verification link may return somebody to.
+      # PUBLIC_ORIGIN is always allowed without being listed here.
+      EMAIL_VERIFY_REDIRECT_HOSTS: ${EMAIL_VERIFY_REDIRECT_HOSTS:-}
+      # How long a session may go unused, on top of its absolute lifetime.
+      # 0 turns it off.
+      SESSION_IDLE_TIMEOUT: ${SESSION_IDLE_TIMEOUT:-90m}
       EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL:-}
       # Integration connectors. Without the key the server refuses to store a
       # credential rather than storing it in the clear, so Drive, Dropbox and
