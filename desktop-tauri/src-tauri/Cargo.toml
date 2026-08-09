@@ -1,0 +1,42 @@
+[package]
+name = "gerege-nexus-shell"
+version = "1.0.0"
+description = "Open Gerege Nexus — Tauri v2 native shell"
+edition = "2021"
+rust-version = "1.77"
+license = "Apache-2.0"
+
+[lib]
+# Tauri-гийн мобайл цар хүрээ ирээдүйд нэмэгдэх боломжтой байлгахын тулд
+# логикийг lib-д байрлуулж, main.rs зөвхөн дуудаж эхлүүлнэ.
+name = "gerege_nexus_shell_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+# Health шалгалт нь webview-гээс хамааралгүй байх ёстой — webview унасан ч
+# бүрхүүл сервер амьд эсэхийг мэдэж байх шаардлагатай.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+base64 = "0.22"
+dirs = "5"
+
+# TODO(updater): автомат шинэчлэлт идэвхжүүлэхэд доорхыг нээж, tauri.conf.json-ы
+# plugins.updater дотор бодит endpoint ба pubkey-г бөглөнө.
+# tauri-plugin-updater = "2"
+
+[features]
+# Tauri-гийн CLI үүсгэдэг стандарт feature. Production build-д custom protocol
+# ашиглана.
+custom-protocol = ["tauri/custom-protocol"]
