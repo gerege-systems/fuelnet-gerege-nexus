@@ -156,6 +156,7 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		InstalledAt      time.Time `json:"installed_at"`
 	}
 
+	locale := config.LocaleFromRequest(r)
 	list := make([]InstalledApp, 0)
 	for rows.Next() {
 		var item InstalledApp
@@ -164,6 +165,17 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion, &item.Status, &item.Enabled, &item.InstalledAt); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "failed to read installed apps")
 			return
+		}
+		// apps.name is the manifest's English name, and this was the one catalogue
+		// surface that answered with it: the store and the sidebar both resolve
+		// through the caller's locale. So an installed app was called "Digital
+		// Documents & Signatures" here and "Баримт ба цахим гарын үсэг" in the menu
+		// beside it — the same app under two names, which reads as an app that is
+		// installed and yet missing from the menu.
+		if catalogApp, ok := s.installer.GetAppBySlug(item.Slug); ok {
+			if localized := catalogApp.Localized(locale).Name; localized != "" {
+				item.Name = localized
+			}
 		}
 		list = append(list, item)
 	}
