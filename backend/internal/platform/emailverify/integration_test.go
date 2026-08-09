@@ -50,6 +50,10 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	t.Setenv("PUBLIC_ORIGIN", "https://nexus.test")
+	// These tests are about what happens to a verification after it is sent —
+	// claimed once, expired, swept. Where it may point is a separate question,
+	// answered in redirect_test.go, so the host they use is simply listed.
+	t.Setenv("EMAIL_VERIFY_REDIRECT_HOSTS", "theirapp.com")
 
 	stub := newStubProvider(t, http.StatusOK, `{"ok":true,"email":"user@example.com"}`)
 	pool := testPool(t)
