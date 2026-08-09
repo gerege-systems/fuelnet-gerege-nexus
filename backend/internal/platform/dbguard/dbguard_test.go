@@ -25,11 +25,15 @@ func TestDormantGuardLeavesConnectionsAlone(t *testing.T) {
 	if guard.Enabled() {
 		t.Fatal("a freshly built guard reports itself enabled")
 	}
-	if cfg.BeforeAcquire == nil {
-		t.Fatal("Install did not attach a BeforeAcquire hook")
+	if cfg.PrepareConn == nil {
+		t.Fatal("Install did not attach a PrepareConn hook")
 	}
 	// nil connection would panic if the hook tried to talk to it.
-	if !cfg.BeforeAcquire(context.Background(), nil) {
+	ok, err := cfg.PrepareConn(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("a dormant guard returned an error: %v", err)
+	}
+	if !ok {
 		t.Fatal("a dormant guard refused a connection")
 	}
 }
