@@ -26,6 +26,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
@@ -33,6 +34,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/mailer"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
@@ -67,11 +69,38 @@ type Server struct {
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
+	appGate        *memo.Cache[bool]
+	bus            *cache.Bus
+	sharedLogin    *security.SharedLimiter
+	sharedPoll     *security.SharedLimiter
+	sharedAI       *security.SharedLimiter
+	sharedVerify   *security.SharedLimiter
 	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
 }
 
-func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
+// appGateTTL bounds how long the gate keeps believing an app is installed after
+// somebody else's replica has uninstalled it. Installing is rare and deliberate,
+// so this is about the replica that did not serve the button press.
+const appGateTTL = 30 * time.Second
+
+// appGateCacheName is what the invalidation bus knows the gate cache as.
+const appGateCacheName = "appgate"
+
+// forgetAppGate drops one tenant's cached installation answers, here and on
+// every other replica.
+func (s *Server) forgetAppGate(tenantID string) {
+	s.bus.Invalidate(appGateCacheName, memo.Key(tenantID, ""))
+}
+
+// forgetGrants drops one tenant's cached permissions everywhere.
+func (s *Server) forgetGrants(tenantID string) {
+	s.bus.Invalidate(rbac.GrantCacheName, rbac.TenantPrefix(tenantID))
+}
+
+// NewServer builds the platform. bus may be a local-only one; nothing here
+// requires Redis to be present.
+func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, error) {
 	catalogData, err := os.ReadFile(catalogPath)
 	if err != nil {
 		return nil, err
@@ -148,11 +177,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		sessions:     auth.NewSessionStore(db, auth.DefaultSessionTTL),
 		loginLimiter: newLoginLimiter(),
 		pollLimiter:  newPollLimiter(),
-		aiLimiter:    security.NewIPRateLimiter(rate.Limit(20.0/60.0), 10),
+		aiLimiter:    security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
-		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(1), 20),
+		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
 		asyncMailer:    asyncMailer,
 		emailVerify:    emailverify.NewService(db),
 		copilotSvc:     ai.NewCopilotService(db),
@@ -163,9 +192,24 @@ func NewServer(db *pgxpool.Pool, catalogPath string) (*Server, error) {
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
+		appGate:        memo.New[bool](appGateTTL),
+		bus:            bus,
 		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
 	}
+
+	// The bus has to know the caches before a message can arrive for one, and a
+	// message can arrive as soon as the subscriber connects.
+	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
+	s.bus.Register(appGateCacheName, s.appGate)
+
+	// Deployment-wide budgets for the endpoints where a per-replica one is not
+	// a budget at all. Each is nil without Redis, and a nil one allows.
+	client := s.bus.Client()
+	s.sharedLogin = security.NewSharedLimiter(client, "login", loginRatePerMinute, time.Minute)
+	s.sharedPoll = security.NewSharedLimiter(client, "poll", pollRatePerMinute, time.Minute)
+	s.sharedAI = security.NewSharedLimiter(client, "ai", aiRatePerMinute, time.Minute)
+	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
 
 	s.setupRoutes()
 	return s, nil
@@ -250,15 +294,15 @@ func (s *Server) setupRoutes() {
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
 		// Auth with rate limiting
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/login", s.handleLogin)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/login", s.handleEIDLogin)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/start", s.handleEIDStart)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/eid/start-id", s.handleEIDStartByNationalID)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.handleLogin)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.handleEIDLogin)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.handleEIDStart)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.handleEIDStartByNationalID)
 		// Not the login limiter: a citizen polls for as long as it takes them to
 		// reach their phone, and sharing that budget with sign-in attempts made
 		// a busy office throttle itself out of signing in at all.
-		api.With(security.RateLimitMiddleware(s.pollLimiter)).Post("/auth/eid/poll", s.handleEIDPoll)
-		api.With(security.RateLimitMiddleware(s.loginLimiter)).Post("/auth/dan/login", s.handleDANLogin)
+		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.handleEIDPoll)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.handleDANLogin)
 		api.Post("/auth/logout", s.handleLogout)
 
 		// The OAuth redirect a connected provider sends the browser back to.
@@ -297,18 +341,18 @@ func (s *Server) setupRoutes() {
 			// credential the whole platform shares, so it is a signed-in act.
 			// App modules do not come through here — they hold the service and
 			// call it in process.
-			pr.With(security.RateLimitMiddleware(s.verifyLimiter)).Post("/verify/send", s.handleVerifySend)
+			pr.With(security.SharedRateLimitMiddleware(s.verifyLimiter, s.sharedVerify)).Post("/verify/send", s.handleVerifySend)
 
 			// Who has been written to is an administrative read: it is a list
 			// of people's addresses and what they were asked to prove.
 			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
 			// AI Copilot & Forecasting
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/copilot", s.handleAICopilot)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/chat", s.handleAIChat)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/stt", s.handleAISTT)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/tts", s.handleAITTS)
-			pr.With(security.RateLimitMiddleware(s.aiLimiter)).Post("/ai/translate", s.handleAITranslate)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/copilot", s.handleAICopilot)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/chat", s.handleAIChat)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/stt", s.handleAISTT)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/tts", s.handleAITTS)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/translate", s.handleAITranslate)
 			pr.Get("/ai/stock-forecast", s.handleAIForecast)
 			pr.With(s.requireAdmin).Get("/admin/ai/prompts", s.handleAIListPrompts)
 			pr.With(s.requireAdmin).Put("/admin/ai/prompts/{key}", s.handleAIUpdatePrompt)

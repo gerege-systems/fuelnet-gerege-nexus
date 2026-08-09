@@ -10,11 +10,14 @@
 package platform
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -64,13 +67,26 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 				return
 			}
 
-			// Check if app is installed and enabled for this tenant
-			var enabled bool
-			err = s.db.QueryRow(r.Context(),
-				`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-				tenantID, appID).Scan(&enabled)
+			// Whether a tenant has this app is asked on the way into every
+			// request the app serves, and answered from a row that changes when
+			// an administrator presses Install — a few times in the life of a
+			// deployment. The negative answer is cached too: a client polling an
+			// app the tenant does not have should not cost a query each time.
+			cacheKey := memo.Key(tenantID, appID)
+			enabled, cached := s.appGate.Get(cacheKey)
+			if !cached {
+				err = s.db.QueryRow(r.Context(),
+					`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+					tenantID, appID).Scan(&enabled)
+				// Only a definite answer is kept. A database that is down would
+				// otherwise pin "not installed" onto the tenant for the length of
+				// the entry, and the app would stay missing after it came back.
+				if err == nil || errors.Is(err, pgx.ErrNoRows) {
+					s.appGate.Put(cacheKey, err == nil && enabled)
+				}
+			}
 
-			if err != nil || !enabled {
+			if !enabled {
 				http.Error(w, `{"error":"forbidden: app module `+appID+` is not installed or enabled for this tenant"}`, http.StatusForbidden)
 				return
 			}

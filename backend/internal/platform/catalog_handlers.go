@@ -193,6 +193,9 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The app gate reads a cached copy of this row, so the screen that just
+	// pressed the button has to stop being told the old answer.
+	s.forgetAppGate(claims.TenantID)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "installed", "app": slug})
@@ -215,6 +218,9 @@ func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The app gate reads a cached copy of this row, so the screen that just
+	// pressed the button has to stop being told the old answer.
+	s.forgetAppGate(claims.TenantID)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "disabled", "app": slug})
@@ -237,6 +243,9 @@ func (s *Server) handleEnableApp(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The app gate reads a cached copy of this row, so the screen that just
+	// pressed the button has to stop being told the old answer.
+	s.forgetAppGate(claims.TenantID)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "enabled", "app": slug})

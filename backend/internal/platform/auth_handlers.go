@@ -158,6 +158,16 @@ const (
 	loginBurst         = 5
 	pollRatePerMinute  = 60
 	pollBurst          = 15
+
+	// The AI endpoints spend somebody else's paid quota and the verification
+	// endpoint spends a mailbox credential the whole platform shares, so both
+	// have always been budgeted. The numbers move up here because they are now
+	// also the deployment-wide budget, and a limit stated in two places drifts.
+	aiRatePerMinute = 20
+	aiBurst         = 10
+
+	verifyRatePerMinute = 60
+	verifyBurst         = 20
 )
 
 func newLoginLimiter() *security.IPRateLimiter {

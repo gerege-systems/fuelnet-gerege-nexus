@@ -32,6 +32,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # Invalidation fan-out and the deployment-wide rate-limit counters. It holds
+  # no cached values and no session: everything in it can be lost on a restart
+  # without a user noticing, so it needs no volume and no backup. What is lost
+  # is the fan-out, and the caches it feeds all expire on their own.
+  redis:
+    image: redis:7-alpine
+    container_name: gerege_nexus_redis
+    restart: unless-stopped
+    # No persistence: this is a coordination point, not a store.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # One-shot migration runner. `up -d` waits for it to exit successfully before
   # starting the API, so the schema is never behind the binary.
   migrate:
@@ -63,6 +81,10 @@ services:
       # owns nothing, GRANT gerege_nexus_app TO it, and point this at it —
       # nothing in the application changes.
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/platform_db?sslmode=disable
+      # Leave REDIS_URL empty and the platform runs exactly as it did before it
+      # existed: invalidation stays inside the process and rate limits are
+      # counted per replica. That is only correct while there is one replica.
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       PORT: 8080
       ENVIRONMENT: production
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://nexus.gerege.mn}
@@ -147,6 +169,8 @@ services:
       - "127.0.0.1:8082:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully

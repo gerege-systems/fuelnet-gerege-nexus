@@ -20,6 +20,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
@@ -129,8 +130,21 @@ func main() {
 		seedInitialData(ctx, db)
 	}
 
+	// Redis, when configured, is what makes a permission revoked on one replica
+	// stop being honoured by the others, and what makes a rate limit a budget
+	// for the deployment rather than one per process. Absent, both fall back to
+	// what this platform has always done.
+	redisClient := cache.Dial(os.Getenv("REDIS_URL"))
+	if redisClient != nil {
+		defer func() { _ = redisClient.Close() }()
+	}
+	busCtx, stopBus := context.WithCancel(context.Background())
+	defer stopBus()
+	bus := cache.NewBus(busCtx, redisClient)
+	slog.Info("cache invalidation configured", "shared", bus.Redis())
+
 	// Initialize Platform Server
-	srv, err := platform.NewServer(db, catalogPath)
+	srv, err := platform.NewServer(db, catalogPath, bus)
 	if err != nil {
 		slog.Error("failed to initialize platform server", "error", err)
 		os.Exit(1)
