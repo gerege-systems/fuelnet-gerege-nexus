@@ -15,6 +15,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Tauri v2 desktop shell ([`desktop-tauri/`](desktop-tauri))
+
+- **A second implementation of one contract, not a second product.** The bridge
+  contract ([`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md)) is the
+  specification; [`desktop-mac/`](desktop-mac) is its Swift reference and this is
+  the cross-platform one. Both inject the same `window.GeregeShell`, so the web
+  app cannot tell them apart — it hides its own chrome and renders as a work area
+  either way, and in a browser neither exists and nothing changes.
+- **`platform` comes from the build target** (`macos`, `windows`, `linux`) and
+  reaches the styling as `<html data-shell>`. Declared capabilities are
+  `notify`, `badge`, `external.open`, `print.system`, `fs.save`, `menu.native`.
+- **Native sign-in window** with email/password and both eID flows. The polling
+  loop is Rust ([`auth.rs`](desktop-tauri/src-tauri/src/auth.rs)) and carries the
+  same reasoning as [`EIDLogin.tsx`](frontend/components/EIDLogin.tsx): one check
+  in flight at a time, a 400 ms gap between them because the server already holds
+  each request for 25 s, three tolerated failures because a dropped long-poll is
+  ordinary on a mobile network, and a 15-minute backstop that is a stop condition
+  rather than a deadline. The QR is rendered to SVG in Rust so the window depends
+  on no JavaScript library.
+- **The session cookie forced the transport.** `session_token` is `HttpOnly` and
+  belongs to the API origin, the web app authenticates with `credentials:
+  "include"` and no bearer header, and neither Tauri nor wry can write a cookie
+  into a webview from outside. The only way it lands in the right jar is for that
+  webview to receive the `Set-Cookie` itself, so the sign-in requests are issued
+  there ([`bridge.rs`](desktop-tauri/src-tauri/src/bridge.rs)) while the flow
+  logic stays in Rust. The work-area window is created hidden and stays hidden
+  until sign-in completes.
+- **The native menu is the tenant's menu.** `GET /api/v1/menus` with the
+  `Accept-Language` the person chose, grouped per app; `menu.changed` rebuilds
+  it; choosing an item emits `shell:navigate` so the work area routes without a
+  full reload. macOS maps a small set of icon names to native symbols and leaves
+  the rest bare, which is steadier than half-matching them.
+- **Server health lives on the tray icon**, checked every 5 s the way
+  [`ServerManager.swift`](desktop-mac/src/ServerManager.swift) does it. Tauri has
+  no native status bar and drawing an HTML one under the work area would put the
+  shell inside the page it is supposed to stay out of. Being offline opens a
+  native window that says what has to be running, not an alert that vanishes when
+  dismissed.
+- **Security**: main-frame navigation is confined to the Web URL's origin and
+  everything else opens in the system browser; the bridge is main-frame only and
+  the remote origin allowed to reach IPC is pinned in
+  [`capabilities/`](desktop-tauri/src-tauri/capabilities); every native→web value
+  is JSON-encoded rather than concatenated into JavaScript; `external.open`
+  accepts only `http`, `https`, `mailto`, `tel`; `fs.saveAs` writes only where the
+  person pointed. In a release build the API and Web URLs are compile-time
+  constants — an installed shell cannot be aimed at a server it was not built for.
+- **`gerege://` deep links** resolve to `shell:navigate`.
+- **Auto-update is present and deliberately inert.** The plugin is left
+  uninitialised with `TODO`s in three places; an updater carrying no signing key
+  is a mechanism for installing unsigned code, so it stays off until a key exists.
+- **Two capabilities are withheld, and why is recorded.** `secure-store` has no
+  method in contract v1, so advertising it would be a claim nothing can act on —
+  using it needs `secure.get`/`set`/`delete` added to the contract and a minor
+  version bump. `biometric.authenticate` exists in the contract but Tauri's
+  biometric plugin is mobile-only, so the capability is not declared and the call
+  is rejected, which is what lets the web app fall back.
+- **Not included**: installers and code signing. The shell builds; shipping it
+  needs a Developer ID identity plus notarisation on macOS and an Authenticode
+  certificate on Windows, both listed as TODO in
+  [`desktop-tauri/README.md`](desktop-tauri/README.md).
+
+### Added — CI for both desktop shells
+
+- **[`desktop-tauri.yml`](.github/workflows/desktop-tauri.yml) builds on Linux,
+  Windows and macOS.** Much of the shell sits behind `#[cfg(target_os = ...)]`, so
+  a green build on one machine says nothing about the other two. It runs
+  `cargo clippy --all-targets -- -D warnings`, `cargo build --locked` and
+  `cargo test --locked`, with `fail-fast: false` because one platform failing is
+  the signal the job exists to produce.
+- **It found a real break on its first run**: `tauri-build` needs
+  `icons/icon.ico` to generate the Windows resource, and the repository had only
+  PNGs. Added `icon.ico` — sizes below 256 packed as classic DIB entries, since
+  some resource compilers reject an all-PNG `.ico` — and `icon.icns` for macOS
+  bundling.
+- **[`desktop-mac.yml`](.github/workflows/desktop-mac.yml) compiles the Swift
+  shell** and then checks the two things a successful `swiftc` cannot: that
+  `build.sh` still names every file under `src/` (a source missing from that fixed
+  list is not a compile error — it is code that silently never ships), and that
+  the produced bundle is one macOS would launch (`Info.plist`, an executable
+  Mach-O, `codesign --verify --strict`).
+- **The bridge fixes are guarded, not just documented.** The job fails on a
+  `WKUserScript` injected into subframes or on JavaScript built by string
+  interpolation — the exact two shapes that were removed. Both guards were checked
+  against the pre-fix sources to confirm they actually catch them rather than
+  passing vacuously.
+- **Neither workflow produces a distributable artifact**, and both are filtered by
+  path. A path-filtered workflow reports no status on runs that miss its filter,
+  so making either a required check needs a merge queue or a companion job.
+
 ### Added — Email verification as a platform capability
 
 - **One flow instead of one per app**
