@@ -421,7 +421,7 @@ function UploadModal({
   };
 
   return (
-    <Modal>
+    <Modal label={t("esign.view.upload_title")}>
       <h2 className="text-xl font-bold text-slate-900 mb-4">{t("esign.view.upload_title")}</h2>
       {error && <div className="mb-3"><Banner tone="error" message={error} onDismiss={() => setError(null)} /></div>}
       <form onSubmit={submit} className="space-y-4">
@@ -528,7 +528,7 @@ function HSMSignModal({
   };
 
   return (
-    <Modal size="lg" scrollable className="my-8">
+    <Modal size="lg" scrollable className="my-8" label={t("esign.view.sign_title")}>
       <h2 className="text-xl font-bold text-slate-900 mb-1">{t("esign.view.sign_title")}</h2>
       <p className="text-xs text-slate-500 mb-4">
         {t("esign.view.sign_placement", { title: doc.title, page: doc.page_count })}

@@ -385,7 +385,7 @@ function CreateBatchModal({
   };
 
   return (
-    <Modal size="lg" className="max-h-[90vh] flex flex-col">
+    <Modal size="lg" className="max-h-[90vh] flex flex-col" label={t("esign.view.new_batch_title")}>
       <h2 className="text-xl font-bold text-slate-900 mb-4">{t("esign.view.new_batch_title")}</h2>
       {error && <div className="mb-3"><Banner tone="error" message={error} onDismiss={() => setError(null)} /></div>}
 

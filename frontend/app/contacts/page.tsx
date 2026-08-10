@@ -114,7 +114,7 @@ export default function ContactsPage() {
 
       {/* Modal */}
       {showModal && (
-        <Modal>
+        <Modal label={t("contacts.view.create_title")}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-900">{t("contacts.view.create_title")}</h2>
             <button

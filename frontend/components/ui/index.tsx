@@ -74,10 +74,19 @@ export function Banner({
 }) {
   const { t } = useI18n();
   return (
-    // role="status" so a screen reader announces the outcome of an action the
-    // user cannot see the result of. The settings screens already did this; the
-    // rest did not, and the answer to that disagreement is the accessible one.
-    <div role="status" className={`p-3 border text-sm rounded-lg flex items-start gap-2 ${BANNER_STYLE[tone]}`}>
+    // A role so a screen reader announces the outcome of an action the user
+    // cannot see the result of. The settings screens already did this; the rest
+    // did not, and the answer to that disagreement is the accessible one.
+    //
+    // Failures get "alert" rather than "status" because the two are not the
+    // same urgency: "status" is polite, so it waits for whatever the region is
+    // already saying to finish. A failed create on /documents renders its
+    // banner just as the loading text changes, and queued behind that the
+    // operator hears nothing and believes the document was created.
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      className={`p-3 border text-sm rounded-lg flex items-start gap-2 ${BANNER_STYLE[tone]}`}
+    >
       {tone === "error" || tone === "warning" ? (
         <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
       ) : (
@@ -85,7 +94,10 @@ export function Banner({
       )}
       <span className="flex-1">{message}</span>
       {onDismiss && (
-        <button onClick={onDismiss} aria-label={t("base.action.close")}>
+        // type="button" because the default is "submit": every call site today
+        // happens to sit outside a <form>, and the first one that does not
+        // would otherwise submit the form on its way to dismissing the banner.
+        <button type="button" onClick={onDismiss} aria-label={t("base.action.close")}>
           <X className="w-4 h-4" />
         </button>
       )}
@@ -132,20 +144,46 @@ export const rowActionClass =
   "inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold " +
   "border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50";
 
+const FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+/** The tabbable elements of an open dialog, in tab order, skipping hidden ones. */
+function focusableWithin(panel: HTMLElement | null): HTMLElement[] {
+  if (!panel) return [];
+  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => el.offsetParent !== null || el === document.activeElement,
+  );
+}
+
 /**
  * A centred dialog over a dimmed page.
  *
- * Structure only: it deliberately does not close on Escape or on a backdrop
- * click, because none of the twelve dialogs it replaced did. Several of them
- * hold typed input, and one is a signing conversation with a citizen's device
- * — losing either to a stray click outside is worse than having to reach for
- * Cancel. Adding dismissal is a change to how these screens behave and belongs
- * in a change that says so.
+ * It deliberately does not close on Escape or on a backdrop click, because none
+ * of the twelve dialogs it replaced did. Several of them hold typed input, and
+ * one is a signing conversation with a citizen's device — losing either to a
+ * stray click outside is worse than having to reach for Cancel. Adding
+ * dismissal is a change to how these screens behave and belongs in a change
+ * that says so.
+ *
+ * Holding focus is a different question, and the answer to that one is yes.
+ * The twelve originals left focus on the button that opened them, so Tab
+ * walked the page behind the dimmed backdrop: with the signing dialog open on
+ * /documents a keyboard operator could tab to a *different* row and press its
+ * Reject. Nothing about that was intended — it is what you get when a dialog
+ * is a dialog only visually — so this one traps Tab, takes focus on open, and
+ * hands it back to the opener on close.
  */
 export function Modal({
   size = "md",
   scrollable = false,
   className,
+  label,
   children,
 }: {
   size?: "md" | "lg";
@@ -159,8 +197,57 @@ export function Modal({
   scrollable?: boolean;
   /** Extra panel classes. Height and scrolling genuinely differ per dialog. */
   className?: string;
+  /**
+   * What the dialog is called, announced on open. Pass the same string the
+   * dialog's own heading shows — a role of "dialog" with no name announces as
+   * just "dialog", which tells the operator less than the heading they cannot
+   * see yet.
+   */
+  label?: string;
   children: React.ReactNode;
 }) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const panel = panelRef.current;
+    // Test against the panel rather than focusing it unconditionally, because
+    // by the time this runs something inside may already hold focus: React
+    // does not render autoFocus as an attribute, it calls focus() during
+    // commit, which is before any effect here. A caller that asks for a field
+    // gets that field; the rest get the panel.
+    if (panel?.contains(document.activeElement)) return;
+    // The panel and not its first field: focusing an input would skip past the
+    // heading a screen reader announces on entry, and these dialogs open on a
+    // title, not on a cursor.
+    const opener = document.activeElement as HTMLElement | null;
+    panel?.focus();
+    // Back to whatever opened the dialog, so closing one from a table row does
+    // not drop the operator at the top of the page. A no-op if that row has
+    // since been re-rendered away.
+    return () => opener?.focus?.();
+  }, []);
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const items = focusableWithin(panelRef.current);
+    if (items.length === 0) {
+      // Nothing to move to, so the only correct move is to stay put rather
+      // than let the browser send focus out to the page behind.
+      event.preventDefault();
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panelRef.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div
       className={`fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4${
@@ -168,7 +255,13 @@ export function Modal({
       }`}
     >
       <div
-        className={`bg-white rounded-xl ${size === "lg" ? "max-w-lg" : "max-w-md"} w-full p-6 shadow-xl border border-slate-200${
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        className={`bg-white rounded-xl ${size === "lg" ? "max-w-lg" : "max-w-md"} w-full p-6 shadow-xl border border-slate-200 focus:outline-none${
           className ? ` ${className}` : ""
         }`}
       >

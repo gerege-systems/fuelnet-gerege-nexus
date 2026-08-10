@@ -486,7 +486,7 @@ export function SignatureDialog({
   };
 
   return (
-    <Modal>
+    <Modal label={t("documents.view.sign_title")}>
       <h2 className="text-xl font-bold text-slate-900 mb-1 flex items-center space-x-2">
         <PenLine className="w-5 h-5 text-indigo-600" />
         <span>{t("documents.view.sign_title")}</span>
@@ -690,7 +690,7 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
   const rows = [...chainRows, ...extraRows];
 
   return (
-    <Modal size="lg">
+    <Modal size="lg" label={t("documents.view.history_title")}>
       <h2 className="text-xl font-bold text-slate-900 mb-1 flex items-center space-x-2">
         <ShieldCheck className="w-5 h-5 text-indigo-600" />
         <span>{t("documents.view.history_title")}</span>

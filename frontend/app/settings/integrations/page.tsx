@@ -329,7 +329,7 @@ export default function IntegrationsPage() {
       )}
 
       {showModal && (
-        <Modal className="max-h-[90vh] overflow-y-auto">
+        <Modal className="max-h-[90vh] overflow-y-auto" label={t("integrations.view.create_title")}>
           <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.view.create_title")}</h2>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
