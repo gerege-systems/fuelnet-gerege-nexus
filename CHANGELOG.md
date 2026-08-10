@@ -35,12 +35,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `memberships` carries a `tenant_id` and is under the row-level policy, so a
   request bound to the current tenant would answer "which tenants may you act
   for" with the one the caller is already in.
-- **The brand mark is the control.** It used to link to `/apps`, which the
-  Platform tile beneath it in the rail still does. Choosing another organisation
-  reloads the shell rather than patching state: the menus, the permissions and
-  every list on screen belonged to the tenant just left. Below 900px the header
-  brand is hidden by the mobile shell, so the switcher is not reachable there
-  yet.
+- **The brand mark is the control**, and the account menu carries the same list
+  — the mobile shell hides the header brand below 900px, and a phone is exactly
+  where somebody moves between two organisations. Both render one component
+  over one cached answer, so the two cannot drift and opening the second does
+  not re-ask the server. The mark used to link to `/apps`, which the Platform
+  tile beneath it in the rail still does. Choosing another organisation reloads
+  the shell rather than patching state: the menus, the permissions and every
+  list on screen belonged to the tenant just left.
+- **The demo seed now has two organisations** (`cmd/api/seed.go`): Demo
+  Corporation, with contacts, products, inventory and documents, and Demo Trade
+  LLC, with contacts and billing. One tenant exercises nothing — the switcher,
+  the row-level isolation and the per-tenant permission set all behave
+  identically on a single-tenant deployment and identically wrongly if they are
+  broken. The seeder runs after the platform server is built rather than before
+  it, because an installation row references the `apps` table that the catalogue
+  sync fills, and it installs through the installer so a demo tenant cannot
+  claim an app whose Go module is not in the binary.
 
 ### Removed — The Swift macOS client (`desktop-mac/`)
 

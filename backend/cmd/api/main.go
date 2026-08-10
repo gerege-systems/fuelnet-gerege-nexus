@@ -124,10 +124,6 @@ func main() {
 			slog.Error("failed to enable row-level tenant isolation", "error", err)
 			os.Exit(1)
 		}
-
-		// Restores the documented demo login (admin@example.com). Skipped in
-		// production unless SEED_DEMO_DATA is set explicitly.
-		seedInitialData(ctx, db)
 	}
 
 	// Redis, when configured, is what makes a permission revoked on one replica
@@ -148,6 +144,17 @@ func main() {
 	if err != nil {
 		slog.Error("failed to initialize platform server", "error", err)
 		os.Exit(1)
+	}
+
+	// Restores the documented demo login (admin@example.com) and the two
+	// organisations it belongs to. Skipped in production unless SEED_DEMO_DATA
+	// is set explicitly.
+	//
+	// After the server rather than before it: seeding now installs apps for
+	// those tenants, and an installation row references the apps table, which
+	// NewServer is what fills from the catalogue file.
+	if databaseReachable {
+		seedInitialData(ctx, db, srv)
 	}
 
 	// Background jobs run until this context is cancelled during shutdown, so

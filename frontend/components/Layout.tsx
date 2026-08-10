@@ -9,8 +9,9 @@ import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
+import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantChoices";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, Check } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; icon:string; order:number }
 interface AppNav { id:string; name:string; icon:string; path:string; menus:MenuItem[] }
@@ -106,7 +107,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   // resetAccess before navigating: /login is a client-side route, so the cached
   // identity would otherwise still be the signed-out user's when the next
   // person signs in at this tab.
-  async function logout(){try{await api.logout()}catch{}resetAccess();router.push("/login")}
+  async function logout(){try{await api.logout()}catch{}resetAccess();forgetTenants();router.push("/login")}
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},
@@ -197,20 +198,9 @@ export default function Layout({children}:{children:React.ReactNode}){
 function TenantSwitcher({current,currentName,children}:{current?:string;currentName?:string;children:React.ReactNode}){
   const {t}=useI18n();
   const [open,setOpen]=useState(false);
-  // null while nothing has been asked for yet, which is also what renders the
-  // loading line. An empty array is an answer: no memberships came back.
-  const [tenants,setTenants]=useState<Array<{id:string;name:string;slug:string}>|null>(null);
-  const [switching,setSwitching]=useState(false),[failed,setFailed]=useState(false);
+  const {tenants,switching,failed,switchTo}=useTenants(open);
   const box=useRef<HTMLDivElement>(null);
-
-  // Fetched when the panel opens rather than with the shell: most people hold
-  // one membership and will never open this.
-  useEffect(()=>{
-    if(!open||tenants)return;
-    let alive=true;
-    void api.getTenants().then(r=>{if(alive)setTenants(r.tenants||[])}).catch(()=>{if(alive)setTenants([])});
-    return()=>{alive=false};
-  },[open,tenants]);
+  const label=currentName?`${currentName} — ${t("web.action.switch_tenant")}`:t("web.action.switch_tenant");
 
   useEffect(()=>{
     if(!open)return;
@@ -221,41 +211,14 @@ function TenantSwitcher({current,currentName,children}:{current?:string;currentN
     return()=>{document.removeEventListener("mousedown",onPointerDown);document.removeEventListener("keydown",onKeyDown)};
   },[open]);
 
-  async function choose(id:string){
-    if(id===current||switching){setOpen(false);return}
-    setSwitching(true);setFailed(false);
-    try{
-      await api.switchTenant(id);
-      // Everything on screen was fetched for the tenant being left — menus,
-      // permissions, every list on the page behind this panel. A full load is
-      // the only honest way to drop all of it at once, and /apps is somewhere
-      // every tenant has, unlike the screen the operator is standing on.
-      resetAccess();
-      window.location.assign("/apps");
-    }catch{
-      setSwitching(false);
-      setFailed(true);
-    }
-  }
-
   return <div ref={box} className="gerege-header-brand relative w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-chrome-border)]">
-    <button type="button" onClick={()=>setOpen(v=>!v)} aria-haspopup="menu" aria-expanded={open}
-      aria-label={currentName?`${currentName} — ${t("web.action.switch_tenant")}`:t("web.action.switch_tenant")}
-      title={currentName?`${currentName} — ${t("web.action.switch_tenant")}`:t("web.action.switch_tenant")}
+    <button type="button" onClick={()=>setOpen(v=>!v)} aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label}
       className="grid place-items-center rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gerege-blue)]">
       {children}
     </button>
     {open&&<div role="menu" aria-label={t("web.view.tenants")} className="gerege-topbar-onlight absolute left-2 top-14 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">
-      <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("web.view.tenants")}</p>
-      {tenants===null&&<p className="px-3 py-2 text-sm text-slate-500">{t("base.message.loading")}</p>}
-      {tenants?.map(option=><button key={option.id} type="button" role="menuitem" disabled={switching} onClick={()=>void choose(option.id)}
-        className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)] disabled:opacity-60 ${option.id===current?"bg-[var(--gerege-blue-soft)]":""}`}>
-        <span className={option.id===current?"text-[var(--gerege-blue)]":"text-slate-400"}><Building2 className="w-4 h-4"/></span>
-        <span className="min-w-0 flex-1"><strong className="block text-sm truncate">{option.name}</strong><small className="text-slate-500 truncate">{option.slug}</small></span>
-        {option.id===current&&<Check className="w-4 h-4 shrink-0 text-[var(--gerege-blue)]"/>}
-      </button>)}
-      {tenants?.length===1&&<p className="px-3 pb-2 pt-1 text-xs text-slate-500">{t("web.message.only_tenant")}</p>}
-      {failed&&<p role="alert" className="px-3 pb-2 pt-1 text-xs text-rose-600">{t("web.message.tenant_switch_failed")}</p>}
+      <p className="px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("web.view.tenants")}</p>
+      <TenantChoices current={current} tenants={tenants} switching={switching} failed={failed} onChoose={id=>void switchTo(id)} onStay={()=>setOpen(false)}/>
     </div>}
   </div>;
 }
