@@ -24,7 +24,9 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
+# No public/ directory: the console ships no static assets — its only images
+# are the letter marks it draws itself. Copying a directory that is not there
+# fails the build, and an empty one cannot be committed to git to make it exist.
 
 USER node
 EXPOSE 3000
