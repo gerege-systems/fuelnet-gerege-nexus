@@ -35,6 +35,9 @@ export const base = {
 
   "base.message.loading": { mn: "Ачаалж байна...", en: "Loading..." },
   "base.message.saving": { mn: "Хадгалж байна...", en: "Saving..." },
+  "base.message.read_only": { mn: "Танд зөвхөн харах эрх бий. Өөрчлөлт хийхэд дараах эрх шаардана:", en: "You have read access only. Changing anything needs this permission:" },
+  "base.message.admin_only_title": { mn: "Зөвхөн админд", en: "Administrators only" },
+  "base.message.admin_only_body": { mn: "Энэ хэсгийг үзэхэд танай байгууллагын админ эрх шаардана. Тохиргоо → Хандалтын удирдлага хэсгээс админ эрх олгоно.", en: "This section needs tenant administrator rights. An administrator can grant them under Settings → Access control." },
   "base.message.error": { mn: "Алдаа гарлаа", en: "Something went wrong" },
   "base.message.page_of": { mn: "{page} / {total} хуудас", en: "Page {page} of {total}" },
   // The paged variant also names how many records the filter matched, which
