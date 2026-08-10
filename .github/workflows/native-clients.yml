@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet build --configuration Release -p:FormFactor=${{ matrix.form_factor }}
+      - run: dotnet build GeregeNexusWin.csproj --configuration Release -p:FormFactor=${{ matrix.form_factor }}
         working-directory: desktop-native/Windows
   android:
     runs-on: ubuntu-latest
