@@ -17,8 +17,11 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
     private var settingsWindowController: SettingsWindowController?
     private let ribbon = NSView()
     private let profileButton = NSButton()
+    private let footer = NSView()
+    private let footerStatus = NSTextField(labelWithString: "●  Холбогдож байна")
     private var profile: NativeUserProfile?
     private let ribbonHeight: CGFloat = 56
+    private let footerHeight: CGFloat = 30
     private let settings = NativeSettings.load()
     private var baseURLString: String { settings.webEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
 
@@ -96,7 +99,27 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
 
         window.contentView?.addSubview(webView)
         setupRibbon(in: window.contentView!)
+        setupFooter(in: window.contentView!)
         showNativeLogin()
+    }
+
+    private func setupFooter(in content: NSView) {
+        footer.wantsLayer = true
+        footer.layer?.backgroundColor = NSColor(srgbRed: 16/255, green: 22/255, blue: 32/255, alpha: 1).cgColor
+        footer.isHidden = true
+        footer.frame = NSRect(x: 0, y: 0, width: content.bounds.width, height: footerHeight)
+        footer.autoresizingMask = [.width, .maxYMargin]
+        content.addSubview(footer)
+        footerStatus.textColor = NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+        footerStatus.font = .systemFont(ofSize: 11, weight: .medium)
+        let info = NSTextField(labelWithString: "macOS · Desktop   |   Shell v1.3")
+        info.textColor = NSColor.white.withAlphaComponent(0.55); info.font = .systemFont(ofSize: 11)
+        let settings = NSButton(title: "Тохиргоо", target: self, action: #selector(ribbonSettings)); settings.isBordered = false; settings.font = .systemFont(ofSize: 11)
+        let spacer = NSView()
+        let stack = NSStackView(views: [footerStatus, spacer, info, settings]); stack.orientation = .horizontal; stack.alignment = .centerY; stack.spacing = 12; stack.translatesAutoresizingMaskIntoConstraints = false
+        footer.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 14), stack.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -10), stack.topAnchor.constraint(equalTo: footer.topAnchor), stack.bottomAnchor.constraint(equalTo: footer.bottomAnchor)])
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
     }
 
     private func setupRibbon(in content: NSView) {
@@ -105,6 +128,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
         ribbon.layer?.borderWidth = 1
         ribbon.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
         ribbon.isHidden = true
+        footer.isHidden = true
         ribbon.frame = NSRect(x: 0, y: content.bounds.height - ribbonHeight, width: content.bounds.width, height: ribbonHeight)
         ribbon.autoresizingMask = [.width, .minYMargin]
         content.addSubview(ribbon)
@@ -179,6 +203,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
             self.loginController?.view.isHidden = true
             self.webView.isHidden = false
             self.ribbon.isHidden = false
+            self.footer.isHidden = false
             self.layoutWorkArea()
             self.loadRelativePath("/apps")
         }
@@ -186,8 +211,8 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
 
     private func layoutWorkArea() {
         guard let content = window?.contentView else { return }
-        webView.frame = NSRect(x: 0, y: 0, width: content.bounds.width,
-                               height: max(0, content.bounds.height - ribbonHeight))
+        webView.frame = NSRect(x: 0, y: footerHeight, width: content.bounds.width,
+                               height: max(0, content.bounds.height - ribbonHeight - footerHeight))
         webView.autoresizingMask = [.width, .height]
     }
 
@@ -261,6 +286,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
 
     // MARK: - WKNavigationDelegate
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        footerStatus.stringValue = "●  Холбогдсон · \(webView.url?.host ?? "Nexus")"
         print("[MainWindowController] Page loaded successfully: \(webView.url?.absoluteString ?? "")")
     }
 
@@ -280,6 +306,8 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
     }
 
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        footerStatus.stringValue = "●  Холболт тасарсан"
+        footerStatus.textColor = .systemRed
         print("[MainWindowController] Navigation failed: \(error.localizedDescription)")
     }
 }

@@ -7,11 +7,12 @@ import LocalAuthentication
 public struct ShellWebView: UIViewRepresentable {
     public let cookies: [SessionCookie]
     public let formFactor: String
+    public let route: String
     public let onRelogin: @MainActor () -> Void
     private let webOrigin: URL
 
-    public init(cookies: [SessionCookie], formFactor: String, onRelogin: @escaping @MainActor () -> Void) {
-        self.cookies = cookies; self.formFactor = formFactor; self.onRelogin = onRelogin
+    public init(cookies: [SessionCookie], formFactor: String, route: String = "/apps", onRelogin: @escaping @MainActor () -> Void) {
+        self.cookies = cookies; self.formFactor = formFactor; self.route = route; self.onRelogin = onRelogin
         let configured = UserDefaults.standard.string(forKey: "native.settings.webEndpoint") ?? "https://nexus.gerege.mn"
         self.webOrigin = URL(string: configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) ?? URL(string: "https://nexus.gerege.mn")!
     }
@@ -32,12 +33,20 @@ public struct ShellWebView: UIViewRepresentable {
             guard let cookie = HTTPCookie(properties: properties) else { return }
             group.enter(); configuration.websiteDataStore.httpCookieStore.setCookie(cookie) { group.leave() }
         }
-        group.notify(queue: .main) { webView.load(URLRequest(url: webOrigin.appending(path: "apps"))) }
+        group.notify(queue: .main) { webView.load(URLRequest(url: routeURL(route))) }
         context.coordinator.webView = webView
         return webView
     }
 
-    public func updateUIView(_ uiView: WKWebView, context: Context) {}
+    public func updateUIView(_ uiView: WKWebView, context: Context) {
+        guard context.coordinator.route != route else { return }
+        context.coordinator.route = route
+        uiView.load(URLRequest(url: routeURL(route)))
+    }
+
+    private func routeURL(_ route: String) -> URL {
+        webOrigin.appending(path: route.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+    }
 
     private var bridgeScript: String { """
     (()=>{if(window.GeregeShell)return;const p=new Map(),l=new Map();let n=0;
@@ -52,6 +61,7 @@ public struct ShellWebView: UIViewRepresentable {
         weak var webView: WKWebView?
         let webOrigin: URL
         let onRelogin: @MainActor () -> Void
+        var route = "/apps"
         init(webOrigin: URL, onRelogin: @escaping @MainActor () -> Void) { self.webOrigin = webOrigin; self.onRelogin = onRelogin }
 
         public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {

@@ -146,6 +146,8 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
 @SuppressLint("SetJavaScriptEnabled")
 @Composable private fun WorkArea(auth: AuthStateMachine, webOrigin: String, apiOrigin: String, deviceToken: String?, biometric: ((Boolean, String?) -> Unit) -> Unit, relogin: () -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
+    var activeRoute by remember { mutableStateOf("/apps") }
+    var nativeWebView by remember { mutableStateOf<WebView?>(null) }
     if (showSettings) { NativeSettingsScreen { showSettings = false }; return }
     BackHandler(enabled = false) {}
     Column(Modifier.fillMaxSize()) {
@@ -155,6 +157,7 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
       } }
       AndroidView(factory = { context ->
         WebView(context).apply {
+            nativeWebView = this
             setBackgroundColor(Color.rgb(11, 15, 23)); settings.javaScriptEnabled = true; settings.domStorageEnabled = true
             CookieManager.getInstance().setAcceptCookie(true)
             auth.sessionCookies().forEach { cookie ->
@@ -176,6 +179,12 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
             loadUrl("$webOrigin$route")
         }
       }, modifier = Modifier.weight(1f).fillMaxWidth())
+      if (BuildConfig.FORM_FACTOR in setOf("mobile", "tablet")) NavigationBar(containerColor = ComposeColor(0xFF101620)) {
+        listOf("▦" to ("Аппууд" to "/apps"), "▤" to ("Баримт" to "/documents"), "♙" to ("Харилцагч" to "/contacts")).forEach { (icon, item) ->
+          NavigationBarItem(selected = activeRoute == item.second, onClick = { activeRoute = item.second; nativeWebView?.loadUrl(webOrigin + item.second) }, icon = { Text(icon, fontSize = 20.sp) }, label = { Text(item.first) })
+        }
+        NavigationBarItem(selected = false, onClick = { showSettings = true }, icon = { Text("⚙", fontSize = 19.sp) }, label = { Text("Тохиргоо") })
+      }
     }
 }
 

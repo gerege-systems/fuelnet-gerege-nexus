@@ -141,12 +141,29 @@ public struct NativeShellView: View {
     public let formFactor: String
     public let onRelogin: @MainActor () -> Void
     @State private var settings = false
+    @State private var route = "/apps"
     public init(cookies: [SessionCookie], formFactor: String, onRelogin: @escaping @MainActor () -> Void) { self.cookies = cookies; self.formFactor = formFactor; self.onRelogin = onRelogin }
     public var body: some View {
         if settings { NativeSettingsView(formFactor: formFactor) { settings = false } }
-        else { ShellWebView(cookies: cookies, formFactor: formFactor, onRelogin: onRelogin)
-            .safeAreaInset(edge: .top) { HStack { Text("Gerege Nexus").fontWeight(.semibold); Spacer(); Button("Төхөөрөмжийн тохиргоо") { settings = true } }.padding(.horizontal).frame(height: 44).background(.bar) }
+        else { ShellWebView(cookies: cookies, formFactor: formFactor, route: route, onRelogin: onRelogin)
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 4) {
+                    tab("square.grid.2x2", "Аппууд", "/apps")
+                    tab("doc.text", "Баримт", "/documents")
+                    tab("person.2", "Харилцагч", "/contacts")
+                    Button { settings = true } label: { Label("Тохиргоо", systemImage: "gearshape").frame(maxWidth: .infinity) }
+                }
+                .labelStyle(.iconOnly).font(.title3).padding(.horizontal, 8).frame(height: 54).background(.bar)
+            }
         }
+    }
+
+    private func tab(_ icon: String, _ title: String, _ path: String) -> some View {
+        Button { route = path } label: {
+            Label(title, systemImage: icon).frame(maxWidth: .infinity)
+                .foregroundStyle(route == path ? Color.accentColor : Color.secondary)
+        }
+        .accessibilityLabel(title)
     }
 }
 #endif

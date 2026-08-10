@@ -20,6 +20,7 @@ namespace GeregeNexusNativeWin
             _baseUrl = _settings.WebEndpoint.TrimEnd('/');
             _auth = new NativeAuth(_settings.ApiEndpoint);
             InitializeComponent();
+            footerPlatform.Text = $"Windows · {ShellProfile.FormFactor}  |  Shell v1.3";
             emailInput.ToolTip=NativeStrings.Get("auth_field_email","И-мэйл");passwordInput.ToolTip=NativeStrings.Get("auth_field_password","Нууц үг");passwordLoginButton.Content=NativeStrings.Get("auth_action_admin_sign_in","Админаар нэвтрэх");nationalIdInput.ToolTip=NativeStrings.Get("auth_eid_reg_number","Регистрийн дугаар");pushLoginButton.Content=NativeStrings.Get("auth_eid_send_request","eID апп руу хүсэлт илгээх");cancelLoginButton.Content=NativeStrings.Get("auth_action_cancel","Цуцлах");staffPinButton.Content=NativeStrings.Get("auth_action_staff_sign_in","Ээлжийн ажилтнаар нэвтрэх");
             staffPinPanel.Visibility = ShellProfile.FormFactor == "pos" ? Visibility.Visible : Visibility.Collapsed;
             _auth.StatusChanged += status => Dispatcher.Invoke(() => RenderLogin(status));
@@ -59,7 +60,7 @@ namespace GeregeNexusNativeWin
                 };
 
                 webView.CoreWebView2.NavigationStarting += NavigationStarting;
-                webView.CoreWebView2.NavigationCompleted += (_, _) => webView.CoreWebView2.ExecuteScriptAsync("window.__geregeShellEmit&&window.__geregeShellEmit('shell:auth-changed',{reason:'navigation-session'})");
+                webView.CoreWebView2.NavigationCompleted += (_, e) => { footerConnection.Text = e.IsSuccess ? $"●  Холбогдсон · {new Uri(webView.Source.ToString()).Host}" : "●  Холболт тасарсан"; footerConnection.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(e.IsSuccess ? "#62D9D4" : "#EF4444")); _ = webView.CoreWebView2.ExecuteScriptAsync("window.__geregeShellEmit&&window.__geregeShellEmit('shell:auth-changed',{reason:'navigation-session'})"); };
                 var deviceToken = CredentialManagerTokenStore.Load();
                 if (!string.IsNullOrWhiteSpace(deviceToken))
                 {
@@ -68,7 +69,7 @@ namespace GeregeNexusNativeWin
                     cookie.IsHttpOnly = true; cookie.IsSecure = api.Scheme == "https"; webView.CoreWebView2.CookieManager.AddOrUpdateCookie(cookie);
                     _ = new DeviceEnrollmentClient().TelemetryAsync(_settings.ApiEndpoint,deviceToken,"INFO","shell.started",new{form_factor=ShellProfile.FormFactor,runtime="webview2"});
                 }
-                if (ShellProfile.FormFactor == "kiosk" && !string.IsNullOrWhiteSpace(deviceToken)) { loginView.Visibility = Visibility.Collapsed; webView.Visibility = Visibility.Visible; NavigatePath(ShellProfile.StartRoute); EnterKioskMode(); }
+                if (ShellProfile.FormFactor == "kiosk" && !string.IsNullOrWhiteSpace(deviceToken)) { loginView.Visibility = Visibility.Collapsed; webView.Visibility = Visibility.Visible; nativeFooter.Visibility = Visibility.Visible; NavigatePath(ShellProfile.StartRoute); EnterKioskMode(); }
                 else ShowNativeLogin();
             }
             catch (Exception ex)
@@ -90,6 +91,7 @@ namespace GeregeNexusNativeWin
         {
             loginView.Visibility = Visibility.Visible;
             webView.Visibility = Visibility.Collapsed;
+            nativeFooter.Visibility = Visibility.Collapsed;
         }
 
         private async void PasswordLogin_Click(object sender, RoutedEventArgs e) =>
@@ -126,7 +128,7 @@ namespace GeregeNexusNativeWin
                 if (source.Expires != DateTime.MinValue) cookie.Expires = source.Expires;
                 webView.CoreWebView2.CookieManager.AddOrUpdateCookie(cookie);
             }
-            loginView.Visibility = Visibility.Collapsed; webView.Visibility = Visibility.Visible;
+            loginView.Visibility = Visibility.Collapsed; webView.Visibility = Visibility.Visible; nativeFooter.Visibility = Visibility.Visible;
             NavigatePath(ShellProfile.StartRoute);
         }
 

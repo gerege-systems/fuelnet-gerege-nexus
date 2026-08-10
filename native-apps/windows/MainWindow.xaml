@@ -13,6 +13,7 @@
             <RowDefinition Height="Auto"/>
             <!-- Row 1: Embedded WebView2 Container -->
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Native Menu Bar -->
@@ -56,5 +57,14 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+        <Border Name="nativeFooter" Grid.Row="2" Height="30" Background="#101620" BorderBrush="#263244" BorderThickness="0,1,0,0" Visibility="Collapsed">
+            <Grid Margin="12,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Name="footerConnection" Text="●  Холбогдож байна" Foreground="#62D9D4" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Name="footerPlatform" Grid.Column="2" Text="Windows · Desktop  |  Shell v1.3" Foreground="#9CA3AF" FontSize="11" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <Button Grid.Column="3" Content="Тохиргоо" Click="MenuSettings_Click" Foreground="#D1D5DB" Background="Transparent" BorderThickness="0" Padding="8,2"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
