@@ -29,7 +29,7 @@ Native бүрхүүл (Swift, C#, Kotlin) ба web app хоёрын хоорон
 эсвэл `false` буцаана; `data-shell` атрибут `<html>` дээр огт тавигдахгүй.
 
 Web талын хэрэгжилт: [`frontend/lib/shell.ts`](../frontend/lib/shell.ts).
-Бүрхүүлийн талын хэрэгжилтүүд: [`desktop-native/`](../desktop-native).
+Бүрхүүлийн талын хэрэгжилтүүд: [`native-apps/`](../native-apps).
 
 ---
 
@@ -257,7 +257,7 @@ payload-ыг шууд дамжуулна.
 
 ## 9. Бүрхүүлийн одоогийн байдал
 
-Хэрэгжилтүүд нь [`desktop-native/`](../desktop-native) доторх Swift/AppKit ба
+Хэрэгжилтүүд нь [`native-apps/`](../native-apps) доторх Swift/AppKit ба
 C#/.NET сууриас эхэлнэ; Kotlin/Android суурь мөн энд нэмэгдэнэ. Linux нь PWA.
 
 | Зүйл | Утга |

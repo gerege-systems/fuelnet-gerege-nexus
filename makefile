@@ -26,10 +26,10 @@ test:
 build:
 	cd backend && go build ./...
 	cd frontend && npm run build
-	cd desktop-native/macOS && ./build.sh
+	cd native-apps/macOS && ./build.sh
 
 build-mac:
-	cd desktop-native/macOS && ./build.sh
+	cd native-apps/macOS && ./build.sh
 
 run-mac: build-mac
-	desktop-native/macOS/GeregeNexusNativeMac
+	native-apps/macOS/GeregeNexusNativeMac

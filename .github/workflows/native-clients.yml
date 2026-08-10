@@ -3,10 +3,10 @@ name: Native clients
 on:
   push:
     branches: [main]
-    paths: ["desktop-native/**", ".github/workflows/native-clients.yml"]
+    paths: ["native-apps/**", ".github/workflows/native-clients.yml"]
   pull_request:
     branches: [main]
-    paths: ["desktop-native/**", ".github/workflows/native-clients.yml"]
+    paths: ["native-apps/**", ".github/workflows/native-clients.yml"]
 
 permissions:
   contents: read
@@ -17,13 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./build.sh
-        working-directory: desktop-native/macOS
+        working-directory: native-apps/macOS
       - run: swift test
-        working-directory: desktop-native/Apple
+        working-directory: native-apps/iOS
       - run: xcodebuild -quiet -scheme GeregeShellUI -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
-        working-directory: desktop-native/Apple
+        working-directory: native-apps/iOS
       - run: xcodebuild -quiet -scheme GeregeNexusApp -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
-        working-directory: desktop-native/Apple
+        working-directory: native-apps/iOS
   windows:
     strategy:
       matrix:
@@ -35,7 +35,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - run: dotnet build GeregeNexusWin.csproj --configuration Release -p:FormFactor=${{ matrix.form_factor }}
-        working-directory: desktop-native/Windows
+        working-directory: native-apps/windows
   android:
     runs-on: ubuntu-latest
     steps:
@@ -50,4 +50,4 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - run: gradle :core:test :app:compileMobileDebugKotlin :app:compileTabletDebugKotlin :app:compileKioskDebugKotlin :app:compilePosDebugKotlin
-        working-directory: desktop-native/Android
+        working-directory: native-apps/android

@@ -12,11 +12,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 8.0.x }
       - run: dotnet publish GeregeNexusWin.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:FormFactor=${{ matrix.form_factor }}
-        working-directory: desktop-native/Windows
+        working-directory: native-apps/windows
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.form_factor }}-win-x64
-          path: "desktop-native/Windows/bin/Release/${{ matrix.form_factor }}/net8.0-windows*/win-x64/publish"
+          path: "native-apps/windows/bin/Release/${{ matrix.form_factor }}/net8.0-windows*/win-x64/publish"
   android:
     runs-on: ubuntu-latest
     steps:
@@ -28,16 +28,16 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - run: gradle :app:assembleMobileRelease :app:assembleTabletRelease :app:assembleKioskRelease :app:assemblePosRelease
-        working-directory: desktop-native/Android
+        working-directory: native-apps/android
       - uses: actions/upload-artifact@v4
-        with: { name: android-all-form-factors-unsigned, path: desktop-native/Android/app/build/outputs/apk/*/release/*.apk }
-  apple:
+        with: { name: android-all-form-factors-unsigned, path: native-apps/android/app/build/outputs/apk/*/release/*.apk }
+  ios:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: ./build.sh
-        working-directory: desktop-native/macOS
+        working-directory: native-apps/macOS
       - run: xcodebuild -quiet -scheme GeregeNexusApp -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO
-        working-directory: desktop-native/Apple
+        working-directory: native-apps/iOS
       - uses: actions/upload-artifact@v4
-        with: { name: macos-arm64-unsigned, path: desktop-native/macOS/GeregeNexusNativeMac }
+        with: { name: macos-arm64-unsigned, path: native-apps/macOS/GeregeNexusNativeMac }

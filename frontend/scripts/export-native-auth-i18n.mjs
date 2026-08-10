@@ -4,11 +4,11 @@ import ts from "typescript";
 
 const root = process.cwd();
 const locales = ["mn", "en", "ar", "zh", "fr", "ru", "es"];
-const out = path.resolve(root, "../desktop-native/generated-i18n");
+const out = path.resolve(root, "../native-apps/generated-i18n");
 await mkdir(out, { recursive: true });
-const androidRoot = path.resolve(root, "../desktop-native/Android/app/src/main/res");
-const windowsRoot = path.resolve(root, "../desktop-native/Windows/Resources");
-const appleCatalog = path.resolve(root, "../desktop-native/Apple/Sources/GeregeShellUI/Resources/Login.xcstrings");
+const androidRoot = path.resolve(root, "../native-apps/android/app/src/main/res");
+const windowsRoot = path.resolve(root, "../native-apps/windows/Resources");
+const iosCatalog = path.resolve(root, "../native-apps/iOS/Sources/GeregeShellUI/Resources/Login.xcstrings");
 const xml = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "\\'");
 const resourceKey = key => key.replaceAll(".", "_").replace(/[^a-zA-Z0-9_]/g, "_");
 const catalog = { sourceLanguage: "mn", strings: {}, version: "1.0" };
@@ -40,6 +40,6 @@ for (const locale of locales) {
     catalog.strings[key].localizations[locale] = { stringUnit: { state: "translated", value } };
   }
 }
-await mkdir(path.dirname(appleCatalog), { recursive: true });
-await writeFile(appleCatalog, `${JSON.stringify(catalog, null, 2)}\n`);
+await mkdir(path.dirname(iosCatalog), { recursive: true });
+await writeFile(iosCatalog, `${JSON.stringify(catalog, null, 2)}\n`);
 console.log(`Exported native auth strings to ${out}`);

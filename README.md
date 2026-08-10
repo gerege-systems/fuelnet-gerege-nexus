@@ -156,7 +156,7 @@ backend/
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
 frontend/             Next.js 15 (App Router) вэб клиент
-desktop-native/       Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)
+native-apps/       Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)
 catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
@@ -178,7 +178,7 @@ method, event, capability, хувилбарын дүрэм, аюулгүй ба�
 тодорхойлно. Вэб клиент бүрхүүлийн дотоод бүтцийг мэдэхгүй — зөвхөн гэрээг л
 мэднэ.
 
-Клиентүүд [`desktop-native/`](desktop-native) дотор гурван native сангаар
+Клиентүүд [`native-apps/`](native-apps) дотор гурван native сангаар
 хөгжинө: Swift (macOS/iOS/iPadOS), C# (Windows desktop/kiosk/POS), Kotlin
 (Android mobile/tablet/kiosk/POS). Linux desktop нь PWA хэвээр.
 
@@ -192,7 +192,7 @@ make build-mac      # Swift/AppKit компиляц
 
 Платформ бүрийн урьдчилсан шаардлага, runtime endpoint, enrollment, code
 signing болон auto-update сувгийн зааврыг
-[`desktop-native/README.md`](desktop-native/README.md)-ээс үзнэ үү.
+[`native-apps/README.md`](native-apps/README.md)-ээс үзнэ үү.
 
 > Native CI нь macOS Swift ба Windows .NET build-ийг тус тусын runner дээр
 > шалгана. Installer нь signing identity оруулсны дараах release ажил.
