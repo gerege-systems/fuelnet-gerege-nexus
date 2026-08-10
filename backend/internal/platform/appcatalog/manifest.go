@@ -4,21 +4,59 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 )
 
+// App types. An app is a Go module compiled into this binary unless it says
+// otherwise, which is why the empty string means TypeModule: every manifest
+// written before external apps existed is a module manifest.
+const (
+	TypeModule   = "module"
+	TypeExternal = "external"
+)
+
 type Manifest struct {
-	ID           string                          `json:"id"`
-	Name         string                          `json:"name"`
-	Version      string                          `json:"version"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// Type is "module" (default) or "external". An external app is a service
+	// that runs somewhere else entirely: the platform holds its registration,
+	// its permissions and its menu entry, and hands its users over by OIDC.
+	// Nothing of it is compiled in.
+	Type         string                          `json:"type,omitempty"`
+	External     *ExternalSpec                   `json:"external,omitempty"`
 	Platform     string                          `json:"platform"`
 	Dependencies []internal.Dependency           `json:"dependencies"`
 	Permissions  []internal.PermissionDefinition `json:"permissions"`
 	Menus        []internal.MenuDefinition       `json:"menus"`
 }
+
+// ExternalSpec describes how to reach a third-party platform and how it signs
+// its users in.
+type ExternalSpec struct {
+	// LaunchURL is where a user is sent. It is the third party's own entry
+	// point, typically the one that starts the OIDC dance back at this issuer.
+	LaunchURL string `json:"launch_url"`
+	// SSOClientID ties the app to an OAuth2 client registered here. It is what
+	// makes "has this tenant installed the app" answerable at the authorization
+	// endpoint — see the install gate in ssoprovider.
+	SSOClientID string   `json:"sso_client_id,omitempty"`
+	Scopes      []string `json:"scopes,omitempty"`
+	// Embed is "new_tab" (default) or "iframe". new_tab is the default because
+	// this platform sends X-Frame-Options: DENY and a Content-Security-Policy
+	// to match: framing somebody else's product inside this one is a decision
+	// both sides have to make, not a default.
+	Embed string `json:"embed,omitempty"`
+	// HealthURL is an address an operator can check. Nothing polls it yet.
+	HealthURL string `json:"health_url,omitempty"`
+}
+
+// IsExternal reports whether this app runs outside the platform binary.
+func (m Manifest) IsExternal() bool { return m.Type == TypeExternal }
 
 type CatalogApp struct {
 	ID          string   `json:"id"`
@@ -88,6 +126,35 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		}
 	}
 
+	switch m.Type {
+	case "", TypeModule:
+		if m.External != nil {
+			return fmt.Errorf("app %s is a module but carries an external section", m.ID)
+		}
+	case TypeExternal:
+		if m.External == nil || m.External.LaunchURL == "" {
+			return fmt.Errorf("external app %s must declare external.launch_url", m.ID)
+		}
+		// Absolute and HTTPS, checked here rather than at the point of use.
+		// This URL is put in front of a user as a link this platform vouches
+		// for: a relative one would resolve against the platform's own origin
+		// and a plain-HTTP one would carry a signed-in person out of TLS on the
+		// way to a service that is about to receive their identity.
+		launch, err := url.Parse(m.External.LaunchURL)
+		if err != nil {
+			return fmt.Errorf("external app %s has an unparseable launch_url: %w", m.ID, err)
+		}
+		if launch.Scheme != "https" || launch.Host == "" {
+			return fmt.Errorf("external app %s must have an absolute https launch_url, got %q",
+				m.ID, m.External.LaunchURL)
+		}
+		if embed := m.External.Embed; embed != "" && embed != "new_tab" && embed != "iframe" {
+			return fmt.Errorf("external app %s has an unknown embed mode %q", m.ID, embed)
+		}
+	default:
+		return fmt.Errorf("app %s has an unknown type %q", m.ID, m.Type)
+	}
+
 	for _, dep := range m.Dependencies {
 		if dep.ID == "" {
 			return fmt.Errorf("dependency ID cannot be empty in app %s", m.ID)
@@ -99,6 +166,28 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		}
 	}
 	return nil
+}
+
+// IsNewerVersion reports whether candidate is a later release than installed.
+//
+// It is the one place the store decides that an update exists, so both the API
+// that offers the button and the installer that refuses a pointless upgrade
+// answer the same question the same way. Semver, not string comparison: "1.10.0"
+// sorts before "1.9.0" as text and after it as a version.
+//
+// A version either side cannot parse falls back to "different means newer".
+// Manifest versions are validated as semver on the way in, so this only covers
+// a catalogue that reached this instance by some other route.
+func IsNewerVersion(candidate, installed string) bool {
+	if candidate == "" {
+		return false
+	}
+	newer, candidateErr := semver.NewVersion(candidate)
+	held, installedErr := semver.NewVersion(installed)
+	if candidateErr != nil || installedErr != nil {
+		return candidate != installed
+	}
+	return newer.GreaterThan(held)
 }
 
 // LoadManifestFile loads and validates a manifest file.

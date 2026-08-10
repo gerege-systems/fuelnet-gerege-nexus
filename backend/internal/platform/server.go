@@ -15,8 +15,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
@@ -24,6 +22,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
@@ -47,11 +46,27 @@ import (
 )
 
 // PlatformVersion is the semver the app-store manifests are validated against.
-const PlatformVersion = "1.0.0"
+//
+// It is a var rather than a const so a release build can stamp the version it
+// actually is:
+//
+//	go build -ldflags "-X github.com/gerege-systems/open-gerege-nexus/backend/internal/platform.PlatformVersion=1.2.0"
+//
+// A manifest names the platform it needs (`"platform": ">=1.1.0"`), and a store
+// that separates from this binary has to be told which platform is asking. A
+// constant would have every deployment claim 1.0.0 for ever, so every app would
+// look compatible with every instance. The default stays 1.0.0, which is what an
+// unstamped build has always reported; whatever is injected must be valid
+// semver, because manifest validation parses it.
+var PlatformVersion = "1.0.0"
 
 type Server struct {
-	db            *pgxpool.Pool
-	installer     *appinstaller.AppInstaller
+	db        *pgxpool.Pool
+	installer *appinstaller.AppInstaller
+	// catalogSource is where the catalogue came from and where a refresh goes.
+	// In file mode it is the bundled file and nothing else; with a registry
+	// configured it is that registry, its disk cache and the file behind them.
+	catalogSource *appcatalog.Provider
 	router        *chi.Mux
 	sessions      *auth.SessionStore
 	loginLimiter  *security.IPRateLimiter
@@ -104,57 +119,6 @@ func (s *Server) forgetGrants(tenantID string) {
 // NewServer builds the platform. bus may be a local-only one; nothing here
 // requires Redis to be present.
 func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, error) {
-	// #nosec G304 -- APP_CATALOG_PATH is deployment configuration read once at
-	// startup. No request reaches this.
-	catalogData, err := os.ReadFile(catalogPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var rawCatalog []appcatalog.CatalogApp
-	if err := json.Unmarshal(catalogData, &rawCatalog); err != nil {
-		return nil, err
-	}
-
-	// Populate full manifests.
-	//
-	// A manifest that failed to load used to be replaced by a silent stub with
-	// no dependencies, permissions or menus. Three shipped manifests were in
-	// fact malformed (object instead of array for "dependencies", plain
-	// strings instead of objects for "permissions") and nobody noticed: the
-	// apps installed with an empty dependency graph and never contributed a
-	// menu entry. Catalog integrity is now a startup error.
-	catalogDir := filepath.Dir(catalogPath)
-	catalog := make([]appcatalog.CatalogApp, 0, len(rawCatalog))
-	for _, app := range rawCatalog {
-		if !security.IsValidSlug(app.Slug) {
-			return nil, fmt.Errorf("catalog app %q has an invalid slug %q", app.ID, app.Slug)
-		}
-		manifestPath := filepath.Join(catalogDir, "manifests", app.Slug+".json")
-		manifest, err := appcatalog.LoadManifestFile(manifestPath, PlatformVersion)
-		if err != nil {
-			return nil, fmt.Errorf("load manifest for %s: %w", app.ID, err)
-		}
-		if manifest.ID != app.ID {
-			return nil, fmt.Errorf("manifest %s declares id %q but the catalog entry is %q",
-				manifestPath, manifest.ID, app.ID)
-		}
-		app.Manifest = manifest
-		catalog = append(catalog, app)
-	}
-
-	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
-
-	// Keep the apps table in step with the catalog file. A missing row makes
-	// installation fail on the app_installations foreign key, so this is a
-	// startup concern, not a seeding concern. A cold database must not stop the
-	// process from booting — /ready reports that separately.
-	syncCtx, cancelSync := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelSync()
-	if err := installer.SyncCatalog(syncCtx); err != nil {
-		slog.Error("failed to sync app catalog into database", "error", err)
-	}
-
 	// Instantiate compile-time Go modules once. Each constructor registers the
 	// module in the global app registry; calling them twice (here and again in
 	// registerAppModuleRoutes) built two instances per app.
@@ -171,14 +135,46 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	ssoProvider := ssoprovider.NewSSOProvider(db)
 	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
+	// Modules first, catalogue second: the catalogue is held against the module
+	// registry as it is loaded, and Bootstrap is what fills that registry.
+	catalogConfig := appcatalog.ConfigFromEnv(catalogPath, PlatformVersion)
+	catalogConfig.Verify = verifyCatalogVersions
+	catalogSource := appcatalog.NewProvider(catalogConfig)
+
+	loadCtx, cancelLoad := context.WithTimeout(context.Background(), catalogLoadTimeout)
+	defer cancelLoad()
+	catalog, err := catalogSource.Load(loadCtx)
+	if err != nil {
+		return nil, err
+	}
+	if catalogSource.Remote() {
+		// Configured, not necessarily reached: Load says in its own log line
+		// which source actually answered, and boot carries on either way.
+		slog.Info("app catalog registry is configured",
+			"apps", len(catalog), "sync_interval", catalogSource.SyncInterval().String())
+	}
+
+	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
+
+	// Keep the apps table in step with the catalog file. A missing row makes
+	// installation fail on the app_installations foreign key, so this is a
+	// startup concern, not a seeding concern. A cold database must not stop the
+	// process from booting — /ready reports that separately.
+	syncCtx, cancelSync := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelSync()
+	if err := installer.SyncCatalog(syncCtx); err != nil {
+		slog.Error("failed to sync app catalog into database", "error", err)
+	}
+
 	s := &Server{
-		db:           db,
-		installer:    installer,
-		router:       chi.NewRouter(),
-		sessions:     auth.NewSessionStore(db, auth.DefaultSessionTTL),
-		loginLimiter: newLoginLimiter(),
-		pollLimiter:  newPollLimiter(),
-		aiLimiter:    security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
+		db:            db,
+		installer:     installer,
+		catalogSource: catalogSource,
+		router:        chi.NewRouter(),
+		sessions:      auth.NewSessionStore(db, auth.DefaultSessionTTL),
+		loginLimiter:  newLoginLimiter(),
+		pollLimiter:   newPollLimiter(),
+		aiLimiter:     security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
@@ -201,6 +197,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.
 	ssoProvider.AttachSessions(s.sessions)
+
+	// And whether the organisation they are signing in for has installed the
+	// app behind the client. For an external app that is the only gate there
+	// is: nothing of it runs here for appGateMiddleware to stand in front of.
+	ssoProvider.AttachInstallGate(s.newExternalAppGate())
 
 	// Clients live in Postgres now, so the built-in one is registered once
 	// rather than rebuilt into a map on every boot. A cold database must not
@@ -230,6 +231,43 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	return s, nil
 }
 
+// catalogLoadTimeout bounds the catalogue fetch that boot waits on. A registry
+// that is merely slow must not hold a deployment open; the fallbacks are there
+// precisely so this can give up.
+const catalogLoadTimeout = 20 * time.Second
+
+// verifyCatalogVersions holds a catalogue against the modules compiled into this
+// binary.
+//
+// The two drifted apart unnoticed — esign shipped 2.0.0 as a module and 1.0.0 in
+// the catalogue, and the developer portal did the same — because nothing ever
+// compared them. Once a registry outside this repository publishes versions, a
+// number the store advertises but the binary does not have is an upgrade that
+// silently does nothing.
+//
+// It runs against every candidate catalogue, so what it means depends on where
+// the catalogue came from: the bundled file failing it is a startup error, the
+// same way its manifests failing validation is, while a registry answer failing
+// it is discarded in favour of the cache or the file. The catalogue/manifest
+// half of the comparison lives in appcatalog.ValidateCatalog, which every source
+// goes through.
+//
+// An app with no compiled module is not an error. External apps have none by
+// definition.
+func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
+	for _, app := range catalog {
+		mod, ok := appregistry.Get(app.ID)
+		if !ok {
+			continue
+		}
+		if mod.Version() != app.Version {
+			return fmt.Errorf("module %s is compiled at version %q but the catalog declares %q",
+				app.ID, mod.Version(), app.Version)
+		}
+	}
+	return nil
+}
+
 // StartBackgroundJobs launches the periodic work app modules need. It is
 // separate from NewServer so a test can build a server without spawning
 // goroutines, and it returns immediately — every job runs until ctx is
@@ -248,6 +286,64 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	// verification trail is an audit record with a retention window, not a
 	// mailing list.
 	s.emailVerify.StartHousekeeping(ctx)
+	// Only with a registry configured; in file mode the catalogue changes when
+	// the release does and there is nothing to poll.
+	s.startCatalogSync(ctx)
+}
+
+// startCatalogSync keeps this instance's catalogue in step with the registry.
+//
+// It is a poll rather than a push because an instance may be behind anything —
+// a firewall, a home connection, an air gap that was opened for an hour — and
+// the registry knowing how to reach every one of them is a coupling this
+// architecture spent its effort avoiding. A failed round is a warning: the
+// catalogue in hand keeps serving, and installed apps do not depend on this at
+// all.
+func (s *Server) startCatalogSync(ctx context.Context) {
+	if !s.catalogSource.Remote() {
+		return
+	}
+	interval := s.catalogSource.SyncInterval()
+	async.Go("catalog-sync", func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				syncCtx, cancel := context.WithTimeout(ctx, catalogLoadTimeout)
+				changed, err := s.syncCatalogFromRegistry(syncCtx)
+				cancel()
+				switch {
+				case err != nil:
+					slog.Warn("catalog: registry sync failed; keeping the catalogue in hand", "error", err)
+				case changed:
+					slog.Info("catalog: updated from the registry", "apps", len(s.installer.GetCatalog()))
+				}
+			}
+		}
+	})
+}
+
+// syncCatalogFromRegistry fetches, accepts and publishes a new catalogue.
+//
+// The order matters: the apps table has to carry a row before an installation
+// can reference it, and every replica's app gate has to stop answering from a
+// catalogue that no longer exists. The gate is dropped for every tenant rather
+// than one, because a catalogue change is not a tenant's act.
+func (s *Server) syncCatalogFromRegistry(ctx context.Context) (bool, error) {
+	catalog, changed, err := s.catalogSource.Refresh(ctx)
+	if err != nil || !changed {
+		return false, err
+	}
+
+	s.installer.SetCatalog(catalog)
+	if err := s.installer.SyncCatalog(ctx); err != nil {
+		return true, fmt.Errorf("sync the new catalogue into the database: %w", err)
+	}
+	s.bus.Invalidate(appGateCacheName, "")
+	return true, nil
 }
 
 func (s *Server) Router() *chi.Mux {
@@ -283,7 +379,10 @@ func (s *Server) setupRoutes() {
 	// Infrastructure
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		// The platform version is part of the health answer because it is what
+		// an app store has to know about this instance: which manifests apply
+		// to it, and whether an operator's rollout actually landed.
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "platform_version": PlatformVersion})
 	})
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.Ping(r.Context()); err != nil {
@@ -429,6 +528,11 @@ func (s *Server) setupRoutes() {
 			pr.Group(func(ar chi.Router) {
 				ar.Use(s.requireAdmin)
 				ar.Post("/store/apps/{slug}/install", s.handleInstallApp)
+				ar.Post("/store/apps/{slug}/upgrade", s.handleUpgradeApp)
+				// Asking the registry for a new catalogue on demand. Admin-only
+				// like the rest: it reaches out of this deployment and changes
+				// what every tenant on it is offered.
+				ar.Post("/admin/store/sync", s.handleSyncCatalog)
 				ar.Post("/store/apps/{slug}/enable", s.handleEnableApp)
 				ar.Post("/store/apps/{slug}/disable", s.handleDisableApp)
 			})

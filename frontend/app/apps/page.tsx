@@ -12,6 +12,7 @@ import {
   Boxes,
   Users,
   Package,
+  ArrowUpCircle,
 } from "lucide-react";
 
 interface AppItem {
@@ -24,6 +25,9 @@ interface AppItem {
   version: string;
   installed: boolean;
   enabled: boolean;
+  installed_version?: string;
+  latest_version: string;
+  update_available: boolean;
   manifest: {
     dependencies?: Array<{ id: string; version_constraint: string }>;
   };
@@ -71,13 +75,30 @@ export default function AppStorePage() {
     setMessage(null);
     try {
       await api.installApp(app.slug);
+      setMessage({ type: "success", text: t("app_store.message.install_succeeded", { app: app.name }) });
+      await loadApps();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message || t("app_store.message.install_failed", { app: app.name }) });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Updating is its own button rather than a second meaning for Install: the
+  // server refuses an upgrade that has nothing to move to (409), and a screen
+  // that sent "install" again would have shown that refusal as a failure.
+  const handleUpdate = async (app: AppItem) => {
+    setActionLoading(app.slug);
+    setMessage(null);
+    try {
+      await api.upgradeApp(app.slug);
       setMessage({
         type: "success",
-        text: `Successfully installed ${app.name} and its dependencies!`,
+        text: t("app_store.message.update_succeeded", { app: app.name, version: app.latest_version }),
       });
       await loadApps();
     } catch (err: any) {
-      setMessage({ type: "error", text: err.message || `Failed to install ${app.name}` });
+      setMessage({ type: "error", text: err.message || t("app_store.message.update_failed", { app: app.name }) });
     } finally {
       setActionLoading(null);
     }
@@ -89,10 +110,10 @@ export default function AppStorePage() {
     try {
       if (app.enabled) {
         await api.disableApp(app.slug);
-        setMessage({ type: "success", text: `Disabled ${app.name}` });
+        setMessage({ type: "success", text: t("app_store.message.disabled", { app: app.name }) });
       } else {
         await api.enableApp(app.slug);
-        setMessage({ type: "success", text: `Enabled ${app.name}` });
+        setMessage({ type: "success", text: t("app_store.message.enabled", { app: app.name }) });
       }
       await loadApps();
     } catch (err: any) {
@@ -170,10 +191,25 @@ export default function AppStorePage() {
                   <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                     {appIcons[app.slug] || <Boxes className="w-8 h-8 text-indigo-500" />}
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded">
-                      v{app.version}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {/* Both versions, and only when they differ: an
+                        installation that is current has one version, and
+                        printing it twice would read as a pending change. */}
+                    <span
+                      className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded"
+                      title={
+                        app.update_available
+                          ? `${t("app_store.field.installed_version")}: ${app.installed_version} · ${t("app_store.field.latest_version")}: ${app.latest_version}`
+                          : `${t("app_store.field.latest_version")}: ${app.latest_version}`
+                      }
+                    >
+                      {app.update_available ? `v${app.installed_version} → v${app.latest_version}` : `v${app.version}`}
                     </span>
+                    {app.installed && app.update_available && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                        {t("app_store.state.update_available")}
+                      </span>
+                    )}
                     {app.installed && (
                       <span
                         className={`text-xs font-semibold px-2 py-0.5 rounded ${
@@ -202,7 +238,7 @@ export default function AppStorePage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 {!app.installed ? (
                   <button
                     onClick={() => handleInstall(app)}
@@ -210,30 +246,53 @@ export default function AppStorePage() {
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
-                    <span>{actionLoading === app.slug ? "Installing..." : "Install App"}</span>
+                    <span>
+                      {actionLoading === app.slug
+                        ? t("app_store.message.installing")
+                        : t("app_store.action.install")}
+                    </span>
                   </button>
                 ) : (
-                  <button
-                    onClick={() => handleToggleState(app)}
-                    disabled={actionLoading === app.slug}
-                    className={`w-full font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition border ${
-                      app.enabled
-                        ? "bg-white hover:bg-red-50 text-red-600 border-red-200"
-                        : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
-                    }`}
-                  >
-                    {app.enabled ? (
-                      <>
-                        <PowerOff className="w-4 h-4" />
-                        <span>{t("app_store.action.disable")}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Power className="w-4 h-4" />
-                        <span>{t("app_store.action.enable")}</span>
-                      </>
+                  <>
+                    {/* Update sits beside enable/disable rather than replacing
+                        it: a tenant that has deliberately switched an app off
+                        should still be able to bring it up to date. */}
+                    {app.update_available && (
+                      <button
+                        onClick={() => handleUpdate(app)}
+                        disabled={actionLoading === app.slug}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50"
+                      >
+                        <ArrowUpCircle className="w-4 h-4" />
+                        <span>
+                          {actionLoading === app.slug
+                            ? t("app_store.message.updating")
+                            : t("app_store.action.update")}
+                        </span>
+                      </button>
                     )}
-                  </button>
+                    <button
+                      onClick={() => handleToggleState(app)}
+                      disabled={actionLoading === app.slug}
+                      className={`w-full font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition border ${
+                        app.enabled
+                          ? "bg-white hover:bg-red-50 text-red-600 border-red-200"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                      }`}
+                    >
+                      {app.enabled ? (
+                        <>
+                          <PowerOff className="w-4 h-4" />
+                          <span>{t("app_store.action.disable")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Power className="w-4 h-4" />
+                          <span>{t("app_store.action.enable")}</span>
+                        </>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

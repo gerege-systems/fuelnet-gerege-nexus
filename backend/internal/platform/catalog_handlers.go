@@ -11,10 +11,14 @@ package platform
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
@@ -44,7 +48,7 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 		}
 		visible := menus[:0]
 		for _, item := range menus {
-			permission := appReadPermission(item.AppID)
+			permission := s.appReadPermission(item.AppID)
 			if permission == "" || permissions[permission] {
 				visible = append(visible, item)
 			}
@@ -54,6 +58,27 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(menus)
+}
+
+// appReadPermission decides which permission a menu entry is hidden behind.
+//
+// An external app cannot be named in the switch below — the whole point is that
+// it arrives from a registry rather than from this repository — so its manifest
+// answers for it. A tenant that installs somebody else's HRMS is not thereby
+// putting a link to it in front of every member of the organisation.
+func (s *Server) appReadPermission(appID string) string {
+	if app, found := s.installer.GetAppByID(appID); found && app.Manifest.IsExternal() {
+		for _, permission := range app.Manifest.Permissions {
+			if strings.HasSuffix(permission.Code, ".read") {
+				return permission.Code
+			}
+		}
+		// A manifest that asks for nothing is visible to the tenant that
+		// installed it, which is the same answer the switch gives for an app it
+		// does not know.
+		return ""
+	}
+	return appReadPermission(appID)
 }
 
 func appReadPermission(appID string) string {
@@ -84,7 +109,7 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	// "installed" and "enabled" are distinct states: an app can be installed
 	// and then disabled. Deriving both from the enabled-only query reported
 	// disabled apps as never installed, so the UI offered "Install" again.
-	installedStates, err := s.installer.GetInstallationStatesForTenant(r.Context(), tenantID)
+	installedStates, err := s.installer.GetInstallationsForTenant(r.Context(), tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load installed apps")
 		return
@@ -94,16 +119,26 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 		appcatalog.CatalogApp
 		Installed bool `json:"installed"`
 		Enabled   bool `json:"enabled"`
+		// What this tenant is running, and what the catalogue carries. They
+		// were the same number for the life of the platform because an
+		// installation's version never moved; now that it does, the store is
+		// where the difference has to show.
+		InstalledVersion string `json:"installed_version,omitempty"`
+		LatestVersion    string `json:"latest_version"`
+		UpdateAvailable  bool   `json:"update_available"`
 	}
 
 	locale := config.LocaleFromRequest(r)
 	res := make([]StoreAppResponse, 0, len(catalog))
 	for _, app := range catalog {
-		state, installed := installedStates[app.ID]
+		held, installed := installedStates[app.ID]
 		res = append(res, StoreAppResponse{
-			CatalogApp: app.Localized(locale),
-			Installed:  installed,
-			Enabled:    state,
+			CatalogApp:       app.Localized(locale),
+			Installed:        installed,
+			Enabled:          held.Enabled,
+			InstalledVersion: held.Version,
+			LatestVersion:    app.Version,
+			UpdateAvailable:  installed && appcatalog.IsNewerVersion(app.Version, held.Version),
 		})
 	}
 
@@ -201,7 +236,19 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.InstallApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		// The failure used to be handed to the browser verbatim. That answered
+		// a database outage with "bad request" and described the inside of the
+		// server — constraint names, the module registry, the dependency graph
+		// — to anyone who could press Install. Only the caller's own mistake is
+		// reported as such; the rest goes to the log, where an operator can act
+		// on it.
+		if errors.Is(err, appinstaller.ErrAppNotFound) {
+			httpx.Error(w, http.StatusNotFound, "app not found")
+			return
+		}
+		slog.Error("app installation failed", "error", err, "app_slug", slug, "tenant_id", claims.TenantID)
+		httpx.Error(w, http.StatusInternalServerError,
+			"could not install this app; the failure has been logged for your administrator")
 		return
 	}
 	// The app gate reads a cached copy of this row, so the screen that just
@@ -210,6 +257,86 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "installed", "app": slug})
+}
+
+// handleUpgradeApp moves this tenant to the version the catalogue carries.
+//
+// Separate from install rather than folded into it: pressing "Install" on an
+// app you already have is a mistake worth ignoring, while pressing "Update"
+// when there is nothing to update is a question worth answering — and the
+// answer, 409, is what stops a store screen offering the button for ever.
+func (s *Server) handleUpgradeApp(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	if !security.IsValidSlug(slug) {
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
+		return
+	}
+
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	from, to, err := s.installer.UpgradeApp(r.Context(), claims.TenantID, slug, claims.UserID)
+	switch {
+	case errors.Is(err, appinstaller.ErrAppNotFound):
+		httpx.Error(w, http.StatusNotFound, "app not found")
+		return
+	case errors.Is(err, appinstaller.ErrNotInstalled):
+		httpx.Error(w, http.StatusNotFound, "this app is not installed for your organisation")
+		return
+	case errors.Is(err, appinstaller.ErrAlreadyCurrent):
+		httpx.JSON(w, http.StatusConflict, map[string]string{
+			"error":             "this app is already on the latest version",
+			"installed_version": from,
+			"latest_version":    to,
+		})
+		return
+	case err != nil:
+		slog.Error("app upgrade failed", "error", err, "app_slug", slug, "tenant_id", claims.TenantID)
+		httpx.Error(w, http.StatusInternalServerError,
+			"could not update this app; the failure has been logged for your administrator")
+		return
+	}
+
+	// The app gate reads a cached copy of this row, so the screen that just
+	// pressed the button has to stop being told the old answer.
+	s.forgetAppGate(claims.TenantID)
+
+	httpx.JSON(w, http.StatusOK, map[string]string{
+		"status": "upgraded", "app": slug, "from": from, "to": to,
+	})
+}
+
+// handleSyncCatalog is the "check for updates" button.
+//
+// The background sync runs on its own clock, which is the right cadence for a
+// catalogue and the wrong one for an administrator who has just been told a new
+// version exists. It answers what happened rather than always "ok": an
+// administrator who presses it needs to know whether anything moved.
+func (s *Server) handleSyncCatalog(w http.ResponseWriter, r *http.Request) {
+	if !s.catalogSource.Remote() {
+		httpx.Error(w, http.StatusNotImplemented,
+			"this deployment reads its app catalog from a file; there is no registry to sync with")
+		return
+	}
+
+	changed, err := s.syncCatalogFromRegistry(r.Context())
+	if err != nil {
+		slog.Error("catalog: manual registry sync failed", "error", err)
+		httpx.Error(w, http.StatusBadGateway, "could not reach the app registry; the current catalog is unchanged")
+		return
+	}
+
+	status := "unchanged"
+	if changed {
+		status = "updated"
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"status": status,
+		"apps":   len(s.installer.GetCatalog()),
+	})
 }
 
 func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {

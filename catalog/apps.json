@@ -217,7 +217,7 @@
     "icon_url": "/icons/developer_portal.png",
     "category": "Developer Tools",
     "visibility": "public",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "translations": {
       "mn": {
         "name": "Хөгжүүлэгчийн портал ба OAuth2 SSO",
@@ -301,7 +301,7 @@
     "icon_url": "/icons/esign.png",
     "category": "Productivity",
     "visibility": "public",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "translations": {
       "mn": {
         "name": "PDF цахим гарын үсэг",

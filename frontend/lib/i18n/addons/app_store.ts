@@ -13,11 +13,16 @@ export const app_store = {
   "app_store.field.installed_version": { mn: "Суулгасан хувилбар", en: "Installed Version" },
   "app_store.field.installed_date": { mn: "Суулгасан огноо", en: "Installed Date" },
 
+  "app_store.field.latest_version": { mn: "Сүүлийн хувилбар", en: "Latest version" },
+
+  "app_store.action.install": { mn: "Суулгах", en: "Install App" },
   "app_store.action.enable": { mn: "Идэвхжүүлэх", en: "Enable App" },
   "app_store.action.disable": { mn: "Идэвхгүй болгох", en: "Disable App" },
+  "app_store.action.update": { mn: "Шинэчлэх", en: "Update" },
 
   "app_store.state.installed": { mn: "Суулгасан ба идэвхтэй", en: "Installed & Enabled" },
   "app_store.state.disabled": { mn: "Идэвхгүй", en: "Disabled" },
+  "app_store.state.update_available": { mn: "Шинэчлэлт бэлэн", en: "Update available" },
 
   "app_store.filter.all": { mn: "Бүгд", en: "All" },
 
@@ -35,4 +40,23 @@ export const app_store = {
   "app_store.message.none_installed": { mn: "Энэ тенантад одоогоор апп суулгаагүй байна.", en: "No apps installed for this tenant yet." },
   "app_store.message.load_failed": { mn: "Аппын каталогийг ачаалж чадсангүй", en: "Failed to load the app catalog" },
   "app_store.message.action_failed": { mn: "Үйлдэл амжилтгүй боллоо", en: "Action failed" },
+
+  // What the store says while it is working and after it has finished. The app
+  // name is a variable rather than part of the sentence: it is catalogue
+  // content, already translated by the API, and splicing a translated name into
+  // a hand-written half-sentence is what leaves a screen half in one language.
+  "app_store.message.installing": { mn: "Суулгаж байна...", en: "Installing..." },
+  "app_store.message.updating": { mn: "Шинэчилж байна...", en: "Updating..." },
+  "app_store.message.install_succeeded": {
+    mn: "{app} болон түүний шаардлагатай аппуудыг суулгалаа.",
+    en: "Installed {app} and the apps it depends on.",
+  },
+  "app_store.message.install_failed": { mn: "{app}-ыг суулгаж чадсангүй.", en: "Could not install {app}." },
+  "app_store.message.update_succeeded": {
+    mn: "{app} {version} хувилбар руу шинэчлэгдлээ.",
+    en: "Updated {app} to {version}.",
+  },
+  "app_store.message.update_failed": { mn: "{app}-ыг шинэчилж чадсангүй.", en: "Could not update {app}." },
+  "app_store.message.enabled": { mn: "{app} идэвхжлээ.", en: "Enabled {app}." },
+  "app_store.message.disabled": { mn: "{app} идэвхгүй боллоо.", en: "Disabled {app}." },
 } as const;

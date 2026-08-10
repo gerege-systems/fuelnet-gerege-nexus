@@ -34,6 +34,47 @@ type SessionResolver interface {
 // than guessing.
 func (s *SSOProvider) AttachSessions(sessions SessionResolver) { s.sessions = sessions }
 
+// InstallGate answers whether a tenant may sign in to a client.
+//
+// It exists for external apps: a third-party platform installed from the store
+// gets an OAuth2 client here, and the app gate that keeps an uninstalled
+// module's routes unreachable has to keep reaching once the app in question is
+// somebody else's service. Without this, any user of any tenant could sign in
+// to any registered external app the moment it was published, whether or not
+// their organisation had installed it — the installation would decide what
+// appears in the menu and nothing else.
+//
+// Clients that belong to no external app — the developer portal's own, every
+// first-party integration — are not the gate's business and it says so by
+// answering true.
+type InstallGate interface {
+	AllowClient(ctx context.Context, tenantID, clientID string) (bool, error)
+}
+
+// AttachInstallGate wires the store's view of installations into the
+// authorization endpoint. Without one, nothing is gated — which is the state
+// this provider was in before external apps existed.
+func (s *SSOProvider) AttachInstallGate(gate InstallGate) { s.installs = gate }
+
+// allowedForTenant reports whether this tenant may use this client.
+//
+// A gate that fails is a refusal, not a bypass. The question it answers is
+// whether an organisation has installed a third-party app, and answering "yes"
+// because the database was unreachable would hand somebody's HR system a user
+// their employer never onboarded.
+func (s *SSOProvider) allowedForTenant(ctx context.Context, tenantID, clientID string) bool {
+	if s.installs == nil {
+		return true
+	}
+	allowed, err := s.installs.AllowClient(ctx, tenantID, clientID)
+	if err != nil {
+		slog.Error("could not check whether the tenant installed this app",
+			"error", err, "client_id", clientID, "tenant_id", tenantID)
+		return false
+	}
+	return allowed
+}
+
 // authRequest is a validated /oauth2/auth query.
 type authRequest struct {
 	Client              *Client
@@ -132,6 +173,18 @@ func (s *SSOProvider) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Checked after the user is known, because the question is about their
+	// organisation: the same client is reachable for a tenant that installed the
+	// app and refused for one that did not. access_denied rather than
+	// unauthorized_client — the client is fine, this user's tenant is not
+	// entitled to it, and that is what RFC 6749 §4.1.2.1 calls access_denied.
+	if !s.allowedForTenant(ctx, claims.TenantID, client.ClientID) {
+		slog.Info("refused an authorization request: the user's tenant has not installed this app",
+			"client_id", client.ClientID, "tenant_id", claims.TenantID)
+		fail("access_denied", "your organisation has not installed this application")
+		return
+	}
+
 	granted, err := s.store.GetConsent(ctx, claims.UserID, client.ClientID)
 	needsConsent := req.Prompt == "consent" || err != nil || !isSubset(scopes, granted)
 	if needsConsent {
@@ -181,6 +234,14 @@ func (s *SSOProvider) HandleConsentPrompt(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// The consent screen describes a grant that is about to be made, so it is
+	// held to the same rule as the endpoint that redirected here.
+	if !s.allowedForTenant(r.Context(), claims.TenantID, req.Client.ClientID) {
+		writeOAuthError(w, http.StatusForbidden, "access_denied",
+			"your organisation has not installed this application")
+		return
+	}
+
 	granted, _ := s.store.GetConsent(r.Context(), claims.UserID, req.Client.ClientID)
 
 	prompt := ConsentPrompt{
@@ -215,6 +276,17 @@ func (s *SSOProvider) HandleConsentDecision(w http.ResponseWriter, r *http.Reque
 	req, oerr := s.parseConsentQuery(ctx, r.PostForm)
 	if oerr != nil {
 		writeOAuthError(w, http.StatusBadRequest, oerr.Code, oerr.Description)
+		return
+	}
+
+	// This endpoint mints a code of its own, so the gate at /oauth2/auth is not
+	// enough: a browser can post here directly, and everything else about this
+	// request is re-validated from scratch for the same reason.
+	if !s.allowedForTenant(ctx, claims.TenantID, req.Client.ClientID) {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"redirect_to": errorRedirectURL(req.RedirectURI, "access_denied",
+				"your organisation has not installed this application", req.State),
+		})
 		return
 	}
 
@@ -593,6 +665,23 @@ func (s *SSOProvider) loadUser(ctx context.Context, userID string) (userProfile,
 	return p, err
 }
 
+// tenantSlug is the human-readable name of the organisation a token was issued
+// for.
+//
+// tenant_id has always been in the token and it is the identifier that matters,
+// but it is a UUID: a third-party platform receiving a sign-in has to map it to
+// the customer it knows, and every one of them would otherwise keep a table of
+// UUIDs to organisation names that this platform already has. A lookup failure
+// is not an error worth failing a sign-in over — the claim is simply absent.
+func (s *SSOProvider) tenantSlug(ctx context.Context, tenantID string) string {
+	var slug string
+	if err := s.store.db.QueryRow(ctx, `SELECT slug FROM tenants WHERE id = $1`, tenantID).Scan(&slug); err != nil {
+		slog.Warn("could not resolve the tenant slug for a token", "error", err, "tenant_id", tenantID)
+		return ""
+	}
+	return slug
+}
+
 // mintIDToken builds the OIDC identity assertion. Claims follow the granted
 // scopes: no email scope, no email claim.
 func (s *SSOProvider) mintIDToken(ctx context.Context, client *Client, tenantID, userID string,
@@ -611,6 +700,11 @@ func (s *SSOProvider) mintIDToken(ctx context.Context, client *Client, tenantID,
 		"exp":       now.Add(accessTokenTTL).Unix(),
 		"auth_time": now.Unix(),
 		"tenant_id": tenantID,
+	}
+	// Which organisation this person is acting for, by name. An external app
+	// signs in a user on behalf of a tenant, and needs to know which.
+	if slug := s.tenantSlug(ctx, tenantID); slug != "" {
+		claims["tenant_slug"] = slug
 	}
 	if nonce != "" {
 		claims["nonce"] = nonce
@@ -671,6 +765,9 @@ func (s *SSOProvider) HandleUserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := map[string]any{"sub": *token.UserID, "tenant_id": token.TenantID}
+	if slug := s.tenantSlug(ctx, token.TenantID); slug != "" {
+		claims["tenant_slug"] = slug
+	}
 	if slices.Contains(token.Scopes, "email") {
 		claims["email"] = profile.Email
 		claims["email_verified"] = true

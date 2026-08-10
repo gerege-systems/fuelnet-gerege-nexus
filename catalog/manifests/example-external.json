@@ -1,0 +1,31 @@
+{
+  "id": "mn.example.external_demo",
+  "type": "external",
+  "name": "Example External Platform",
+  "version": "1.0.0",
+  "platform": ">=1.0.0",
+  "dependencies": [],
+  "external": {
+    "launch_url": "https://external.example.mn/sso/gerege",
+    "sso_client_id": "app_example_external",
+    "scopes": ["openid", "profile", "email"],
+    "embed": "new_tab",
+    "health_url": "https://external.example.mn/healthz"
+  },
+  "permissions": [
+    {
+      "code": "external_demo.read",
+      "name": "Open the Example External Platform",
+      "description": "Allows opening the third-party platform with a Gerege sign-in"
+    }
+  ],
+  "menus": [
+    {
+      "id": "external_demo_home",
+      "label": "Example External Platform",
+      "external_url": "https://external.example.mn/sso/gerege",
+      "icon": "share-2",
+      "order": 10
+    }
+  ]
+}
