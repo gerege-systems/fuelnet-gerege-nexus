@@ -19,7 +19,18 @@ RUN go mod download
 # Copy the module source
 COPY backend/ ./
 
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/api ./cmd/api
+# Which platform this build claims to be. Manifests declare the platform they
+# need ("platform": ">=1.1.0"), and once the catalogue comes from a registry
+# outside this repository, that constraint is checked against whatever is
+# stamped here — an unstamped build would tell every store it is 1.0.0 for ever.
+# The default is the version the constant carries, so nothing changes for a
+# build that does not pass it. It must be valid semver: manifest validation
+# parses it.
+ARG VERSION=1.0.0
+
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-w -s -X github.com/gerege-systems/open-gerege-nexus/backend/internal/platform.PlatformVersion=${VERSION}" \
+    -o /bin/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/migrate ./cmd/migrate
 
 # Production Alpine image

@@ -3,6 +3,7 @@ package appinstaller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,8 +12,18 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ErrAppNotFound is returned when a slug names no app in the catalogue.
+//
+// It is a sentinel because it is the one installation failure that is the
+// caller's mistake rather than this deployment's: everything else — a missing
+// module, an unresolvable dependency, a database that will not take the row —
+// is an operator's problem, and telling a browser about it in detail only
+// describes the inside of the server to whoever asked.
+var ErrAppNotFound = errors.New("app not found in the store catalog")
 
 type AppInstaller struct {
 	db              *pgxpool.Pool
@@ -54,7 +65,7 @@ func (ai *AppInstaller) GetAppByID(id string) (appcatalog.CatalogApp, bool) {
 func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userID string) error {
 	targetApp, ok := ai.GetAppBySlug(appSlug)
 	if !ok {
-		return fmt.Errorf("app with slug %q not found in store catalog", appSlug)
+		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
 	}
 
 	// Build dependency graph from catalog
@@ -84,18 +95,33 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 		_ = tx.Rollback(ctx)
 	}()
 
+	// The tenant's administrator role is the same row for every permission of
+	// every app in this order, so it is resolved once. It used to be queried
+	// again inside the permission loop — eight apps' worth of permissions meant
+	// eight times as many round trips for an answer that cannot change inside a
+	// transaction. A tenant with no admin role is not an error: the grant below
+	// is skipped and the permission still exists for the role editor to hand out.
+	var adminRoleID string
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM roles WHERE tenant_id = $1 AND code = 'admin'`, tenantID).Scan(&adminRoleID); err != nil {
+		adminRoleID = ""
+	}
+
 	// Install apps in topological order (dependencies first)
 	for _, appID := range installOrderIDs {
 		app, _ := ai.GetAppByID(appID)
 
-		// Check if already installed
-		var existingID string
+		// Check if already installed, and on which version: an installation
+		// that stays behind the catalogue is what "update" has to move, so the
+		// version it was on is read before it is overwritten.
+		var existingID, previousVersion string
 		err := tx.QueryRow(ctx,
-			`SELECT id FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-			tenantID, app.ID).Scan(&existingID)
+			`SELECT id, installed_version FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+			tenantID, app.ID).Scan(&existingID, &previousVersion)
 
 		now := time.Now()
 		var installID string
+		upgradedFrom := ""
 
 		if err != nil {
 			// Not installed yet — insert installation
@@ -109,75 +135,38 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 			}
 		} else {
 			installID = existingID
-			// Enable and update status
+			// installed_version moves with the catalogue. It used to be left
+			// alone here, so a tenant that reinstalled an app the catalogue had
+			// carried to 1.1.0 was still recorded as running 1.0.0 for ever —
+			// and nothing could tell an out-of-date installation from a current
+			// one.
 			_, err = tx.Exec(ctx,
-				`UPDATE app_installations SET status = 'installed', enabled = TRUE, updated_at = $1
-				 WHERE id = $2`, now, installID)
+				`UPDATE app_installations SET status = 'installed', enabled = TRUE,
+				     installed_version = $1, updated_at = $2
+				 WHERE id = $3`, app.Version, now, installID)
 			if err != nil {
 				return fmt.Errorf("update app installation for %s: %w", app.ID, err)
 			}
-		}
-
-		// Register app permissions for tenant. Get returning !ok used to fall
-		// through to a nil-interface method call and panic the request.
-		mod, ok := appregistry.Get(app.ID)
-		if !ok {
-			return fmt.Errorf("compile-time module missing for %s", appID)
-		}
-		for _, perm := range mod.Permissions() {
-			permID := uuid.New().String()
-			_, _ = tx.Exec(ctx,
-				`INSERT INTO permissions (id, code, name, description)
-				 VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING`,
-				permID, perm.Code, perm.Name, perm.Description)
-
-			// Grant to tenant admin role
-			var adminRoleID string
-			err := tx.QueryRow(ctx,
-				`SELECT id FROM roles WHERE tenant_id = $1 AND code = 'admin'`, tenantID).Scan(&adminRoleID)
-			if err == nil {
-				var pID string
-				_ = tx.QueryRow(ctx, `SELECT id FROM permissions WHERE code = $1`, perm.Code).Scan(&pID)
-				if pID != "" {
-					_, _ = tx.Exec(ctx,
-						`INSERT INTO role_permissions (role_id, permission_id)
-						 VALUES ($1, $2) ON CONFLICT DO NOTHING`, adminRoleID, pID)
-				}
-			}
-
-			// Odoo-style additive default groups: managers receive operational
-			// read/manage permissions; users receive read/self-service rights.
-			// Tenant administrators still bypass checks and their system role is
-			// kept complete above.
-			for _, grant := range []struct {
-				roleCode string
-				allowed  bool
-			}{
-				{roleCode: "manager", allowed: strings.HasSuffix(perm.Code, ".read") || strings.HasSuffix(perm.Code, ".manage") || perm.Code == "gov.process" || perm.Code == "gov.delegate" || perm.Code == "gov.verify" || perm.Code == "gov.report" || perm.Code == "esign.sign"},
-				// esign.sign reaches ordinary users deliberately. The authority
-				// to sign is the citizen's own — an eID signature is made with
-				// their PIN2 on their own phone, and the HSM rail makes them
-				// prove a certificate — so withholding it would only stop
-				// people signing their own documents. Uploading and configuring
-				// remain behind esign.manage.
-				{roleCode: "user", allowed: strings.HasSuffix(perm.Code, ".read") || perm.Code == "gov.apply" || perm.Code == "esign.sign"},
-			} {
-				if !grant.allowed {
-					continue
-				}
-				_, _ = tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id)
-					SELECT r.id,p.id FROM roles r JOIN permissions p ON p.code=$3
-					WHERE r.tenant_id=$1 AND r.code=$2 AND r.active ON CONFLICT DO NOTHING`, tenantID, grant.roleCode, perm.Code)
+			if previousVersion != app.Version {
+				upgradedFrom = previousVersion
 			}
 		}
 
-		// Log installation event
-		evtDetails, _ := json.Marshal(map[string]string{"version": app.Version, "user_id": userID})
-		evtID := uuid.New().String()
-		_, _ = tx.Exec(ctx,
-			`INSERT INTO installation_events (id, installation_id, event_type, details, created_at)
-			 VALUES ($1, $2, 'installed', $3, $4)`,
-			evtID, installID, evtDetails, now)
+		if err := ai.grantAppPermissions(ctx, tx, tenantID, adminRoleID, app); err != nil {
+			return err
+		}
+
+		// Log installation event. A version that moved is recorded as an
+		// upgrade rather than as another install, so the trail answers "when did
+		// this tenant leave 1.0.0" without diffing timestamps.
+		eventType, details := "installed", map[string]string{"version": app.Version, "user_id": userID}
+		if upgradedFrom != "" {
+			eventType = "upgraded"
+			details = map[string]string{"from": upgradedFrom, "to": app.Version, "user_id": userID}
+		}
+		if err := recordInstallationEvent(ctx, tx, installID, eventType, details, now); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -192,10 +181,90 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 	return nil
 }
 
+// grantAppPermissions registers an app's permissions and hands them to the
+// tenant's default roles.
+//
+// Every statement here is now checked. They used to be written `_, _ =`, so a
+// tenant could finish an installation with none of the app's permissions
+// granted and be told it had succeeded — the app then appeared installed and
+// refused every request behind it.
+func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tenantID, adminRoleID string, app appcatalog.CatalogApp) error {
+	// Register app permissions for tenant. Get returning !ok used to fall
+	// through to a nil-interface method call and panic the request.
+	mod, ok := appregistry.Get(app.ID)
+	if !ok {
+		return fmt.Errorf("compile-time module missing for %s", app.ID)
+	}
+
+	for _, perm := range mod.Permissions() {
+		permID := uuid.New().String()
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO permissions (id, code, name, description)
+			 VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING`,
+			permID, perm.Code, perm.Name, perm.Description); err != nil {
+			return fmt.Errorf("register permission %s for %s: %w", perm.Code, app.ID, err)
+		}
+
+		// Grant to tenant admin role
+		if adminRoleID != "" {
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO role_permissions (role_id, permission_id)
+				 SELECT $1, p.id FROM permissions p WHERE p.code = $2
+				 ON CONFLICT DO NOTHING`, adminRoleID, perm.Code); err != nil {
+				return fmt.Errorf("grant %s to the admin role: %w", perm.Code, err)
+			}
+		}
+
+		// Odoo-style additive default groups: managers receive operational
+		// read/manage permissions; users receive read/self-service rights.
+		// Tenant administrators still bypass checks and their system role is
+		// kept complete above.
+		for _, grant := range []struct {
+			roleCode string
+			allowed  bool
+		}{
+			{roleCode: "manager", allowed: strings.HasSuffix(perm.Code, ".read") || strings.HasSuffix(perm.Code, ".manage") || perm.Code == "gov.process" || perm.Code == "gov.delegate" || perm.Code == "gov.verify" || perm.Code == "gov.report" || perm.Code == "esign.sign"},
+			// esign.sign reaches ordinary users deliberately. The authority
+			// to sign is the citizen's own — an eID signature is made with
+			// their PIN2 on their own phone, and the HSM rail makes them
+			// prove a certificate — so withholding it would only stop
+			// people signing their own documents. Uploading and configuring
+			// remain behind esign.manage.
+			{roleCode: "user", allowed: strings.HasSuffix(perm.Code, ".read") || perm.Code == "gov.apply" || perm.Code == "esign.sign"},
+		} {
+			if !grant.allowed {
+				continue
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id)
+				SELECT r.id,p.id FROM roles r JOIN permissions p ON p.code=$3
+				WHERE r.tenant_id=$1 AND r.code=$2 AND r.active ON CONFLICT DO NOTHING`,
+				tenantID, grant.roleCode, perm.Code); err != nil {
+				return fmt.Errorf("grant %s to the %s role: %w", perm.Code, grant.roleCode, err)
+			}
+		}
+	}
+	return nil
+}
+
+// recordInstallationEvent appends one line to an installation's history.
+func recordInstallationEvent(ctx context.Context, tx pgx.Tx, installID, eventType string, details map[string]string, at time.Time) error {
+	encoded, err := json.Marshal(details)
+	if err != nil {
+		return fmt.Errorf("encode %s event details: %w", eventType, err)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO installation_events (id, installation_id, event_type, details, created_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New().String(), installID, eventType, encoded, at); err != nil {
+		return fmt.Errorf("record %s event: %w", eventType, err)
+	}
+	return nil
+}
+
 func (ai *AppInstaller) DisableApp(ctx context.Context, tenantID, appSlug, userID string) error {
 	targetApp, ok := ai.GetAppBySlug(appSlug)
 	if !ok {
-		return fmt.Errorf("app with slug %q not found", appSlug)
+		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
 	}
 
 	now := time.Now()
@@ -217,7 +286,7 @@ func (ai *AppInstaller) DisableApp(ctx context.Context, tenantID, appSlug, userI
 func (ai *AppInstaller) EnableApp(ctx context.Context, tenantID, appSlug, userID string) error {
 	targetApp, ok := ai.GetAppBySlug(appSlug)
 	if !ok {
-		return fmt.Errorf("app with slug %q not found", appSlug)
+		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
 	}
 
 	now := time.Now()
@@ -258,6 +327,32 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 			app.ID, app.Slug, app.Name, app.Description, app.IconURL, app.Category, app.Visibility)
 		if err != nil {
 			return fmt.Errorf("sync catalog app %s: %w", app.ID, err)
+		}
+
+		// The version the catalogue currently carries is kept as history.
+		// app_versions has existed since migration 00002 and nothing ever wrote
+		// to it, so "which versions has this instance seen, and what did their
+		// manifest say" had no answer at all — which is the question every
+		// upgrade and every rollback starts from.
+		//
+		// DO NOTHING rather than an update: a published version is immutable.
+		// A manifest that changes under a version number it has already used is
+		// a publisher error, and overwriting the row here would hide it.
+		manifest, err := json.Marshal(app.Manifest)
+		if err != nil {
+			return fmt.Errorf("encode manifest for %s: %w", app.ID, err)
+		}
+		platformConstraint := app.Manifest.Platform
+		if platformConstraint == "" {
+			platformConstraint = ">=0.1.0"
+		}
+		_, err = ai.db.Exec(ctx,
+			`INSERT INTO app_versions (app_id, version, platform_constraint, manifest)
+			 VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (app_id, version) DO NOTHING`,
+			app.ID, app.Version, platformConstraint, manifest)
+		if err != nil {
+			return fmt.Errorf("record version %s of %s: %w", app.Version, app.ID, err)
 		}
 	}
 	return nil

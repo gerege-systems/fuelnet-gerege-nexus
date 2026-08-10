@@ -47,7 +47,19 @@ import (
 )
 
 // PlatformVersion is the semver the app-store manifests are validated against.
-const PlatformVersion = "1.0.0"
+//
+// It is a var rather than a const so a release build can stamp the version it
+// actually is:
+//
+//	go build -ldflags "-X github.com/gerege-systems/open-gerege-nexus/backend/internal/platform.PlatformVersion=1.2.0"
+//
+// A manifest names the platform it needs (`"platform": ">=1.1.0"`), and a store
+// that separates from this binary has to be told which platform is asking. A
+// constant would have every deployment claim 1.0.0 for ever, so every app would
+// look compatible with every instance. The default stays 1.0.0, which is what an
+// unstamped build has always reported; whatever is injected must be valid
+// semver, because manifest validation parses it.
+var PlatformVersion = "1.0.0"
 
 type Server struct {
 	db            *pgxpool.Pool
@@ -171,6 +183,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	ssoProvider := ssoprovider.NewSSOProvider(db)
 	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
+	// After Bootstrap, because that is what fills the module registry.
+	if err := verifyCatalogVersions(catalog); err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		db:           db,
 		installer:    installer,
@@ -230,6 +247,38 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	return s, nil
 }
 
+// verifyCatalogVersions holds the three records of an app's version to each
+// other: the Go module compiled into this binary, the catalogue entry the store
+// lists, and the manifest the installer reads.
+//
+// They drifted apart unnoticed — esign shipped 2.0.0 as a module and 1.0.0 in
+// the catalogue, and the developer portal did the same — because nothing ever
+// compared them. Once a registry outside this repository publishes versions, a
+// number the store advertises but the binary does not have is an upgrade that
+// silently does nothing, so the drift is caught here rather than in a support
+// ticket. Same reasoning as the manifest checks above: catalog integrity is a
+// startup error.
+//
+// An app with no compiled module is not an error. External apps have none by
+// definition, and their catalogue and manifest versions are still checked.
+func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
+	for _, app := range catalog {
+		if app.Manifest.Version != app.Version {
+			return fmt.Errorf("catalog entry %s is version %q but its manifest declares %q",
+				app.ID, app.Version, app.Manifest.Version)
+		}
+		mod, ok := appregistry.Get(app.ID)
+		if !ok {
+			continue
+		}
+		if mod.Version() != app.Version {
+			return fmt.Errorf("module %s is compiled at version %q but the catalog declares %q",
+				app.ID, mod.Version(), app.Version)
+		}
+	}
+	return nil
+}
+
 // StartBackgroundJobs launches the periodic work app modules need. It is
 // separate from NewServer so a test can build a server without spawning
 // goroutines, and it returns immediately — every job runs until ctx is
@@ -283,7 +332,10 @@ func (s *Server) setupRoutes() {
 	// Infrastructure
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		// The platform version is part of the health answer because it is what
+		// an app store has to know about this instance: which manifests apply
+		// to it, and whether an operator's rollout actually landed.
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "platform_version": PlatformVersion})
 	})
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.Ping(r.Context()); err != nil {

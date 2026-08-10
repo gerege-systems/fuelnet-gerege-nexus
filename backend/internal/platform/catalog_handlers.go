@@ -11,10 +11,13 @@ package platform
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
@@ -201,7 +204,19 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.InstallApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		// The failure used to be handed to the browser verbatim. That answered
+		// a database outage with "bad request" and described the inside of the
+		// server — constraint names, the module registry, the dependency graph
+		// — to anyone who could press Install. Only the caller's own mistake is
+		// reported as such; the rest goes to the log, where an operator can act
+		// on it.
+		if errors.Is(err, appinstaller.ErrAppNotFound) {
+			httpx.Error(w, http.StatusNotFound, "app not found")
+			return
+		}
+		slog.Error("app installation failed", "error", err, "app_slug", slug, "tenant_id", claims.TenantID)
+		httpx.Error(w, http.StatusInternalServerError,
+			"could not install this app; the failure has been logged for your administrator")
 		return
 	}
 	// The app gate reads a cached copy of this row, so the screen that just
