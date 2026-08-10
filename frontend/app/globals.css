@@ -277,6 +277,10 @@ html[data-theme="dark"] .border-slate-300 { border-color: var(--gerege-border) !
 /* Mobile shell follows open-gerege-mn: app switching moves to a fixed bottom
    tab bar and the active app's menu becomes an off-canvas drawer. */
 :root { --gerege-mobile-tabs-h: 64px; }
+/* Wide enough for the menu button alone, and free to grow when the fold-all
+   button joins it — the cell used to be a fixed 4rem, which cropped the second
+   button rather than making room for it. */
+.gerege-menu-toggle { min-width: 4rem; padding-inline: 0.25rem; }
 .gerege-header-context { width: 0; padding-inline: 0; }
 .gerege-header-context.is-open { width: 14rem; padding-inline: 1rem; border-right: 1px solid var(--gerege-chrome-border); }
 .gerege-sidebar { position: static; width: 4rem; transition: width 0.24s ease; }
@@ -288,7 +292,7 @@ html[data-theme="dark"] .border-slate-300 { border-color: var(--gerege-border) !
 @media (max-width: 900px) {
   .gerege-topbar { padding-inline: 0.25rem; }
   .gerege-header-brand { display: none; }
-  .gerege-menu-toggle { order: 1; width: 3.5rem; }
+  .gerege-menu-toggle { order: 1; min-width: 3.5rem; padding-inline: 0; }
   .gerege-header-context,
   .gerege-header-context.is-open {
     order: 2; flex: 1 1 auto; width: auto; padding-inline: 0.25rem;
