@@ -71,7 +71,9 @@ final class NativeLoginViewController: NSViewController {
         stack.setCustomSpacing(10, after: divider)
         [email, password, nationalID, passwordButton, pushButton, qrButton, status, cancelButton, divider].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
-            $0.widthAnchor.constraint(equalToConstant: 440).isActive = true
+            let width = $0.widthAnchor.constraint(equalTo: stack.widthAnchor)
+            width.priority = .init(999)
+            width.isActive = true
         }
         qrImage.translatesAutoresizingMaskIntoConstraints = false; qrImage.widthAnchor.constraint(equalToConstant: 190).isActive = true; qrImage.heightAnchor.constraint(equalToConstant: 190).isActive = true
         NSLayoutConstraint.activate([
@@ -97,7 +99,9 @@ final class NativeLoginViewController: NSViewController {
             string: placeholder,
             attributes: [.foregroundColor: Palette.muted]
         )
-        field.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        let height = field.heightAnchor.constraint(equalToConstant: 46)
+        height.priority = .init(999)
+        height.isActive = true
     }
 
     private func styleButton(_ button: NSButton, primary: Bool) {
@@ -109,7 +113,9 @@ final class NativeLoginViewController: NSViewController {
         button.layer?.backgroundColor = (primary ? Palette.teal : .clear).cgColor
         button.contentTintColor = primary ? Palette.navy : Palette.teal
         button.font = .systemFont(ofSize: 15, weight: .semibold)
-        button.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        let height = button.heightAnchor.constraint(equalToConstant: 46)
+        height.priority = .init(999)
+        height.isActive = true
     }
 
     @objc private func loginPassword() { auth.password(email: email.stringValue, password: password.stringValue) }
