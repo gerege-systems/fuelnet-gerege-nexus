@@ -200,6 +200,60 @@ manual SQL is required.
 
 ---
 
+## External apps: a platform that runs somewhere else
+
+Not every app in the store is a Go module compiled into this binary. A third
+party with a service already running — a payroll system, an HR platform, a
+sector-specific SaaS — is registered as an **external** app: this platform holds
+its catalogue entry, its permissions and its menu entry, and signs its users in
+over OIDC. None of its code runs here.
+
+```json
+{
+  "id": "mn.example.hrms",
+  "type": "external",
+  "name": "Example HRMS",
+  "version": "2026.8.0",
+  "platform": ">=1.0.0",
+  "external": {
+    "launch_url": "https://hrms.example.mn/sso/gerege",
+    "sso_client_id": "app_hrms_x1y2",
+    "scopes": ["openid", "profile", "email"],
+    "embed": "new_tab",
+    "health_url": "https://hrms.example.mn/healthz"
+  },
+  "permissions": [{ "code": "hrms.read", "name": "Open HRMS", "description": "…" }],
+  "menus": [{ "id": "hrms_home", "label": "HRMS",
+              "external_url": "https://hrms.example.mn/sso/gerege", "icon": "share-2" }]
+}
+```
+
+A worked example ships as `catalog/manifests/example-external.json`.
+
+What differs from a module manifest:
+
+- `type` is `"external"`. Absent or `"module"` means a compiled Go module, which
+  is what every manifest written before this existed says.
+- `external.launch_url` is required and must be **absolute HTTPS**. It is put in
+  front of a signed-in user as a link this platform vouches for.
+- `external.embed` defaults to `new_tab`. This platform sends
+  `X-Frame-Options: DENY`, so framing is a decision both sides have to make.
+- A menu entry carries `external_url` **instead of** `path`. The shell renders it
+  as `target="_blank" rel="noopener noreferrer"` with an external-link icon, and
+  it never highlights as "the page you are on" — it is not a route here.
+- No Go module is required or looked for. Permissions are granted from the
+  manifest rather than from a compiled `Permissions()`.
+
+**Installation is what authorises the sign-in.** `external.sso_client_id` names
+an OAuth2 client registered in this platform. At `/oauth2/auth`, a user whose
+tenant has not installed (and enabled) the app is refused with
+`error=access_denied` — the app gate that keeps an uninstalled module's routes
+unreachable, continued into an application that serves no routes here. Tokens
+carry `tenant_id` and `tenant_slug` so the third party knows which organisation
+the person is acting for.
+
+---
+
 ## Maintainers
 
 - **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))

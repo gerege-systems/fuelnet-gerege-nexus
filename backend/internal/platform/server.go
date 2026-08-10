@@ -148,8 +148,10 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		return nil, err
 	}
 	if catalogSource.Remote() {
-		slog.Info("app catalog is served by a registry",
-			"apps", len(catalog), "sync_interval", catalogSource.SyncInterval())
+		// Configured, not necessarily reached: Load says in its own log line
+		// which source actually answered, and boot carries on either way.
+		slog.Info("app catalog registry is configured",
+			"apps", len(catalog), "sync_interval", catalogSource.SyncInterval().String())
 	}
 
 	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
@@ -195,6 +197,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.
 	ssoProvider.AttachSessions(s.sessions)
+
+	// And whether the organisation they are signing in for has installed the
+	// app behind the client. For an external app that is the only gate there
+	// is: nothing of it runs here for appGateMiddleware to stand in front of.
+	ssoProvider.AttachInstallGate(s.newExternalAppGate())
 
 	// Clients live in Postgres now, so the built-in one is registered once
 	// rather than rebuilt into a map on every boot. A cold database must not

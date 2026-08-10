@@ -27,8 +27,14 @@ type MenuDefinition struct {
 	ParentID string `json:"parent_id,omitempty"`
 	Label    string `json:"label"`
 	Path     string `json:"path,omitempty"`
-	Icon     string `json:"icon"`
-	Order    int    `json:"order"`
+	// ExternalURL is set instead of Path by an app that lives outside this
+	// platform. The two are alternatives, not a pair: Path is a route in this
+	// application and ExternalURL is somewhere else entirely, so the shell
+	// renders one as a link it owns and the other as a link it is only
+	// pointing at.
+	ExternalURL string `json:"external_url,omitempty"`
+	Icon        string `json:"icon"`
+	Order       int    `json:"order"`
 
 	// Labels holds per-locale overrides keyed by ISO 639-1 code. The menu API
 	// resolves Label from the caller's locale before responding, so the client

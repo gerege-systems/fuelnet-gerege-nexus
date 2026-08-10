@@ -105,6 +105,10 @@ type SSOProvider struct {
 	// because the session store and the provider are both built by the Server.
 	sessions SessionResolver
 
+	// installs answers whether the signing-in user's tenant has installed the
+	// app a client belongs to. Nil means nothing is gated. See InstallGate.
+	installs InstallGate
+
 	keyMu sync.RWMutex
 	key   *signingKey
 }

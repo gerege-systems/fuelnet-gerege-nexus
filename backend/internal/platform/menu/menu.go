@@ -6,11 +6,16 @@ import (
 	"sort"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 )
 
 type InstalledAppStore interface {
 	GetEnabledAppIDsForTenant(context.Context, string) ([]string, error)
+	// GetCatalog is what external apps are read from. They have no compiled
+	// module to ask for menus, so their manifest is the only place their
+	// navigation exists.
+	GetCatalog() []appcatalog.CatalogApp
 }
 
 func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]internal.MenuDefinition, error) {
@@ -47,6 +52,23 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 			menus = append(menus, futureDefinition(mod.ID(), mod.Name(), settingsID, bp.Slug, item, 10+i*10, locale))
 		}
 	}
+	// External apps: a third-party service the tenant has installed. There is no
+	// Go module behind them and no blueprint of screens still to be built, so
+	// what they contribute is exactly what their manifest declares — usually one
+	// entry pointing out of this platform altogether.
+	for _, app := range store.GetCatalog() {
+		if !app.Manifest.IsExternal() || !enabled[app.ID] {
+			continue
+		}
+		modulesID := app.Slug + "_modules"
+		menus = append(menus,
+			localized(internal.MenuDefinition{ID: modulesID, AppID: app.ID, AppName: app.Name, Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale))
+		for _, item := range app.Manifest.Menus {
+			item.AppID, item.AppName, item.ParentID, item.Order = app.ID, app.Name, modulesID, 10
+			menus = append(menus, localized(item, locale))
+		}
+	}
+
 	sort.Slice(menus, func(i, j int) bool {
 		if menus[i].AppID != menus[j].AppID {
 			return menus[i].AppID < menus[j].AppID

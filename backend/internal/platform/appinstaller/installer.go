@@ -135,8 +135,14 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 		return fmt.Errorf("dependency resolution failed: %w", err)
 	}
 
-	// Verify all modules in install order are compiled into binary
+	// Verify all modules in install order are compiled into binary. An external
+	// app has no Go module by definition — it is somebody else's running service
+	// — so requiring one would make the whole category uninstallable.
 	for _, appID := range installOrderIDs {
+		app, ok := ai.GetAppByID(appID)
+		if ok && app.Manifest.IsExternal() {
+			continue
+		}
 		if err := appregistry.VerifyModuleExists(appID); err != nil {
 			return fmt.Errorf("compile-time module missing for %s: %w", appID, err)
 		}
@@ -239,14 +245,22 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 // granted and be told it had succeeded — the app then appeared installed and
 // refused every request behind it.
 func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tenantID, adminRoleID string, app appcatalog.CatalogApp) error {
-	// Register app permissions for tenant. Get returning !ok used to fall
-	// through to a nil-interface method call and panic the request.
-	mod, ok := appregistry.Get(app.ID)
-	if !ok {
-		return fmt.Errorf("compile-time module missing for %s", app.ID)
+	// Where the permissions come from follows what the app is. A module's are
+	// read from the compiled module, which is the code that will enforce them;
+	// an external app has no code here, so its manifest is the only statement of
+	// what it asks for — and the manifest arrived signed by the registry.
+	permissions := app.Manifest.Permissions
+	if !app.Manifest.IsExternal() {
+		// Register app permissions for tenant. Get returning !ok used to fall
+		// through to a nil-interface method call and panic the request.
+		mod, ok := appregistry.Get(app.ID)
+		if !ok {
+			return fmt.Errorf("compile-time module missing for %s", app.ID)
+		}
+		permissions = mod.Permissions()
 	}
 
-	for _, perm := range mod.Permissions() {
+	for _, perm := range permissions {
 		permID := uuid.New().String()
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO permissions (id, code, name, description)

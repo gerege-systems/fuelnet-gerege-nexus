@@ -14,6 +14,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
@@ -47,7 +48,7 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 		}
 		visible := menus[:0]
 		for _, item := range menus {
-			permission := appReadPermission(item.AppID)
+			permission := s.appReadPermission(item.AppID)
 			if permission == "" || permissions[permission] {
 				visible = append(visible, item)
 			}
@@ -57,6 +58,27 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(menus)
+}
+
+// appReadPermission decides which permission a menu entry is hidden behind.
+//
+// An external app cannot be named in the switch below — the whole point is that
+// it arrives from a registry rather than from this repository — so its manifest
+// answers for it. A tenant that installs somebody else's HRMS is not thereby
+// putting a link to it in front of every member of the organisation.
+func (s *Server) appReadPermission(appID string) string {
+	if app, found := s.installer.GetAppByID(appID); found && app.Manifest.IsExternal() {
+		for _, permission := range app.Manifest.Permissions {
+			if strings.HasSuffix(permission.Code, ".read") {
+				return permission.Code
+			}
+		}
+		// A manifest that asks for nothing is visible to the tenant that
+		// installed it, which is the same answer the switch gives for an app it
+		// does not know.
+		return ""
+	}
+	return appReadPermission(appID)
 }
 
 func appReadPermission(appID string) string {

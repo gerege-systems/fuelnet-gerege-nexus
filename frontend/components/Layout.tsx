@@ -11,10 +11,13 @@ import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
 import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantChoices";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
 
-interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; icon:string; order:number }
-interface AppNav { id:string; name:string; icon:string; path:string; menus:MenuItem[] }
+interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number }
+// path is a route in this application; external_url is somewhere else. An app
+// installed from the store may be either, so an AppNav carries whichever its
+// first menu entry has and the rail renders a Link or an anchor accordingly.
+interface AppNav { id:string; name:string; icon:string; path:string; externalUrl?:string; menus:MenuItem[] }
 
 // Every icon the server can name in a menu definition. A name missing here
 // falls back to a generic box, which is why the sub-menus under an app used to
@@ -93,7 +96,14 @@ export default function Layout({children}:{children:React.ReactNode}){
   const apps=useMemo<AppNav[]>(()=>{
     const groups=new Map<string,MenuItem[]>();
     menus.filter(m=>m.app_id).forEach(m=>groups.set(m.app_id!,[...(groups.get(m.app_id!)||[]),m]));
-    return [...groups.entries()].map(([id,items])=>{const sorted=items.sort((a,b)=>a.order-b.order),first=sorted.find(item=>item.path)!;return{id,name:first.label||first.app_name||id,icon:first.icon,path:first.path!,menus:sorted}}).sort((a,b)=>{const ai=APP_ORDER.indexOf(a.id),bi=APP_ORDER.indexOf(b.id);return (ai<0?999:ai)-(bi<0?999:bi)||a.id.localeCompare(b.id)});
+    // An app with nothing to link to is dropped rather than rendered: the tile
+    // is built from its first linkable entry, and a group heading alone would
+    // have made that undefined.
+    return [...groups.entries()].flatMap(([id,items])=>{
+      const sorted=items.sort((a,b)=>a.order-b.order),first=sorted.find(item=>item.path||item.external_url);
+      if(!first)return[];
+      return[{id,name:first.label||first.app_name||id,icon:first.icon,path:first.path||first.external_url!,externalUrl:first.path?undefined:first.external_url,menus:sorted}];
+    }).sort((a,b)=>{const ai=APP_ORDER.indexOf(a.id),bi=APP_ORDER.indexOf(b.id);return (ai<0?999:ai)-(bi<0?999:bi)||a.id.localeCompare(b.id)});
   },[menus]);
   const selected=apps.find(app=>app.menus.some(m=>m.path&&isUnder(pathname,m.path)))||null;
   const platformActive=!selected;
@@ -121,8 +131,8 @@ export default function Layout({children}:{children:React.ReactNode}){
   async function logout(){try{await api.logout()}catch{}resetAccess();forgetTenants();router.push("/login")}
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
-    {id:"platform",href:"/apps",active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},
-    ...apps.map(app=>({id:app.id,href:app.path,active:selected?.id===app.id,label:app.name,icon:iconMap[app.icon]||<Package className="w-5 h-5"/>})),
+    {id:"platform",href:"/apps",external:false,active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},
+    ...apps.map(app=>({id:app.id,href:app.path,external:!!app.externalUrl,active:selected?.id===app.id,label:app.name,icon:iconMap[app.icon]||<Package className="w-5 h-5"/>})),
   ];
   const hasMobileMore=mobileAppTabs.length>5;
   const primaryMobileTabs=hasMobileMore?mobileAppTabs.slice(0,4):mobileAppTabs;
@@ -183,7 +193,7 @@ export default function Layout({children}:{children:React.ReactNode}){
       <div className={`gerege-sidebar top-16 bottom-0 left-0 z-40 flex overflow-hidden ${mobileOpen?"is-mobile-open":""} ${panelOpen?"is-desktop-open":""}`}>
         <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
-          {apps.map(app=><AppRailLink key={app.id} href={app.path} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+          {apps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
         </nav>
         <aside className="gerege-menu-panel overflow-hidden">
           <div className="w-56 py-4">
@@ -244,10 +254,32 @@ function TenantSwitcher({current,currentName,children}:{current?:string;currentN
     </div>}
   </div>;
 }
-function AppRailLink({href,active,title,icon}:{href:string;active:boolean;title:string;icon:React.ReactNode}){return <Link href={href} title={title} aria-label={title} className={`w-11 h-11 rounded-xl grid place-items-center transition ${active?"bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] shadow-sm":"text-slate-500 hover:bg-[var(--gerege-surface-2)] hover:text-slate-800"}`}>{icon}</Link>}
-function MobileAppTab({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-label={label} aria-current={active?"page":undefined} className={`gerege-mobile-tab ${active?"is-active":""}`}><span>{icon}</span><small>{label}</small></Link>}
-function MobileMoreApp({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-current={active?"page":undefined} className={`gerege-mobile-more-app ${active?"is-active":""}`}><span>{icon}</span><strong>{label}</strong></Link>}
+// Leaving this product is stated, not implied: an external destination gets a
+// new tab, an icon that says so, and rel="noopener" — the page it opens is
+// somebody else's and must not be handed a reference back to this window.
+function ExternalAnchor({href,className,children,...rest}:{href:string;className?:string;children:React.ReactNode}&React.AnchorHTMLAttributes<HTMLAnchorElement>){
+  return <a href={href} target="_blank" rel="noopener noreferrer" className={className} {...rest}>{children}</a>;
+}
+function AppRailLink({href,external,active,title,icon}:{href:string;external?:boolean;active:boolean;title:string;icon:React.ReactNode}){
+  const className=`w-11 h-11 rounded-xl grid place-items-center transition ${active?"bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] shadow-sm":"text-slate-500 hover:bg-[var(--gerege-surface-2)] hover:text-slate-800"}`;
+  if(external)return <ExternalAnchor href={href} title={title} aria-label={title} className={className}>{icon}</ExternalAnchor>;
+  return <Link href={href} title={title} aria-label={title} className={className}>{icon}</Link>;
+}
+function MobileAppTab({href,external,active,label,icon}:{href:string;external?:boolean;active:boolean;label:string;icon:React.ReactNode}){
+  const className=`gerege-mobile-tab ${active?"is-active":""}`;
+  if(external)return <ExternalAnchor href={href} aria-label={label} className={className}><span>{icon}</span><small>{label}</small></ExternalAnchor>;
+  return <Link href={href} aria-label={label} aria-current={active?"page":undefined} className={className}><span>{icon}</span><small>{label}</small></Link>;
+}
+function MobileMoreApp({href,external,active,label,icon}:{href:string;external?:boolean;active:boolean;label:string;icon:React.ReactNode}){
+  const className=`gerege-mobile-more-app ${active?"is-active":""}`;
+  if(external)return <ExternalAnchor href={href} className={className}><span>{icon}</span><strong>{label}</strong></ExternalAnchor>;
+  return <Link href={href} aria-current={active?"page":undefined} className={className}><span>{icon}</span><strong>{label}</strong></Link>;
+}
 function NavLink({href,active,icon,label}:{href:string;active:boolean;icon:React.ReactNode;label:string}){return <Link href={href} className={`gerege-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition ${active?"gerege-nav-link-active font-semibold":""}`}><span className="gerege-nav-icon">{icon}</span><span>{label}</span></Link>}
+// The same row as a NavLink, minus the highlight: an external destination has
+// no path under this application, so nothing it opens can ever be "the page
+// you are on".
+function ExternalNavLink({href,icon,label}:{href:string;icon:React.ReactNode;label:string}){return <ExternalAnchor href={href} className="gerege-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition"><span className="gerege-nav-icon">{icon}</span><span className="flex-1">{label}</span><ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-60"/></ExternalAnchor>}
 function MenuGroup({id,title,closed,onToggle,children}:{id:string;title:string;closed:boolean;onToggle:(id:string)=>void;children:React.ReactNode}){
   const bodyId=`menu-group-${id}`;
   return <section className="gerege-menu-group mb-6">
@@ -268,4 +300,6 @@ function MenuGroup({id,title,closed,onToggle,children}:{id:string;title:string;c
     </div>
   </section>;
 }
-function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];pathname:string;closedGroups:string[];onToggle:(id:string)=>void}){const roots=menus.filter(item=>!item.parent_id).sort((a,b)=>a.order-b.order);return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&item.path).sort((a,b)=>a.order-b.order).map(item=><NavLink key={item.id} href={item.path!} active={isUnder(pathname,item.path!)} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
+function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];pathname:string;closedGroups:string[];onToggle:(id:string)=>void}){const roots=menus.filter(item=>!item.parent_id).sort((a,b)=>a.order-b.order);return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
+  ?<NavLink key={item.id} href={item.path} active={isUnder(pathname,item.path)} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>
+  :<ExternalNavLink key={item.id} href={item.external_url!} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
