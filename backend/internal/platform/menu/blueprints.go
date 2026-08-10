@@ -129,16 +129,22 @@ var blueprints = map[string]blueprint{
 			// Latin even in the scripts that would otherwise transliterate them.
 			{ID: "api-keys", EN: "API keys", Icon: "key-round", Labels: map[string]string{
 				"mn": "API түлхүүр", "ar": "مفاتيح API", "zh": "API 密钥", "fr": "Clés API", "ru": "Ключи API", "es": "Claves API"}},
-			{ID: "webhooks", EN: "Webhooks", Icon: "webhook", Labels: map[string]string{
-				"mn": "Webhook", "ar": "Webhooks", "zh": "Webhook", "fr": "Webhooks", "ru": "Webhooks", "es": "Webhooks"}},
+			// Access audit sits under Modules rather than Settings: it is
+			// something you read, not something you configure.
+			{ID: "audit", EN: "Access audit", Icon: "scroll-text", Labels: map[string]string{
+				"mn": "Хандалтын аудит", "ar": "تدقيق الوصول", "zh": "访问审计", "fr": "Audit des accès", "ru": "Аудит доступа", "es": "Auditoría de acceso"}},
+			// No Webhooks entry: Settings -> Integrations already registers
+			// webhook listeners with a target URL and a signing secret, and a
+			// second screen over the same records would only disagree with the
+			// first one eventually.
 		},
 		Settings: []futureMenu{
 			{ID: "scopes", EN: "OAuth scopes", Icon: "shield-check", Labels: map[string]string{
 				"mn": "OAuth scope", "ar": "نطاقات OAuth", "zh": "OAuth 权限范围", "fr": "Portées OAuth", "ru": "Области OAuth", "es": "Ámbitos OAuth"}},
 			{ID: "redirects", EN: "Redirect policies", Icon: "route", Labels: map[string]string{
 				"mn": "Redirect бодлого", "ar": "سياسات إعادة التوجيه", "zh": "重定向策略", "fr": "Politiques de redirection", "ru": "Политики перенаправления", "es": "Políticas de redirección"}},
-			{ID: "audit", EN: "Access audit", Icon: "scroll-text", Labels: map[string]string{
-				"mn": "Хандалтын аудит", "ar": "تدقيق الوصول", "zh": "访问审计", "fr": "Audit des accès", "ru": "Аудит доступа", "es": "Auditoría de acceso"}},
+			{ID: "signing-keys", EN: "Signing keys", Icon: "key-square", Labels: map[string]string{
+				"mn": "Гарын үсгийн түлхүүр", "ar": "مفاتيح التوقيع", "zh": "签名密钥", "fr": "Clés de signature", "ru": "Ключи подписи", "es": "Claves de firma"}},
 		}},
 
 	"io.example.gov_services": {Slug: "gov-services",
