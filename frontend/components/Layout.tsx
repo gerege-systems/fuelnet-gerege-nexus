@@ -148,7 +148,18 @@ export default function Layout({children}:{children:React.ReactNode}){
         <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(iconMap[selected.icon]||<Package className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
         <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">Gerege Nexus</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
       </div>
-      <div className="gerege-menu-toggle w-16 h-full shrink-0 grid place-items-center"><button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={t("web.action.toggle_menu")} aria-expanded={mobileOpen}><MenuIcon className="w-5 h-5"/></button></div>
+      <div className="gerege-menu-toggle h-full shrink-0 flex items-center justify-center gap-1">
+        <button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={t("web.action.toggle_menu")} aria-expanded={mobileOpen}><MenuIcon className="w-5 h-5"/></button>
+        {/* Beside the control that opens the panel, because it acts on what
+            that panel contains. Icon-only: the words fit in a 14rem column,
+            not in a header cell next to the menu button. */}
+        {visibleGroups.length>1&&<button type="button" onClick={toggleAllGroups} aria-expanded={allGroupsOpen}
+          aria-label={allGroupsOpen?t("web.action.collapse_all"):t("web.action.expand_all")}
+          title={allGroupsOpen?t("web.action.collapse_all"):t("web.action.expand_all")}
+          className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50">
+          {allGroupsOpen?<ChevronsDownUp className="w-5 h-5"/>:<ChevronsUpDown className="w-5 h-5"/>}
+        </button>}
+      </div>
       <div className="hidden lg:flex items-center gap-2 px-4 min-w-0"><span className="gerege-session-dot w-2 h-2 rounded-full shrink-0"/><strong className="text-base text-slate-800 font-semibold truncate max-w-56">{user?.tenant_name||"Demo Tenant"}</strong></div>
       <div className="gerege-header-search hidden md:flex flex-1 items-center justify-center min-w-0 px-5 relative">
         <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&results[0]){router.push(results[0].path);setQuery("")}}} placeholder={t("web.view.search_placeholder")} className="w-full h-10 rounded-full border border-slate-200 bg-slate-100/80 pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--gerege-blue)_15%,transparent)]"/>
@@ -167,12 +178,6 @@ export default function Layout({children}:{children:React.ReactNode}){
         </nav>
         <aside className="gerege-menu-panel overflow-hidden">
           <div className="w-56 py-4">
-            {visibleGroups.length>1&&<div className="px-2 pb-2 flex">
-              <button type="button" onClick={toggleAllGroups} aria-expanded={allGroupsOpen} className="ml-auto flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 hover:bg-[var(--gerege-surface-2)] transition">
-                {allGroupsOpen?<ChevronsDownUp className="w-3.5 h-3.5"/>:<ChevronsUpDown className="w-3.5 h-3.5"/>}
-                {allGroupsOpen?t("web.action.collapse_all"):t("web.action.expand_all")}
-              </button>
-            </div>}
             <nav className="space-y-1 px-2">
               {selected?<AppMenuGroups menus={selected.menus} pathname={pathname} closedGroups={closedGroups} onToggle={toggleGroup}/>:platformMenus}
             </nav>
