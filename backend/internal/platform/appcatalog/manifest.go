@@ -101,6 +101,28 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 	return nil
 }
 
+// IsNewerVersion reports whether candidate is a later release than installed.
+//
+// It is the one place the store decides that an update exists, so both the API
+// that offers the button and the installer that refuses a pointless upgrade
+// answer the same question the same way. Semver, not string comparison: "1.10.0"
+// sorts before "1.9.0" as text and after it as a version.
+//
+// A version either side cannot parse falls back to "different means newer".
+// Manifest versions are validated as semver on the way in, so this only covers
+// a catalogue that reached this instance by some other route.
+func IsNewerVersion(candidate, installed string) bool {
+	if candidate == "" {
+		return false
+	}
+	newer, candidateErr := semver.NewVersion(candidate)
+	held, installedErr := semver.NewVersion(installed)
+	if candidateErr != nil || installedErr != nil {
+		return candidate != installed
+	}
+	return newer.GreaterThan(held)
+}
+
 // LoadManifestFile loads and validates a manifest file.
 func LoadManifestFile(path string, platformVersion string) (Manifest, error) {
 	// #nosec G304 -- the only caller builds this from the catalogue directory

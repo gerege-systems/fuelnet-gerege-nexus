@@ -202,6 +202,9 @@ export const api = {
         version: string;
         installed: boolean;
         enabled: boolean;
+        installed_version?: string;
+        latest_version: string;
+        update_available: boolean;
         manifest: any;
       }>
     >("/store/apps"),
@@ -221,6 +224,10 @@ export const api = {
     >("/installed-apps"),
 
   installApp: (slug: string) => mutateApp(`/store/apps/${slug}/install`),
+
+  // An upgrade changes which menus an app contributes just as an install does,
+  // so it goes through the same notification rather than beside it.
+  upgradeApp: (slug: string) => mutateApp(`/store/apps/${slug}/upgrade`),
 
   enableApp: (slug: string) => mutateApp(`/store/apps/${slug}/enable`),
 

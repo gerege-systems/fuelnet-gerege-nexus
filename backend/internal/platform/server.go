@@ -481,6 +481,7 @@ func (s *Server) setupRoutes() {
 			pr.Group(func(ar chi.Router) {
 				ar.Use(s.requireAdmin)
 				ar.Post("/store/apps/{slug}/install", s.handleInstallApp)
+				ar.Post("/store/apps/{slug}/upgrade", s.handleUpgradeApp)
 				ar.Post("/store/apps/{slug}/enable", s.handleEnableApp)
 				ar.Post("/store/apps/{slug}/disable", s.handleDisableApp)
 			})

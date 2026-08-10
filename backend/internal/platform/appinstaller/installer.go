@@ -25,6 +25,15 @@ import (
 // describes the inside of the server to whoever asked.
 var ErrAppNotFound = errors.New("app not found in the store catalog")
 
+// ErrNotInstalled is returned when an operation addresses an installation this
+// tenant does not have.
+var ErrNotInstalled = errors.New("app is not installed for this tenant")
+
+// ErrAlreadyCurrent is returned when an upgrade is asked for and there is
+// nothing to move to. It is a refusal rather than a silent success: a store
+// that answered "upgraded" here would keep offering the button.
+var ErrAlreadyCurrent = errors.New("the installed version is already the catalog version")
+
 type AppInstaller struct {
 	db              *pgxpool.Pool
 	catalog         []appcatalog.CatalogApp
@@ -63,6 +72,30 @@ func (ai *AppInstaller) GetAppByID(id string) (appcatalog.CatalogApp, bool) {
 
 // InstallApp handles recursive dependency resolution and tenant installation.
 func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userID string) error {
+	targetApp, ok := ai.GetAppBySlug(appSlug)
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
+	}
+
+	if err := ai.installOrUpgrade(ctx, tenantID, appSlug, userID); err != nil {
+		return err
+	}
+
+	audit.Record(ctx, tenantID, userID, "app.install", targetApp.ID, map[string]any{
+		"app_slug": targetApp.Slug,
+		"version":  targetApp.Version,
+	})
+
+	return nil
+}
+
+// installOrUpgrade is the transaction both installing and upgrading run.
+//
+// They are the same work — resolve the dependency order, write or move every
+// installation row in it, grant the permissions, record what happened — and
+// differ only in what they refuse beforehand and what they write to the audit
+// trail afterwards.
+func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug, userID string) error {
 	targetApp, ok := ai.GetAppBySlug(appSlug)
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
@@ -173,11 +206,6 @@ func (ai *AppInstaller) InstallApp(ctx context.Context, tenantID, appSlug, userI
 		return fmt.Errorf("commit install transaction: %w", err)
 	}
 
-	audit.Record(ctx, tenantID, userID, "app.install", targetApp.ID, map[string]any{
-		"app_slug": targetApp.Slug,
-		"version":  targetApp.Version,
-	})
-
 	return nil
 }
 
@@ -259,6 +287,63 @@ func recordInstallationEvent(ctx context.Context, tx pgx.Tx, installID, eventTyp
 		return fmt.Errorf("record %s event: %w", eventType, err)
 	}
 	return nil
+}
+
+// UpgradeApp moves one tenant's installation to the version the catalogue now
+// carries, and reports which version it came from.
+//
+// The work is InstallApp's: dependencies are resolved again (a new version may
+// have gained one), every version in the resolved order moves, and each app
+// whose version actually changed records an 'upgraded' event. What is added
+// here is the two refusals — an app this tenant never installed, and an
+// installation that is already on the catalogue version — because "upgrade"
+// has to be able to say no rather than quietly reinstall.
+func (ai *AppInstaller) UpgradeApp(ctx context.Context, tenantID, appSlug, userID string) (from string, to string, err error) {
+	targetApp, ok := ai.GetAppBySlug(appSlug)
+	if !ok {
+		return "", "", fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
+	}
+
+	var installed, pinned string
+	err = ai.db.QueryRow(ctx,
+		`SELECT installed_version, COALESCE(pinned_version, '')
+		   FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		tenantID, targetApp.ID).Scan(&installed, &pinned)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", fmt.Errorf("%w: %s", ErrNotInstalled, appSlug)
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("read installation of %s: %w", targetApp.ID, err)
+	}
+
+	if !appcatalog.IsNewerVersion(targetApp.Version, installed) {
+		return installed, targetApp.Version, ErrAlreadyCurrent
+	}
+
+	if err := ai.installOrUpgrade(ctx, tenantID, appSlug, userID); err != nil {
+		return installed, targetApp.Version, err
+	}
+
+	// A pinned installation that is upgraded on purpose stays pinned — to the
+	// version the administrator has just approved. Clearing the pin instead
+	// would turn one deliberate upgrade into consent for every future one,
+	// which is the opposite of what pinning was asked for.
+	if pinned != "" {
+		if _, err := ai.db.Exec(ctx,
+			`UPDATE app_installations SET pinned_version = $1, updated_at = $2
+			   WHERE tenant_id = $3 AND app_id = $4`,
+			targetApp.Version, time.Now(), tenantID, targetApp.ID); err != nil {
+			return installed, targetApp.Version, fmt.Errorf("move the version pin of %s: %w", targetApp.ID, err)
+		}
+	}
+
+	audit.Record(ctx, tenantID, userID, "app.upgrade", targetApp.ID, map[string]any{
+		"app_slug": targetApp.Slug,
+		"from":     installed,
+		"to":       targetApp.Version,
+	})
+
+	return installed, targetApp.Version, nil
 }
 
 func (ai *AppInstaller) DisableApp(ctx context.Context, tenantID, appSlug, userID string) error {
@@ -358,25 +443,40 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 	return nil
 }
 
-// GetInstallationStatesForTenant returns every installed app for the tenant
-// mapped to whether it is currently enabled. Presence in the map means
-// "installed"; the value means "enabled".
-func (ai *AppInstaller) GetInstallationStatesForTenant(ctx context.Context, tenantID string) (map[string]bool, error) {
+// Installation is what one tenant has of one app.
+type Installation struct {
+	Version    string
+	Enabled    bool
+	AutoUpdate bool
+	// PinnedVersion is empty unless the tenant has been held at a version on
+	// purpose. See migration 00033.
+	PinnedVersion string
+}
+
+// GetInstallationsForTenant returns every installed app for the tenant.
+// Presence in the map means "installed".
+//
+// It used to answer with enabled/not-enabled alone, which was enough for a
+// store that could only install and disable. The store now has to say whether
+// an installation is behind the catalogue, and that is a question about the
+// version it is on.
+func (ai *AppInstaller) GetInstallationsForTenant(ctx context.Context, tenantID string) (map[string]Installation, error) {
 	rows, err := ai.db.Query(ctx,
-		`SELECT app_id, enabled FROM app_installations WHERE tenant_id = $1`, tenantID)
+		`SELECT app_id, installed_version, enabled, auto_update, COALESCE(pinned_version, '')
+		   FROM app_installations WHERE tenant_id = $1`, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	states := make(map[string]bool)
+	states := make(map[string]Installation)
 	for rows.Next() {
 		var id string
-		var enabled bool
-		if err := rows.Scan(&id, &enabled); err != nil {
+		var held Installation
+		if err := rows.Scan(&id, &held.Version, &held.Enabled, &held.AutoUpdate, &held.PinnedVersion); err != nil {
 			return nil, err
 		}
-		states[id] = enabled
+		states[id] = held
 	}
 	return states, rows.Err()
 }

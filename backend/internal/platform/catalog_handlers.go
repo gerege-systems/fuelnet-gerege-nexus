@@ -87,7 +87,7 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	// "installed" and "enabled" are distinct states: an app can be installed
 	// and then disabled. Deriving both from the enabled-only query reported
 	// disabled apps as never installed, so the UI offered "Install" again.
-	installedStates, err := s.installer.GetInstallationStatesForTenant(r.Context(), tenantID)
+	installedStates, err := s.installer.GetInstallationsForTenant(r.Context(), tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load installed apps")
 		return
@@ -97,16 +97,26 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 		appcatalog.CatalogApp
 		Installed bool `json:"installed"`
 		Enabled   bool `json:"enabled"`
+		// What this tenant is running, and what the catalogue carries. They
+		// were the same number for the life of the platform because an
+		// installation's version never moved; now that it does, the store is
+		// where the difference has to show.
+		InstalledVersion string `json:"installed_version,omitempty"`
+		LatestVersion    string `json:"latest_version"`
+		UpdateAvailable  bool   `json:"update_available"`
 	}
 
 	locale := config.LocaleFromRequest(r)
 	res := make([]StoreAppResponse, 0, len(catalog))
 	for _, app := range catalog {
-		state, installed := installedStates[app.ID]
+		held, installed := installedStates[app.ID]
 		res = append(res, StoreAppResponse{
-			CatalogApp: app.Localized(locale),
-			Installed:  installed,
-			Enabled:    state,
+			CatalogApp:       app.Localized(locale),
+			Installed:        installed,
+			Enabled:          held.Enabled,
+			InstalledVersion: held.Version,
+			LatestVersion:    app.Version,
+			UpdateAvailable:  installed && appcatalog.IsNewerVersion(app.Version, held.Version),
 		})
 	}
 
@@ -225,6 +235,56 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "installed", "app": slug})
+}
+
+// handleUpgradeApp moves this tenant to the version the catalogue carries.
+//
+// Separate from install rather than folded into it: pressing "Install" on an
+// app you already have is a mistake worth ignoring, while pressing "Update"
+// when there is nothing to update is a question worth answering — and the
+// answer, 409, is what stops a store screen offering the button for ever.
+func (s *Server) handleUpgradeApp(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	if !security.IsValidSlug(slug) {
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
+		return
+	}
+
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	from, to, err := s.installer.UpgradeApp(r.Context(), claims.TenantID, slug, claims.UserID)
+	switch {
+	case errors.Is(err, appinstaller.ErrAppNotFound):
+		httpx.Error(w, http.StatusNotFound, "app not found")
+		return
+	case errors.Is(err, appinstaller.ErrNotInstalled):
+		httpx.Error(w, http.StatusNotFound, "this app is not installed for your organisation")
+		return
+	case errors.Is(err, appinstaller.ErrAlreadyCurrent):
+		httpx.JSON(w, http.StatusConflict, map[string]string{
+			"error":             "this app is already on the latest version",
+			"installed_version": from,
+			"latest_version":    to,
+		})
+		return
+	case err != nil:
+		slog.Error("app upgrade failed", "error", err, "app_slug", slug, "tenant_id", claims.TenantID)
+		httpx.Error(w, http.StatusInternalServerError,
+			"could not update this app; the failure has been logged for your administrator")
+		return
+	}
+
+	// The app gate reads a cached copy of this row, so the screen that just
+	// pressed the button has to stop being told the old answer.
+	s.forgetAppGate(claims.TenantID)
+
+	httpx.JSON(w, http.StatusOK, map[string]string{
+		"status": "upgraded", "app": slug, "from": from, "to": to,
+	})
 }
 
 func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
