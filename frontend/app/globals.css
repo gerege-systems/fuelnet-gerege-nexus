@@ -101,6 +101,21 @@
   }
   .gerege-nav-icon { color: #98a2b3; }
   .gerege-nav-link-active .gerege-nav-icon { color: var(--gerege-blue); }
+  /* The open/closed halves of a menu group.
+
+     A 1fr -> 0fr grid row rather than an animated height, because the links
+     inside are a list of unknown length and a height transition needs a number
+     to travel to. The row does the measuring; min-height:0 is what lets the
+     child shrink below its content, and overflow:hidden is what makes the
+     links disappear behind the fold rather than spill over the group below.
+     Transitions are already neutralised under prefers-reduced-motion. */
+  .gerege-menu-group-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.22s ease;
+  }
+  .gerege-menu-group-body[data-collapsed="true"] { grid-template-rows: 0fr; }
+  .gerege-menu-group-body > div { min-height: 0; overflow: hidden; }
   .gerege-parent-menu { border: 0; background: transparent; }
   .gerege-submenu { border-left: 1px solid var(--gerege-border); }
   .gerege-submenu .gerege-nav-link-active { box-shadow: none; position: relative; }

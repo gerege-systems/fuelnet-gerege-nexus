@@ -756,6 +756,8 @@ export const zh: Record<string, string> = {
   "products.view.title": "产品目录",
   "web.action.close_menu": "关闭菜单",
   "web.action.close_more": "关闭更多应用",
+  "web.action.collapse_all": "全部收起",
+  "web.action.expand_all": "全部展开",
   "web.action.logout": "退出",
   "web.action.more": "更多",
   "web.action.toggle_menu": "切换菜单",
