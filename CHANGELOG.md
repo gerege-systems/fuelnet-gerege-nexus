@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Switching between the organisations you belong to
+
+- **The membership table always allowed several; the runtime allowed one.**
+  Which tenant a session acted for was decided at login by whichever membership
+  was oldest (`internal/platform/auth_handlers.go`), and nothing could change it
+  afterwards — signing out and back in landed the same person in the same
+  tenant, deliberately, so somebody working for two organisations could reach
+  only the first. `GET /api/v1/auth/tenants` lists the ones they may act for and
+  `POST /api/v1/auth/switch-tenant` moves the session to one of them.
+- **The token is rotated, not the row updated.** A session token is the
+  authority to act inside one tenant, and the tenant is what changes; the new
+  session inherits the old one's expiry, so moving between two organisations
+  cannot be used to keep a session alive without signing in again. The
+  membership check lives in the store, where no route can reach the insert
+  without it, and a tenant the caller is not in answers 403 rather than 404 —
+  whether it exists is not their business.
+- **Both queries deliberately leave the tenant behind** (`tenant.Without`):
+  `memberships` carries a `tenant_id` and is under the row-level policy, so a
+  request bound to the current tenant would answer "which tenants may you act
+  for" with the one the caller is already in.
+- **The brand mark is the control.** It used to link to `/apps`, which the
+  Platform tile beneath it in the rail still does. Choosing another organisation
+  reloads the shell rather than patching state: the menus, the permissions and
+  every list on screen belonged to the tenant just left. Below 900px the header
+  brand is hidden by the mobile shell, so the switcher is not reachable there
+  yet.
+
 ### Removed — The Swift macOS client (`desktop-mac/`)
 
 - The bundle was a WKWebView pointed at the web client, plus a menu bar, Touch

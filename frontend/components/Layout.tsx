@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,7 +10,7 @@ import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, Check } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; icon:string; order:number }
 interface AppNav { id:string; name:string; icon:string; path:string; menus:MenuItem[] }
@@ -132,9 +132,9 @@ export default function Layout({children}:{children:React.ReactNode}){
 
   return <div className="gerege-shell min-h-screen flex flex-col">
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
-      <Link href="/apps" className="gerege-header-brand w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-chrome-border)]">
+      <TenantSwitcher current={user?.tenant_id} currentName={user?.tenant_name}>
         {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege Nexus" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
-      </Link>
+      </TenantSwitcher>
       <div className={`gerege-header-context h-full flex items-center gap-3 overflow-hidden transition-all duration-200 ${panelOpen?"is-open":""}`}>
         <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(iconMap[selected.icon]||<Package className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
         <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">Gerege Nexus</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
@@ -181,6 +181,84 @@ export default function Layout({children}:{children:React.ReactNode}){
   </div>;
 }
 
+/**
+ * The brand mark, and now the way to change which organisation you are working
+ * in.
+ *
+ * The mark used to link to /apps; the Platform tile directly beneath it in the
+ * rail still does, so nothing is lost. What was missing had no home at all:
+ * which tenant a session belonged to was decided once, by whichever membership
+ * was oldest, and somebody who works for two organisations could reach only the
+ * first — signing out and back in landed them in the same one again.
+ *
+ * Below 900px the header brand is hidden by the mobile shell, so this control
+ * is not reachable there yet.
+ */
+function TenantSwitcher({current,currentName,children}:{current?:string;currentName?:string;children:React.ReactNode}){
+  const {t}=useI18n();
+  const [open,setOpen]=useState(false);
+  // null while nothing has been asked for yet, which is also what renders the
+  // loading line. An empty array is an answer: no memberships came back.
+  const [tenants,setTenants]=useState<Array<{id:string;name:string;slug:string}>|null>(null);
+  const [switching,setSwitching]=useState(false),[failed,setFailed]=useState(false);
+  const box=useRef<HTMLDivElement>(null);
+
+  // Fetched when the panel opens rather than with the shell: most people hold
+  // one membership and will never open this.
+  useEffect(()=>{
+    if(!open||tenants)return;
+    let alive=true;
+    void api.getTenants().then(r=>{if(alive)setTenants(r.tenants||[])}).catch(()=>{if(alive)setTenants([])});
+    return()=>{alive=false};
+  },[open,tenants]);
+
+  useEffect(()=>{
+    if(!open)return;
+    const onPointerDown=(event:MouseEvent)=>{if(!box.current?.contains(event.target as Node))setOpen(false)};
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false)};
+    document.addEventListener("mousedown",onPointerDown);
+    document.addEventListener("keydown",onKeyDown);
+    return()=>{document.removeEventListener("mousedown",onPointerDown);document.removeEventListener("keydown",onKeyDown)};
+  },[open]);
+
+  async function choose(id:string){
+    if(id===current||switching){setOpen(false);return}
+    setSwitching(true);setFailed(false);
+    try{
+      await api.switchTenant(id);
+      // Everything on screen was fetched for the tenant being left — menus,
+      // permissions, every list on the page behind this panel. A full load is
+      // the only honest way to drop all of it at once, and /apps is somewhere
+      // every tenant has, unlike the screen the operator is standing on.
+      resetAccess();
+      window.location.assign("/apps");
+    }catch{
+      setSwitching(false);
+      setFailed(true);
+    }
+  }
+
+  return <div ref={box} className="gerege-header-brand relative w-16 h-full shrink-0 grid place-items-center border-r border-[var(--gerege-chrome-border)]">
+    <button type="button" onClick={()=>setOpen(v=>!v)} aria-haspopup="menu" aria-expanded={open}
+      aria-label={currentName?`${currentName} — ${t("web.action.switch_tenant")}`:t("web.action.switch_tenant")}
+      title={currentName?`${currentName} — ${t("web.action.switch_tenant")}`:t("web.action.switch_tenant")}
+      className="grid place-items-center rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gerege-blue)]">
+      {children}
+    </button>
+    {open&&<div role="menu" aria-label={t("web.view.tenants")} className="gerege-topbar-onlight absolute left-2 top-14 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">
+      <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("web.view.tenants")}</p>
+      {tenants===null&&<p className="px-3 py-2 text-sm text-slate-500">{t("base.message.loading")}</p>}
+      {tenants?.map(option=><button key={option.id} type="button" role="menuitem" disabled={switching} onClick={()=>void choose(option.id)}
+        className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)] disabled:opacity-60 ${option.id===current?"bg-[var(--gerege-blue-soft)]":""}`}>
+        <span className={option.id===current?"text-[var(--gerege-blue)]":"text-slate-400"}><Building2 className="w-4 h-4"/></span>
+        <span className="min-w-0 flex-1"><strong className="block text-sm truncate">{option.name}</strong><small className="text-slate-500 truncate">{option.slug}</small></span>
+        {option.id===current&&<Check className="w-4 h-4 shrink-0 text-[var(--gerege-blue)]"/>}
+      </button>)}
+      {tenants?.length===1&&<p className="px-3 pb-2 pt-1 text-xs text-slate-500">{t("web.message.only_tenant")}</p>}
+      {failed&&<p role="alert" className="px-3 pb-2 pt-1 text-xs text-rose-600">{t("web.message.tenant_switch_failed")}</p>}
+    </div>}
+  </div>;
+}
 function AppRailLink({href,active,title,icon}:{href:string;active:boolean;title:string;icon:React.ReactNode}){return <Link href={href} title={title} aria-label={title} className={`w-11 h-11 rounded-xl grid place-items-center transition ${active?"bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] shadow-sm":"text-slate-500 hover:bg-[var(--gerege-surface-2)] hover:text-slate-800"}`}>{icon}</Link>}
 function MobileAppTab({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-label={label} aria-current={active?"page":undefined} className={`gerege-mobile-tab ${active?"is-active":""}`}><span>{icon}</span><small>{label}</small></Link>}
 function MobileMoreApp({href,active,label,icon}:{href:string;active:boolean;label:string;icon:React.ReactNode}){return <Link href={href} aria-current={active?"page":undefined} className={`gerege-mobile-more-app ${active?"is-active":""}`}><span>{icon}</span><strong>{label}</strong></Link>}

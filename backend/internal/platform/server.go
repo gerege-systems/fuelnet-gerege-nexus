@@ -320,6 +320,11 @@ func (s *Server) setupRoutes() {
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.
 			pr.Post("/auth/logout-all", s.handleLogoutEverywhere)
+			// Which organisations this person may act for, and moving the
+			// session to one of them. Both cross tenants by definition, so
+			// they run on the platform path — see handleTenants.
+			pr.Get("/auth/tenants", s.handleTenants)
+			pr.Post("/auth/switch-tenant", s.handleSwitchTenant)
 			pr.Get("/menus", s.handleMenus)
 
 			// Tenant access control. Mutations are deliberately admin-only;

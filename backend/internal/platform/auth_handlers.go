@@ -29,6 +29,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/time/rate"
@@ -139,6 +140,86 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	auth.ClearSessionCookie(w)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "logged_out"})
+}
+
+// handleTenants answers which tenants the caller may act for.
+//
+// A user with one membership gets a list of one. That is not a wasted answer:
+// it is what lets the client show where it is without claiming there is
+// somewhere else to go.
+func (s *Server) handleTenants(w http.ResponseWriter, r *http.Request) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	options, err := s.sessions.TenantsForUser(tenant.Without(r.Context()), claims.UserID)
+	if err != nil {
+		slog.Error("failed to list the tenants a user belongs to", "user_id", claims.UserID, "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "failed to list tenants")
+		return
+	}
+
+	httpx.JSON(w, http.StatusOK, map[string]any{"current": claims.TenantID, "tenants": options})
+}
+
+// handleSwitchTenant moves the caller's session to another of their tenants.
+//
+// Until this existed, which tenant a person acted in was decided once, at
+// login, by whichever membership was oldest — someone who works for two
+// organisations could reach only one of them, and the only way to change that
+// was to edit the database. Signing out and back in would not have helped: the
+// login picks the same oldest membership every time, deliberately.
+func (s *Server) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
+	var req struct {
+		TenantID string `json:"tenant_id"`
+	}
+	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil || strings.TrimSpace(req.TenantID) == "" {
+		httpx.Error(w, http.StatusBadRequest, "tenant_id is required")
+		return
+	}
+	req.TenantID = strings.TrimSpace(req.TenantID)
+
+	// Already there. Answering rather than rotating keeps a double-click on the
+	// tenant you are in from replacing a working session with another one.
+	if req.TenantID == claims.TenantID {
+		httpx.JSON(w, http.StatusOK, map[string]any{"tenant_id": claims.TenantID, "switched": false})
+		return
+	}
+
+	token, expiresAt, err := s.sessions.SwitchTenant(tenant.Without(r.Context()), auth.TokenFromRequest(r), req.TenantID)
+	switch {
+	case errors.Is(err, auth.ErrNotAMember):
+		// Not 404: whether that tenant exists is not this caller's business.
+		httpx.Error(w, http.StatusForbidden, "no membership in that tenant")
+		return
+	case errors.Is(err, auth.ErrSessionInvalid):
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	case err != nil:
+		slog.Error("failed to switch tenant", "user_id", claims.UserID, "tenant_id", req.TenantID, "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "failed to switch tenant")
+		return
+	}
+
+	auth.SetSessionCookie(w, token, expiresAt)
+	// Recorded against the tenant being left, because that is the trail an
+	// administrator of it reads: this person stopped acting here, and when.
+	audit.Record(r.Context(), claims.TenantID, claims.UserID, "auth.tenant_switched", "session",
+		map[string]any{"from": claims.TenantID, "to": req.TenantID})
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"tenant_id":  req.TenantID,
+		"switched":   true,
+		"expires_at": expiresAt,
+	})
 }
 
 // handleLogoutEverywhere ends every session the caller holds.

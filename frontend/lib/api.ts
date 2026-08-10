@@ -161,6 +161,20 @@ export const api = {
   // is empty for administrators, who bypass the check.
   getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[] }>("/auth/me"),
 
+  // The organisations the signed-in person may act for. A membership in one is
+  // the common case, so callers should expect a list of one rather than treat
+  // it as an error.
+  getTenants: () => fetcher<{ current: string; tenants: Array<{ id: string; name: string; slug: string }> }>("/auth/tenants"),
+
+  // Moves the session to another of them. The server rotates the token and
+  // re-sets the cookie, so everything fetched before this call belongs to the
+  // tenant just left — the caller reloads rather than patching state.
+  switchTenant: (tenantId: string) =>
+    fetcher<{ tenant_id: string; switched: boolean; expires_at?: string }>("/auth/switch-tenant", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }),
+
   getMenus: () => fetcher<Array<{ id: string; app_id?: string; app_name?: string; parent_id?: string; label: string; path?: string; icon: string; order: number }>>("/menus"),
 
   // Odoo-style tenant access control
