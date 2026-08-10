@@ -58,7 +58,13 @@ permissions:
   packages: write
 
 concurrency:
-  group: production-deploy
+  # Shared with deploy-appstore.yml, and named for the host rather than for
+  # either stack. Both roll out to the same machine as the same user, so they
+  # share one ~/.docker/config.json: when they overlapped, one workflow's
+  # `docker logout` landed between the other's `docker rm -f` and its pull, and
+  # the platform spent several minutes serving 502 because its containers were
+  # gone and the replacement pull was denied.
+  group: production-host-rollout
   cancel-in-progress: false
 
 env:
@@ -244,6 +250,19 @@ jobs:
             echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
             docker compose -f docker-compose.prod.yml pull
+
+            # Nothing is torn down until the images that replace it are on this
+            # host. The running containers are the only thing serving, and a
+            # pull that fails after they are gone is an outage rather than a
+            # failed deploy — which is exactly what happened when a concurrent
+            # rollout logged this host out of the registry mid-pull.
+            for image in "ghcr.io/${REPO_LOWER}/backend:${IMAGE_TAG}" "ghcr.io/${REPO_LOWER}/frontend:${IMAGE_TAG}"; do
+              if ! docker image inspect "$image" >/dev/null 2>&1; then
+                echo "::error::$image is not on the host after the pull; refusing to remove the running containers"
+                exit 1
+              fi
+            done
+
             # A previously interrupted Compose recreate can leave a stopped
             # container holding one of our explicit container names. Remove
             # only the stateless application services before bringing the new
