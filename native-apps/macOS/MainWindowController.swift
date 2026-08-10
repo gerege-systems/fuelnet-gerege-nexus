@@ -23,7 +23,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
     private var baseURLString: String { settings.webEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
 
     public init() {
-        let mask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        let mask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
         let rect = NSRect(x: 100, y: 100, width: 1280, height: 820)
         let window = NSWindow(contentRect: rect, styleMask: mask, backing: .buffered, defer: false)
 
