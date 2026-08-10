@@ -23,7 +23,7 @@ public struct NativeSettingsView: View {
     @State private var status = ""
     @AppStorage("native.settings.schemaVersion") private var schemaVersion = 1
     @AppStorage("native.settings.webEndpoint") private var webEndpoint = "https://nexus.gerege.mn"
-    @AppStorage("native.settings.apiEndpoint") private var apiEndpoint = "https://api.nexus.gerege.mn"
+    @AppStorage("native.settings.apiEndpoint") private var apiEndpoint = "https://nexus.gerege.mn"
     @AppStorage("native.settings.printerTransport") private var printerTransport = "AirPrint"
     @AppStorage("native.settings.printerHost") private var printerHost = ""
     @AppStorage("native.settings.printerPort") private var printerPort = "9100"

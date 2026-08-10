@@ -1,11 +1,11 @@
 import Foundation
 
 struct NativeSettings: Codable {
-    var schemaVersion = 1
+    var schemaVersion = 2
     var launchAtLogin = false
     var language = "mn"
-    var webEndpoint = "http://localhost:3000"
-    var apiEndpoint = "http://localhost:8080"
+    var webEndpoint = "https://nexus.gerege.mn"
+    var apiEndpoint = "https://nexus.gerege.mn"
     var printerTransport = "USB"
     var printerHost = ""
     var printerPort = 9100
@@ -25,7 +25,13 @@ struct NativeSettings: Codable {
     static let storageKey = "mn.gerege.nexus.native-settings.v1"
     static func load() -> NativeSettings {
         guard let data = UserDefaults.standard.data(forKey: storageKey),
-              let value = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
+              var value = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
+        if value.schemaVersion < 2 {
+            if value.webEndpoint == "http://localhost:3000" { value.webEndpoint = "https://nexus.gerege.mn" }
+            if value.apiEndpoint == "http://localhost:8080" { value.apiEndpoint = "https://nexus.gerege.mn" }
+            value.schemaVersion = 2
+            value.save()
+        }
         return value
     }
     func save() {

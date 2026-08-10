@@ -16,7 +16,11 @@ struct GeregeNexusApp: App {
     @State private var showWorkArea = false
 
     init() {
-        let configured = UserDefaults.standard.string(forKey: "native.settings.apiEndpoint") ?? "https://api.nexus.gerege.mn"
+        var configured = UserDefaults.standard.string(forKey: "native.settings.apiEndpoint") ?? "https://nexus.gerege.mn"
+        if configured == "https://api.nexus.gerege.mn" || configured == "http://localhost:8080" {
+            configured = "https://nexus.gerege.mn"
+            UserDefaults.standard.set(configured, forKey: "native.settings.apiEndpoint")
+        }
         let root = configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let url = URL(string: root.hasSuffix("/api/v1") ? root + "/" : root + "/api/v1/")!
         _auth = StateObject(wrappedValue: AuthController(transport: URLSessionAuthTransport(apiBase: url)))
@@ -39,7 +43,7 @@ struct GeregeNexusApp: App {
             .onOpenURL { _ in /* The in-flight poll owns completion; app link only re-activates this scene. */ }
         }
     }
-    private func registerPushToken(){guard let token=UserDefaults.standard.string(forKey:"native.push.apnsToken") else{return};let endpoint=UserDefaults.standard.string(forKey:"native.settings.apiEndpoint") ?? "https://api.nexus.gerege.mn";Task{try? await PushRegistration.registerAPNS(token:token,apiEndpoint:endpoint)}}
+    private func registerPushToken(){guard let token=UserDefaults.standard.string(forKey:"native.push.apnsToken") else{return};let endpoint=UserDefaults.standard.string(forKey:"native.settings.apiEndpoint") ?? "https://nexus.gerege.mn";Task{try? await PushRegistration.registerAPNS(token:token,apiEndpoint:endpoint)}}
 }
 #else
 @main
