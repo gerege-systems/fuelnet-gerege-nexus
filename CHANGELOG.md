@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed — The Swift macOS client (`desktop-mac/`)
+
+- The bundle was a WKWebView pointed at the web client, plus a menu bar, Touch
+  ID and a preferences window for the two server URLs. It was built by a shell
+  script outside CI, so nothing compiled it on a pull request and nothing
+  caught a Swift file that no longer built until somebody ran `make build-mac`
+  by hand. `make build` ran it, which meant a build of this repository failed
+  on any machine without Xcode.
+- What it offered over the browser, the browser now offers: the web client is
+  installable as a PWA and gets its own dock icon and window from
+  `/manifest.webmanifest`, with no download and no store. The README section
+  that documented `make build-mac` / `make run-mac` says that instead.
+- The API keeps the path a native client would use — bearer tokens, no ambient
+  cookie — so this is a client leaving, not the platform closing a door. Anyone
+  wanting a native macOS app can build one against the same API in its own
+  repository, where it can have a real build and a real signing identity.
+
 ### Added — Email verification as a platform capability
 
 - **One flow instead of one per app**
