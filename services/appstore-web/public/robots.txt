@@ -1,0 +1,4 @@
+# The storefront is the one Gerege surface that wants to be found. The platform
+# itself sends noindex; this does the opposite, deliberately.
+User-agent: *
+Allow: /
