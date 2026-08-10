@@ -1,0 +1,272 @@
+name: Deploy the App Store (appstore.gerege.mn, developer.gerege.mn)
+
+# The second stack on the production host, deployed the same way as the first:
+# CI proves the commit, images go to GHCR, the server pulls them.
+#
+# It is chained to CI's completion rather than to a push for the same reason
+# deploy.yml is — two pull requests that are each green can still break main
+# together, and that is precisely when an automatic rollout should not happen.
+#
+# Required repository secrets (beyond the ones deploy.yml already uses):
+#   APPSTORE_SIGNING_KEY        base64 Ed25519 private key; the registry signs
+#                               every catalogue with it and refuses to start
+#                               without it. Generate with:
+#                                 docker run --rm <backend image> /app/catalog-sign -genkey
+#                               The public half goes to nexus as
+#                               APPSTORE_PUBLIC_KEY.
+#   APPSTORE_POSTGRES_PASSWORD  for this stack's own database
+#
+# Repository variables:
+#   APPSTORE_ORIGIN         defaults to https://appstore.gerege.mn
+#   CONSOLE_ORIGIN          defaults to https://developer.gerege.mn
+#   APPSTORE_ADMIN_EMAILS   who may publish a submitted version
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (defaults to this commit)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: appstore-deploy
+  cancel-in-progress: false
+
+env:
+  APPSTORE_ORIGIN: ${{ vars.APPSTORE_ORIGIN || 'https://appstore.gerege.mn' }}
+  CONSOLE_ORIGIN: ${{ vars.CONSOLE_ORIGIN || 'https://developer.gerege.mn' }}
+  SSO_ISSUER: ${{ vars.PUBLIC_ORIGIN || 'https://nexus.gerege.mn' }}
+
+jobs:
+  build-and-push:
+    name: Build & push ${{ matrix.component }} image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      matrix:
+        include:
+          # The registry ships inside the platform's own image — same module,
+          # same catalogue types, one build. Only the two web faces are new.
+          - component: appstore-web
+            context: ./services/appstore-web
+          - component: developer-web
+            context: ./services/developer-web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image name
+        id: meta
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ github.event.workflow_run.head_sha || github.sha }}
+          # Only the cross-links between the two sites are baked in; everything
+          # else is read at run time on the server side.
+          build-args: |
+            NEXT_PUBLIC_DEVELOPER_URL=${{ env.CONSOLE_ORIGIN }}
+            NEXT_PUBLIC_STOREFRONT_URL=${{ env.APPSTORE_ORIGIN }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  deploy:
+    name: Roll out the App Store
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check deployment secrets
+        id: guard
+        run: |
+          if [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] || [ -z "${{ secrets.APPSTORE_SIGNING_KEY }}" ]; then
+            echo "::warning::DEPLOY_SSH_KEY or APPSTORE_SIGNING_KEY is not configured — skipping rollout."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve image tag
+        id: tag
+        run: echo "value=${{ github.event.inputs.tag || github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Copy the compose file and the vhosts
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "deploy/appstore/docker-compose.prod.yml,deploy/nginx/appstore.gerege.mn.conf,deploy/nginx/developer.gerege.mn.conf"
+          target: /opt/appstore
+          strip_components: 1
+
+      - name: Pull images and restart
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          APPSTORE_POSTGRES_PASSWORD: ${{ secrets.APPSTORE_POSTGRES_PASSWORD }}
+          APPSTORE_SIGNING_KEY: ${{ secrets.APPSTORE_SIGNING_KEY }}
+          APPSTORE_ORIGIN: ${{ env.APPSTORE_ORIGIN }}
+          CONSOLE_ORIGIN: ${{ env.CONSOLE_ORIGIN }}
+          SSO_ISSUER: ${{ env.SSO_ISSUER }}
+          APPSTORE_ADMIN_EMAILS: ${{ vars.APPSTORE_ADMIN_EMAILS }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN,REPO,APPSTORE_POSTGRES_PASSWORD,APPSTORE_SIGNING_KEY,APPSTORE_ORIGIN,CONSOLE_ORIGIN,SSO_ISSUER,APPSTORE_ADMIN_EMAILS
+          script: |
+            set -euo pipefail
+            APP_DIR=/opt/appstore
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+
+            REPO_LOWER=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
+
+            umask 077
+            cat > .env <<EOF
+            IMAGE_BACKEND=ghcr.io/${REPO_LOWER}/backend
+            IMAGE_STOREFRONT=ghcr.io/${REPO_LOWER}/appstore-web
+            IMAGE_CONSOLE=ghcr.io/${REPO_LOWER}/developer-web
+            IMAGE_TAG=${IMAGE_TAG}
+            APPSTORE_POSTGRES_PASSWORD=${APPSTORE_POSTGRES_PASSWORD}
+            APPSTORE_SIGNING_KEY=${APPSTORE_SIGNING_KEY}
+            APPSTORE_ORIGIN=${APPSTORE_ORIGIN}
+            CONSOLE_ORIGIN=${CONSOLE_ORIGIN}
+            SSO_ISSUER=${SSO_ISSUER}
+            APPSTORE_ADMIN_EMAILS=${APPSTORE_ADMIN_EMAILS}
+            EOF
+
+            echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+            docker compose -f appstore/docker-compose.prod.yml pull
+            # Stateless containers are force-removed rather than stopped
+            # gracefully, the same as the platform stack: a wedged web container
+            # otherwise holds the rollout until the SSH action times out. The
+            # database and its volume are never touched.
+            set +e
+            timeout 30s docker rm -f gerege_appstore_registry gerege_appstore_web gerege_developer_web
+            set -e
+            docker compose -f appstore/docker-compose.prod.yml up -d --remove-orphans
+
+            docker logout ghcr.io
+
+      - name: Install the vhosts and obtain certificates
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APPSTORE_ORIGIN: ${{ env.APPSTORE_ORIGIN }}
+          CONSOLE_ORIGIN: ${{ env.CONSOLE_ORIGIN }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: APPSTORE_ORIGIN,CONSOLE_ORIGIN
+          script: |
+            set -uo pipefail
+            # Nginx and certbot need root, and this deploy user may not have it.
+            # A rollout that fails here has still rolled the applications out —
+            # they are up on loopback — so this step reports what an operator
+            # has to do rather than failing the deploy after the fact.
+            if ! sudo -n true 2>/dev/null; then
+              echo "::warning::No passwordless sudo; install deploy/nginx/*.conf and run certbot by hand."
+              exit 0
+            fi
+
+            for host in appstore.gerege.mn developer.gerege.mn; do
+              src="/opt/appstore/nginx/${host}.conf"
+              dest="/etc/nginx/sites-available/${host}.conf"
+              [ -f "$src" ] || continue
+
+              # Certbot rewrites the file it manages, adding the TLS server
+              # block. Copying over a certbot-managed file every deploy would
+              # remove that block and take the site off HTTPS, so an existing
+              # managed file is left exactly as it is.
+              if [ -f "$dest" ] && grep -q "managed by Certbot" "$dest"; then
+                echo "${host}: certbot manages this vhost already; leaving it alone"
+              else
+                sudo cp "$src" "$dest"
+                sudo ln -sf "$dest" "/etc/nginx/sites-enabled/${host}.conf"
+                echo "${host}: vhost installed"
+              fi
+            done
+
+            sudo nginx -t && sudo systemctl reload nginx
+
+            if command -v certbot >/dev/null 2>&1; then
+              for host in appstore.gerege.mn developer.gerege.mn; do
+                if sudo test -d "/etc/letsencrypt/live/${host}"; then
+                  echo "${host}: certificate already present"
+                else
+                  # --nginx edits the vhost in place and reloads; a failure here
+                  # (DNS not pointed yet, rate limit) leaves the site on plain
+                  # HTTP rather than leaving the rollout broken.
+                  sudo certbot --nginx -n --agree-tos --redirect \
+                    -m "${CERTBOT_EMAIL:-admin@gerege.mn}" -d "${host}" \
+                    || echo "::warning::certbot failed for ${host}; the site is on HTTP until it is run by hand"
+                fi
+              done
+            else
+              echo "::warning::certbot is not installed; ${APPSTORE_ORIGIN} and ${CONSOLE_ORIGIN} stay on HTTP"
+            fi
+
+      - name: Verify the App Store is healthy
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8083/health > /dev/null \
+                 && curl -fsS http://127.0.0.1:3009/health > /dev/null \
+                 && curl -fsS http://127.0.0.1:3010/health > /dev/null; then
+                echo "registry, storefront and console are healthy"
+                # The catalogue is what every Nexus instance depends on, so the
+                # rollout is not called done until it actually signs one.
+                curl -fsS "http://127.0.0.1:8083/api/v1/registry/catalog?platform=1.0.0" \
+                  | head -c 120 && echo
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "::error::the App Store did not become healthy within 150s"
+            docker compose -f /opt/appstore/appstore/docker-compose.prod.yml logs --tail=80
+            exit 1

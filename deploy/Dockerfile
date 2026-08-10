@@ -51,6 +51,15 @@ ENV TZ=Asia/Ulaanbaatar
 # Run as an unprivileged user.
 RUN addgroup -S app && adduser -S -G app app
 
+# Where a catalogue pulled from the registry is cached between restarts.
+#
+# Created here, owned by the runtime user, so that a named volume mounted over
+# it inherits that ownership — Docker copies the image directory's owner into an
+# empty volume, and a root-owned one would leave the cache unwritable. The cache
+# failing is not fatal (the platform logs it and rebuilds next sync), which is
+# exactly why it would otherwise go unnoticed.
+RUN mkdir -p /var/lib/nexus && chown app:app /var/lib/nexus
+
 WORKDIR /app
 
 COPY --from=builder /bin/api /app/api
