@@ -26,46 +26,90 @@ final class NativeLoginViewController: NSViewController {
     override func loadView() {
         let root = NSView()
         root.wantsLayer = true
-        root.layer?.backgroundColor = NSColor(calibratedRed: 0.043, green: 0.059, blue: 0.09, alpha: 1).cgColor
+        root.appearance = NSAppearance(named: .darkAqua)
+        root.layer?.backgroundColor = Palette.navy.cgColor
 
-        let title = NSTextField(labelWithString: "Gerege Nexus")
-        title.font = .systemFont(ofSize: 30, weight: .bold)
+        let eyebrow = NSTextField(labelWithString: "G E R E G E  /  N E X U S")
+        eyebrow.font = .systemFont(ofSize: 13, weight: .bold)
+        eyebrow.textColor = Palette.teal
+        let title = NSTextField(labelWithString: "Таны баталгаатай\nажлын орчин")
+        title.font = .systemFont(ofSize: 36, weight: .semibold)
         title.textColor = .white
-        let subtitle = NSTextField(labelWithString: "Тавтай морил — native нэвтрэлт")
-        subtitle.textColor = .secondaryLabelColor
+        title.maximumNumberOfLines = 2
+        let subtitle = NSTextField(labelWithString: "Gerege Nexus-д үргэлжлүүлэхийн тулд нэвтэрнэ үү.")
+        subtitle.font = .systemFont(ofSize: 14, weight: .regular)
+        subtitle.textColor = Palette.muted
 
-        email.placeholderString = "И-мэйл"
-        password.placeholderString = "Нууц үг"
-        nationalID.placeholderString = "Регистрийн дугаар (АА00112233)"
-        [email, password, nationalID].forEach { $0.controlSize = .large }
+        styleField(email, placeholder: "И-мэйл")
+        styleField(password, placeholder: "Нууц үг")
+        styleField(nationalID, placeholder: "Регистрийн дугаар (АА00112233)")
 
         passwordButton.target = self; passwordButton.action = #selector(loginPassword)
         pushButton.target = self; pushButton.action = #selector(loginPush)
         qrButton.target = self; qrButton.action = #selector(loginQR)
         cancelButton.target = self; cancelButton.action = #selector(cancel)
-        passwordButton.bezelStyle = .rounded; pushButton.bezelStyle = .rounded
-        status.textColor = .secondaryLabelColor
+        styleButton(passwordButton, primary: true)
+        styleButton(pushButton, primary: true)
+        styleButton(qrButton, primary: false)
+        styleButton(cancelButton, primary: false)
+        status.font = .systemFont(ofSize: 13, weight: .medium)
+        status.textColor = Palette.muted
         status.maximumNumberOfLines = 3
 
         let divider = NSBox(); divider.boxType = .separator
         qrImage.imageScaling = .scaleProportionallyUpOrDown; qrImage.isHidden = true
-        let stack = NSStackView(views: [title, subtitle, email, password, passwordButton, divider, nationalID, pushButton, qrButton, qrImage, status, cancelButton])
-        stack.orientation = .vertical; stack.spacing = 14; stack.alignment = .leading
+        let eIDLabel = NSTextField(labelWithString: "eID MONGOLIA")
+        eIDLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        eIDLabel.textColor = Palette.muted
+        let stack = NSStackView(views: [eyebrow, title, subtitle, email, password, passwordButton, divider, eIDLabel, nationalID, pushButton, qrButton, qrImage, status, cancelButton])
+        stack.orientation = .vertical; stack.spacing = 12; stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(stack)
+        stack.setCustomSpacing(8, after: eyebrow)
+        stack.setCustomSpacing(20, after: subtitle)
+        stack.setCustomSpacing(24, after: passwordButton)
+        stack.setCustomSpacing(10, after: divider)
         [email, password, nationalID, passwordButton, pushButton, qrButton, status, cancelButton, divider].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
-            $0.widthAnchor.constraint(equalToConstant: 390).isActive = true
+            $0.widthAnchor.constraint(equalToConstant: 440).isActive = true
         }
         qrImage.translatesAutoresizingMaskIntoConstraints = false; qrImage.widthAnchor.constraint(equalToConstant: 190).isActive = true; qrImage.heightAnchor.constraint(equalToConstant: 190).isActive = true
         NSLayoutConstraint.activate([
             stack.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: root.centerYAnchor),
-            stack.widthAnchor.constraint(equalToConstant: 390)
+            stack.widthAnchor.constraint(equalToConstant: 440)
         ])
         view = root
         auth.onPhase = { [weak self] in self?.render($0) }
         render(.idle)
+    }
+
+    private func styleField(_ field: NSTextField, placeholder: String) {
+        field.controlSize = .large
+        field.font = .systemFont(ofSize: 15)
+        field.textColor = .white
+        field.drawsBackground = true
+        field.backgroundColor = Palette.surface
+        field.isBezeled = true
+        field.bezelStyle = .roundedBezel
+        field.focusRingType = .default
+        field.placeholderAttributedString = NSAttributedString(
+            string: placeholder,
+            attributes: [.foregroundColor: Palette.muted]
+        )
+        field.heightAnchor.constraint(equalToConstant: 46).isActive = true
+    }
+
+    private func styleButton(_ button: NSButton, primary: Bool) {
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 9
+        button.layer?.borderWidth = primary ? 0 : 1.5
+        button.layer?.borderColor = Palette.teal.cgColor
+        button.layer?.backgroundColor = (primary ? Palette.teal : .clear).cgColor
+        button.contentTintColor = primary ? Palette.navy : Palette.teal
+        button.font = .systemFont(ofSize: 15, weight: .semibold)
+        button.heightAnchor.constraint(equalToConstant: 46).isActive = true
     }
 
     @objc private func loginPassword() { auth.password(email: email.stringValue, password: password.stringValue) }
@@ -94,4 +138,11 @@ final class NativeLoginViewController: NSViewController {
     }
 
     private func renderQR(_ link: URL?) { guard let link, let filter = CIFilter(name: "CIQRCodeGenerator") else { qrImage.isHidden = true; return }; filter.setValue(Data(link.absoluteString.utf8), forKey: "inputMessage"); filter.setValue("Q", forKey: "inputCorrectionLevel"); guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)) else { return }; let rep = NSCIImageRep(ciImage: output); let image = NSImage(size: rep.size); image.addRepresentation(rep); qrImage.image = image; qrImage.isHidden = false }
+}
+
+private enum Palette {
+    static let navy = NSColor(srgbRed: 11/255, green: 15/255, blue: 23/255, alpha: 1)
+    static let surface = NSColor(srgbRed: 29/255, green: 34/255, blue: 43/255, alpha: 1)
+    static let teal = NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+    static let muted = NSColor(srgbRed: 166/255, green: 175/255, blue: 188/255, alpha: 1)
 }
