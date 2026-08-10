@@ -31,6 +31,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: mn.gerege.nexus.ios
         PRODUCT_NAME: Gerege Nexus
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: CQTHTD6YJQ
         CODE_SIGN_ENTITLEMENTS: GeregeNexusIOS.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
@@ -47,6 +49,16 @@ targets:
             CFBundleURLName: mn.gerege.nexus.ios
             CFBundleURLSchemes:
               - gerege-nexus
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
 
 schemes:
   GeregeNexusIOS:

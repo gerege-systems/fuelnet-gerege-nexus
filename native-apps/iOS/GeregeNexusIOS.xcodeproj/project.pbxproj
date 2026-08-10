@@ -96,6 +96,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
+					3DCAAE49912C73D5F112EA09 = {
+						DevelopmentTeam = CQTHTD6YJQ;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 1037585E880489348A19E733 /* Build configuration list for PBXProject "GeregeNexusIOS" */;
@@ -138,6 +142,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = GeregeNexusIOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = CQTHTD6YJQ;
 				INFOPLIST_FILE = "GeregeNexusIOS-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Gerege Nexus";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
@@ -220,6 +226,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = GeregeNexusIOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = CQTHTD6YJQ;
 				INFOPLIST_FILE = "GeregeNexusIOS-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Gerege Nexus";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
