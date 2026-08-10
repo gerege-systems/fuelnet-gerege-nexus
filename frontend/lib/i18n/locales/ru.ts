@@ -756,6 +756,8 @@ export const ru: Record<string, string> = {
   "products.view.title": "Каталог товаров",
   "web.action.close_menu": "Закрыть меню",
   "web.action.close_more": "Закрыть другие приложения",
+  "web.action.collapse_all": "Свернуть все",
+  "web.action.expand_all": "Развернуть все",
   "web.action.logout": "Выйти",
   "web.action.more": "Ещё",
   "web.action.toggle_menu": "Переключить меню",

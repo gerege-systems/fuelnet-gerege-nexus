@@ -756,6 +756,8 @@ export const ar: Record<string, string> = {
   "products.view.title": "كتالوج المنتجات",
   "web.action.close_menu": "إغلاق القائمة",
   "web.action.close_more": "إغلاق المزيد من التطبيقات",
+  "web.action.collapse_all": "طي الكل",
+  "web.action.expand_all": "توسيع الكل",
   "web.action.logout": "تسجيل الخروج",
   "web.action.more": "المزيد",
   "web.action.toggle_menu": "تبديل القائمة",

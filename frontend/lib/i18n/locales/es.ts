@@ -756,6 +756,8 @@ export const es: Record<string, string> = {
   "products.view.title": "Catálogo de productos",
   "web.action.close_menu": "Cerrar menú",
   "web.action.close_more": "Cerrar más apps",
+  "web.action.collapse_all": "Contraer todo",
+  "web.action.expand_all": "Expandir todo",
   "web.action.logout": "Cerrar sesión",
   "web.action.more": "Más",
   "web.action.toggle_menu": "Alternar menú",

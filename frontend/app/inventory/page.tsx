@@ -282,7 +282,7 @@ export default function InventoryPage() {
 
       {/* Warehouse Modal */}
       {showWhModal && (
-        <Modal>
+        <Modal label={t("inventory.view.create_warehouse")}>
           <h2 className="text-xl font-bold text-slate-900 mb-4">{t("inventory.view.create_warehouse")}</h2>
           <form onSubmit={handleCreateWarehouse} className="space-y-4">
             <div>
@@ -339,7 +339,7 @@ export default function InventoryPage() {
 
       {/* Stock Adjustment Modal */}
       {showAdjModal && (
-        <Modal>
+        <Modal label={t("inventory.view.adjustment")}>
           <h2 className="text-xl font-bold text-slate-900 mb-4">{t("inventory.view.adjustment")}</h2>
           <form onSubmit={handleAdjustStock} className="space-y-4">
             <div>
