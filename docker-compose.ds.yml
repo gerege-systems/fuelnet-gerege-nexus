@@ -1,0 +1,41 @@
+name: gerege-nexus-ds
+
+# ds.nexus.gerege.mn — үндсэн Nexus-ээс бүрэн тусдаа data/container/port бүхий
+# deployment. Үндсэн production compose-той давхарлан хэрэглэнэ:
+# docker compose -f docker-compose.prod.yml -f docker-compose.ds.yml up -d
+services:
+  postgres:
+    container_name: gerege_nexus_ds_postgres
+    ports: !override
+      - "127.0.0.1:5438:5432"
+    volumes: !override
+      - gerege_nexus_ds_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    container_name: gerege_nexus_ds_redis
+    ports: !override
+      - "127.0.0.1:6382:6379"
+
+  migrate:
+    container_name: gerege_nexus_ds_migrate
+
+  backend:
+    container_name: gerege_nexus_ds_backend
+    ports: !override
+      - "127.0.0.1:8096:8080"
+    environment:
+      PUBLIC_ORIGIN: https://ds.nexus.gerege.mn
+      ALLOWED_ORIGINS: https://ds.nexus.gerege.mn
+      SSO_ISSUER: https://ds.nexus.gerege.mn
+      EID_RP_NAME: Gerege Nexus DS
+      EID_DISPLAY_TEXT: Gerege Nexus DS-д нэвтрэх
+      PUSH_TOKEN_ENCRYPTION_KEY: ${PUSH_TOKEN_ENCRYPTION_KEY:?PUSH_TOKEN_ENCRYPTION_KEY is required}
+
+  frontend:
+    container_name: gerege_nexus_ds_frontend
+    ports: !override
+      - "127.0.0.1:3012:3000"
+
+volumes:
+  gerege_nexus_ds_postgres_data:
+    name: gerege_nexus_ds_postgres_data
