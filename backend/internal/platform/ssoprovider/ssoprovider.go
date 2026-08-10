@@ -215,6 +215,80 @@ func (s *SSOProvider) EnsureDefaultClient(ctx context.Context) {
 	slog.Info("registered the built-in SSO client", "client_id", clientID, "tenant_slug", slug)
 }
 
+// EnsureConsoleClient registers the developer console at developer.gerege.mn.
+//
+// The console is a public client with PKCE: it ships no secret, because a
+// secret baked into a container image anybody can pull is not a secret. That is
+// exactly the case PKCE exists for, and this provider requires PKCE of every
+// client anyway.
+//
+// It is registered from configuration rather than by hand for the same reason
+// the built-in client is: a client that has to exist for a deployment to work
+// should not depend on somebody remembering to create it, and a redirect URI
+// typed into a form is a redirect URI that can be typed wrongly.
+//
+// Nothing happens unless DEVELOPER_CONSOLE_ORIGIN is set, so a deployment
+// without a console is untouched.
+func (s *SSOProvider) EnsureConsoleClient(ctx context.Context) {
+	origin := strings.TrimSuffix(strings.TrimSpace(os.Getenv("DEVELOPER_CONSOLE_ORIGIN")), "/")
+	if origin == "" {
+		return
+	}
+	clientID := strings.TrimSpace(os.Getenv("DEVELOPER_CONSOLE_CLIENT_ID"))
+	if clientID == "" {
+		clientID = "gerege-developer-console"
+	}
+
+	slug := os.Getenv("SSO_DEFAULT_CLIENT_TENANT")
+	if slug == "" {
+		slug = "demo"
+	}
+	var tenantID string
+	if err := s.store.db.QueryRow(ctx,
+		`SELECT id::text FROM tenants WHERE slug = $1`, slug).Scan(&tenantID); err != nil {
+		slog.Info("skipping the developer console client: its owning tenant does not exist",
+			"tenant_slug", slug)
+		return
+	}
+
+	redirect := origin + "/auth/callback"
+	if existing, err := s.store.GetClient(ctx, clientID); err == nil {
+		// The origin can move — a deployment renames a host, a staging console
+		// appears — and the redirect URI has to follow it or every sign-in
+		// fails with a mismatch nobody can fix from the console itself.
+		if !slices.Contains(existing.RedirectURIs, redirect) {
+			updated := *existing
+			updated.ClientURI = origin
+			updated.RedirectURIs = []string{redirect}
+			if _, err := s.store.UpdateClient(ctx, existing.TenantID, &updated); err != nil {
+				slog.Error("could not point the developer console client at its origin",
+					"error", err, "redirect_uri", redirect)
+				return
+			}
+			slog.Info("updated the developer console redirect URI", "redirect_uri", redirect)
+		}
+		return
+	}
+
+	if _, err := s.store.CreateClient(ctx, &Client{
+		TenantID:     tenantID,
+		ClientID:     clientID,
+		ClientName:   "Gerege Developer Console",
+		ClientURI:    origin,
+		ClientType:   clientTypePublic,
+		RedirectURIs: []string{redirect},
+		// No refresh_token: the console holds an identity for an hour and asks
+		// the person to sign in again, which for something opened a few times a
+		// week is a better trade than storing a long-lived credential.
+		GrantTypes: []string{"authorization_code"},
+		Scopes:     []string{"openid", "profile", "email"},
+	}, "", ""); err != nil {
+		slog.Error("failed to register the developer console client", "error", err)
+		return
+	}
+	slog.Info("registered the developer console client", "client_id", clientID, "origin", origin)
+}
+
 // StartJanitor sweeps spent codes and dead tokens until ctx is cancelled.
 // Without it the tables grow without bound, which is the durable version of the
 // unbounded token map this provider used to keep in memory.
