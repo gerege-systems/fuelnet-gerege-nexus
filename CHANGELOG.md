@@ -15,6 +15,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Preparing the App Store to live at appstore.gerege.mn
+
+The catalogue is on its way out of this repository and into a registry of its
+own (`docs/APPSTORE_SEPARATION_PLAN.md`). Everything here works today in file
+mode, which stays the default and the whole story for a self-hosted deployment;
+the registry is opt-in and this platform never depends on it.
+
+- **An installation's version now moves.** `InstallApp`'s reinstall branch
+  updated status and enabled and left `installed_version` alone, so a tenant sat
+  on 1.0.0 for ever while the catalogue carried the app forward — nothing could
+  tell a current installation from a stale one. A version that actually changes
+  is recorded as `'upgraded'` with the version it came from, and `SyncCatalog`
+  finally writes `app_versions`, the table migration 00002 created and nobody
+  ever filled.
+- **Three records of a version are held to each other**: the compiled module,
+  the catalogue entry and the manifest. They had drifted — esign shipped 2.0.0
+  as a module and 1.0.0 in the catalogue, and the developer portal did the same.
+  Both are corrected and the drift is now a startup error. `PlatformVersion`
+  became a var a release build can stamp with `-ldflags`, and `/health` reports
+  it.
+- **A tenant can update an app it has already installed.**
+  `POST /api/v1/store/apps/{slug}/upgrade` (admin) re-resolves dependencies,
+  moves the version, records the event and refuses with 409 when there is
+  nothing to move to. The store answers with `installed_version`,
+  `latest_version` and `update_available`, compared as semver rather than as
+  text, and the card carries an Update button beside enable/disable. Migration
+  00033 adds `auto_update` and `pinned_version`.
+- **The catalogue can come from a registry** (`APP_CATALOG_URL`): fetched with
+  an ETag, verified against `APPSTORE_PUBLIC_KEY` before a single field of it is
+  read, cached to disk, and behind all of it the bundled file. Boot never fails
+  because of the registry — an unreachable or lying one costs an instance its
+  updates and a line in the log. `CATALOG_SYNC_INTERVAL` drives a background
+  refresh; `POST /api/v1/admin/store/sync` runs one on demand.
+- **An app can be a platform that runs somewhere else** (`"type": "external"`).
+  No Go module is required or looked for, permissions come from the manifest,
+  and its menu entry opens in a new tab rather than pretending to be a route
+  here. Its OAuth2 client is gated by installation: a user whose tenant has not
+  installed the app is refused at `/oauth2/auth` with `access_denied`, and
+  tokens carry `tenant_slug` beside `tenant_id` so the third party knows which
+  organisation it has been handed.
+
 ### Added — Switching between the organisations you belong to
 
 - **The membership table always allowed several; the runtime allowed one.**
