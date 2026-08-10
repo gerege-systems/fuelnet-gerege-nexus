@@ -287,6 +287,8 @@ npm run dev
 | `POST` | `/api/v1/auth/eid/login` | Үндэсний E-ID-аар нэвтрэх |
 | `POST` | `/api/v1/auth/dan/login` | ДАН гарцаар нэвтрэх |
 | `POST` | `/api/v1/auth/logout` | Session-ийг цуцлах |
+| `GET` | `/api/v1/auth/tenants` | Хэрэглэгчийн харьяалагдах байгууллагууд |
+| `POST` | `/api/v1/auth/switch-tenant` | Session-ийг өөр байгууллага руу шилжүүлэх |
 | `GET` | `/api/v1/menus` | Тенантад идэвхтэй цэсүүд |
 | `GET` | `/api/v1/store/apps` | Апп сторын жагсаалт |
 | `POST` | `/api/v1/ai/chat`, `/stt`, `/tts`, `/translate` | Tenant-safe Gemini AI pipeline |

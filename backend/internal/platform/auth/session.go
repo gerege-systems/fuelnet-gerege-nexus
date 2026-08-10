@@ -60,6 +60,11 @@ func IdleTimeoutFromEnv() time.Duration {
 
 var ErrSessionInvalid = errors.New("session is invalid or expired")
 
+// ErrNotAMember is returned when somebody asks to act for a tenant they hold no
+// membership in. It is deliberately distinct from ErrSessionInvalid: the
+// session is fine, the destination is not.
+var ErrNotAMember = errors.New("no membership in that tenant")
+
 // SessionStore issues and resolves opaque server-side session tokens.
 //
 // Tokens are 256 bits of crypto/rand output; only their SHA-256 digest is
@@ -180,6 +185,118 @@ func (s *SessionStore) Revoke(ctx context.Context, token string) error {
 		`UPDATE sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
 		hashToken(token))
 	return err
+}
+
+// TenantOption is one tenant a person may act for.
+type TenantOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// TenantsForUser lists the tenants a person holds a membership in, by name.
+//
+// The caller must pass a context with no tenant in it. memberships carries a
+// tenant_id and is therefore under the row-level policy, so a context bound to
+// the current tenant would answer this question with the one tenant the caller
+// is already in — a switcher that only ever offers where you already are.
+func (s *SessionStore) TenantsForUser(ctx context.Context, userID string) ([]TenantOption, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT t.id::text, t.name, t.slug
+		   FROM memberships m
+		   JOIN tenants t ON t.id = m.tenant_id
+		  WHERE m.user_id = $1
+		  ORDER BY t.name, t.id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants for user: %w", err)
+	}
+	defer rows.Close()
+
+	options := make([]TenantOption, 0, 2)
+	for rows.Next() {
+		var option TenantOption
+		if err := rows.Scan(&option.ID, &option.Name, &option.Slug); err != nil {
+			return nil, fmt.Errorf("read tenant option: %w", err)
+		}
+		options = append(options, option)
+	}
+	return options, rows.Err()
+}
+
+// SwitchTenant moves a live session to another tenant the same person belongs
+// to, and returns the token that replaces the old one.
+//
+// The token is rotated rather than the row updated. A session token is the
+// authority to act inside one tenant, and the tenant is what changes here; a
+// token that silently means something different from what it meant a moment ago
+// is the thing rotation exists to prevent. It also means the audit trail keeps
+// one row per tenant a person acted in, rather than one row whose tenant column
+// is only ever the last one they chose.
+//
+// The membership check is the authorization, and it is made here rather than by
+// the caller so that no route can reach the insert without it.
+//
+// Like TenantsForUser, this needs a context with no tenant: sessions carries a
+// tenant_id, and the policy's WITH CHECK would refuse a row belonging to the
+// tenant being moved to.
+func (s *SessionStore) SwitchTenant(ctx context.Context, token, tenantID string) (string, time.Time, error) {
+	if token == "" {
+		return "", time.Time{}, ErrSessionInvalid
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var userID string
+	err = tx.QueryRow(ctx,
+		`SELECT user_id::text FROM sessions
+		  WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+		hashToken(token)).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", time.Time{}, ErrSessionInvalid
+		}
+		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
+	}
+
+	var member bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1 AND tenant_id = $2)`,
+		userID, tenantID).Scan(&member); err != nil {
+		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
+	}
+	if !member {
+		return "", time.Time{}, ErrNotAMember
+	}
+
+	next, err := newToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	// A switch is not a fresh sign-in: the new session expires when the old one
+	// would have. Otherwise moving between two tenants every so often would
+	// extend a session indefinitely without anybody proving who they are again.
+	var expiresAt time.Time
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address, expires_at)
+		 SELECT $2, user_id, $3, auth_method, user_agent, ip_address, expires_at
+		   FROM sessions WHERE token_hash = $1
+		 RETURNING expires_at`,
+		hashToken(token), hashToken(next), tenantID).Scan(&expiresAt); err != nil {
+		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
+		hashToken(token)); err != nil {
+		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
+	}
+	return next, expiresAt, nil
 }
 
 // RevokeAllForUser ends every session a person holds, on every device.

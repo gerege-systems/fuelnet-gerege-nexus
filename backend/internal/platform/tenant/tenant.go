@@ -19,6 +19,22 @@ func WithTenantID(ctx context.Context, tenantID string) context.Context {
 	return context.WithValue(ctx, tenantIDKey, tenantID)
 }
 
+// Without strips the tenant from a context, putting the caller back on the
+// platform path — the login role, outside the row-level policies (see
+// internal/platform/dbguard).
+//
+// It is for the handful of questions that are genuinely about a person rather
+// than about a tenant: which tenants somebody may act for, and moving their
+// session to one of them. Both read `memberships`, which carries a tenant_id
+// and is therefore filtered to the current tenant for everybody else — the
+// answer would be "the tenant you are already in", every time.
+//
+// Reach for this only where crossing tenants is the point, and never with an
+// id that arrived from a request without a membership check behind it.
+func Without(ctx context.Context) context.Context {
+	return context.WithValue(ctx, tenantIDKey, "")
+}
+
 // FromContext extracts tenant_id from context.
 //
 // Handlers should reach for Require instead. This is for callers that have a
