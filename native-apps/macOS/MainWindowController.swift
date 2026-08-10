@@ -14,6 +14,11 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
     public var webView: WKWebView!
     private var ipcBridge: NativeIPCBridge?
     private var loginController: NativeLoginViewController?
+    private var settingsWindowController: SettingsWindowController?
+    private let ribbon = NSView()
+    private let profileButton = NSButton()
+    private var profile: NativeUserProfile?
+    private let ribbonHeight: CGFloat = 56
     private let settings = NativeSettings.load()
     private var baseURLString: String { settings.webEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
 
@@ -90,12 +95,65 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
         contentController.add(ipcBridge!, name: "geregeShell")
 
         window.contentView?.addSubview(webView)
+        setupRibbon(in: window.contentView!)
         showNativeLogin()
+    }
+
+    private func setupRibbon(in content: NSView) {
+        ribbon.wantsLayer = true
+        ribbon.layer?.backgroundColor = NSColor(srgbRed: 16/255, green: 22/255, blue: 32/255, alpha: 1).cgColor
+        ribbon.layer?.borderWidth = 1
+        ribbon.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        ribbon.isHidden = true
+        ribbon.frame = NSRect(x: 0, y: content.bounds.height - ribbonHeight, width: content.bounds.width, height: ribbonHeight)
+        ribbon.autoresizingMask = [.width, .minYMargin]
+        content.addSubview(ribbon)
+
+        let brand = NSTextField(labelWithString: "GEREGE / NEXUS")
+        brand.font = .systemFont(ofSize: 12, weight: .bold)
+        brand.textColor = NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+        let reload = ribbonButton("arrow.clockwise", "Дахин ачаалах", #selector(ribbonReload))
+        let lock = ribbonButton("lock", "Түгжих", #selector(ribbonLock))
+        let settings = ribbonButton("gearshape", "Тохиргоо", #selector(ribbonSettings))
+        profileButton.target = self
+        profileButton.action = #selector(showProfileMenu)
+        profileButton.isBordered = false
+        profileButton.imagePosition = .imageLeading
+        profileButton.image = NSImage(systemSymbolName: "person.crop.circle.fill", accessibilityDescription: "Profile")
+        profileButton.contentTintColor = .white
+        profileButton.font = .systemFont(ofSize: 13, weight: .semibold)
+
+        let spacer = NSView()
+        let stack = NSStackView(views: [brand, spacer, reload, lock, settings, profileButton])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 10
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        ribbon.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: ribbon.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: ribbon.trailingAnchor, constant: -14),
+            stack.topAnchor.constraint(equalTo: ribbon.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: ribbon.bottomAnchor),
+            spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 20)
+        ])
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    }
+
+    private func ribbonButton(_ symbol: String, _ label: String, _ action: Selector) -> NSButton {
+        let button = NSButton(title: label, target: self, action: action)
+        button.isBordered = false
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.imagePosition = .imageLeading
+        button.contentTintColor = NSColor.white.withAlphaComponent(0.82)
+        button.font = .systemFont(ofSize: 12, weight: .medium)
+        return button
     }
 
     public func showNativeLogin() {
         guard let window, let content = window.contentView else { return }
         webView.isHidden = true
+        ribbon.isHidden = true
         if loginController == nil {
             let controller = NativeLoginViewController(apiEndpoint: settings.apiEndpoint)
             controller.delegate = self
@@ -108,7 +166,9 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
         loginView.isHidden = false
     }
 
-    public func nativeLoginDidSucceed(cookies: [HTTPCookie]) {
+    func nativeLoginDidSucceed(cookies: [HTTPCookie], profile: NativeUserProfile) {
+        self.profile = profile
+        profileButton.title = profile.name.isEmpty ? "Хэрэглэгч" : profile.name
         let store = webView.configuration.websiteDataStore.httpCookieStore
         let group = DispatchGroup()
         for cookie in cookies {
@@ -118,7 +178,67 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
             guard let self else { return }
             self.loginController?.view.isHidden = true
             self.webView.isHidden = false
+            self.ribbon.isHidden = false
+            self.layoutWorkArea()
             self.loadRelativePath("/apps")
+        }
+    }
+
+    private func layoutWorkArea() {
+        guard let content = window?.contentView else { return }
+        webView.frame = NSRect(x: 0, y: 0, width: content.bounds.width,
+                               height: max(0, content.bounds.height - ribbonHeight))
+        webView.autoresizingMask = [.width, .height]
+    }
+
+    public func showSettings() {
+        if settingsWindowController == nil { settingsWindowController = SettingsWindowController() }
+        settingsWindowController?.showWindow(nil)
+        settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func ribbonReload() { reloadPage() }
+    @objc private func ribbonSettings() { showSettings() }
+    @objc private func ribbonLock() { showNativeLogin() }
+
+    @objc private func showProfileMenu() {
+        let menu = NSMenu()
+        let name = NSMenuItem(title: profile?.name ?? "Хэрэглэгч", action: nil, keyEquivalent: "")
+        name.isEnabled = false
+        menu.addItem(name)
+        if let email = profile?.email, !email.isEmpty {
+            let emailItem = NSMenuItem(title: email, action: nil, keyEquivalent: "")
+            emailItem.isEnabled = false
+            menu.addItem(emailItem)
+        }
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Тохиргоо…", action: #selector(ribbonSettings), keyEquivalent: "")
+        menu.addItem(withTitle: "Гарах", action: #selector(logout), keyEquivalent: "")
+        menu.items.forEach { if $0.action != nil { $0.target = self } }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: profileButton.bounds.height + 4), in: profileButton)
+    }
+
+    @objc public func logout() {
+        Task {
+            let endpoint = NativeSettings.load().apiEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if let url = URL(string: endpoint + "/api/v1/auth/logout") {
+                var request = URLRequest(url: url); request.httpMethod = "POST"
+                _ = try? await URLSession.shared.data(for: request)
+            }
+            await MainActor.run { self.clearSessionAndShowLogin() }
+        }
+    }
+
+    private func clearSessionAndShowLogin() {
+        profile = nil
+        HTTPCookieStorage.shared.cookies?.filter { $0.name == "session_token" }.forEach(HTTPCookieStorage.shared.deleteCookie)
+        let store = webView.configuration.websiteDataStore.httpCookieStore
+        store.getAllCookies { cookies in
+            let group = DispatchGroup()
+            for cookie in cookies where cookie.name == "session_token" {
+                group.enter(); store.delete(cookie) { group.leave() }
+            }
+            group.notify(queue: .main) { self.showNativeLogin() }
         }
     }
 

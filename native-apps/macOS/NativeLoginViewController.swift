@@ -3,7 +3,7 @@ import CoreImage
 
 @MainActor
 protocol NativeLoginDelegate: AnyObject {
-    func nativeLoginDidSucceed(cookies: [HTTPCookie])
+    func nativeLoginDidSucceed(cookies: [HTTPCookie], profile: NativeUserProfile)
 }
 
 @MainActor
@@ -125,7 +125,7 @@ final class NativeLoginViewController: NSViewController {
         case .waiting(let code, let link): status.stringValue = "eID апп дээр зөвшөөрнө үү. Баталгаажуулах код: \(code)"; pending = true; renderQR(link)
         case .success:
             status.stringValue = "Амжилттай нэвтэрлээ"; pending = false
-            delegate?.nativeLoginDidSucceed(cookies: auth.sessionCookies())
+            delegate?.nativeLoginDidSucceed(cookies: auth.sessionCookies(), profile: auth.profile ?? .eidUser)
         case .expired: status.stringValue = "Хүсэлтийн хугацаа дууслаа. Дахин оролдоно уу."; pending = false
         case .refused: status.stringValue = "eID хүсэлтээс татгалзлаа."; pending = false
         case .error(let message): status.stringValue = message; pending = false

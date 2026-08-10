@@ -4,6 +4,26 @@ enum LoginPhase: Equatable {
     case idle, starting, waiting(code: String, link: URL?), success, expired, refused, error(String)
 }
 
+struct NativeUserProfile: Equatable {
+    let id: String
+    let name: String
+    let email: String
+    let tenantID: String
+
+    static let eidUser = NativeUserProfile(id: "", name: "eID хэрэглэгч", email: "", tenantID: "")
+}
+
+private struct PasswordLoginResponse: Decodable {
+    struct User: Decodable {
+        let id: String
+        let name: String
+        let email: String
+        let tenantID: String
+        enum CodingKeys: String, CodingKey { case id, name, email; case tenantID = "tenant_id" }
+    }
+    let user: User
+}
+
 struct EIDStart: Decodable {
     let sessionID: String
     let verificationCode: String
@@ -27,6 +47,7 @@ final class NativeAuth: NSObject {
     private var ticket = 0
     private var task: Task<Void, Never>?
     private let session: URLSession
+    private(set) var profile: NativeUserProfile?
 
     init(apiEndpoint: String) {
         let root = apiEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -47,8 +68,11 @@ final class NativeAuth: NSObject {
 
     func password(email: String, password: String) {
         begin { [self] mine in
-            try await request("auth/login", body: ["email": email, "password": password])
+            let data = try await request("auth/login", body: ["email": email, "password": password])
+            let response = try JSONDecoder().decode(PasswordLoginResponse.self, from: data)
             guard mine == ticket else { return }
+            profile = NativeUserProfile(id: response.user.id, name: response.user.name,
+                                        email: response.user.email, tenantID: response.user.tenantID)
             phase = .success
         }
     }
@@ -103,7 +127,7 @@ final class NativeAuth: NSObject {
                 let result = try JSONDecoder().decode(EIDPoll.self, from: data)
                 guard mine == ticket else { return }
                 switch result.state.uppercased() {
-                case "COMPLETE": phase = .success; return
+                case "COMPLETE": profile = .eidUser; phase = .success; return
                 case "EXPIRED": phase = .expired; return
                 case "REFUSED": phase = .refused; return
                 default: break

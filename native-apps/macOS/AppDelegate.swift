@@ -11,7 +11,6 @@ import AppKit
 
 public class AppDelegate: NSObject, NSApplicationDelegate {
     public var mainWindowController: MainWindowController?
-    private var settingsWindowController: SettingsWindowController?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         setupNativeMenuBar()
@@ -73,9 +72,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func actionPreferences() {
-        if settingsWindowController == nil { settingsWindowController = SettingsWindowController() }
-        settingsWindowController?.showWindow(nil)
-        settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+        mainWindowController?.showSettings()
     }
 
     @objc private func actionApps() {
