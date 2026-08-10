@@ -163,7 +163,7 @@ func (s *Server) handleDeviceTelemetry(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 503, "telemetry unavailable")
 		return
 	}
-	defer tx.Rollback(r.Context())
+	defer func() { _ = tx.Rollback(r.Context()) }()
 	for _, event := range req.Events {
 		level := strings.ToUpper(event.Level)
 		if level != "INFO" && level != "WARN" && level != "ERROR" || strings.TrimSpace(event.Event) == "" {

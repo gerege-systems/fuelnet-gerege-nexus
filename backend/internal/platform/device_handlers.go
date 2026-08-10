@@ -106,7 +106,7 @@ func (s *Server) handleEnrollDevice(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 503, "enrollment unavailable")
 		return
 	}
-	defer tx.Rollback(r.Context())
+	defer func() { _ = tx.Rollback(r.Context()) }()
 	var codeID, tenantID string
 	err = tx.QueryRow(r.Context(), `SELECT id::text,tenant_id::text FROM resolve_device_enrollment($1)`, secretHash(req.Code)).Scan(&codeID, &tenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
