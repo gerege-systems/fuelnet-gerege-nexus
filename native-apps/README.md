@@ -16,6 +16,7 @@ native-apps/
 │   └── build.sh             # Swiftc Compilation Script
 │
 ├── iOS/                     # iOS/iPadOS app + shared Swift package
+│   ├── GeregeNexusIOS.xcodeproj # Xcode app project
 │   ├── Package.swift        # GeregeShellKit, GeregeShellUI, GeregeNexusApp
 │   ├── Sources/             # Native login/settings and WKWebView shell
 │   └── Tests/               # Swift auth state-machine tests
@@ -39,6 +40,13 @@ native-apps/
 
 ## 🚀 Building & Running
 
+### IDE-ээр шууд нээх
+
+- iOS/iPadOS — Xcode-д `iOS/GeregeNexusIOS.xcodeproj`-ийг нээгээд `GeregeNexusIOS` scheme-ийг ажиллуулна. `project.yml` нь XcodeGen-ээр төслийг дахин үүсгэх эх файл.
+- macOS — Xcode-д `macOS/GeregeNexusNativeMac.xcodeproj`-ийг нээгээд `GeregeNexusNativeMac` scheme-ийг ажиллуулна.
+- Android — Android Studio-д `android/` хавтсыг нээнэ. Repository-д Gradle wrapper орсон тул тусдаа Gradle суулгах шаардлагагүй.
+- Windows — Visual Studio 2022-д `windows/GeregeNexusNativeWin.sln`-ийг нээнэ. Solution дотор WPF app болон `GeregeShell.Core` хоёулаа байна.
+
 ### 1. macOS Native Shell (Swift + AppKit)
 
 **Prerequisites**: macOS 12+, Xcode Command Line Tools (`swiftc`, `xcrun`)
@@ -52,7 +60,15 @@ cd native-apps/macOS
 ./GeregeNexusNativeMac
 ```
 
-### 2. Windows Native Shell (C# + WPF + WebView2)
+### 2. iOS/iPadOS app (SwiftUI + WKWebView)
+
+```bash
+cd native-apps/iOS
+xcodebuild -project GeregeNexusIOS.xcodeproj -scheme GeregeNexusIOS \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+### 3. Windows Native Shell (C# + WPF + WebView2)
 
 **Prerequisites**: Windows 10/11, .NET 8 SDK
 
@@ -64,16 +80,16 @@ dotnet build -p:FormFactor=Kiosk
 dotnet build -p:FormFactor=POS
 ```
 
-### 3. Android native clients (Kotlin + Compose)
+### 4. Android native clients (Kotlin + Compose)
 
 Android Studio-д `native-apps/android`-ыг нээнэ. Нэг app module дөрвөн
 form-factor flavor-тай: `mobile`, `tablet`, `kiosk`, `pos`; auth state machine
 нь `:core` модульд байна.
 
 ```bash
-gradle :core:test
-gradle :app:assembleMobileDebug
-gradle :app:assembleTabletDebug :app:assembleKioskDebug :app:assemblePosDebug
+./gradlew :core:test
+./gradlew :app:assembleMobileDebug
+./gradlew :app:assembleTabletDebug :app:assembleKioskDebug :app:assemblePosDebug
 ```
 
 ---
