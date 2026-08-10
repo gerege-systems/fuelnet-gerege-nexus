@@ -12,6 +12,7 @@ import { auth } from "./addons/auth";
 import { billing } from "./addons/billing";
 import { contacts } from "./addons/contacts";
 import { developer } from "./addons/developer";
+import { modules } from "./addons/modules";
 import { documents } from "./addons/documents";
 import { emailverify } from "./addons/emailverify";
 import { esign } from "./addons/esign";
@@ -82,6 +83,7 @@ const dictionary = {
   ...billing,
   ...contacts,
   ...developer,
+  ...modules,
   ...documents,
   ...emailverify,
   ...esign,

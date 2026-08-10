@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { api, type OAuth2Client, type OAuth2ClientDraft, type OAuth2Scope } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { Modal as Dialog } from "@/components/ui";
+import { ReadOnlyNote, useAccess } from "@/lib/permissions";
 
 const emptyDraft: OAuth2ClientDraft = {
   client_name: "",
@@ -30,6 +32,7 @@ export default function DeveloperAppsPage() {
   const { t, locale } = useI18n();
   // Registering, editing, rotating and deleting all need developer.manage;
   // a member with only developer.read gets the list and nothing else.
+  const { allowed: canManage } = useAccess("developer.manage");
   const [apps, setApps] = useState<OAuth2Client[]>([]);
   const [scopes, setScopes] = useState<OAuth2Scope[]>([]);
   const [grantTypes, setGrantTypes] = useState<string[]>([]);
@@ -112,14 +115,16 @@ export default function DeveloperAppsPage() {
           </h1>
           <p className="text-sm text-slate-500 mt-1">{t("developer.view.subtitle")}</p>
         </div>
-        <button
+        {canManage && <button
           onClick={() => setEditing({ draft: { ...emptyDraft } })}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm"
         >
           <Plus className="w-4 h-4" />
           {t("developer.action.create")}
-        </button>
+        </button>}
       </header>
+
+      {!canManage && <ReadOnlyNote permission="developer.manage" />}
 
       <EndpointCard endpoints={endpoints} copied={copied} onCopy={copy} title={t("developer.view.endpoints_title")} />
 
@@ -151,6 +156,7 @@ export default function DeveloperAppsPage() {
               onEdit={() => setEditing({ clientID: app.client_id, draft: toDraft(app) })}
               onRotate={() => setConfirming({ app, action: "rotate" })}
               onDelete={() => setConfirming({ app, action: "delete" })}
+              canManage={canManage}
             />
           ))}
         </div>
@@ -236,10 +242,10 @@ function EndpointCard({ endpoints, copied, onCopy, title }: {
   );
 }
 
-function AppCard({ app, scopes, copied, onCopy, onEdit, onRotate, onDelete }: {
+function AppCard({ app, scopes, copied, onCopy, onEdit, onRotate, onDelete, canManage }: {
   app: OAuth2Client; scopes: OAuth2Scope[]; copied: string;
   onCopy: (value: string, id: string) => void;
-  onEdit: () => void; onRotate: () => void; onDelete: () => void;
+  onEdit: () => void; onRotate: () => void; onDelete: () => void; canManage: boolean;
 }) {
   const { t } = useI18n();
   const sensitive = useMemo(
@@ -305,7 +311,7 @@ function AppCard({ app, scopes, copied, onCopy, onEdit, onRotate, onDelete }: {
         {app.grant_types.map((grant) => <Chip key={grant} mono tone="slate">{grant}</Chip>)}
       </Field>
 
-      <div className="flex gap-2 pt-1 border-t border-slate-100">
+      <div className={`flex gap-2 pt-1 border-t border-slate-100 ${canManage ? "" : "hidden"}`}>
         <button onClick={onEdit} className="text-xs font-semibold text-slate-600 hover:bg-slate-100 px-3 py-1.5 rounded-lg mt-2">
           {t("developer.view.edit_title")}
         </button>
@@ -368,7 +374,7 @@ function AppForm({ initial, isNew, scopes, grantTypes, describe, onCancel, onSav
   }
 
   return (
-    <Modal onClose={onCancel} wide>
+    <Modal onClose={onCancel} wide label={isNew ? t("developer.view.create_title") : t("developer.view.edit_title")}>
       <form onSubmit={submit} className="space-y-4">
         <h2 className="text-lg font-bold text-slate-900">
           {isNew ? t("developer.view.create_title") : t("developer.view.edit_title")}
@@ -505,7 +511,7 @@ function SecretModal({ secret, clientID, copied, onCopy, onClose }: {
 }) {
   const { t } = useI18n();
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} label={t("developer.message.secret_once_title")}>
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <KeyRound className="w-5 h-5 text-amber-600" />
@@ -548,7 +554,7 @@ function ConfirmModal({ title, body, danger, confirmLabel, cancelLabel, onCancel
   onCancel: () => void; onConfirm: () => void;
 }) {
   return (
-    <Modal onClose={onCancel}>
+    <Modal onClose={onCancel} label={title}>
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <AlertTriangle className={`w-5 h-5 ${danger ? "text-rose-600" : "text-amber-600"}`} />
@@ -571,15 +577,19 @@ function ConfirmModal({ title, body, danger, confirmLabel, cancelLabel, onCancel
   );
 }
 
-function Modal({ children, onClose, wide }: { children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+// The platform's dialog, with the close affordance these three need. The shared
+// one deliberately has no dismissal — most dialogs here hold typed input — but a
+// secret shown once, and a confirmation, are read and dismissed, so they carry
+// an X. What comes from the shared component is what no dialog should be
+// without: the role, the name, focus taken on open and returned on close, and
+// Tab that cannot walk out into the page behind.
+function Modal({ children, onClose, wide, label }: { children: React.ReactNode; onClose: () => void; wide?: boolean; label?: string }) {
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
-      <div className={`bg-white rounded-xl w-full ${wide ? "max-w-xl" : "max-w-md"} p-6 shadow-2xl my-8 relative`}>
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600" aria-label="close">
-          <X className="w-4 h-4" />
-        </button>
-        {children}
-      </div>
-    </div>
+    <Dialog size={wide ? "lg" : "md"} scrollable label={label} className="my-8 relative">
+      <button type="button" onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600" aria-label={label ? undefined : "close"}>
+        <X className="w-4 h-4" />
+      </button>
+      {children}
+    </Dialog>
   );
 }
