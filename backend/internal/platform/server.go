@@ -289,6 +289,19 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	// Only with a registry configured; in file mode the catalogue changes when
 	// the release does and there is nothing to poll.
 	s.startCatalogSync(ctx)
+
+	// The publishing console's OAuth2 client, when a deployment has one.
+	//
+	// Here rather than in NewServer because it needs its owning tenant to
+	// exist, and on a cold database that tenant is created by the seeder — which
+	// runs after the server is built and before this. Registering it from
+	// configuration at all is the same argument as for the built-in client: a
+	// client a console cannot work without should not depend on somebody
+	// remembering to create it, and a redirect URI typed into a form is a
+	// redirect URI that can be typed wrongly.
+	ensureCtx, cancelEnsure := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelEnsure()
+	s.ssoProvider.EnsureConsoleClient(ensureCtx)
 }
 
 // startCatalogSync keeps this instance's catalogue in step with the registry.

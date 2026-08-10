@@ -1,0 +1,127 @@
+# Production stack for appstore.gerege.mn and developer.gerege.mn.
+#
+# A second stack on the same host as Gerege Nexus, following the pattern that is
+# already there: images from GHCR, published on loopback only, nginx in front.
+# It never builds on the server.
+#
+# Loopback ports (see deploy/nginx/*.conf):
+#   8083  registry API      appstore.gerege.mn/api, /.well-known
+#   3009  storefront        appstore.gerege.mn
+#   3010  developer console developer.gerege.mn
+#
+# Required environment (written by .github/workflows/deploy-appstore.yml):
+#   IMAGE_BACKEND, IMAGE_STOREFRONT, IMAGE_CONSOLE, IMAGE_TAG,
+#   APPSTORE_POSTGRES_PASSWORD, APPSTORE_SIGNING_KEY
+
+services:
+  # Its own PostgreSQL rather than a second database inside the platform's.
+  #
+  # The plan proposed sharing the instance, and that is still the cheaper
+  # arrangement — but the platform's Postgres publishes on loopback only, so a
+  # container in this stack cannot reach it without joining the other stack's
+  # Compose network by name. Depending on a name Compose derives from a
+  # directory is a dependency that breaks silently when somebody moves a
+  # directory. This costs a few dozen megabytes and owes nothing to the
+  # neighbour; consolidating later is a data migration, not a redesign.
+  postgres:
+    image: postgres:16-alpine
+    container_name: gerege_appstore_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: appstore_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${APPSTORE_POSTGRES_PASSWORD:?APPSTORE_POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - gerege_appstore_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d appstore_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # The registry. Same image as the platform's API, a different binary: they
+  # share the catalogue format, and one image is one build to keep in step.
+  registry:
+    image: ${IMAGE_BACKEND}:${IMAGE_TAG:-latest}
+    container_name: gerege_appstore_registry
+    restart: unless-stopped
+    pull_policy: always
+    command: ["/app/appstore"]
+    environment:
+      DATABASE_URL: postgres://postgres:${APPSTORE_POSTGRES_PASSWORD}@postgres:5432/appstore_db?sslmode=disable
+      PORT: 8080
+      PUBLIC_ORIGIN: ${APPSTORE_ORIGIN:-https://appstore.gerege.mn}
+      # Who may read this API from a browser. The catalogue itself is public and
+      # unauthenticated, so this list is about the console's convenience rather
+      # than about protecting anything.
+      ALLOWED_ORIGINS: ${APPSTORE_ORIGIN:-https://appstore.gerege.mn},${CONSOLE_ORIGIN:-https://developer.gerege.mn}
+      # The key every Nexus instance verifies catalogues against. Without it the
+      # registry refuses to start: a registry serving unsigned catalogues is one
+      # every instance would silently ignore.
+      SIGNING_KEY: ${APPSTORE_SIGNING_KEY:?APPSTORE_SIGNING_KEY is required}
+      SIGNING_KEY_ID: ${APPSTORE_SIGNING_KEY_ID:-appstore-2026}
+      # Publishing is done by people who already have a Gerege identity; this is
+      # the issuer whose signature on an id_token is accepted.
+      SSO_ISSUER: ${SSO_ISSUER:-https://nexus.gerege.mn}
+      CONSOLE_CLIENT_ID: ${CONSOLE_CLIENT_ID:-gerege-developer-console}
+      # Who may publish somebody else's submission. Configuration rather than a
+      # table: the first reviewer has to come from somewhere.
+      APPSTORE_ADMIN_EMAILS: ${APPSTORE_ADMIN_EMAILS:-}
+      APPSTORE_ADMIN_SUBJECTS: ${APPSTORE_ADMIN_SUBJECTS:-}
+      # On first boot the registry imports the catalogue that ships in the
+      # image, so the store is not empty on the day it opens.
+      APP_CATALOG_PATH: /app/catalog/apps.json
+    ports:
+      - "127.0.0.1:8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  storefront:
+    image: ${IMAGE_STOREFRONT}:${IMAGE_TAG:-latest}
+    container_name: gerege_appstore_web
+    restart: unless-stopped
+    pull_policy: always
+    environment:
+      # Server-side only: the browser never talks to the registry, so this can
+      # be the address inside this network.
+      REGISTRY_URL: http://registry:8080
+      PORT: 3000
+    ports:
+      - "127.0.0.1:3009:3000"
+    depends_on:
+      registry:
+        condition: service_healthy
+
+  console:
+    image: ${IMAGE_CONSOLE}:${IMAGE_TAG:-latest}
+    container_name: gerege_developer_web
+    restart: unless-stopped
+    pull_policy: always
+    environment:
+      REGISTRY_URL: http://registry:8080
+      SSO_ISSUER: ${SSO_ISSUER:-https://nexus.gerege.mn}
+      CONSOLE_ORIGIN: ${CONSOLE_ORIGIN:-https://developer.gerege.mn}
+      CONSOLE_CLIENT_ID: ${CONSOLE_CLIENT_ID:-gerege-developer-console}
+      PORT: 3000
+    ports:
+      - "127.0.0.1:3010:3000"
+    depends_on:
+      registry:
+        condition: service_healthy
+
+volumes:
+  # Pinned by name for the same reason the platform's is: Compose otherwise
+  # derives the name from the deploy directory, so moving the stack would bring
+  # Postgres up on an empty data directory — healthy container, no publishers,
+  # no versions, and a catalogue that quietly re-seeds itself from the bundled
+  # file as if nothing had been published in months.
+  gerege_appstore_postgres_data:
+    name: gerege_appstore_postgres_data

@@ -35,3 +35,7 @@ tmp/
 *.log
 coverage.out
 coverage.html
+
+# Next.js build output for the store and console services
+services/*/.next/
+services/*/node_modules/
