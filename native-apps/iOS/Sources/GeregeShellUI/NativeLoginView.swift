@@ -21,25 +21,25 @@ public struct NativeLoginView: View {
                         .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                         .foregroundStyle(.white).padding(.bottom, 10)
 
-                    TextField(String(localized: "auth.field.email", bundle: .module), text: $email).textContentType(.emailAddress)
+                    TextField(loginText("auth.field.email"), text: $email).textContentType(.emailAddress)
                         .keyboardType(.emailAddress).textInputAutocapitalization(.never).loginField()
-                    SecureField(String(localized: "auth.field.password", bundle: .module), text: $password).textContentType(.password).loginField()
-                    Button(String(localized: "auth.action.admin_sign_in", bundle: .module)) { auth.password(email: email, password: password) }
+                    SecureField(loginText("auth.field.password"), text: $password).textContentType(.password).loginField()
+                    Button(loginText("auth.action.admin_sign_in")) { auth.password(email: email, password: password) }
                         .buttonStyle(GeregePrimaryButton()).disabled(isPending)
 
                     HStack { Rectangle().frame(height: 1); Text("eID Mongolia").font(.caption); Rectangle().frame(height: 1) }
                         .foregroundStyle(Color.white.opacity(0.18)).padding(.vertical, 10)
 
-                    TextField(String(localized: "auth.eid.reg_number", bundle: .module), text: $nationalID)
+                    TextField(loginText("auth.eid.reg_number"), text: $nationalID)
                         .textInputAutocapitalization(.characters).autocorrectionDisabled().loginField()
-                    Button(String(localized: "auth.eid.send_request", bundle: .module)) { auth.push(nationalID: nationalID) }
+                    Button(loginText("auth.eid.send_request")) { auth.push(nationalID: nationalID) }
                         .buttonStyle(GeregePrimaryButton()).disabled(isPending)
-                    Button(String(localized: "auth.action.app_to_app", bundle: .module)) {
+                    Button(loginText("auth.action.app_to_app")) {
                         auth.appToApp(callbackURL: "https://nexus.gerege.mn/auth/eid/callback")
                     }.buttonStyle(GeregeSecondaryButton()).disabled(isPending)
 
                     status
-                    if isPending { Button(String(localized: "auth.action.cancel", bundle: .module), action: auth.cancel).frame(maxWidth: .infinity, alignment: .trailing) }
+                    if isPending { Button(loginText("auth.action.cancel"), action: auth.cancel).frame(maxWidth: .infinity, alignment: .trailing) }
                 }
                 .frame(maxWidth: geometry.size.width > 700 ? 520 : 420, alignment: .leading)
                 .padding(28).frame(maxWidth: .infinity, minHeight: geometry.size.height)
@@ -61,11 +61,11 @@ public struct NativeLoginView: View {
     @ViewBuilder private var status: some View {
         let message: String = switch auth.phase {
         case .idle: ""
-        case .starting: String(localized: "auth.message.starting", bundle: .module)
+        case .starting: loginText("auth.message.starting")
         case .waiting(let code, _): "eID апп дээрх кодтой тулгана уу  ·  \(code)"
-        case .success: String(localized: "auth.message.success", bundle: .module)
-        case .expired: String(localized: "auth.message.expired", bundle: .module)
-        case .refused: String(localized: "auth.message.refused", bundle: .module)
+        case .success: loginText("auth.message.success")
+        case .expired: loginText("auth.message.expired")
+        case .refused: loginText("auth.message.refused")
         case .error(let error): error
         }
         if !message.isEmpty {
@@ -75,6 +75,10 @@ public struct NativeLoginView: View {
                 .accessibilityLabel(message)
         }
     }
+}
+
+private func loginText(_ key: String.LocalizationValue) -> String {
+    String(localized: key, table: "Login", bundle: .module)
 }
 
 private extension View {
