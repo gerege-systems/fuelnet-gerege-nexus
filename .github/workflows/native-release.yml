@@ -14,7 +14,9 @@ jobs:
       - run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:FormFactor=${{ matrix.form_factor }}
         working-directory: desktop-native/Windows
       - uses: actions/upload-artifact@v4
-        with: { name: windows-${{ matrix.form_factor }}-win-x64, path: desktop-native/Windows/bin/Release/${{ matrix.form_factor }}/net8.0-windows*/win-x64/publish }
+        with:
+          name: windows-${{ matrix.form_factor }}-win-x64
+          path: "desktop-native/Windows/bin/Release/${{ matrix.form_factor }}/net8.0-windows*/win-x64/publish"
   android:
     runs-on: ubuntu-latest
     steps:
