@@ -14,6 +14,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.ConcurrentHashMap
 
 data class EIDStart(val sessionId: String, val verificationCode: String, val deviceLinkUrl: String?, val expiresAt: String?)
@@ -64,6 +65,7 @@ class AuthApi(
     private suspend fun post(path: String, body: String, deviceToken: String? = null) = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url(apiBase + path)
             .header("Accept-Language", "mn")
+            .header("Origin", apiBase.toHttpUrl().run { "$scheme://$host${if (port == 80 || port == 443) "" else ":$port"}" })
         if (deviceToken != null) builder.header("Authorization", "Device $deviceToken")
         val request = builder.post(body.toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).execute().use { response ->

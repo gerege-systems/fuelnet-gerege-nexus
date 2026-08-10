@@ -47,11 +47,15 @@ final class NativeAuth: NSObject {
     private var ticket = 0
     private var task: Task<Void, Never>?
     private let session: URLSession
+    private let requestOrigin: String
     private(set) var profile: NativeUserProfile?
 
     init(apiEndpoint: String) {
         let root = apiEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         apiBase = URL(string: root.hasSuffix("/api/v1") ? root : root + "/api/v1")!
+        var origin = URLComponents(url: apiBase, resolvingAgainstBaseURL: false)!
+        origin.path = ""; origin.query = nil; origin.fragment = nil
+        requestOrigin = origin.string!.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let config = URLSessionConfiguration.default
         config.httpCookieStorage = .shared
         config.httpShouldSetCookies = true
@@ -147,6 +151,7 @@ final class NativeAuth: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("mn", forHTTPHeaderField: "Accept-Language")
+        request.setValue(requestOrigin, forHTTPHeaderField: "Origin")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {

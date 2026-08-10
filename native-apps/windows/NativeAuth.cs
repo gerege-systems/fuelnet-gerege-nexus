@@ -33,6 +33,7 @@ public sealed class NativeAuth : IDisposable
         _apiBase = new Uri(root + "/");
         _http = new HttpClient(new HttpClientHandler { CookieContainer = _cookies, UseCookies = true }) { BaseAddress = _apiBase };
         _http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("mn");
+        _http.DefaultRequestHeaders.Add("Origin", _apiBase.GetLeftPart(UriPartial.Authority));
     }
 
     public CookieCollection SessionCookies => _cookies.GetCookies(_apiBase);

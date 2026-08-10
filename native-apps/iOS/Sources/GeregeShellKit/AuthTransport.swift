@@ -30,6 +30,9 @@ public final class URLSessionAuthTransport: AuthTransport, @unchecked Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("mn", forHTTPHeaderField: "Accept-Language")
+        var origin = URLComponents(url: apiBase, resolvingAgainstBaseURL: false)!
+        origin.path = ""; origin.query = nil; origin.fragment = nil
+        request.setValue(origin.string?.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

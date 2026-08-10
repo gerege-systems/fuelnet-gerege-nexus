@@ -221,8 +221,12 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
     @objc public func logout() {
         Task {
             let endpoint = NativeSettings.load().apiEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            if let url = URL(string: endpoint + "/api/v1/auth/logout") {
+            let apiRoot = endpoint.hasSuffix("/api/v1") ? endpoint : endpoint + "/api/v1"
+            if let url = URL(string: apiRoot + "/auth/logout") {
                 var request = URLRequest(url: url); request.httpMethod = "POST"
+                if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                    request.setValue("\(components.scheme ?? "https")://\(components.host ?? "")", forHTTPHeaderField: "Origin")
+                }
                 _ = try? await URLSession.shared.data(for: request)
             }
             await MainActor.run { self.clearSessionAndShowLogin() }
