@@ -1,0 +1,22 @@
+{
+  "appName": "Gerege Nexus Shell Native",
+  "appVersion": "1.0.0-native",
+  "devUrl": "http://localhost:3000",
+  "productionUrl": "http://localhost:8080",
+  "defaultWidth": 1280,
+  "defaultHeight": 820,
+  "minWidth": 1024,
+  "minHeight": 680,
+  "enableNativeMenus": true,
+  "enableWebSockets": true,
+  "platforms": {
+    "macOS": {
+      "framework": "Swift / AppKit / WKWebView",
+      "minimumOsVersion": "12.0"
+    },
+    "windows": {
+      "framework": "C# / .NET 8 / WPF / WebView2",
+      "minimumOsVersion": "Windows 10 Build 19041"
+    }
+  }
+}

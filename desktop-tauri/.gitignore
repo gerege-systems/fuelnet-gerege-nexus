@@ -1,5 +1,0 @@
-# Rust build output
-src-tauri/target/
-
-# Tauri-гийн үүсгэсэн схем/эрхийн файлууд
-src-tauri/gen/

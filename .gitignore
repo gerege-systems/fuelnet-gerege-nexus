@@ -25,7 +25,6 @@ frontend/out/
 # Go / Binary outputs
 bin/
 tmp/
-desktop-tauri/src-tauri/target/
 *.exe
 *.dll
 *.so
@@ -36,3 +35,16 @@ desktop-tauri/src-tauri/target/
 *.log
 coverage.out
 coverage.html
+
+# Xcode-ийн хэрэглэгчийн төлөв — машин бүрт өөр, түүхэнд хэрэггүй.
+xcuserdata/
+*.xcuserstate
+desktop-native/macOS/build/
+desktop-native/macOS/GeregeNexusNativeMac
+desktop-native/Android/**/build/
+desktop-native/Android/.gradle/
+desktop-native/Android/local.properties
+desktop-native/Apple/.build/
+desktop-native/Apple/.swiftpm/
+desktop-native/Windows/**/bin/
+desktop-native/Windows/**/obj/

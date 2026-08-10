@@ -1,6 +1,6 @@
-# Bridge Contract v1 — Native Shell + Web Work Area
+# Bridge Contract v1.3 — Native Shell + Web Work Area
 
-Native бүрхүүл (Swift/AppKit, дараа Tauri) ба web app хоёрын хооронд байх
+Native бүрхүүл (Swift, C#, Kotlin) ба web app хоёрын хооронд байх
 `window.GeregeShell` гэрээний бүртгэл.
 
 <p>
@@ -17,9 +17,11 @@ Native бүрхүүл (Swift/AppKit, дараа Tauri) ба web app хоёрын
 
 - **Хөтчийн горим** — web app өөрөө бүрэн апп: толгой хэсэг, хажуугийн цэс,
   мобайл таб, нэвтрэлт бүгд түүнийх.
-- **Бүрхүүлийн горим** — native бүрхүүл нь нэвтрэлт, толгой хэсэг, цэс, хөл,
-  төхөөрөмжийн хандалтыг эзэмшинэ. Web app өөрийн chrome-оо нуугаад зөвхөн
-  **ажлын муж** болж рендерлэгдэнэ.
+- **Бүрхүүлийн горим** — native бүрхүүл нь session-ий амьдралын мөчлөг
+  (сэргээх, дахин нэвтрүүлэх, гарах), толгой хэсэг, цэс, хөл, төхөөрөмжийн
+  хандалтыг эзэмшинэ. Web app өөрийн chrome-оо нуугаад зөвхөн **ажлын муж**
+  болж рендерлэгдэнэ. Нэвтрэлтийн дэлгэц нь платформын native UI; web-ийн
+  `/login` зөвхөн browser/PWA горимд үлдэнэ.
 
 Гэрээ нь энэ хоёрын хилийг тодорхойлно. Хамгийн чухал шаардлага:
 **хөтчийн горим ямар ч нөхцөлд өөрчлөгдөхгүй.** Бүрхүүл байхгүй үед
@@ -27,8 +29,7 @@ Native бүрхүүл (Swift/AppKit, дараа Tauri) ба web app хоёрын
 эсвэл `false` буцаана; `data-shell` атрибут `<html>` дээр огт тавигдахгүй.
 
 Web талын хэрэгжилт: [`frontend/lib/shell.ts`](../frontend/lib/shell.ts).
-Бүрхүүлийн талын хэрэгжилт: [`desktop-tauri/`](../desktop-tauri) — Windows,
-Linux, macOS гурвуулаа нэг кодын сангаас.
+Бүрхүүлийн талын хэрэгжилтүүд: [`desktop-native/`](../desktop-native).
 
 ---
 
@@ -51,8 +52,9 @@ Document start дээр inject хийх шаардлага нь зөвхөн т�
 
 ```ts
 interface GeregeShell {
-  version: string;       // гэрээний semver, одоо "1.0"
-  platform: "macos" | "windows" | "linux" | "ios" | "android" | "kiosk" | "pos";
+  version: string;       // гэрээний semver, одоо "1.3"
+  platform: "macos" | "windows" | "ios" | "android" | "kiosk" | "pos";
+  formFactor: "desktop" | "mobile" | "tablet" | "kiosk" | "pos";
   capabilities: string[];
   invoke<T>(method: string, params?: Record<string, unknown>): Promise<T>;
   on(event: string, handler: (payload: unknown) => void): () => void;
@@ -103,6 +105,12 @@ Session дуусахад нэвтрэлтийн урсгалыг эхлүүлн�
 
 Web тал үүнийг нэг session-д **нэг л удаа** оролдоно: дахин нэвтэрсэн ч
 session хүчингүй хэвээр байвал мөчлөг үүсэхээс сэргийлнэ.
+
+### `auth.lock`
+
+Native biometric/PIN түгжээг гаргана. Unlock дуусах хүртэл resolve хийхгүй,
+цуцалбал reject хийнэ. `auth.reLogin`, `auth.lock` нь lifecycle method учраас
+capability шаардахгүй.
 
 ### `notify.show`
 
@@ -165,6 +173,24 @@ session хүчингүй хэвээр байвал мөчлөг үүсэхээс
 | Параметр | `{}` |
 | Хариу | `null` |
 
+### Device method-ууд (v1.1–v1.3)
+
+| Method | Capability | Параметр | Хариу |
+| --- | --- | --- | --- |
+| `escpos.print` | `escpos` | `{ text?: string, base64?: string, cut?: boolean }` | `null` |
+| `escpos.drawer` | `escpos` | `{ pulse_ms?: number }` | `null` |
+| `scanner.start` / `scanner.stop` | `scanner` | `{ mode?: string }` / `{}` | `null`; уншилт `shell:scan` event-ээр ирнэ |
+| `serial.transact` | `serial` | `{ port?: string, baud?: number, base64: string, read_timeout_ms?: number }` | `{ base64: string }` |
+| `device.identity` | `device.identity` | `{}` | Нууц token-гүй device identity |
+| `camera.scan` | `camera.scan` | `{ formats?: string[] }` | `{ value: string, format: string }` |
+| `kiosk.lockdown` | `kiosk.lockdown` | `{ enabled: boolean }` | `{ enabled: boolean }` |
+| `telemetry.emit` | `telemetry` | `{ level: string, event: string, payload?: object }` | `null` |
+| `payments.start` | `payments` | `{ amount: number, currency: string, reference: string }` | Vendor-neutral төлбөрийн үр дүн |
+
+`payments.start` нь vendor SDK суусан adapter байхгүй үед reject хийнэ. Web тал
+тэр үед өөр төлбөрийн арга руу fallback хийнэ. Device token, secure-store key,
+printer raw credential зэрэг нь ямар ч method-ын хариунд орж болохгүй.
+
 ---
 
 ## 6. Event-ууд
@@ -177,6 +203,9 @@ payload-ыг шууд дамжуулна.
 | `shell:navigate` | `{ path: string }` | SPA router-ээр шилжинэ. Зөвхөн `/`-ээр эхэлсэн дотоод зам хүлээн авна. |
 | `shell:search` | `{ query: string }` | Ажлын мужийн хайлтыг нээж, үгийг нь дамжуулна. |
 | `shell:menu-refresh` | Байхгүй (`null`) | Цэсээ сервертэй дахин тааруулахыг хүснэ. |
+| `shell:auth-changed` | `{ reason: string, user_id?: string }` | Session/ажилтан солигдсон; tenant data-г дахин татна. |
+| `shell:capabilities-changed` | `{ capabilities: string[] }` | Peripheral/settings өөрчлөгдсөн; web fallback-аа дахин тооцно. |
+| `shell:scan` | `{ value: string, format: string }` | Keyboard wedge, camera эсвэл vendor scanner уншилт. |
 
 ---
 
@@ -189,8 +218,8 @@ payload-ыг шууд дамжуулна.
 - **Major (1.x → 2.0)** — байгаа method-ын нэр, параметр, хариу, эсвэл
   event-ийн payload өөрчлөх, юм хасах. Бүрхүүл шинэ `version`-оо ЗААВАЛ
   зарлана.
-- Method нэмэхдээ түүнд харгалзах **capability-г мөн зарлана**. Capability-гүй
-  зарлагдсан method бол хэрэгжээгүйтэй адил.
+- Device method нэмэхдээ түүнд харгалзах **capability-г мөн зарлана**.
+  `auth.*` lifecycle method-ууд capability шаардахгүй.
 - Web тал үл мэдэгдэх method-ыг дуудаж болно — reject ирнэ гэдгийг тооцсон
   fallback-тай байх ёстой. Энэ нь хуучин бүрхүүл дээр шинэ web ажиллах гол
   механизм.
@@ -228,17 +257,22 @@ payload-ыг шууд дамжуулна.
 
 ## 9. Бүрхүүлийн одоогийн байдал
 
-Хэрэгжилт нь [`desktop-tauri/`](../desktop-tauri) (Tauri v2 + Rust). Гурван
-платформ нэг кодын сангаас баригдана.
+Хэрэгжилтүүд нь [`desktop-native/`](../desktop-native) доторх Swift/AppKit ба
+C#/.NET сууриас эхэлнэ; Kotlin/Android суурь мөн энд нэмэгдэнэ. Linux нь PWA.
 
 | Зүйл | Утга |
 | --- | --- |
-| `version` | `1.0` |
-| `platform` | build target-аас: `macos`, `windows`, `linux` |
-| `capabilities` | `notify`, `badge`, `external.open`, `print.system`, `fs.save`, `menu.native` |
+| `version` | `1.3` |
+| `platform` | `macos`, `windows`, `ios`, `android`, `kiosk`, `pos` |
+| `capabilities` | `notify`, `badge`, `external.open`, `print.system`, `fs.save` |
 | Хэрэгжсэн method | `notify.show`, `badge.set`, `external.open`, `print.system`, `fs.saveAs`, `menu.changed`, `auth.reLogin` |
 | Reject хийдэг | `biometric.authenticate` — desktop дээр хэрэгжилт алга; web тал өөрийн fallback-аа ажиллуулна |
-| Илгээдэг event | `shell:navigate` (deep link, цэс, tray), `shell:search` (⌘/Ctrl+F), `shell:menu-refresh` (цэс дахин баригдсаны дараа) |
+| Илгээдэг event | `shell:navigate` (deep link, цэс, tray), `shell:search` (⌘/Ctrl+F) |
+
+`menu.native` зарлагдаагүй: навигацийн цэсийг ажлын муж өөрөө зурдаг тул
+бүрхүүл тенантын цэсийг native байдлаар барихаа больсон. Тиймээс
+`shell:menu-refresh` мөн илгээгддэггүй — `menu.changed` дуудлагыг хүлээж авч,
+хариу нь амжилттай гэдгийг л баталгаажуулна.
 
 `secure-store` капабилити зарлагдаагүй: гэрээний v1-д түүнийг ашиглах method
 тодорхойлогдоогүй тул зарлах нь дуудагдах боломжгүй амлалт болно. Хэрэглэх
@@ -253,10 +287,9 @@ origin-ууд. Байгууллага өөрийн интеграцийн OAuth 
 нэмнэ. Нэмээгүй бол урсгал таслагдахгүй — зөвхөн системийн хөтөч дээр
 үргэлжилнэ.
 
-> **Анхаар.** Ажлын мужийн origin нь `capabilities/workarea.json`-ы
-> `remote.urls` дотор байх ёстой бөгөөд тэр capability нь `tauri.conf.json`-ы
-> `app.security.capabilities` жагсаалтад бүртгэгдсэн байх ёстой. Аль нэг нь
-> дутвал IPC чимээгүй хаагдаж, гүүр бүхэлдээ ажиллахаа болино.
+> **Анхаар.** Swift-ийн `WKNavigationDelegate`, WebView2-ийн
+> `NavigationStarting`, Android-ийн `WebViewClient` гурвуул main-frame origin
+> allowlist-ыг bridge message бүр дээр давхар шалгана.
 
 ---
 
@@ -274,7 +307,7 @@ origin-ууд. Байгууллага өөрийн интеграцийн OAuth 
 
 **B. Бүрхүүлийн горимд chrome нуугдсан эсэх**
 
-1. `make run-desktop` ажиллуулж, бүрхүүлээр нэвтэрнэ.
+1. Тухайн native target-ыг ажиллуулж, native дэлгэцээр нэвтэрнэ.
 2. Нэвтэрсний дараа `gerege-topbar`, хажуугийн цэс, мобайл таб аль нь ч
    зурагдаагүй; зөвхөн ажлын муж ба AI туслах харагдана.
 3. Апп Стороос модуль асаагаад/унтраагаад цэсний өгөгдөл шинэчлэгдэж байгааг
@@ -283,7 +316,7 @@ origin-ууд. Байгууллага өөрийн интеграцийн OAuth 
 **C. `data-shell` тавигдсан эсэх**
 
 1. Аппын цонхон дээр баруун товшоод *Inspect Element* (dev build).
-2. Elements: `<html data-shell="macos" ...>` — эсвэл `windows` / `linux`.
+2. Elements: `<html data-shell="macos" ...>` — эсвэл `windows` / `ios` / `android`.
 3. Console: `getComputedStyle(document.body).fontFamily` — Inter биш,
    системийн фонтоор эхэлсэн байна.
 

@@ -297,6 +297,16 @@ func (s *Server) setupRoutes() {
 		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.handleEIDPoll)
 		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.handleDANLogin)
 		api.Post("/auth/logout", s.handleLogout)
+		// Device enrollment is the bootstrap: the one-time code is its authority,
+		// so the device cannot already be behind session/device middleware.
+		api.Post("/devices/enroll", s.handleEnrollDevice)
+		api.With(s.deviceMiddleware).Get("/devices/me", s.handleDeviceMe)
+		api.With(s.deviceMiddleware).Post("/devices/token/rotate", s.handleRotateDeviceToken)
+		api.With(s.deviceMiddleware, security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/devices/staff/pin", s.handleDeviceStaffPIN)
+		api.With(s.deviceMiddleware).Get("/devices/shifts/current", s.handleCurrentShift)
+		api.With(s.deviceMiddleware, s.authMiddleware).Post("/devices/shifts/open", s.handleOpenShift)
+		api.With(s.deviceMiddleware, s.authMiddleware).Post("/devices/shifts/close", s.handleCloseShift)
+		api.With(s.deviceMiddleware).Post("/devices/telemetry", s.handleDeviceTelemetry)
 
 		// The OAuth redirect a connected provider sends the browser back to.
 		// Unauthenticated on purpose — see handleIntegrationOAuthCallback: the
@@ -321,6 +331,11 @@ func (s *Server) setupRoutes() {
 			// account, so it sits behind authentication with the rest.
 			pr.Post("/auth/logout-all", s.handleLogoutEverywhere)
 			pr.Get("/menus", s.handleMenus)
+			pr.With(s.requireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
+			pr.With(s.requireAdmin).Get("/admin/devices", s.handleListDevices)
+			pr.With(s.requireAdmin).Put("/admin/devices/staff-pin", s.handleSetStaffPIN)
+			pr.With(s.requireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
+			pr.Post("/push-tokens", s.handleRegisterPushToken)
 
 			// Tenant access control. Mutations are deliberately admin-only;
 			// authorization configuration can otherwise be used to self-elevate.

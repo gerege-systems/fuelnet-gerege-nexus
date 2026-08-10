@@ -11,7 +11,7 @@ import { useTheme } from "@/lib/theme";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, MonitorCog } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; icon:string; order:number }
 interface AppNav { id:string; name:string; icon:string; path:string; menus:MenuItem[] }
@@ -48,7 +48,7 @@ const iconMap: Record<string, React.ReactNode> = {
   // gov services
   inbox:<Inbox className="w-5 h-5"/>, "calendar-clock":<CalendarClock className="w-5 h-5"/>, timer:<Timer className="w-5 h-5"/>,
 };
-const PUBLIC_ROUTES=["/","/login","/auth/eid/callback"];
+const PUBLIC_ROUTES=["/","/login","/auth/eid/callback","/kiosk"];
 const APP_ORDER=["io.example.contacts","io.example.products","io.example.inventory","io.example.billing","io.example.documents","io.example.esign","io.example.developer_portal","io.example.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
@@ -158,12 +158,40 @@ export default function Layout({children}:{children:React.ReactNode}){
   if(isPublic)return <>{children}</>;
   if(loading)return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-medium">{t("web.message.loading_platform")}</div>;
 
-  // Бүрхүүл дотор: толгой, хажуугийн цэс, мобайл таб, мобайл drawer аль нь ч
-  // зурагдахгүй — тэдгээрийг native тал аль хэдийн эзэмшсэн. Цэс, хэрэглэгчийн
-  // өгөгдөл дээрх fetch хэвээр ажиллаж байгаа (RBAC, хандалт түүнээс хамаарна),
-  // зөвхөн харагдац нь л хасагдана. AICopilot бол ажлын мужийн хэсэг тул үлдэнэ.
-  if(inShell)return <div className="gerege-shell gerege-workarea min-h-screen flex flex-col">
-    <main className="gerege-main flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+  const platformMenus=<><MenuGroup title={t("web.group.modules")}>
+    <NavLink href="/apps" active={pathname==="/apps"} icon={<LayoutGrid className="w-5 h-5"/>} label={t("web.menu.app_store")}/><NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("web.menu.installed_apps")}/><NavLink href="/settings/ai" active={pathname==="/settings/ai"} icon={<BrainCircuit className="w-5 h-5"/>} label={t("web.menu.ai_settings")}/>
+  </MenuGroup><MenuGroup title={t("web.group.settings")}>
+    <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("web.menu.appearance")}/>
+    <NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Share2 className="w-5 h-5"/>} label={t("web.menu.integrations")}/>
+    {/* Issuing a key that sends mail in the tenant's name is administrative, and
+        the API behind this screen is admin-only, so the link follows it. */}
+    {user?.is_admin&&<NavLink href="/settings/email-verification" active={pathname==="/settings/email-verification"} icon={<MailCheck className="w-5 h-5"/>} label={t("web.menu.email_verification")}/>}
+    {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={t("access.view.title")}/>}
+    {user?.is_admin&&<NavLink href="/settings/devices" active={pathname==="/settings/devices"} icon={<MonitorCog className="w-5 h-5"/>} label="Төхөөрөмжийн парк"/>}
+  </MenuGroup></>;
+
+  // Бүрхүүл дотор: толгой хэсэг ба мобайл навигаци зурагдахгүй — хайлт,
+  // хэрэглэгч, нэвтрэлт, цонхны үйлдлүүдийг native тал эзэмшинэ. Хажуугийн цэс
+  // нь ЭНД үлдэнэ: тэр бол ажлын мужийн доторх навигаци бөгөөд аль апп
+  // идэвхтэй, ямар эрхтэй, ямар хэлээр гэдгийг web тал аль хэдийн мэддэг.
+  // AICopilot мөн ажлын мужийн хэсэг.
+  if(inShell)return <div className="gerege-shell gerege-workarea h-screen flex flex-col overflow-hidden">
+    <RibbonBar selected={selected} brandTitle={brandTitle} user={user} setShellSearchOpen={setShellSearchOpen} iconMap={iconMap} t={t} onLogout={logout} />
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="gerege-sidebar bottom-0 left-0 z-40 flex overflow-hidden is-desktop-open">
+        <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
+          <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
+          {apps.map(app=><AppRailLink key={app.id} href={app.path} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+        </nav>
+        <aside className="gerege-menu-panel overflow-hidden">
+          <div className="w-56 py-4"><nav className="space-y-1 px-2">
+            {selected?<AppMenuGroups menus={selected.menus} pathname={pathname}/>:platformMenus}
+          </nav></div>
+        </aside>
+      </div>
+      <main className="gerege-main flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+    </div>
+    <WorkareaFooter />
     {shellSearchOpen&&<div className="gerege-shell-search" role="dialog" aria-modal="true" aria-label={t("web.view.search_placeholder")}>
       <button type="button" className="gerege-shell-search-backdrop" aria-label={t("base.action.close")} onClick={()=>{setShellSearchOpen(false);setQuery("")}}/>
       <div className="gerege-shell-search-panel">
@@ -179,16 +207,6 @@ export default function Layout({children}:{children:React.ReactNode}){
     <AICopilot/>
   </div>;
 
-  const platformMenus=<><MenuGroup title={t("web.group.modules")}>
-    <NavLink href="/apps" active={pathname==="/apps"} icon={<LayoutGrid className="w-5 h-5"/>} label={t("web.menu.app_store")}/><NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("web.menu.installed_apps")}/><NavLink href="/settings/ai" active={pathname==="/settings/ai"} icon={<BrainCircuit className="w-5 h-5"/>} label={t("web.menu.ai_settings")}/>
-  </MenuGroup><MenuGroup title={t("web.group.settings")}>
-    <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("web.menu.appearance")}/>
-    <NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Share2 className="w-5 h-5"/>} label={t("web.menu.integrations")}/>
-    {/* Issuing a key that sends mail in the tenant's name is administrative, and
-        the API behind this screen is admin-only, so the link follows it. */}
-    {user?.is_admin&&<NavLink href="/settings/email-verification" active={pathname==="/settings/email-verification"} icon={<MailCheck className="w-5 h-5"/>} label={t("web.menu.email_verification")}/>}
-    {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={t("access.view.title")}/>}
-  </MenuGroup></>;
 
   return <div className="gerege-shell min-h-screen flex flex-col">
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
@@ -200,7 +218,7 @@ export default function Layout({children}:{children:React.ReactNode}){
         <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">Gerege Nexus</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
       </div>
       <div className="gerege-menu-toggle w-16 h-full shrink-0 grid place-items-center"><button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={t("web.action.toggle_menu")} aria-expanded={mobileOpen}><MenuIcon className="w-5 h-5"/></button></div>
-      <div className="hidden lg:flex items-center gap-2 px-4 min-w-0"><span className="gerege-session-dot w-2 h-2 rounded-full shrink-0"/><strong className="text-base text-slate-800 font-semibold truncate max-w-56">{user?.tenant_name||"Demo Tenant"}</strong></div>
+      {user?.tenant_name&&<div className="hidden lg:flex items-center gap-2 px-4 min-w-0"><span className="gerege-session-dot w-2 h-2 rounded-full shrink-0"/><strong className="text-base text-slate-800 font-semibold truncate max-w-56">{user.tenant_name}</strong></div>}
       <div className="gerege-header-search hidden md:flex flex-1 items-center justify-center min-w-0 px-5 relative">
         <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&results[0]){router.push(results[0].path);setQuery("")}}} placeholder={t("web.view.search_placeholder")} className="w-full h-10 rounded-full border border-slate-200 bg-slate-100/80 pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--gerege-blue)_15%,transparent)]"/>
           {results.length>0&&<div className="gerege-topbar-onlight absolute top-12 inset-x-0 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
@@ -208,6 +226,10 @@ export default function Layout({children}:{children:React.ReactNode}){
       </div>
       <div className="gerege-header-user flex pr-2 sm:pr-4 lg:pr-6"><UserMenu user={user} onLogout={logout}/></div>
     </header>
+
+    {/* RibbonBar нь ЗӨВХӨН бүрхүүлийн горимд. Хөтөч дээр дээрх <header> нь
+        байгууллагын нэр, хайлт, хэрэглэгчийн цэсийг аль хэдийн зурдаг тул
+        энд давхардуулбал хоёр tenant chip, хоёр хайлт, хоёр user menu болно. */}
 
     <div className="flex flex-1 min-h-0">
       {mobileOpen&&<button className="gerege-mobile-backdrop fixed inset-0 top-16 bg-slate-950/40 z-30" aria-label={t("web.action.close_menu")} onClick={()=>setMobileOpen(false)}/>}
@@ -231,6 +253,89 @@ export default function Layout({children}:{children:React.ReactNode}){
     </nav>
     <AICopilot/>
   </div>;
+}
+
+function RibbonBar({
+  selected,
+  brandTitle,
+  user,
+  setShellSearchOpen,
+  iconMap,
+  t,
+  onLogout,
+}: {
+  selected: AppNav | null;
+  brandTitle: string;
+  user: any;
+  setShellSearchOpen: (open: boolean) => void;
+  iconMap: Record<string, React.ReactNode>;
+  t: (key: any) => string;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="gerege-ribbon h-10 shrink-0 border-b border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-xs z-30 select-none">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="text-[var(--gerege-blue)] shrink-0">
+          {selected ? (iconMap[selected.icon] || <Package className="w-4 h-4" />) : <LayoutGrid className="w-4 h-4" />}
+        </span>
+        <div className="flex items-center gap-1.5 text-xs min-w-0">
+          <span className="font-bold text-slate-800 dark:text-slate-100">Gerege Nexus</span>
+          <span className="text-slate-300 dark:text-slate-600">/</span>
+          <span className="font-semibold text-[var(--gerege-blue)] truncate">{brandTitle}</span>
+        </div>
+
+        {user?.tenant_name && (
+          <div className="hidden md:flex items-center pl-3 border-l border-slate-200 dark:border-slate-800">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="truncate max-w-36">{user.tenant_name}</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2.5 shrink-0 text-xs">
+        <button
+          onClick={() => setShellSearchOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+        >
+          <Search className="w-3.5 h-3.5 text-slate-400" />
+          <span>{t("web.view.search_placeholder") || "Хайх..."}</span>
+          <kbd className="hidden lg:inline-block px-1 py-0.2 text-[9px] font-semibold text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded">⌘K</kbd>
+        </button>
+        <button
+          onClick={() => window.location.reload()}
+          title="Дахин ачаалах"
+          className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+        <UserMenu user={user} onLogout={onLogout} />
+      </div>
+    </div>
+  );
+}
+
+function WorkareaFooter() {
+  return (
+    <footer className="gerege-footer h-7 shrink-0 border-t border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 select-none z-30">
+      <div className="flex items-center gap-3">
+        <span className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Gerege Nexus Shell 1.0</span>
+        </span>
+        <span className="hidden md:inline text-slate-300 dark:text-slate-700">|</span>
+        <span className="hidden md:inline text-slate-400">Enterprise Native Work Area</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <span className="hidden sm:inline-flex items-center gap-1 text-slate-400">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          <span>SSL 256-bit Encrypted</span>
+        </span>
+        <span className="font-mono text-[10px] text-slate-400">MN · UTF-8</span>
+      </div>
+    </footer>
+  );
 }
 
 function AppRailLink({href,active,title,icon}:{href:string;active:boolean;title:string;icon:React.ReactNode}){return <Link href={href} title={title} aria-label={title} className={`w-11 h-11 rounded-xl grid place-items-center transition ${active?"bg-[var(--gerege-blue-soft)] text-[var(--gerege-blue)] shadow-sm":"text-slate-500 hover:bg-[var(--gerege-surface-2)] hover:text-slate-800"}`}>{icon}</Link>}

@@ -15,11 +15,25 @@ export const app_store = {
 
   "app_store.action.enable": { mn: "Идэвхжүүлэх", en: "Enable App" },
   "app_store.action.disable": { mn: "Идэвхгүй болгох", en: "Disable App" },
+  "app_store.action.install": { mn: "Суулгах", en: "Install App" },
 
   "app_store.state.installed": { mn: "Суулгасан ба идэвхтэй", en: "Installed & Enabled" },
   "app_store.state.disabled": { mn: "Идэвхгүй", en: "Disabled" },
+  "app_store.state.not_installed": { mn: "Суулгаагүй", en: "Not installed" },
+  "app_store.state.installing": { mn: "Суулгаж байна...", en: "Installing..." },
 
   "app_store.filter.all": { mn: "Бүгд", en: "All" },
+
+  // Хоёр харагдац: карт нь танилцах, жагсаалт нь олон аппыг зэрэг харьцуулж
+  // удирдахад. Сонголт нь хэрэглэгчийнх тул localStorage-д үлдэнэ.
+  "app_store.layout.cards": { mn: "Карт харагдац", en: "Card view" },
+  "app_store.layout.list": { mn: "Жагсаалтан харагдац", en: "List view" },
+
+  "app_store.column.app": { mn: "Апп", en: "App" },
+  "app_store.column.category": { mn: "Ангилал", en: "Category" },
+  "app_store.column.version": { mn: "Хувилбар", en: "Version" },
+  "app_store.column.state": { mn: "Төлөв", en: "Status" },
+  "app_store.column.action": { mn: "Үйлдэл", en: "Action" },
 
   "app_store.message.loading": { mn: "Апп каталог ачаалж байна...", en: "Loading apps catalog..." },
   "app_store.message.loading_installed": { mn: "Суулгасан аппуудыг ачаалж байна...", en: "Loading installed apps..." },

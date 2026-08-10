@@ -156,7 +156,7 @@ backend/
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
 frontend/             Next.js 15 (App Router) вэб клиент
-desktop-tauri/        Tauri v2 native бүрхүүл (Windows, Linux, macOS)
+desktop-native/       Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)
 catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
@@ -166,8 +166,8 @@ docs/                 Баримт бичиг ба орчуулгууд
 
 ## Desktop бүрхүүлүүд
 
-Архитектур нь **Native Shell + Web Work Area**: native бүрхүүл нь нэвтрэлт,
-толгой хэсэг, цэс, tray, төхөөрөмжийн хандалтыг эзэмшинэ; вэб клиент нь бүрхүүл
+Архитектур нь **Native Shell + Web Work Area**: native бүрхүүл нь session-ий
+мөчлөг, толгой хэсэг, цэс, tray, төхөөрөмжийн хандалтыг эзэмшинэ; вэб клиент нь бүрхүүл
 дотор ажиллахдаа өөрийн chrome-оо нуугаад зөвхөн **ажлын муж** болж
 рендерлэгдэнэ. Хөтчөөр орвол бүрхүүл байхгүй тул вэб клиент урьдын адил бүрэн
 аппликейшн хэвээрээ ажиллана.
@@ -178,24 +178,24 @@ method, event, capability, хувилбарын дүрэм, аюулгүй ба�
 тодорхойлно. Вэб клиент бүрхүүлийн дотоод бүтцийг мэдэхгүй — зөвхөн гэрээг л
 мэднэ.
 
-Бүрхүүл нь [`desktop-tauri/`](desktop-tauri) дотор, гурван платформд нэг
-кодын сангаас баригдана: Windows, Linux, macOS.
+Клиентүүд [`desktop-native/`](desktop-native) дотор гурван native сангаар
+хөгжинө: Swift (macOS/iOS/iPadOS), C# (Windows desktop/kiosk/POS), Kotlin
+(Android mobile/tablet/kiosk/POS). Linux desktop нь PWA хэвээр.
 
-Native нэвтрэлтийн цонх (имэйл/нууц үг ба eID QR), сервэрээс баригдах native
-цэс, tray дээрх серверийн төлөв, `gerege://` deep link:
+Бүх native клиент нэвтрэлтийг өөрийн native UI-аар хийж, session cookie-г
+webview store-д тарина. `/login` нь browser/PWA горимд л ашиглагдана:
 
 ```bash
-make run-desktop    # хөгжүүлэлтийн горим (backend ба frontend ажиллаж байх ёстой)
-make build-desktop  # компиляц
+make run-mac        # macOS хөгжүүлэлтийн горим
+make build-mac      # Swift/AppKit компиляц
 ```
 
-Платформ бүрийн урьдчилсан шаардлага, серверийн хаягийг compile-time тогтмол
-болгох арга, code signing болон auto-update-ийн TODO-нуудыг
-[`desktop-tauri/README.md`](desktop-tauri/README.md)-ээс үзнэ үү.
+Платформ бүрийн урьдчилсан шаардлага, runtime endpoint, enrollment, code
+signing болон auto-update сувгийн зааврыг
+[`desktop-native/README.md`](desktop-native/README.md)-ээс үзнэ үү.
 
-> Компиляцыг гурван платформ дээр CI шалгана:
-> [`desktop-tauri.yml`](.github/workflows/desktop-tauri.yml). Installer
-> гаргахгүй — гарын үсгийн гэрчилгээ репод байхгүй.
+> Native CI нь macOS Swift ба Windows .NET build-ийг тус тусын runner дээр
+> шалгана. Installer нь signing identity оруулсны дараах release ажил.
 
 ---
 

@@ -12,7 +12,13 @@ import {
   Boxes,
   Users,
   Package,
+  LayoutGrid,
+  Rows3,
 } from "lucide-react";
+
+/** Хоёр харагдац: карт нь танилцуулга, жагсаалт нь харьцуулж удирдахад. */
+type Layout = "cards" | "list";
+const LAYOUT_KEY = "gerege_appstore_layout";
 
 interface AppItem {
   id: string;
@@ -35,6 +41,31 @@ const appIcons: Record<string, React.ReactNode> = {
   inventory: <Boxes className="w-8 h-8 text-amber-500" />,
 };
 
+// Жагсаалтын мөрөнд картынхаас жижиг дүрс хэрэгтэй. Дээрхийг дахин ашиглаж
+// хэмжээг нь CSS-ээр дарах нь `w-8 h-8`-ыг мөрөн дотор нь тулгах гэсэн үг тул
+// хоёр дахь газар нэг эх сурвалжаас клонлоно.
+function appIcon(slug: string, className: string): React.ReactNode {
+  const icon = appIcons[slug] || <Boxes className="text-indigo-500" />;
+  return React.isValidElement<{ className?: string }>(icon)
+    ? React.cloneElement(icon, { className: `${className} ${(icon.props.className || "").replace(/\bw-8\b|\bh-8\b/g, "")}`.trim() })
+    : icon;
+}
+
+/** Суулгасан эсэх ба идэвхтэй эсэхийг нэг мөрөнд харуулах цэг + шошго. */
+function StateLabel({ app, t }: { app: AppItem; t: (key: any) => string }) {
+  const tone = !app.installed
+    ? { dot: "bg-slate-300", text: "text-slate-500", label: t("app_store.state.not_installed") }
+    : app.enabled
+      ? { dot: "bg-emerald-500", text: "text-emerald-700", label: t("app_store.state.installed") }
+      : { dot: "bg-amber-500", text: "text-amber-700", label: t("app_store.state.disabled") };
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${tone.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tone.dot}`} />
+      {tone.label}
+    </span>
+  );
+}
+
 export default function AppStorePage() {
   const { t } = useI18n();
   const [apps, setApps] = useState<AppItem[]>([]);
@@ -43,6 +74,18 @@ export default function AppStorePage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  // SSR-д localStorage байхгүй тул анхны markup нь үргэлж "cards" — сонголт
+  // mount-ын дараа л уншигдана, эс бөгөөс hydration зөрнө.
+  const [layout, setLayout] = useState<Layout>("cards");
+
+  useEffect(() => {
+    if (localStorage.getItem(LAYOUT_KEY) === "list") setLayout("list");
+  }, []);
+
+  const chooseLayout = (next: Layout) => {
+    setLayout(next);
+    localStorage.setItem(LAYOUT_KEY, next);
+  };
 
   const loadApps = useCallback(async () => {
     try {
@@ -145,6 +188,30 @@ export default function AppStorePage() {
               </option>
             ))}
           </select>
+
+          {/* Харагдац солих segmented control */}
+          <div role="group" aria-label={t("app_store.column.app")} className="flex items-center p-0.5 rounded-lg border border-slate-300 bg-slate-100">
+            {([
+              { value: "cards" as const, icon: LayoutGrid, label: t("app_store.layout.cards") },
+              { value: "list" as const, icon: Rows3, label: t("app_store.layout.list") },
+            ]).map(({ value, icon: Icon, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => chooseLayout(value)}
+                aria-pressed={layout === value}
+                title={label}
+                aria-label={label}
+                className={`grid place-items-center w-8 h-7 rounded-md transition ${
+                  layout === value
+                    ? "bg-white text-[var(--gerege-blue)] shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -158,6 +225,91 @@ export default function AppStorePage() {
         <div className="py-12 text-center text-slate-500 text-sm">{t("app_store.message.loading")}</div>
       ) : filteredApps.length === 0 ? (
         <div className="py-12 text-center text-slate-500 text-sm">{t("app_store.message.no_match")}</div>
+      ) : layout === "list" ? (
+        /* Жагсаалтан харагдац — олон аппыг зэрэг харьцуулж, багц удирдахад.
+           Багана нь өргөнөөс хамаарч хасагдана: нэр ба үйлдэл л заавал үлдэнэ. */
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[34rem] text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-left">
+                  <th scope="col" className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {t("app_store.column.app")}
+                  </th>
+                  <th scope="col" className="hidden lg:table-cell px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {t("app_store.column.category")}
+                  </th>
+                  <th scope="col" className="hidden md:table-cell px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {t("app_store.column.version")}
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {t("app_store.column.state")}
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {t("app_store.column.action")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredApps.map((app) => (
+                  <tr key={app.id} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="grid place-items-center w-9 h-9 shrink-0 rounded-lg bg-slate-50 border border-slate-100">
+                          {appIcon(app.slug, "w-5 h-5")}
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block font-semibold text-slate-900 truncate">{app.name}</strong>
+                          <small className="block text-xs text-slate-500 truncate max-w-[22rem]">{app.description}</small>
+                          {app.manifest.dependencies && app.manifest.dependencies.length > 0 && (
+                            <small className="block text-[11px] text-slate-400 truncate max-w-[22rem]">
+                              {t("app_store.field.requires")}
+                              {app.manifest.dependencies.map((d) => d.id.replace("io.example.", "")).join(", ")}
+                            </small>
+                          )}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="hidden lg:table-cell px-4 py-3 text-xs font-medium text-indigo-600 whitespace-nowrap">
+                      {app.category}
+                    </td>
+                    <td className="hidden md:table-cell px-4 py-3 text-xs font-mono text-slate-500 whitespace-nowrap">
+                      v{app.version}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StateLabel app={app} t={t} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {!app.installed ? (
+                        <button
+                          onClick={() => handleInstall(app)}
+                          disabled={actionLoading === app.slug}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50 whitespace-nowrap"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          {actionLoading === app.slug ? t("app_store.state.installing") : t("app_store.action.install")}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleState(app)}
+                          disabled={actionLoading === app.slug}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 whitespace-nowrap ${
+                            app.enabled
+                              ? "bg-white hover:bg-red-50 text-red-600 border-red-200"
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                          }`}
+                        >
+                          {app.enabled ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                          {app.enabled ? t("app_store.action.disable") : t("app_store.action.enable")}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredApps.map((app) => (
@@ -210,7 +362,7 @@ export default function AppStorePage() {
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
-                    <span>{actionLoading === app.slug ? "Installing..." : "Install App"}</span>
+                    <span>{actionLoading === app.slug ? t("app_store.state.installing") : t("app_store.action.install")}</span>
                   </button>
                 ) : (
                   <button

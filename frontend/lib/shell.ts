@@ -3,7 +3,7 @@
 /**
  * shell — "Native Shell + Web Work Area" архитектурын web талын гэрээ.
  *
- * Native бүрхүүл (одоо Swift/AppKit, дараа Tauri) нь нэвтрэлт, толгой хэсэг,
+ * Native бүрхүүл (Swift/AppKit, C#/WPF, Kotlin/Android) нь нэвтрэлт, толгой хэсэг,
  * цэс, хөл, төхөөрөмжийн хандалтыг өөртөө авдаг. Тэр үед web app нь өөрийн
  * chrome-оо нуугаад зөвхөн ажлын муж болж рендерлэгдэнэ. Хөтөч дээр shell
  * байхгүй тул энэ файлын бүх зүйл `null`/`false` буцаана — өөрөөр хэлбэл
@@ -12,14 +12,16 @@
  * Гэрээний бүрэн бүртгэл: `docs/SHELL_CONTRACT.md`.
  */
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
-export type ShellPlatform = "macos" | "windows" | "linux" | "ios" | "android" | "kiosk" | "pos";
+export type ShellPlatform = "macos" | "windows" | "ios" | "android" | "kiosk" | "pos";
+export type ShellFormFactor = "desktop" | "mobile" | "tablet" | "kiosk" | "pos";
 
 export interface GeregeShell {
-  /** Гэрээний semver. Одоо "1.0". */
+  /** Гэрээний semver. */
   version: string;
   platform: ShellPlatform;
+  formFactor: ShellFormFactor;
   /** Тухайн бүрхүүлд ҮНЭХЭЭР хэрэгжсэн чадварууд. Зарлагдаагүй method дуудвал
    *  invoke() reject хийнэ. */
   capabilities: string[];
@@ -39,6 +41,8 @@ declare global {
 export const SHELL_METHODS = {
   /** Session дуусахад бүрхүүлийн нэвтрэлтийн урсгалыг эхлүүлнэ. */
   AUTH_RE_LOGIN: "auth.reLogin",
+  /** Lifecycle method-ууд capability шаардахгүй. */
+  AUTH_LOCK: "auth.lock",
   NOTIFY_SHOW: "notify.show",
   BADGE_SET: "badge.set",
   BIOMETRIC_AUTHENTICATE: "biometric.authenticate",
@@ -48,6 +52,16 @@ export const SHELL_METHODS = {
   /** Тенантын цэс өөрчлөгдсөнийг мэдэгдэнэ — бүрхүүл өөрийн native цэсээ дахин
    *  татах боломжтой болно. */
   MENU_CHANGED: "menu.changed",
+  ESCPOS_PRINT: "escpos.print",
+  ESCPOS_DRAWER: "escpos.drawer",
+  SCANNER_START: "scanner.start",
+  SCANNER_STOP: "scanner.stop",
+  SERIAL_TRANSACT: "serial.transact",
+  DEVICE_IDENTITY: "device.identity",
+  CAMERA_SCAN: "camera.scan",
+  KIOSK_LOCKDOWN: "kiosk.lockdown",
+  TELEMETRY_EMIT: "telemetry.emit",
+  PAYMENT_START: "payments.start",
 } as const;
 
 /** Гэрээгээр тогтсон event нэрс. Бүрхүүлээс web рүү чиглэнэ. */
@@ -55,6 +69,8 @@ export const SHELL_EVENTS = {
   NAVIGATE: "shell:navigate",
   SEARCH: "shell:search",
   MENU_REFRESH: "shell:menu-refresh",
+  AUTH_CHANGED: "shell:auth-changed",
+  CAPABILITIES_CHANGED: "shell:capabilities-changed",
 } as const;
 
 /** Гэрээгээр тогтсон capability нэрс. */
@@ -68,6 +84,15 @@ export const SHELL_CAPABILITIES = {
   EXTERNAL_OPEN: "external.open",
   SECURE_STORE: "secure-store",
   MENU_NATIVE: "menu.native",
+  ESCPOS: "escpos",
+  SCANNER: "scanner",
+  SERIAL: "serial",
+  NFC: "nfc",
+  CAMERA_SCAN: "camera.scan",
+  DEVICE_IDENTITY: "device.identity",
+  KIOSK_LOCKDOWN: "kiosk.lockdown",
+  TELEMETRY: "telemetry",
+  PAYMENTS: "payments",
 } as const;
 
 export interface ShellNavigatePayload {
@@ -107,7 +132,14 @@ const getServerShell = () => null;
  */
 export function useShell(): { shell: GeregeShell | null; inShell: boolean } {
   const shell = useSyncExternalStore(subscribeToShell, getShell, getServerShell);
-  return { shell, inShell: shell !== null };
+  const [mountedShell, setMountedShell] = useState<GeregeShell | null>(null);
+
+  useEffect(() => {
+    setMountedShell(getShell());
+  }, []);
+
+  const activeShell = shell ?? mountedShell;
+  return { shell: activeShell, inShell: activeShell !== null };
 }
 
 export type ShellInvokeResult<T> =
