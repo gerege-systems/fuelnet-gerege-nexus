@@ -240,6 +240,16 @@ func (s *Server) Router() *chi.Mux {
 	return s.router
 }
 
+// InstallAppForTenant installs a catalogue app without a request behind it.
+//
+// It exists for the demo seeder, which needs the same dependency resolution and
+// compiled-module check the store endpoint performs — writing app_installations
+// rows directly would let a demo tenant claim an app whose Go module is not in
+// the binary, and the shell would then render a menu leading nowhere.
+func (s *Server) InstallAppForTenant(ctx context.Context, tenantID, appSlug, userID string) error {
+	return s.installer.InstallApp(ctx, tenantID, appSlug, userID)
+}
+
 func (s *Server) setupRoutes() {
 	r := s.router
 
