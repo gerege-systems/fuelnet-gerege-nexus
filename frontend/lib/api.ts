@@ -229,6 +229,12 @@ export const api = {
   // so it goes through the same notification rather than beside it.
   upgradeApp: (slug: string) => mutateApp(`/store/apps/${slug}/upgrade`),
 
+  // Ask the registry for a catalog now rather than at the next scheduled sync.
+  // Answers 501 on a deployment that reads its catalog from a file, which is
+  // every self-hosted one — the button is hidden there rather than failing.
+  syncStore: () =>
+    fetcher<{ status: "updated" | "unchanged"; apps: number }>("/admin/store/sync", { method: "POST" }),
+
   enableApp: (slug: string) => mutateApp(`/store/apps/${slug}/enable`),
 
   disableApp: (slug: string) => mutateApp(`/store/apps/${slug}/disable`),

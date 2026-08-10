@@ -287,6 +287,36 @@ func (s *Server) handleUpgradeApp(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleSyncCatalog is the "check for updates" button.
+//
+// The background sync runs on its own clock, which is the right cadence for a
+// catalogue and the wrong one for an administrator who has just been told a new
+// version exists. It answers what happened rather than always "ok": an
+// administrator who presses it needs to know whether anything moved.
+func (s *Server) handleSyncCatalog(w http.ResponseWriter, r *http.Request) {
+	if !s.catalogSource.Remote() {
+		httpx.Error(w, http.StatusNotImplemented,
+			"this deployment reads its app catalog from a file; there is no registry to sync with")
+		return
+	}
+
+	changed, err := s.syncCatalogFromRegistry(r.Context())
+	if err != nil {
+		slog.Error("catalog: manual registry sync failed", "error", err)
+		httpx.Error(w, http.StatusBadGateway, "could not reach the app registry; the current catalog is unchanged")
+		return
+	}
+
+	status := "unchanged"
+	if changed {
+		status = "updated"
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"status": status,
+		"apps":   len(s.installer.GetCatalog()),
+	})
+}
+
 func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if !security.IsValidSlug(slug) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
@@ -36,8 +37,15 @@ var ErrAlreadyCurrent = errors.New("the installed version is already the catalog
 
 type AppInstaller struct {
 	db              *pgxpool.Pool
-	catalog         []appcatalog.CatalogApp
 	platformVersion string
+
+	// The catalogue is no longer fixed for the life of the process: with a
+	// registry configured, a background sync replaces it while requests are
+	// being served. Every read goes through the lock — a slice header swapped
+	// under a ranging goroutine is a data race, and this one would be reading
+	// the list that decides what a tenant may install.
+	mu      sync.RWMutex
+	catalog []appcatalog.CatalogApp
 }
 
 func NewAppInstaller(db *pgxpool.Pool, catalog []appcatalog.CatalogApp, platformVersion string) *AppInstaller {
@@ -48,12 +56,25 @@ func NewAppInstaller(db *pgxpool.Pool, catalog []appcatalog.CatalogApp, platform
 	}
 }
 
+// SetCatalog replaces the catalogue this installer works from.
+//
+// Installations already written are untouched: what a tenant has installed is a
+// database row, and this only changes what the store offers and what an upgrade
+// would move to.
+func (ai *AppInstaller) SetCatalog(catalog []appcatalog.CatalogApp) {
+	ai.mu.Lock()
+	ai.catalog = catalog
+	ai.mu.Unlock()
+}
+
 func (ai *AppInstaller) GetCatalog() []appcatalog.CatalogApp {
+	ai.mu.RLock()
+	defer ai.mu.RUnlock()
 	return ai.catalog
 }
 
 func (ai *AppInstaller) GetAppBySlug(slug string) (appcatalog.CatalogApp, bool) {
-	for _, app := range ai.catalog {
+	for _, app := range ai.GetCatalog() {
 		if app.Slug == slug {
 			return app, true
 		}
@@ -62,7 +83,7 @@ func (ai *AppInstaller) GetAppBySlug(slug string) (appcatalog.CatalogApp, bool) 
 }
 
 func (ai *AppInstaller) GetAppByID(id string) (appcatalog.CatalogApp, bool) {
-	for _, app := range ai.catalog {
+	for _, app := range ai.GetCatalog() {
 		if app.ID == id {
 			return app, true
 		}
@@ -102,8 +123,9 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 	}
 
 	// Build dependency graph from catalog
-	manifests := make([]appcatalog.Manifest, 0, len(ai.catalog))
-	for _, app := range ai.catalog {
+	catalog := ai.GetCatalog()
+	manifests := make([]appcatalog.Manifest, 0, len(catalog))
+	for _, app := range catalog {
 		manifests = append(manifests, app.Manifest)
 	}
 	graph := NewDependencyGraph(manifests)
@@ -398,7 +420,7 @@ func (ai *AppInstaller) EnableApp(ctx context.Context, tenantID, appSlug, userID
 // catalog later — failed with a foreign-key violation. The catalog file is the
 // single source of truth; the table is now derived from it on every boot.
 func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
-	for _, app := range ai.catalog {
+	for _, app := range ai.GetCatalog() {
 		_, err := ai.db.Exec(ctx,
 			`INSERT INTO apps (id, slug, name, description, icon_url, category, visibility)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7)
