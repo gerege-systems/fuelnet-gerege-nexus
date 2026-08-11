@@ -8,7 +8,7 @@
  * warehouse from the stock-levels feed so an empty location is obvious.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Warehouse } from "lucide-react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";

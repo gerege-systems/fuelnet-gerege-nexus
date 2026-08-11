@@ -325,13 +325,13 @@ func (s *SSOProvider) HandleConsentDecision(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"redirect_to": target.String()})
 }
 
-// oauthError is a code/description pair destined for the client.
+// oauthError is a code/description pair destined for the client. It is a
+// carrier, not an error value: callers render Code and Description into an
+// RFC 6749 §5.2 body rather than wrapping or unwrapping it.
 type oauthError struct {
 	Code        string
 	Description string
 }
-
-func (e *oauthError) Error() string { return e.Code + ": " + e.Description }
 
 // parseConsentQuery validates the subset of the authorization request that the
 // consent screen round-trips.
@@ -602,13 +602,12 @@ func (s *SSOProvider) issueTokenSet(w http.ResponseWriter, r *http.Request, clie
 	now := time.Now()
 
 	accessToken := "gat_" + generateRandomString(48)
-	stored, err := s.store.SaveToken(ctx, &Token{
+	if _, err := s.store.SaveToken(ctx, &Token{
 		TokenHash: hashSecret(accessToken), TokenType: tokenTypeAccess,
 		ClientID: client.ClientID, TenantID: tenantID, UserID: userID, Scopes: scopes,
 		ParentID: parentID, AuthCodeHash: authCodeHash,
 		ExpiresAt: now.Add(accessTokenTTL),
-	})
-	if err != nil {
+	}); err != nil {
 		slog.Error("failed to store an access token", "error", err)
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not issue a token")
 		return
@@ -646,7 +645,6 @@ func (s *SSOProvider) issueTokenSet(w http.ResponseWriter, r *http.Request, clie
 		}
 	}
 
-	_ = stored
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	writeJSON(w, http.StatusOK, response)

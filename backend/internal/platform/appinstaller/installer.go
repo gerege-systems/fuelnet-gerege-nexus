@@ -525,12 +525,18 @@ func (ai *AppInstaller) GetEnabledAppIDsForTenant(ctx context.Context, tenantID 
 	}
 	defer rows.Close()
 
+	// Both errors are reported rather than skipped. This list is what the menu
+	// is built from, so a row that failed to scan — or a stream that broke
+	// partway, which leaves rows.Next() returning false exactly as a clean end
+	// does — used to reach the caller as a short list with a nil error, and the
+	// apps that fell off it read as ones the tenant had never installed.
 	var ids []string
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err == nil {
-			ids = append(ids, id)
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
 		}
+		ids = append(ids, id)
 	}
-	return ids, nil
+	return ids, rows.Err()
 }
