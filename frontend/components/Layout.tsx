@@ -11,7 +11,7 @@ import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
 import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantChoices";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number }
 // path is a route in this application; external_url is somewhere else. An app
@@ -28,6 +28,8 @@ const iconMap: Record<string, React.ReactNode> = {
   "credit-card":<CreditCard className="w-5 h-5"/>, "file-text":<FileText className="w-5 h-5"/>, code:<Code2 className="w-5 h-5"/>, landmark:<Landmark className="w-5 h-5"/>,
   "pen-tool":<PenTool className="w-5 h-5"/>, settings:<Settings className="w-5 h-5"/>,
   "mail-check":<MailCheck className="w-5 h-5"/>,
+  // core
+  "building-2":<Building2 className="w-5 h-5"/>, network:<Network className="w-5 h-5"/>,
   // esign
   "scroll-text":<ScrollText className="w-5 h-5"/>, layers:<Layers className="w-5 h-5"/>,
   move:<Move className="w-5 h-5"/>, "server-cog":<ServerCog className="w-5 h-5"/>,
@@ -47,7 +49,7 @@ const iconMap: Record<string, React.ReactNode> = {
   "list-checks":<ListChecks className="w-5 h-5"/>, files:<Files className="w-5 h-5"/>,
   workflow:<Workflow className="w-5 h-5"/>, archive:<Archive className="w-5 h-5"/>,
   // developer portal
-  "key-round":<KeyRound className="w-5 h-5"/>, webhook:<Webhook className="w-5 h-5"/>,
+  "key-round":<KeyRound className="w-5 h-5"/>, "key-square":<KeySquare className="w-5 h-5"/>, webhook:<Webhook className="w-5 h-5"/>,
   // gov services
   inbox:<Inbox className="w-5 h-5"/>, "calendar-clock":<CalendarClock className="w-5 h-5"/>, timer:<Timer className="w-5 h-5"/>,
 };
@@ -69,7 +71,7 @@ const GROUPS_KEY="gerege_sidebar_groups";
 // both are installed.
 function isUnder(pathname:string,path:string){return pathname===path||pathname.startsWith(path.endsWith("/")?path:path+"/")}
 
-const APP_ORDER=["io.example.contacts","io.example.products","io.example.inventory","io.example.billing","io.example.documents","io.example.esign","io.example.developer_portal","io.example.gov_services"];
+const APP_ORDER=["io.example.core","io.example.contacts","io.example.products","io.example.inventory","io.example.billing","io.example.documents","io.example.esign","io.example.developer_portal","io.example.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);
