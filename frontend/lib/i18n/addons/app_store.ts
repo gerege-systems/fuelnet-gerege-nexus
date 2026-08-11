@@ -28,6 +28,12 @@ export const app_store = {
   "app_store.state.disabled": { mn: "Идэвхгүй", en: "Disabled" },
   // Said where the Disable button would be, so the row explains itself.
   "app_store.state.core": { mn: "Платформын бүрэлдэхүүн", en: "Part of the platform" },
+
+  // The two layouts of the catalogue. Titles rather than visible labels: the
+  // buttons are icons, and a word beside each would say twice what the icon
+  // already says once.
+  "app_store.action.view_grid": { mn: "Хөзрөөр харах", en: "Card view" },
+  "app_store.action.view_list": { mn: "Жагсаалтаар харах", en: "List view" },
   "app_store.state.update_available": { mn: "Шинэчлэлт бэлэн", en: "Update available" },
   "app_store.state.auto_update_on": { mn: "Автоматаар шинэчилнэ", en: "Updates automatically" },
   "app_store.state.auto_update_off": { mn: "Гараар шинэчилнэ", en: "Updated by hand" },

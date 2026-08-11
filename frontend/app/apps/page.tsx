@@ -13,6 +13,8 @@ import {
   Users,
   Package,
   ArrowUpCircle,
+  LayoutGrid,
+  Rows3,
 } from "lucide-react";
 
 interface AppItem {
@@ -39,6 +41,20 @@ const appIcons: Record<string, React.ReactNode> = {
   inventory: <Boxes className="w-8 h-8 text-amber-500" />,
 };
 
+/**
+ * How the catalogue is laid out.
+ *
+ * Cards are the right shape for browsing something you have not seen before —
+ * an icon, a sentence, room for the description to breathe. They are the wrong
+ * shape for an operator who knows exactly which of nine apps they came for, and
+ * who has to scroll past three screens of whitespace to reach it. Rows are that
+ * second reading, and which one somebody prefers is a habit rather than a
+ * decision, so it is remembered.
+ */
+type ViewMode = "grid" | "list";
+
+const VIEW_STORAGE_KEY = "gerege_apps_view";
+
 export default function AppStorePage() {
   const { t } = useI18n();
   const [apps, setApps] = useState<AppItem[]>([]);
@@ -47,6 +63,19 @@ export default function AppStorePage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  // Server and first client render must agree, so the stored preference is
+  // applied in an effect rather than during initial state — the same rule the
+  // sidebar follows for its collapsed groups.
+  const [view, setView] = useState<ViewMode>("grid");
+
+  useEffect(() => {
+    if (window.localStorage.getItem(VIEW_STORAGE_KEY) === "list") setView("list");
+  }, []);
+
+  const chooseView = (next: ViewMode) => {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    setView(next);
+  };
 
   const loadApps = useCallback(async () => {
     try {
@@ -123,6 +152,107 @@ export default function AppStorePage() {
     }
   };
 
+  // Chips and buttons are written once and read in both layouts. Two copies
+  // would have been shorter today and different by the second change.
+  const renderChips = (app: AppItem) => (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {/* Both versions, and only when they differ: an installation that is
+          current has one version, and printing it twice would read as a
+          pending change. */}
+      <span
+        className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded"
+        title={
+          app.update_available
+            ? `${t("app_store.field.installed_version")}: ${app.installed_version} · ${t("app_store.field.latest_version")}: ${app.latest_version}`
+            : `${t("app_store.field.latest_version")}: ${app.latest_version}`
+        }
+      >
+        {app.update_available ? `v${app.installed_version} → v${app.latest_version}` : `v${app.version}`}
+      </span>
+      {app.installed && app.update_available && (
+        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
+          {t("app_store.state.update_available")}
+        </span>
+      )}
+      {app.installed && (
+        <span
+          className={`text-xs font-semibold px-2 py-0.5 rounded ${
+            app.enabled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {app.enabled ? t("app_store.state.installed") : t("app_store.state.disabled")}
+        </span>
+      )}
+    </div>
+  );
+
+  // In a card the buttons fill the width and sit under a rule; in a row they
+  // are as wide as their words and sit at the end of the line.
+  const renderActions = (app: AppItem, mode: ViewMode) => {
+    const width = mode === "grid" ? "w-full" : "";
+    return (
+      <div
+        className={
+          mode === "grid"
+            ? "pt-3 border-t border-slate-100 flex items-center justify-end gap-2"
+            : "flex items-center justify-end gap-2 shrink-0"
+        }
+      >
+        {!app.installed ? (
+          <button
+            onClick={() => handleInstall(app)}
+            disabled={actionLoading === app.slug}
+            className={`${width} bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50`}
+          >
+            <Download className="w-4 h-4" />
+            <span>
+              {actionLoading === app.slug ? t("app_store.message.installing") : t("app_store.action.install")}
+            </span>
+          </button>
+        ) : (
+          <>
+            {/* Update sits beside enable/disable rather than replacing it: a
+                tenant that has deliberately switched an app off should still be
+                able to bring it up to date. */}
+            {app.update_available && (
+              <button
+                onClick={() => handleUpdate(app)}
+                disabled={actionLoading === app.slug}
+                className={`${width} bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50`}
+              >
+                <ArrowUpCircle className="w-4 h-4" />
+                <span>
+                  {actionLoading === app.slug ? t("app_store.message.updating") : t("app_store.action.update")}
+                </span>
+              </button>
+            )}
+            <button
+              onClick={() => handleToggleState(app)}
+              disabled={actionLoading === app.slug}
+              className={`${width} font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition border ${
+                app.enabled
+                  ? "bg-white hover:bg-red-50 text-red-600 border-red-200"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+              }`}
+            >
+              {app.enabled ? (
+                <>
+                  <PowerOff className="w-4 h-4" />
+                  <span>{t("app_store.action.disable")}</span>
+                </>
+              ) : (
+                <>
+                  <Power className="w-4 h-4" />
+                  <span>{t("app_store.action.enable")}</span>
+                </>
+              )}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const categories = ["All", ...Array.from(new Set(apps.map((a) => a.category)))];
 
   const filteredApps = apps.filter((app) => {
@@ -166,6 +296,33 @@ export default function AppStorePage() {
               </option>
             ))}
           </select>
+
+          {/* Two buttons rather than a third dropdown entry: it is one choice
+              with two answers, and the icons say which is which without being
+              read. aria-pressed rather than a label change, so a screen reader
+              hears the state instead of a button that renames itself. */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
+            {([
+              { mode: "grid" as const, icon: <LayoutGrid className="w-4 h-4" />, label: t("app_store.action.view_grid") },
+              { mode: "list" as const, icon: <Rows3 className="w-4 h-4" />, label: t("app_store.action.view_list") },
+            ]).map((option) => (
+              <button
+                key={option.mode}
+                type="button"
+                onClick={() => chooseView(option.mode)}
+                aria-pressed={view === option.mode}
+                aria-label={option.label}
+                title={option.label}
+                className={`p-1.5 rounded-md transition ${
+                  view === option.mode
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {option.icon}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -179,6 +336,33 @@ export default function AppStorePage() {
         <div className="py-12 text-center text-slate-500 text-sm">{t("app_store.message.loading")}</div>
       ) : filteredApps.length === 0 ? (
         <div className="py-12 text-center text-slate-500 text-sm">{t("app_store.message.no_match")}</div>
+      ) : view === "list" ? (
+        <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+          {filteredApps.map((app) => (
+            <div key={app.id} className="p-4 flex flex-wrap items-center gap-4">
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 shrink-0">
+                {appIcons[app.slug] || <Boxes className="w-8 h-8 text-indigo-500" />}
+              </div>
+              {/* min-w-0 so the description truncates instead of pushing the
+                  buttons off the end of the row. */}
+              <div className="flex-1 min-w-56">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="font-bold text-slate-900">{app.name}</h2>
+                  <span className="text-xs font-medium text-indigo-600">{app.category}</span>
+                </div>
+                <p className="text-sm text-slate-600 truncate">{app.description}</p>
+                {app.manifest.dependencies && app.manifest.dependencies.length > 0 && (
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    <span className="font-semibold text-slate-700">{t("app_store.field.requires")}</span>
+                    {app.manifest.dependencies.map((d) => d.id.replace("io.gerege.nexus.", "")).join(", ")}
+                  </p>
+                )}
+              </div>
+              {renderChips(app)}
+              {renderActions(app, "list")}
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredApps.map((app) => (
@@ -191,37 +375,7 @@ export default function AppStorePage() {
                   <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                     {appIcons[app.slug] || <Boxes className="w-8 h-8 text-indigo-500" />}
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {/* Both versions, and only when they differ: an
-                        installation that is current has one version, and
-                        printing it twice would read as a pending change. */}
-                    <span
-                      className="text-xs bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded"
-                      title={
-                        app.update_available
-                          ? `${t("app_store.field.installed_version")}: ${app.installed_version} · ${t("app_store.field.latest_version")}: ${app.latest_version}`
-                          : `${t("app_store.field.latest_version")}: ${app.latest_version}`
-                      }
-                    >
-                      {app.update_available ? `v${app.installed_version} → v${app.latest_version}` : `v${app.version}`}
-                    </span>
-                    {app.installed && app.update_available && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
-                        {t("app_store.state.update_available")}
-                      </span>
-                    )}
-                    {app.installed && (
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                          app.enabled
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-amber-100 text-amber-700"
-                        }`}
-                      >
-                        {app.enabled ? t("app_store.state.installed") : t("app_store.state.disabled")}
-                      </span>
-                    )}
-                  </div>
+                  {renderChips(app)}
                 </div>
 
                 <h2 className="text-lg font-bold text-slate-900">{app.name}</h2>
@@ -237,64 +391,7 @@ export default function AppStorePage() {
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                {!app.installed ? (
-                  <button
-                    onClick={() => handleInstall(app)}
-                    disabled={actionLoading === app.slug}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>
-                      {actionLoading === app.slug
-                        ? t("app_store.message.installing")
-                        : t("app_store.action.install")}
-                    </span>
-                  </button>
-                ) : (
-                  <>
-                    {/* Update sits beside enable/disable rather than replacing
-                        it: a tenant that has deliberately switched an app off
-                        should still be able to bring it up to date. */}
-                    {app.update_available && (
-                      <button
-                        onClick={() => handleUpdate(app)}
-                        disabled={actionLoading === app.slug}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition disabled:opacity-50"
-                      >
-                        <ArrowUpCircle className="w-4 h-4" />
-                        <span>
-                          {actionLoading === app.slug
-                            ? t("app_store.message.updating")
-                            : t("app_store.action.update")}
-                        </span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleToggleState(app)}
-                      disabled={actionLoading === app.slug}
-                      className={`w-full font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition border ${
-                        app.enabled
-                          ? "bg-white hover:bg-red-50 text-red-600 border-red-200"
-                          : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
-                      }`}
-                    >
-                      {app.enabled ? (
-                        <>
-                          <PowerOff className="w-4 h-4" />
-                          <span>{t("app_store.action.disable")}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Power className="w-4 h-4" />
-                          <span>{t("app_store.action.enable")}</span>
-                        </>
-                      )}
-                    </button>
-                  </>
-                )}
-              </div>
+              {renderActions(app, "grid")}
             </div>
           ))}
         </div>

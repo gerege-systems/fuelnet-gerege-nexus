@@ -68,6 +68,8 @@ export const ru: Record<string, string> = {
   "app_store.action.enable": "Включить приложение",
   "app_store.action.install": "Установить приложение",
   "app_store.action.update": "Обновить",
+  "app_store.action.view_grid": "Плитками",
+  "app_store.action.view_list": "Списком",
   "app_store.field.app_count": "{count} приложений",
   "app_store.field.application_name": "Название приложения",
   "app_store.field.installed_date": "Дата установки",

@@ -68,6 +68,8 @@ export const ar: Record<string, string> = {
   "app_store.action.enable": "تمكين التطبيق",
   "app_store.action.install": "تثبيت التطبيق",
   "app_store.action.update": "تحديث",
+  "app_store.action.view_grid": "عرض البطاقات",
+  "app_store.action.view_list": "عرض القائمة",
   "app_store.field.app_count": "{count} تطبيقًا",
   "app_store.field.application_name": "اسم التطبيق",
   "app_store.field.installed_date": "تاريخ التثبيت",
