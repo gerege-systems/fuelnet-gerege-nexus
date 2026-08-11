@@ -37,7 +37,10 @@ permissions:
   packages: write
 
 concurrency:
-  group: appstore-deploy
+  # Shared with deploy.yml — see the note there. One host, one rollout at a
+  # time; the second queues rather than racing the first for the credentials
+  # they both write to the same file.
+  group: production-host-rollout
   cancel-in-progress: false
 
 env:
@@ -205,6 +208,19 @@ jobs:
             set +e
             timeout 30s docker rm -f gerege_appstore_registry gerege_appstore_web gerege_developer_web
             set -e
+
+            # An earlier rollout put the compose file one directory deeper, so
+            # Compose knew this stack under a different project. Its Postgres
+            # survives that change and keeps holding 127.0.0.1:5435, and the new
+            # project's container then cannot bind. The data is in a named
+            # volume, so removing the container it was left in loses nothing —
+            # but only the stranded one is removed, never the current stack's.
+            owner=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' \
+                      gerege_appstore_postgres 2>/dev/null || true)
+            if [ -n "$owner" ] && [ "$owner" != "$APP_DIR" ]; then
+              echo "removing a Postgres container left behind by $owner (its volume is kept)"
+              docker rm -f gerege_appstore_postgres || true
+            fi
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             docker logout ghcr.io
