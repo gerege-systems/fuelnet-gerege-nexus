@@ -190,6 +190,18 @@ jobs:
             APPSTORE_ADMIN_EMAILS=${APPSTORE_ADMIN_EMAILS}
             EOF
 
+            # This host runs six stacks, and a port taken by one of the others
+            # surfaces as "port is already allocated" against a container that
+            # never starts — a sentence that names neither the port nor who has
+            # it. Checked here, where both are known.
+            for port in 8085 3013 3014 5439; do
+              holder=$(docker ps --format '{{.Names}}|{{.Ports}}' | grep ":${port}->" | cut -d'|' -f1 | grep -v '^gerege_appstore\|^gerege_developer' || true)
+              if [ -n "$holder" ]; then
+                echo "::error::127.0.0.1:${port} is held by ${holder}; pick another port in deploy/appstore/docker-compose.prod.yml and the matching nginx vhost"
+                exit 1
+              fi
+            done
+
             # Compose is quiet about an unset variable — it substitutes an empty
             # string and pulls ":<tag>" — so the file it is about to read is
             # checked against the file that was just written.
@@ -296,13 +308,13 @@ jobs:
           script: |
             set -euo pipefail
             for i in $(seq 1 30); do
-              if curl -fsS http://127.0.0.1:8083/health > /dev/null \
-                 && curl -fsS http://127.0.0.1:3009/health > /dev/null \
-                 && curl -fsS http://127.0.0.1:3010/health > /dev/null; then
+              if curl -fsS http://127.0.0.1:8085/health > /dev/null \
+                 && curl -fsS http://127.0.0.1:3013/health > /dev/null \
+                 && curl -fsS http://127.0.0.1:3014/health > /dev/null; then
                 echo "registry, storefront and console are healthy"
                 # The catalogue is what every Nexus instance depends on, so the
                 # rollout is not called done until it actually signs one.
-                curl -fsS "http://127.0.0.1:8083/api/v1/registry/catalog?platform=1.0.0" \
+                curl -fsS "http://127.0.0.1:8085/api/v1/registry/catalog?platform=1.0.0" \
                   | head -c 120 && echo
                 exit 0
               fi

@@ -10,12 +10,18 @@
 
 | Сервис | Процесс | Loopback порт | Домэйн |
 | --- | --- | --- | --- |
-| Registry API | `/app/appstore` (backend image) | 8083 | `appstore.gerege.mn/api`, `/.well-known` |
-| Storefront | `appstore-web` image | 3009 | `appstore.gerege.mn` |
-| Хөгжүүлэгчийн консол | `developer-web` image | 3010 | `developer.gerege.mn` |
-| Registry DB | `gerege_appstore_postgres` | 5435 | — |
+| Registry API | `/app/appstore` (backend image) | 8085 | `appstore.gerege.mn/api`, `/.well-known` |
+| Storefront | `appstore-web` image | 3013 | `appstore.gerege.mn` |
+| Хөгжүүлэгчийн консол | `developer-web` image | 3014 | `developer.gerege.mn` |
+| Registry DB | `gerege_appstore_postgres` | 5439 | — |
 
 Stack: `/opt/appstore`, compose файл нь `deploy/appstore/docker-compose.prod.yml`.
+
+**Порт сонголт:** энэ хост дээр зургаан stack ажилладаг (nexus, nexus-ds, sso, salus,
+app-js, appstore). 3008–3012, 5434–5438, 8082–8084, 8095–8096 аль хэдийн эзэлсэн тул
+дээрх дөрвөн портыг сонгосон. Порт солих бол compose файл **ба** харгалзах nginx vhost
+хоёуланг зэрэг өөрчилнө; rollout нь порт эзэлсэн эсэхийг урьдчилан шалгаж, хэн эзэлж
+байгааг нэрлэж хэлнэ.
 Nexus-ийн stack (`/opt/open-gerege-nexus`) хөндөгдөхгүй — тусдаа DB, тусдаа сүлжээ.
 
 Registry нь платформын **яг тэр image**-ээс өөр binary-гаар ажиллана. Учир нь
@@ -124,7 +130,7 @@ Manifest-ыг registry нь Nexus-ийн ашигладаг **яг тэр** ша
 | --- | --- |
 | Instance update авахаа болив | `docker logs gerege_appstore_registry`; instance дээр `catalog:` гэсэн WARN мөрүүд |
 | `signature does not verify` | Instance-ийн `APPSTORE_PUBLIC_KEY` ↔ registry-ийн `SIGNING_KEY` хос таарахгүй байна |
-| Storefront хоосон | `curl 127.0.0.1:8083/api/v1/registry/apps` — registry үү, storefront уу гэдгийг ялгана |
+| Storefront хоосон | `curl 127.0.0.1:8085/api/v1/registry/apps` — registry үү, storefront уу гэдгийг ялгана |
 | Консол `401` | id_token хугацаа дуусав (1 цаг) — дахин нэвтэрнэ |
 | Консол `403` | `APPSTORE_ADMIN_EMAILS`-д байхгүй хүн хяналтын үйлдэл хийхийг оролдов |
 | Каталог хоцорсон | `catalog_snapshots`-ын `revision` ба `registry_state.revision` — зөрвөл дараагийн хүсэлтэд дахин угсрагдана |
