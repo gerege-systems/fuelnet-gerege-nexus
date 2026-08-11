@@ -15,6 +15,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — A lockout that never let go, and three silent truncations
+
+- **A lapsed login lockout re-locked the account on the next single failure.**
+  Five bad passwords lock an account for fifteen minutes, but the counter that
+  decides that was only ever reset by a successful sign-in. Once it had reached
+  five it stayed there, so after the window passed the next mistyped password
+  met the threshold on its own and locked the account for another full fifteen
+  minutes — indefinitely. Two consequences: nobody who had been locked out once
+  could afford to typo again, and anybody who knew an address could hold it shut
+  with one request every quarter of an hour. The count now restarts when the
+  lock it produced has expired, and the lapsed lock is cleared by the same
+  statement rather than left asserting a lockout that is over. Reaching five
+  again still locks, so this is a restart and not a way out. The statement moved
+  to a named constant behind `recordLoginFailure`; all of the behaviour is in
+  the SQL, so the three tests that come with it need a real schema
+  (`AUTH_TEST_DATABASE_URL`), and CI fails if they skip.
+- **A tenant's menu could lose apps it had installed.**
+  `GetEnabledAppIDsForTenant` discarded the per-row scan error and never checked
+  the stream error, so a read that broke partway reached the caller as a short
+  list with a nil error — and a broken stream leaves `rows.Next()` returning
+  false exactly as a clean end does. That list is what the menu is built from,
+  so the apps that fell off it read as ones the organisation had never
+  installed. Its neighbour `GetInstallationsForTenant` already did this
+  correctly.
+- **The AI copilot could state a truncated search as fact.** Its product and
+  knowledge tools dropped the same two errors, and there the truncation becomes
+  a sentence: the model presents whatever it is handed, so half a result set is
+  "you do not stock that" rather than an error the person can retry.
+
+### Removed — Code that had stopped being reachable
+
+- `oauthError.Error` made the type satisfy `error`, but it is a carrier — the
+  code and description are rendered into an RFC 6749 §5.2 body and it is never
+  wrapped or unwrapped — so the method was unreachable.
+- `issueTokenSet` kept the token `SaveToken` hands back only to discard it with
+  `_ = stored`; `SaveToken` returns the same pointer it was given.
+- The integrations screen still rendered an error paragraph from a state nothing
+  had set since the page moved to the banner, and the warehouses screen imported
+  `useMemo` without using it.
+
 ### Added — The App Store moved to appstore.gerege.mn
 
 The catalogue now comes from a registry of its own, and the apps in it can
