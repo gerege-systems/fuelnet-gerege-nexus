@@ -236,6 +236,7 @@ export const ru: Record<string, string> = {
   "core.action.archive": "В архив",
   "core.action.deactivate": "Деактивировать",
   "core.action.reactivate": "Восстановить",
+  "core.action.restore": "Восстановить",
   "core.field.address_line": "Адрес",
   "core.field.code": "Код",
   "core.field.currency": "Валюта",

@@ -123,6 +123,7 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		cr.With(manage).Post("/departments", m.handleCreateDepartment)
 		cr.With(manage).Put("/departments/{id}", m.handleUpdateDepartment)
 		cr.With(manage).Delete("/departments/{id}", m.handleArchiveDepartment)
+		cr.With(manage).Post("/departments/{id}/restore", m.handleRestoreDepartment)
 
 		// Who is in it.
 		cr.With(read).Get("/people", m.handleListPeople)

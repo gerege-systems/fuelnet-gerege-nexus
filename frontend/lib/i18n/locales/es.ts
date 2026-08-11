@@ -236,6 +236,7 @@ export const es: Record<string, string> = {
   "core.action.archive": "Archivar",
   "core.action.deactivate": "Desactivar",
   "core.action.reactivate": "Reactivar",
+  "core.action.restore": "Restaurar",
   "core.field.address_line": "Dirección",
   "core.field.code": "Código",
   "core.field.currency": "Moneda",

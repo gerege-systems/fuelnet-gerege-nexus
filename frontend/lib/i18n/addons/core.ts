@@ -56,6 +56,10 @@ export const core = {
   "core.action.deactivate": { mn: "Идэвхгүй болгох", en: "Deactivate" },
   "core.action.reactivate": { mn: "Сэргээх", en: "Reactivate" },
   "core.action.archive": { mn: "Архивлах", en: "Archive" },
+  // Its own term rather than reusing the people one: in Mongolian both are
+  // "Сэргээх", but a person is reactivated and a unit is restored, and the
+  // languages that distinguish the two should be allowed to.
+  "core.action.restore": { mn: "Сэргээх", en: "Restore" },
 
   "core.message.saved": { mn: "Байгууллагын мэдээлэл хадгалагдлаа", en: "The organisation's details were saved" },
   // Said once, at the bottom, rather than as a disabled "Add person" button:

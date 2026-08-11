@@ -236,6 +236,7 @@ export const ar: Record<string, string> = {
   "core.action.archive": "أرشفة",
   "core.action.deactivate": "إلغاء التفعيل",
   "core.action.reactivate": "إعادة التفعيل",
+  "core.action.restore": "استعادة",
   "core.field.address_line": "العنوان التفصيلي",
   "core.field.code": "الرمز",
   "core.field.currency": "العملة",
