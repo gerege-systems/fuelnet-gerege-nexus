@@ -64,6 +64,12 @@ export const core = {
   // languages that distinguish the two should be allowed to.
   "core.action.restore": { mn: "Сэргээх", en: "Restore" },
 
+  // Named, because "are you sure?" is a question nobody can answer without
+  // being told what they are about to lose.
+  "core.message.confirm_delete": {
+    mn: "{name} нэгжийг устгах уу? Энэ үйлдлийг буцаах боломжгүй — түүхээ хадгалах бол оронд нь архивлана уу.",
+    en: "Delete {name}? This cannot be undone — archive it instead to keep its history.",
+  },
   "core.message.saved": { mn: "Байгууллагын мэдээлэл хадгалагдлаа", en: "The organisation's details were saved" },
   // Says what this is and, just as importantly, what it is not: recording a
   // parent grants nobody anything.

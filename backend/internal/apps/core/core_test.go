@@ -274,7 +274,7 @@ func TestAnArchivedDepartmentCanComeBack(t *testing.T) {
 	child := create("ops-sales", "Борлуулалт", parent)
 
 	// Archived, then brought back on its own: the ordinary case.
-	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+child, ""); res.Code != http.StatusOK {
+	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/archive", ""); res.Code != http.StatusOK {
 		t.Fatalf("archive: %d", res.Code)
 	}
 	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/restore", ""); res.Code != http.StatusOK {
@@ -292,10 +292,10 @@ func TestAnArchivedDepartmentCanComeBack(t *testing.T) {
 	// And the one case that is refused: a unit cannot stand under a parent that
 	// is still archived, or the tree draws it as a root with a parent missing
 	// from every list that offers one.
-	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+parent, ""); res.Code != http.StatusOK {
+	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+parent+"/archive", ""); res.Code != http.StatusOK {
 		t.Fatalf("archive parent: %d", res.Code)
 	}
-	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+child, ""); res.Code != http.StatusOK {
+	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/archive", ""); res.Code != http.StatusOK {
 		t.Fatalf("archive child: %d", res.Code)
 	}
 	res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/restore", "")
@@ -403,5 +403,118 @@ func TestASubsidiaryIsRecordedButChangesNothingAboutIsolation(t *testing.T) {
 	}
 	if cleared := organisation(t); cleared.ParentTenantID != "" {
 		t.Fatalf("the parent was not cleared: %+v", cleared)
+	}
+}
+
+// Deleting and archiving are different acts, and the screen now offers both.
+// The delete is for a unit that never really existed — a typo, a duplicate —
+// and it has to stay refused the moment anything points at the row, or it
+// becomes a way to lose people quietly.
+func TestAUnitIsDeletedOnlyWhenNothingPointsAtIt(t *testing.T) {
+	f := newFixture(t)
+
+	create := func(code, name, parent string) string {
+		t.Helper()
+		body := `{"code":"` + code + `","name":"` + name + `"`
+		if parent != "" {
+			body += `,"parent_id":"` + parent + `"`
+		}
+		res := f.do(t, http.MethodPost, "/api/v1/core/departments", body+`}`)
+		if res.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d %s", code, res.Code, res.Body.String())
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+			t.Fatal(err)
+		}
+		return created.ID
+	}
+
+	parent := create("ops", "Үйл ажиллагаа", "")
+	child := create("ops-sales", "Борлуулалт", parent)
+
+	// A unit with something under it is refused, and told what is under it.
+	res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+parent, "")
+	if res.Code != http.StatusConflict {
+		t.Fatalf("expected a unit with children to be refused, got %d: %s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "1 units") {
+		t.Fatalf("the refusal should count what is in the way; got %s", res.Body.String())
+	}
+
+	// Somebody working in it counts too.
+	var membershipID string
+	if err := f.pool.QueryRow(context.Background(),
+		`SELECT id::text FROM memberships WHERE tenant_id = $1`, f.tenantID).Scan(&membershipID); err != nil {
+		t.Fatal(err)
+	}
+	if res := f.do(t, http.MethodPut, "/api/v1/core/people/"+membershipID,
+		`{"department_id":"`+child+`"}`); res.Code != http.StatusOK {
+		t.Fatalf("assign: %d", res.Code)
+	}
+	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+child, ""); res.Code != http.StatusConflict {
+		t.Fatalf("expected a unit with people to be refused, got %d: %s", res.Code, res.Body.String())
+	}
+
+	// Emptied, it goes.
+	if res := f.do(t, http.MethodPut, "/api/v1/core/people/"+membershipID, `{"department_id":""}`); res.Code != http.StatusOK {
+		t.Fatalf("unassign: %d", res.Code)
+	}
+	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+child, ""); res.Code != http.StatusOK {
+		t.Fatalf("delete answered %d: %s", res.Code, res.Body.String())
+	}
+	var left int
+	if err := f.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM departments WHERE id = $1`, child).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Fatal("the department is still there")
+	}
+}
+
+// The tree has to stay a tree. A unit moved under one of its own descendants
+// would make every reader that follows parent_id loop for ever, and no CHECK
+// can see it — it is a walk, not a row.
+func TestAUnitCannotBeMovedUnderItsOwnDescendant(t *testing.T) {
+	f := newFixture(t)
+
+	create := func(code, name, parent string) string {
+		t.Helper()
+		body := `{"code":"` + code + `","name":"` + name + `"`
+		if parent != "" {
+			body += `,"parent_id":"` + parent + `"`
+		}
+		res := f.do(t, http.MethodPost, "/api/v1/core/departments", body+`}`)
+		if res.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d", code, res.Code)
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+			t.Fatal(err)
+		}
+		return created.ID
+	}
+
+	top := create("top", "Тэргүүн", "")
+	middle := create("middle", "Дунд", top)
+	bottom := create("bottom", "Доод", middle)
+
+	// Two levels down, so a check that only looked at the immediate children
+	// would let this through.
+	res := f.do(t, http.MethodPut, "/api/v1/core/departments/"+top,
+		`{"name":"Тэргүүн","parent_id":"`+bottom+`"}`)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("expected the loop to be refused, got %d: %s", res.Code, res.Body.String())
+	}
+
+	// And itself, which the schema also refuses but which deserves words.
+	if res := f.do(t, http.MethodPut, "/api/v1/core/departments/"+middle,
+		`{"name":"Дунд","parent_id":"`+middle+`"}`); res.Code != http.StatusBadRequest {
+		t.Fatalf("expected self-parenting to be refused, got %d", res.Code)
 	}
 }

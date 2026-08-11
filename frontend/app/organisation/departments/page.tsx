@@ -1,23 +1,25 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Banner } from "@/components/ui";
 import { useAccess } from "@/lib/permissions";
-import { Network, Archive, ArchiveRestore, Plus } from "lucide-react";
+import { Network, Archive, ArchiveRestore, Plus, Pencil, Trash2, Check, X } from "lucide-react";
 
 type Department = Awaited<ReturnType<typeof api.getDepartments>>[number];
 type Person = Awaited<ReturnType<typeof api.getPeople>>[number];
 
+/** A unit with its children, which is the shape the screen actually draws. */
+type Node = Department & { children: Node[] };
+
 /**
  * How the organisation is arranged.
  *
- * Drawn as a tree rather than a list, because that is what a department
- * structure is and a flat table makes the reader rebuild it in their head. The
- * parent selector deliberately never offers a descendant: the server refuses a
- * department that reports to itself, and the screen is what keeps the deeper
- * cycles from being offered in the first place.
+ * Drawn as a tree because that is what a department structure is. It used to be
+ * a flat list indented by depth, which reads as a tree only if you already know
+ * the answer: nothing said which unit a row hung from, and two siblings looked
+ * exactly like a parent and its child.
  */
 export default function DepartmentsPage() {
   const { t } = useI18n();
@@ -25,6 +27,7 @@ export default function DepartmentsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [draft, setDraft] = useState({ code: "", name: "", parent_id: "" });
+  const [editing, setEditing] = useState<{ id: string; name: string; parent_id: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -42,83 +45,244 @@ export default function DepartmentsPage() {
     void load();
   }, [load]);
 
-  const create = async () => {
+  const active = useMemo(() => departments.filter((d) => d.active), [departments]);
+  const archived = useMemo(() => departments.filter((d) => !d.active), [departments]);
+
+  // Built once per change rather than per row: the old screen walked up the
+  // parent chain for every unit it drew, which is the same tree rebuilt as many
+  // times as there are branches on it.
+  const roots = useMemo(() => {
+    const byID = new Map<string, Node>(active.map((d) => [d.id, { ...d, children: [] }]));
+    const top: Node[] = [];
+    for (const node of byID.values()) {
+      // A unit whose parent is archived hangs at the top rather than vanishing
+      // with it — otherwise archiving one unit would hide a whole branch.
+      const parent = node.parent_id ? byID.get(node.parent_id) : undefined;
+      (parent ? parent.children : top).push(node);
+    }
+    const sort = (nodes: Node[]) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name));
+      nodes.forEach((n) => sort(n.children));
+    };
+    sort(top);
+    return top;
+  }, [active]);
+
+  // Everything below a unit, so the parent selector cannot offer a move that
+  // would tie the tree in a knot. The server refuses it too; this is what stops
+  // the screen offering it in the first place.
+  const descendantsOf = useCallback(
+    (id: string) => {
+      const out = new Set<string>([id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const d of active) {
+          if (d.parent_id && out.has(d.parent_id) && !out.has(d.id)) {
+            out.add(d.id);
+            grew = true;
+          }
+        }
+      }
+      return out;
+    },
+    [active],
+  );
+
+  const run = async (action: () => Promise<unknown>, success?: string) => {
     setBusy(true);
     setMessage(null);
     try {
+      await action();
+      await load();
+      if (success) setMessage({ type: "success", text: success });
+    } catch (err: any) {
+      // The server refuses three things in sentences — a foreign parent, a loop,
+      // a unit that still holds people — and each sentence is the explanation.
+      setMessage({ type: "error", text: err.message || t("base.message.error") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const create = () =>
+    run(async () => {
       await api.createDepartment({
         code: draft.code.trim(),
         name: draft.name.trim(),
         parent_id: draft.parent_id || undefined,
       });
       setDraft({ code: "", name: "", parent_id: "" });
-      await load();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || t("base.message.error") });
-    } finally {
-      setBusy(false);
-    }
-  };
+    });
 
-  const assignManager = async (unit: Department, membershipID: string) => {
-    setBusy(true);
-    try {
-      await api.updateDepartment(unit.id, {
-        name: unit.name,
-        parent_id: unit.parent_id || undefined,
-        manager_membership_id: membershipID || undefined,
+  const saveEdit = () =>
+    run(async () => {
+      if (!editing) return;
+      const unit = active.find((d) => d.id === editing.id);
+      await api.updateDepartment(editing.id, {
+        name: editing.name.trim(),
+        parent_id: editing.parent_id || undefined,
+        manager_membership_id: unit?.manager_membership_id || undefined,
       });
-      await load();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || t("base.message.error") });
-    } finally {
-      setBusy(false);
-    }
+      setEditing(null);
+    });
+
+  const remove = (unit: Node) => {
+    if (!window.confirm(t("core.message.confirm_delete", { name: unit.name }))) return;
+    return run(() => api.deleteDepartment(unit.id));
   };
 
-  const restore = async (unit: Department) => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api.restoreDepartment(unit.id);
-      await load();
-    } catch (err: any) {
-      // The server refuses one case in a sentence — a parent that is still
-      // archived — and that sentence is the whole explanation.
-      setMessage({ type: "error", text: err.message || t("base.message.error") });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const row = (node: Node, depth: number, isLast: boolean, guides: boolean[]) => {
+    const isEditing = editing?.id === node.id;
+    const blocked = descendantsOf(node.id);
+    return (
+      <React.Fragment key={node.id}>
+        <div className="flex flex-wrap items-center gap-3 py-3 px-4 hover:bg-slate-50/70">
+          {/* The tree guides. Drawn as boxes rather than characters so they line
+              up at any font, and marked aria-hidden because the nesting is
+              already carried by the parent selector on each row. */}
+          <div className="flex items-stretch self-stretch shrink-0" aria-hidden>
+            {guides.map((drawn, i) => (
+              <span key={i} className={`w-5 ${drawn ? "border-s border-slate-200" : ""}`} />
+            ))}
+            {depth > 0 && (
+              <span className="relative w-5">
+                <span className={`absolute inset-y-0 start-0 border-s border-slate-200 ${isLast ? "h-1/2" : ""}`} />
+                <span className="absolute top-1/2 start-0 w-3 border-t border-slate-200" />
+              </span>
+            )}
+          </div>
 
-  const archive = async (unit: Department) => {
-    setBusy(true);
-    try {
-      await api.archiveDepartment(unit.id);
-      await load();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || t("base.message.error") });
-    } finally {
-      setBusy(false);
-    }
-  };
+          {isEditing ? (
+            <input
+              autoFocus
+              value={editing.name}
+              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void saveEdit();
+                if (e.key === "Escape") setEditing(null);
+              }}
+              className="flex-1 min-w-40 px-2 py-1 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          ) : (
+            <div className="flex-1 min-w-40">
+              <div className="font-semibold text-slate-900">{node.name}</div>
+              <div className="text-xs text-slate-500">
+                <code>{node.code}</code> · {t("core.field.people_count", { count: node.people_count })}
+              </div>
+            </div>
+          )}
 
-  // Depth by walking up: the list is small and this keeps the tree honest
-  // without asking the server for a nested shape it would have to flatten again.
-  const depthOf = (unit: Department): number => {
-    let depth = 0;
-    let current = unit;
-    while (current.parent_id) {
-      const parent = departments.find((d) => d.id === current.parent_id);
-      if (!parent || depth > 8) break;
-      current = parent;
-      depth += 1;
-    }
-    return depth;
-  };
+          {isEditing ? (
+            <label className="w-52">
+              <span className="block text-[11px] font-medium text-slate-500">{t("core.field.parent")}</span>
+              <select
+                value={editing.parent_id}
+                onChange={(e) => setEditing({ ...editing, parent_id: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white"
+              >
+                <option value="">—</option>
+                {/* Itself and everything below it are left out: moving a unit
+                    under its own child is the one move that would make the tree
+                    unreadable, and offering it only to refuse it is a worse way
+                    to say so. */}
+                {active
+                  .filter((d) => !blocked.has(d.id))
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : (
+            <label className="w-52">
+              <span className="block text-[11px] font-medium text-slate-500">{t("core.field.manager")}</span>
+              <select
+                value={node.manager_membership_id || ""}
+                disabled={!canManage || busy}
+                onChange={(e) =>
+                  run(() =>
+                    api.updateDepartment(node.id, {
+                      name: node.name,
+                      parent_id: node.parent_id || undefined,
+                      manager_membership_id: e.target.value || undefined,
+                    }),
+                  )
+                }
+                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white disabled:bg-transparent disabled:border-transparent"
+              >
+                <option value="">—</option>
+                {people.map((p) => (
+                  <option key={p.membership_id} value={p.membership_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-  const active = departments.filter((d) => d.active);
-  const archived = departments.filter((d) => !d.active);
+          {canManage && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={saveEdit}
+                    disabled={busy || !editing.name.trim()}
+                    title={t("base.action.save")}
+                    className="p-1.5 rounded-lg border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setEditing(null)}
+                    title={t("base.action.cancel")}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setEditing({ id: node.id, name: node.name, parent_id: node.parent_id || "" })}
+                    disabled={busy}
+                    title={t("base.action.edit")}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => run(() => api.archiveDepartment(node.id))}
+                    disabled={busy}
+                    title={t("core.action.archive")}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                  </button>
+                  {/* Delete is last and is the only red control on the row.
+                      The server refuses it while anything points at the unit,
+                      so what is left here is the one it is for: a unit created
+                      by mistake. */}
+                  <button
+                    onClick={() => remove(node)}
+                    disabled={busy}
+                    title={t("base.action.delete")}
+                    className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        {node.children.map((child, i) =>
+          row(child, depth + 1, i === node.children.length - 1, [...guides, depth > 0 ? !isLast : false]),
+        )}
+      </React.Fragment>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -178,44 +342,8 @@ export default function DepartmentsPage() {
       )}
 
       <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
-        {active.map((unit) => (
-          <div key={unit.id} className="p-4 flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-48" style={{ paddingInlineStart: depthOf(unit) * 20 }}>
-              <div className="font-semibold text-slate-900">{unit.name}</div>
-              <div className="text-xs text-slate-500">
-                <code>{unit.code}</code> · {t("core.field.people_count", { count: unit.people_count })}
-              </div>
-            </div>
-            <label className="w-56">
-              <span className="block text-xs font-medium text-slate-500 mb-1">{t("core.field.manager")}</span>
-              <select
-                value={unit.manager_membership_id || ""}
-                disabled={!canManage || busy}
-                onChange={(e) => assignManager(unit, e.target.value)}
-                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded bg-white disabled:bg-transparent"
-              >
-                <option value="">—</option>
-                {people.map((p) => (
-                  <option key={p.membership_id} value={p.membership_id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {canManage && (
-              <button
-                onClick={() => archive(unit)}
-                disabled={busy}
-                title={t("core.action.archive")}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1.5"
-              >
-                <Archive className="w-3.5 h-3.5" />
-                {t("core.action.archive")}
-              </button>
-            )}
-          </div>
-        ))}
-        {active.length === 0 && (
+        {roots.map((node, i) => row(node, 0, i === roots.length - 1, []))}
+        {roots.length === 0 && (
           <div className="py-10 text-center text-sm text-slate-500">{t("base.message.no_data")}</div>
         )}
       </div>
@@ -235,7 +363,7 @@ export default function DepartmentsPage() {
                 </span>
                 {canManage && (
                   <button
-                    onClick={() => restore(unit)}
+                    onClick={() => run(() => api.restoreDepartment(unit.id))}
                     disabled={busy}
                     className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-white inline-flex items-center gap-1.5 disabled:opacity-50"
                   >

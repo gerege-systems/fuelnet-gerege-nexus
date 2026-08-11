@@ -15,6 +15,7 @@ export const base = {
 
   "base.action.save": { mn: "Хадгалах", en: "Save" },
   "base.action.create": { mn: "Үүсгэх", en: "Create" },
+  "base.action.edit": { mn: "Засах", en: "Edit" },
   "base.action.delete": { mn: "Устгах", en: "Delete" },
   "base.action.close": { mn: "Хаах", en: "Close" },
   "base.action.cancel": { mn: "Цуцлах", en: "Cancel" },
