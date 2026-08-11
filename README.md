@@ -48,6 +48,18 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 ---
 
+
+## Хамаарах сервисүүд
+
+Апп стор нь тусдаа репод байрладаг бөгөөд энэ платформ түүнээс каталогоо
+**гарын үсэгтэйгээр** татдаг (`APP_CATALOG_URL`; тохируулаагүй бол
+`catalog/apps.json` файлаараа ажиллана):
+
+- [`appstore-gerege-mn`](https://gitlab.gerege.mn/gerege-line/gerege-core/appstore-gerege-mn)
+  — registry API ба нээлттэй storefront (appstore.gerege.mn)
+- [`developer-gerege-nexus`](https://gitlab.gerege.mn/gerege-line/gerege-core/developer-gerege-nexus)
+  — хөгжүүлэгчийн консол (developer.gerege.mn)
+
 ## Агуулга
 
 - [Хөгжүүлэгчид](#хөгжүүлэгчид)

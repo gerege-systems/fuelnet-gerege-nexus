@@ -33,14 +33,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
     -o /bin/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/migrate ./cmd/migrate
 
-# The App Store registry ships in the same image as the platform it serves.
-#
-# It is a separate service — its own database, its own domain, its own compose
-# stack — but it is built from the same module so that it and the client that
-# consumes it share one definition of the catalogue format rather than two
-# descriptions of it. One image means one build to keep them in step.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/appstore ./cmd/appstore
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/catalog-sign ./cmd/catalog-sign
 
 # Production Alpine image
 FROM alpine:3.20
@@ -64,8 +56,6 @@ WORKDIR /app
 
 COPY --from=builder /bin/api /app/api
 COPY --from=builder /bin/migrate /app/migrate
-COPY --from=builder /bin/appstore /app/appstore
-COPY --from=builder /bin/catalog-sign /app/catalog-sign
 # App-store catalog + goose migrations are read from disk at runtime.
 COPY catalog/ /app/catalog/
 COPY backend/db/migrations/ /app/db/migrations/

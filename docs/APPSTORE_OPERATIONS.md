@@ -1,5 +1,12 @@
 # App Store — ажиллуулах гарын авлага
 
+> **Код энэ репод байхгүй.** Registry ба storefront нь
+> [`appstore-gerege-mn`](https://gitlab.gerege.mn/gerege-line/gerege-core/appstore-gerege-mn),
+> консол нь [`developer-gerege-nexus`](https://gitlab.gerege.mn/gerege-line/gerege-core/developer-gerege-nexus)
+> репод, deploy нь тэдний GitLab CI-аар явна. Энэ баримт нь **nexus талын**
+> тохиргоо (remote горим, түлхүүр pin) болон гэмтэл олоход хэвээр хэрэгтэй;
+> сервисийн өөрийнх нь дэлгэрэнгүй нь тухайн репод.
+
 `appstore.gerege.mn` (registry + storefront) ба `developer.gerege.mn` (хөгжүүлэгчийн
 консол)-ыг асаах, шинэчлэх, буцаах бүх алхам. Архитектурын үндэслэл
 `APPSTORE_SEPARATION_PLAN.md`-д; энд зөвхөн гар дээрх ажил.
@@ -36,7 +43,8 @@ Registry нь платформын **яг тэр image**-ээс өөр binary-г
 ### 2.1 Гарын үсгийн түлхүүр
 
 ```bash
-cd backend && go run ./cmd/catalog-sign -genkey
+# appstore-gerege-mn репод:
+go run ./cmd/catalog-sign -genkey
 # SIGNING_KEY=<base64 private>        → registry-д
 # APPSTORE_PUBLIC_KEY=<base64 public> → Nexus instance бүрт pin хийнэ
 ```
