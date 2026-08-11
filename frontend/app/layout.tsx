@@ -34,6 +34,15 @@ export default function RootLayout({
         */}
         <meta name="theme-color" content="#1869eb" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        {/*
+          Both spellings, because the standard one is not yet the only one that
+          works. `mobile-web-app-capable` is the name every current browser
+          reads and the one Chrome now warns about the absence of; Safari on iOS
+          still only honours Apple's prefixed name for standalone launch, and
+          dropping it would take the installed app back to a Safari chrome it
+          has not had. They can go when iOS reads the unprefixed name.
+        */}
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Nexus" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
