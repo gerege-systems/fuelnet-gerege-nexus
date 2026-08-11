@@ -11,6 +11,11 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 )
 
+// defaultMenuOrder is where an entry sits when its module expresses no
+// preference: after anything that asked to come first, before the blueprint
+// entries, which start at 20.
+const defaultMenuOrder = 10
+
 type InstalledAppStore interface {
 	GetEnabledAppIDsForTenant(context.Context, string) ([]string, error)
 	// GetCatalog is what external apps are read from. They have no compiled
@@ -49,7 +54,15 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 			localized(internal.MenuDefinition{ID: settingsID, AppID: mod.ID(), AppName: mod.Name(), Label: "Settings", Icon: "settings", Order: 20, Labels: groupSettings}, locale),
 		)
 		for _, item := range mod.Menus() {
-			item.AppID, item.AppName, item.ParentID, item.Order = mod.ID(), mod.Name(), modulesID, 10
+			// The parent is the platform's to decide; the order is the
+			// module's. It used to be overwritten with 10 for every entry,
+			// which left core's three screens — organisation, departments,
+			// people — sorting equal and coming out in whatever order the sort
+			// happened to leave them, changing between builds.
+			item.AppID, item.AppName, item.ParentID = mod.ID(), mod.Name(), modulesID
+			if item.Order == 0 {
+				item.Order = defaultMenuOrder
+			}
 			menus = append(menus, localized(item, locale))
 		}
 		for i, item := range bp.Modules {
@@ -71,12 +84,17 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		menus = append(menus,
 			localized(internal.MenuDefinition{ID: modulesID, AppID: app.ID, AppName: app.Name, Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale))
 		for _, item := range app.Manifest.Menus {
-			item.AppID, item.AppName, item.ParentID, item.Order = app.ID, app.Name, modulesID, 10
+			item.AppID, item.AppName, item.ParentID = app.ID, app.Name, modulesID
+			if item.Order == 0 {
+				item.Order = defaultMenuOrder
+			}
 			menus = append(menus, localized(item, locale))
 		}
 	}
 
-	sort.Slice(menus, func(i, j int) bool {
+	// Stable, so entries that share an order keep the order their module
+	// declared them in rather than one the sort invented.
+	sort.SliceStable(menus, func(i, j int) bool {
 		if menus[i].AppID != menus[j].AppID {
 			return menus[i].AppID < menus[j].AppID
 		}

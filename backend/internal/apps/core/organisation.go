@@ -8,6 +8,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/jackc/pgx/v5"
 )
 
 // Organisation is what the tenant is, as opposed to what it is called.
@@ -42,14 +44,21 @@ type Organisation struct {
 	Timezone           string `json:"timezone"`
 	Locale             string `json:"locale"`
 	Currency           string `json:"currency"`
+	// The organisation this one is a subsidiary of, if any. It is a statement
+	// about the world and not a grant: see migration 00036. A branch or an
+	// office is a department, not this.
+	ParentTenantID string `json:"parent_tenant_id,omitempty"`
+	ParentName     string `json:"parent_name,omitempty"`
 }
 
 const organisationColumns = `SELECT t.id::text, t.slug, t.name,
 	p.legal_name, p.registration_number, p.tax_number, p.country_code,
 	p.province, p.district, p.khoroo, p.address_line, p.postal_code,
-	p.phone, p.email, p.website, p.logo_url, p.timezone, p.locale, p.currency
+	p.phone, p.email, p.website, p.logo_url, p.timezone, p.locale, p.currency,
+	COALESCE(p.parent_tenant_id::text, ''), COALESCE(parent.name, '')
 	FROM tenants t
 	JOIN tenant_profiles p ON p.tenant_id = t.id
+	LEFT JOIN tenants parent ON parent.id = p.parent_tenant_id
 	WHERE t.id = $1`
 
 func (m *Module) handleGetOrganisation(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +71,8 @@ func (m *Module) handleGetOrganisation(w http.ResponseWriter, r *http.Request) {
 	err := m.db.QueryRow(r.Context(), organisationColumns, tenantID).Scan(
 		&o.TenantID, &o.Slug, &o.Name, &o.LegalName, &o.RegistrationNumber, &o.TaxNumber,
 		&o.CountryCode, &o.Province, &o.District, &o.Khoroo, &o.AddressLine, &o.PostalCode,
-		&o.Phone, &o.Email, &o.Website, &o.LogoURL, &o.Timezone, &o.Locale, &o.Currency)
+		&o.Phone, &o.Email, &o.Website, &o.LogoURL, &o.Timezone, &o.Locale, &o.Currency,
+		&o.ParentTenantID, &o.ParentName)
 	if err != nil {
 		// The profile row is created with the tenant and by the migration, so
 		// its absence is a broken invariant rather than a missing page.
@@ -97,6 +107,7 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		Timezone           *string `json:"timezone"`
 		Locale             *string `json:"locale"`
 		Currency           *string `json:"currency"`
+		ParentTenantID     *string `json:"parent_tenant_id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "malformed request body")
@@ -107,6 +118,19 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 	// three fields. A struct of plain strings would blank everything the caller
 	// happened not to mention — which is how a registration number disappears
 	// because somebody edited a phone number.
+	// The parent is settled before anything is written, because two of its
+	// three refusals are about other tenants and one of them has to look
+	// outside this one — which is not something to do half way through a
+	// transaction that has already changed the profile.
+	var parent *string
+	if body.ParentTenantID != nil {
+		resolved, ok := m.resolveParent(w, r, tenantID, strings.TrimSpace(*body.ParentTenantID))
+		if !ok {
+			return
+		}
+		parent = resolved
+	}
+
 	tx, err := m.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
@@ -122,6 +146,16 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		if _, err := tx.Exec(r.Context(),
 			`UPDATE tenants SET name = $1 WHERE id = $2`, strings.TrimSpace(*body.Name), tenantID); err != nil {
 			slog.Error("core: could not rename the organisation", "error", err, "tenant_id", tenantID)
+			httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
+			return
+		}
+	}
+
+	if body.ParentTenantID != nil {
+		if _, err := tx.Exec(r.Context(),
+			`UPDATE tenant_profiles SET parent_tenant_id = $2::uuid, updated_at = NOW()
+			 WHERE tenant_id = $1`, tenantID, parent); err != nil {
+			slog.Error("core: could not set the parent organisation", "error", err, "tenant_id", tenantID)
 			httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 			return
 		}
@@ -161,6 +195,89 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	m.handleGetOrganisation(w, r)
+}
+
+// resolveParent decides whether this organisation may be recorded as a
+// subsidiary of the one named, and answers the caller itself when it may not.
+//
+// Three refusals, and each is a different kind of wrong:
+//
+//	itself — the schema refuses that one too, but saying so in words beats a
+//	  constraint violation surfacing as "could not save the organisation";
+//
+//	a chain that comes back round — A under B under A. The schema cannot see
+//	  this; a CHECK constrains one row and this is a walk. Left in, every
+//	  reader that follows the chain hangs;
+//
+//	an organisation the caller has nothing to do with. Anyone could otherwise
+//	  declare their company a subsidiary of a ministry, and the claim would
+//	  print on documents. Membership of the parent is the smallest honest
+//	  proof of a relationship this platform can check, and it is the same
+//	  proof the tenant switcher already trusts.
+func (m *Module) resolveParent(w http.ResponseWriter, r *http.Request, tenantID, parentID string) (*string, bool) {
+	if parentID == "" {
+		return nil, true // "no parent" is a value, not an omission
+	}
+	if parentID == tenantID {
+		httpx.Error(w, http.StatusBadRequest, "an organisation cannot be a subsidiary of itself")
+		return nil, false
+	}
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return nil, false
+	}
+
+	// Crossing tenants is the point here, so the tenant binding comes off for
+	// these two reads — the same thing the tenant switcher does, and for the
+	// same reason: under this tenant's policies, another tenant's rows are not
+	// visible at all, and the answer would always be "no such organisation".
+	ctx := tenant.Without(r.Context())
+
+	var member bool
+	if err := m.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM memberships
+		                 WHERE tenant_id = $1::uuid AND user_id = $2 AND active)`,
+		parentID, claims.UserID).Scan(&member); err != nil {
+		slog.Error("core: could not check the parent organisation", "error", err, "parent", parentID)
+		httpx.Error(w, http.StatusInternalServerError, "could not check that organisation")
+		return nil, false
+	}
+	if !member {
+		// Deliberately the same answer whether the organisation does not exist
+		// or the caller simply does not belong to it. Which of the two it is
+		// would itself be an answer about somebody else's organisation.
+		httpx.Error(w, http.StatusBadRequest,
+			"you can only record an organisation you belong to as the parent")
+		return nil, false
+	}
+
+	// Walk up from the proposed parent. Meeting ourselves means the link would
+	// close a loop. The bound is a guard against a cycle that already exists in
+	// the data rather than a limit on how deep a group may be.
+	seen, cursor := 0, parentID
+	for cursor != "" && seen < 32 {
+		if cursor == tenantID {
+			httpx.Error(w, http.StatusConflict,
+				"that organisation is already below this one; the two would report to each other")
+			return nil, false
+		}
+		var next string
+		if err := m.db.QueryRow(ctx,
+			`SELECT COALESCE(parent_tenant_id::text, '') FROM tenant_profiles WHERE tenant_id = $1::uuid`,
+			cursor).Scan(&next); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				break
+			}
+			slog.Error("core: could not walk the organisation chain", "error", err, "at", cursor)
+			httpx.Error(w, http.StatusInternalServerError, "could not check that organisation")
+			return nil, false
+		}
+		cursor = next
+		seen++
+	}
+
+	return &parentID, true
 }
 
 // Preferences are the person's own, and follow them between organisations.

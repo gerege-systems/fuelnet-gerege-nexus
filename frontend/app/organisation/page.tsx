@@ -60,13 +60,20 @@ export default function OrganisationPage() {
   const { t } = useI18n();
   const { allowed: canManage } = useAccess("core.manage");
   const [organisation, setOrganisation] = useState<Organisation | null>(null);
+  // Only organisations this person belongs to can be offered: the server will
+  // refuse any other, and a selector full of choices that all fail is worse
+  // than a short one.
+  const [candidates, setCandidates] = useState<Array<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setOrganisation(await api.getOrganisation());
+      const [current, mine] = await Promise.all([api.getOrganisation(), api.getTenants().catch(() => null)]);
+      setOrganisation(current);
+      setCandidates((mine?.tenants || []).filter((x: any) => x.id !== current.tenant_id)
+        .map((x: any) => ({ id: x.id, name: x.name })));
     } catch (err: any) {
       setMessage({ type: "error", text: err.message || t("base.message.error") });
     }
@@ -131,6 +138,38 @@ export default function OrganisationPage() {
           </section>
         ))}
       </div>
+
+      {/* Kept apart from the grouped fields, and last: it is the one field on
+          this screen that names somebody else, and it is a statement about the
+          world rather than a setting — recording it grants nothing and changes
+          nothing about what this organisation can see. */}
+      <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-2">
+        <h2 className="font-semibold text-slate-800">{t("core.group.affiliation")}</h2>
+        <p className="text-xs text-slate-500">{t("core.message.parent_hint")}</p>
+        <label className="block max-w-md">
+          <span className="block text-xs font-medium text-slate-500 mb-1">{t("core.field.parent_organisation")}</span>
+          <select
+            value={draft.parent_tenant_id ?? organisation.parent_tenant_id ?? ""}
+            disabled={!canManage}
+            onChange={(e) => setDraft((d) => ({ ...d, parent_tenant_id: e.target.value }))}
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white disabled:bg-slate-50"
+          >
+            <option value="">{t("core.state.independent")}</option>
+            {/* The organisation currently recorded stays on offer even if the
+                person has since left it, or the selector would silently read
+                as "independent" and the next save would make that true. */}
+            {organisation.parent_tenant_id &&
+              !candidates.some((c) => c.id === organisation.parent_tenant_id) && (
+                <option value={organisation.parent_tenant_id}>{organisation.parent_name}</option>
+              )}
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
 
       {canManage && (
         <div className="flex items-center gap-3">

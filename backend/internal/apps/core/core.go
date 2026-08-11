@@ -91,7 +91,7 @@ func (m *Module) Menus() []internal.MenuDefinition {
 		},
 		{
 			ID: "core_people", Label: "People",
-			Path: "/organisation/people", Icon: "users", Order: 6,
+			Path: "/organisation/people", Icon: "users", Order: 7,
 			Labels: map[string]string{
 				"mn": "Ажилтнууд", "ar": "الأشخاص", "zh": "人员",
 				"fr": "Personnes", "ru": "Сотрудники", "es": "Personas",
@@ -99,7 +99,7 @@ func (m *Module) Menus() []internal.MenuDefinition {
 		},
 		{
 			ID: "core_departments", Label: "Departments",
-			Path: "/organisation/departments", Icon: "network", Order: 7,
+			Path: "/organisation/departments", Icon: "network", Order: 6,
 			Labels: map[string]string{
 				"mn": "Хэлтэс, нэгж", "ar": "الأقسام", "zh": "部门",
 				"fr": "Départements", "ru": "Подразделения", "es": "Departamentos",

@@ -29,6 +29,7 @@ export const core = {
   // Not "settings": these are what the organisation uses when nobody has said
   // otherwise, and a person may still choose their own language over them.
   "core.group.defaults": { mn: "Үндсэн тохиргоо", en: "Defaults" },
+  "core.group.affiliation": { mn: "Харьяалал", en: "Affiliation" },
 
   "core.field.name": { mn: "Дэлгэцэнд харагдах нэр", en: "Display name" },
   "core.field.legal_name": { mn: "Албан ёсны нэр", en: "Legal name" },
@@ -46,6 +47,8 @@ export const core = {
 
   "core.field.code": { mn: "Код", en: "Code" },
   "core.field.parent": { mn: "Харьяалагдах нэгж", en: "Reports to" },
+  "core.field.parent_organisation": { mn: "Толгой байгууллага", en: "Parent organisation" },
+  "core.state.independent": { mn: "Бие даасан", en: "Independent" },
   "core.field.manager": { mn: "Хариуцсан ажилтан", en: "Manager" },
   "core.field.people_count": { mn: "{count} ажилтан", en: "{count} people" },
   "core.field.job_title": { mn: "Албан тушаал", en: "Job title" },
@@ -62,6 +65,12 @@ export const core = {
   "core.action.restore": { mn: "Сэргээх", en: "Restore" },
 
   "core.message.saved": { mn: "Байгууллагын мэдээлэл хадгалагдлаа", en: "The organisation's details were saved" },
+  // Says what this is and, just as importantly, what it is not: recording a
+  // parent grants nobody anything.
+  "core.message.parent_hint": {
+    mn: "Салбар, нэгжийг Хэлтэс, нэгж хэсэгт бүртгэнэ. Энд зөвхөн тусдаа хуулийн этгээд болох толгой байгууллагаа заана — өөрийн ажилладаг байгууллагуудаас сонгоно. Энэ нь мэдээллийн хандалтыг өөрчлөхгүй.",
+    en: "Branches and offices are departments. This is for a parent that is a separate legal entity, chosen from the organisations you work in. Recording it changes nothing about who can see what.",
+  },
   // Said once, at the bottom, rather than as a disabled "Add person" button:
   // the button would suggest the screen could do it and is merely refusing.
   "core.message.people_hint": {
