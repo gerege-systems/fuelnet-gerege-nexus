@@ -55,15 +55,28 @@ go run ./cmd/catalog-sign -genkey
 (instance-ууд хаяад өөрсдийн cache/файл руу унана — эвдрэхгүй, зүгээр л update
 авахаа болино).
 
-### 2.2 GitHub secrets ба variables
+### 2.2 Хаана ямар тохиргоо байдаг вэ
+
+Сервисийн тохиргоо нь **түүний өөрийн репод** (GitLab CI/CD Variables):
+
+| Репо | Хувьсагч |
+| --- | --- |
+| `appstore-gerege-mn` | `APPSTORE_SIGNING_KEY`, `APPSTORE_POSTGRES_PASSWORD`, `APPSTORE_ADMIN_EMAILS`, `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER` |
+| `developer-gerege-nexus` | `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER` |
+
+Nexus (GitHub) талд зөвхөн **хэрэглэгчийн** тал үлдэнэ:
 
 | Нэр | Төрөл | Утга |
 | --- | --- | --- |
-| `APPSTORE_SIGNING_KEY` | secret | Дээрх `SIGNING_KEY` |
-| `APPSTORE_POSTGRES_PASSWORD` | secret | Registry DB-гийн нууц үг |
-| `APPSTORE_ADMIN_EMAILS` | variable | Хяналт хийх эрхтэй и-мэйлүүд (таслалаар) |
-| `APPSTORE_ORIGIN` | variable | Анхдагч `https://appstore.gerege.mn` |
-| `CONSOLE_ORIGIN` | variable | Анхдагч `https://developer.gerege.mn` |
+| `APPSTORE_PUBLIC_KEY` | secret | Registry-гийн **нийтийн** түлхүүр (pin) |
+| `APP_CATALOG_URL` | variable | `https://appstore.gerege.mn/api/v1/registry` |
+| `CATALOG_SYNC_INTERVAL` | variable | Анхдагч `1h` |
+| `CONSOLE_ORIGIN` | variable | Консолын OAuth2 client-ийг бүртгэхэд |
+
+**Түлхүүр эргүүлэх үед хоёуланг зэрэг солино:** GitLab дахь `APPSTORE_SIGNING_KEY`
+ба GitHub дахь `APPSTORE_PUBLIC_KEY` нь нэг хосын хоёр хэсэг. Ганцыг нь сольвол
+instance-ууд каталогийг хаяж, өөрсдийн cache/файлаараа үлдэнэ — эвдрэхгүй ч
+шинэчлэлт зогсоно.
 
 ### 2.3 DNS ба TLS
 
