@@ -20,6 +20,7 @@ interface InstalledApp {
   update_available: boolean;
   held_for?: string[];
   held_reason?: string;
+  core: boolean;
 }
 
 interface CatalogStatus {
@@ -249,17 +250,25 @@ export default function InstalledAppsSettingsPage() {
                           : t("app_store.action.update")}
                       </button>
                     )}
-                    <button
-                      onClick={() => handleToggle(app)}
-                      disabled={actionLoading === app.slug}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
-                        app.enabled
-                          ? "border-red-200 text-red-600 hover:bg-red-50"
-                          : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
-                      }`}
-                    >
-                      {app.enabled ? t("app_store.action.disable") : t("app_store.action.enable")}
-                    </button>
+                    {/* A core app is the floor the rest of the screens stand
+                        on, and the server refuses to disable it. Saying so is
+                        the honest control; a red button that returns 400 is
+                        not. */}
+                    {app.core ? (
+                      <span className="text-xs text-slate-500">{t("app_store.state.core")}</span>
+                    ) : (
+                      <button
+                        onClick={() => handleToggle(app)}
+                        disabled={actionLoading === app.slug}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                          app.enabled
+                            ? "border-red-200 text-red-600 hover:bg-red-50"
+                            : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+                        }`}
+                      >
+                        {app.enabled ? t("app_store.action.disable") : t("app_store.action.enable")}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
@@ -32,9 +33,15 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		if !enabled[mod.ID()] {
 			continue
 		}
+		// A module with no blueprint still has screens: the ones it registers
+		// itself. Skipping it outright is how an app ships with three working
+		// pages and nothing in the sidebar pointing at them, which is exactly
+		// what happened to core — a blueprint lists the entries still to be
+		// built, so having none of those is an ordinary state, not a reason to
+		// go unlisted.
 		bp, ok := blueprints[mod.ID()]
 		if !ok {
-			continue
+			bp = blueprint{Slug: routeSlug(mod.ID())}
 		}
 		modulesID, settingsID := bp.Slug+"_modules", bp.Slug+"_settings"
 		menus = append(menus,
@@ -79,6 +86,16 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		return menus[i].Order < menus[j].Order
 	})
 	return menus, nil
+}
+
+// routeSlug is the last segment of an app id — io.example.core -> core — which
+// is the convention every blueprint slug already follows.
+func routeSlug(appID string) string {
+	slug := appID
+	if idx := strings.LastIndex(appID, "."); idx >= 0 {
+		slug = appID[idx+1:]
+	}
+	return strings.ReplaceAll(slug, "_", "-")
 }
 
 func localized(item internal.MenuDefinition, locale string) internal.MenuDefinition {

@@ -1,0 +1,42 @@
+{
+  "id": "io.example.core",
+  "name": "Organisation & People",
+  "version": "1.0.0",
+  "platform": ">=1.0.0",
+  "dependencies": [],
+  "permissions": [
+    {
+      "code": "core.read",
+      "name": "Read Organisation",
+      "description": "View the organisation profile, its departments and its people"
+    },
+    {
+      "code": "core.manage",
+      "name": "Manage Organisation",
+      "description": "Edit the organisation profile, its departments and its people"
+    }
+  ],
+  "menus": [
+    {
+      "id": "core_organisation",
+      "label": "Organisation",
+      "path": "/organisation",
+      "icon": "building-2",
+      "order": 5
+    },
+    {
+      "id": "core_people",
+      "label": "People",
+      "path": "/organisation/people",
+      "icon": "users",
+      "order": 6
+    },
+    {
+      "id": "core_departments",
+      "label": "Departments",
+      "path": "/organisation/departments",
+      "icon": "network",
+      "order": 7
+    }
+  ]
+}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +18,28 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// CoreApps are installed for every tenant and cannot be turned off.
+//
+// An app is core when the platform stops making sense without it. Today that is
+// one: the organisation and the people in it, which every other module names —
+// a document prints the registration number, an approval names a department, a
+// deadline is counted in the organisation's timezone. Odoo draws the same line
+// around `base` and for the same reason.
+//
+// It is a list in the platform rather than a flag in the manifest, because a
+// third party publishing an app that declares itself uninstallable is not a
+// thing this store should be able to express.
+var CoreApps = []string{"io.example.core"}
+
+// IsCoreApp reports whether an app belongs to the platform itself.
+func IsCoreApp(appID string) bool {
+	return slices.Contains(CoreApps, appID)
+}
+
+// ErrCoreApp is returned when somebody tries to remove the floor they are
+// standing on.
+var ErrCoreApp = errors.New("this app is part of the platform and cannot be disabled")
 
 // ErrAppNotFound is returned when a slug names no app in the catalogue.
 //
@@ -387,6 +411,9 @@ func (ai *AppInstaller) DisableApp(ctx context.Context, tenantID, appSlug, userI
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
 	}
+	if IsCoreApp(targetApp.ID) {
+		return fmt.Errorf("%w: %s", ErrCoreApp, appSlug)
+	}
 
 	now := time.Now()
 	res, err := ai.db.Exec(ctx,
@@ -515,6 +542,57 @@ func (ai *AppInstaller) GetInstallationsForTenant(ctx context.Context, tenantID 
 		states[id] = held
 	}
 	return states, rows.Err()
+}
+
+// EnsureCoreApps installs the platform's own apps for every tenant missing one.
+//
+// A tenant created before an app became core, or created by a path that installs
+// nothing — the seeder, an eID sign-in that makes a membership on the spot —
+// would otherwise have a platform with no organisation screen and no way to
+// reach one, because installing is a store action and the store is behind the
+// very app that is missing.
+func (ai *AppInstaller) EnsureCoreApps(ctx context.Context) error {
+	for _, appID := range CoreApps {
+		app, known := ai.GetAppByID(appID)
+		if !known {
+			// A catalogue that does not carry a core app is a deployment fault,
+			// not something to install around.
+			slog.Warn("core app is missing from the catalogue", "app_id", appID)
+			continue
+		}
+
+		rows, err := ai.db.Query(ctx,
+			`SELECT t.id::text FROM tenants t
+			  WHERE NOT EXISTS (SELECT 1 FROM app_installations ai
+			                     WHERE ai.tenant_id = t.id AND ai.app_id = $1)`, appID)
+		if err != nil {
+			return err
+		}
+		tenants := make([]string, 0)
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			tenants = append(tenants, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		for _, tenantID := range tenants {
+			if err := ai.installOrUpgrade(ctx, tenantID, app.Slug, SystemActor); err != nil {
+				// One tenant's failure is not the sweep's.
+				slog.Error("could not install a core app for a tenant",
+					"error", err, "app_id", appID, "tenant_id", tenantID)
+				continue
+			}
+			slog.Info("installed a core app", "app_id", appID, "tenant_id", tenantID)
+		}
+	}
+	return nil
 }
 
 func (ai *AppInstaller) GetEnabledAppIDsForTenant(ctx context.Context, tenantID string) ([]string, error) {

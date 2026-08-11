@@ -8,6 +8,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/core"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/developer_portal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
@@ -30,6 +31,10 @@ type Runtime struct {
 }
 
 func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmongolia.Service, sso *ssoprovider.SSOProvider) Runtime {
+	// First, and not merely in order: core is what the others assume. It is the
+	// organisation, the people in it and how it is arranged — the module Odoo
+	// calls base and never lets you uninstall.
+	core.New(db)
 	contacts.New(db)
 	products.New(db)
 	inventory.New(db, false)
