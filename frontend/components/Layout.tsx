@@ -187,7 +187,7 @@ export default function Layout({children}:{children:React.ReactNode}){
           {results.length>0&&<div className="gerege-topbar-onlight absolute top-12 inset-x-0 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
         </div>
       </div>
-      <div className="gerege-header-user flex pr-2 sm:pr-4 lg:pr-6"><UserMenu user={user} onLogout={logout}/></div>
+      <div className="gerege-header-user flex items-center gap-2 pr-2 sm:pr-4 lg:pr-6"><AICopilot/><UserMenu user={user} onLogout={logout}/></div>
     </header>
 
     <div className="flex flex-1 min-h-0">
@@ -212,7 +212,6 @@ export default function Layout({children}:{children:React.ReactNode}){
       {primaryMobileTabs.map(tab=><MobileAppTab key={tab.id} {...tab}/>)}
       {hasMobileMore&&<button type="button" onClick={()=>setMobileMoreOpen(v=>!v)} aria-expanded={mobileMoreOpen} className={`gerege-mobile-tab ${remainingMobileTabs.some(tab=>tab.active)||mobileMoreOpen?"is-active":""}`}><span><Ellipsis className="w-5 h-5"/></span><small>{t("web.action.more")}</small></button>}
     </nav>
-    <AICopilot/>
   </div>;
 }
 
