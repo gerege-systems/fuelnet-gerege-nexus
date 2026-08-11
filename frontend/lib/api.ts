@@ -284,6 +284,9 @@ export const api = {
       province: string; district: string; khoroo: string; address_line: string;
       postal_code: string; phone: string; email: string; website: string;
       logo_url: string; timezone: string; locale: string; currency: string;
+      // The organisation this one is a subsidiary of. A branch or an office is
+      // a department; this is another legal entity, and so another tenant.
+      parent_tenant_id?: string; parent_name?: string;
     }>("/core/organisation"),
 
   // Partial by design: a form that sends the fields it changed must not blank

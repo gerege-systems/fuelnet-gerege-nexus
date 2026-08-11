@@ -26,8 +26,12 @@ func (blueprintlessModule) Permissions() []internal.PermissionDefinition {
 	return nil
 }
 func (blueprintlessModule) Menus() []internal.MenuDefinition {
+	// Declared out of order on purpose: what comes back must follow Order, not
+	// the order they were written in.
 	return []internal.MenuDefinition{
+		{ID: "noblueprint_third", Label: "Third", Path: "/noblueprint/c", Icon: "box", Order: 7},
 		{ID: "noblueprint_home", Label: "Home", Path: "/noblueprint", Icon: "box", Order: 5},
+		{ID: "noblueprint_second", Label: "Second", Path: "/noblueprint/b", Icon: "box", Order: 6},
 	}
 }
 func (blueprintlessModule) RegisterRoutes(chi.Router, func(http.Handler) http.Handler) {}
@@ -65,5 +69,36 @@ func TestAModuleWithoutABlueprintStillContributesItsOwnScreens(t *testing.T) {
 	}
 	if found.AppName != mod.Name() {
 		t.Fatalf("expected the entry to name its app, got %q", found.AppName)
+	}
+}
+
+// A module says what order its screens read in, and that used to be thrown
+// away: every entry was rewritten to the same order and then sorted with an
+// unstable sort, so core's three screens came out as organisation, people,
+// departments — or any other arrangement, changing between builds.
+func TestAModulesMenusKeepTheOrderItDeclared(t *testing.T) {
+	mod := blueprintlessModule{}
+	appregistry.Register(mod)
+
+	menus, err := menu.GetTenantMenus(context.Background(),
+		enabledStore{ids: []string{mod.ID()}}, "tenant", "en")
+	if err != nil {
+		t.Fatalf("menus: %v", err)
+	}
+
+	var got []string
+	for _, item := range menus {
+		if item.AppID == mod.ID() && item.ParentID != "" {
+			got = append(got, item.ID)
+		}
+	}
+	want := []string{"noblueprint_home", "noblueprint_second", "noblueprint_third"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d entries, got %v", len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("the module's order was not kept:\n got %v\nwant %v", got, want)
+		}
 	}
 }

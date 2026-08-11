@@ -316,3 +316,92 @@ func TestAnArchivedDepartmentCanComeBack(t *testing.T) {
 		t.Fatalf("restore child after its parent: %d %s", res.Code, res.Body.String())
 	}
 }
+
+// "An organisation with organisations under it" is two questions, and this is
+// the half that is not a department: a subsidiary is its own tenant, and what
+// was missing was only the record of the relationship.
+func TestASubsidiaryIsRecordedButChangesNothingAboutIsolation(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	organisation := func(t *testing.T) core.Organisation {
+		t.Helper()
+		var o core.Organisation
+		if err := json.Unmarshal(f.do(t, http.MethodGet, "/api/v1/core/organisation", "").Body.Bytes(), &o); err != nil {
+			t.Fatal(err)
+		}
+		return o
+	}
+
+	// The caller belongs to the other tenant too, which is what makes the
+	// claim checkable at all.
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1, $2)`, f.otherID, f.userID); err != nil {
+		t.Fatal(err)
+	}
+
+	if res := f.do(t, http.MethodPut, "/api/v1/core/organisation",
+		`{"parent_tenant_id":"`+f.otherID+`"}`); res.Code != http.StatusOK {
+		t.Fatalf("recording the parent answered %d: %s", res.Code, res.Body.String())
+	}
+	after := organisation(t)
+	if after.ParentTenantID != f.otherID || after.ParentName == "" {
+		t.Fatalf("the parent did not come back named: %+v", after)
+	}
+
+	// It is a statement about the world, not a grant: the parent's departments
+	// stay the parent's.
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO departments (tenant_id, code, name) VALUES ($1, 'hq', 'Төв оффис')`, f.otherID); err != nil {
+		t.Fatal(err)
+	}
+	var visible []core.Department
+	if err := json.Unmarshal(f.do(t, http.MethodGet, "/api/v1/core/departments", "").Body.Bytes(), &visible); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range visible {
+		if d.Code == "hq" {
+			t.Fatal("recording a parent must not make its rows visible here")
+		}
+	}
+
+	// Itself, refused in words rather than as a constraint violation.
+	if res := f.do(t, http.MethodPut, "/api/v1/core/organisation",
+		`{"parent_tenant_id":"`+f.tenantID+`"}`); res.Code != http.StatusBadRequest {
+		t.Fatalf("expected self-parenting to be refused, got %d", res.Code)
+	}
+
+	// An organisation the caller has nothing to do with: same answer whether it
+	// exists or not.
+	var stranger string
+	if err := f.pool.QueryRow(ctx,
+		`INSERT INTO tenants (slug, name) VALUES ('stranger-' || substr(gen_random_uuid()::text, 1, 8), 'Stranger')
+		 RETURNING id::text`).Scan(&stranger); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = f.pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, stranger) })
+	if res := f.do(t, http.MethodPut, "/api/v1/core/organisation",
+		`{"parent_tenant_id":"`+stranger+`"}`); res.Code != http.StatusBadRequest {
+		t.Fatalf("expected an unrelated organisation to be refused, got %d", res.Code)
+	}
+
+	// And the loop the schema cannot see: the other tenant is already above
+	// this one, so it may not also sit below it.
+	if _, err := f.pool.Exec(ctx,
+		`UPDATE tenant_profiles SET parent_tenant_id = $2 WHERE tenant_id = $1`, f.otherID, f.tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if res := f.do(t, http.MethodPut, "/api/v1/core/organisation",
+		`{"parent_tenant_id":"`+f.otherID+`"}`); res.Code != http.StatusConflict {
+		t.Fatalf("expected a cycle to be refused, got %d: %s", res.Code, res.Body.String())
+	}
+	_, _ = f.pool.Exec(ctx, `UPDATE tenant_profiles SET parent_tenant_id = NULL WHERE tenant_id = $1`, f.otherID)
+
+	// Cleared by sending an empty value, which is a value and not an omission.
+	if res := f.do(t, http.MethodPut, "/api/v1/core/organisation", `{"parent_tenant_id":""}`); res.Code != http.StatusOK {
+		t.Fatalf("clearing the parent answered %d", res.Code)
+	}
+	if cleared := organisation(t); cleared.ParentTenantID != "" {
+		t.Fatalf("the parent was not cleared: %+v", cleared)
+	}
+}

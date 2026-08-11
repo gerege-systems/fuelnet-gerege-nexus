@@ -25,17 +25,17 @@
       "order": 5
     },
     {
-      "id": "core_people",
-      "label": "People",
-      "path": "/organisation/people",
-      "icon": "users",
-      "order": 6
-    },
-    {
       "id": "core_departments",
       "label": "Departments",
       "path": "/organisation/departments",
       "icon": "network",
+      "order": 6
+    },
+    {
+      "id": "core_people",
+      "label": "People",
+      "path": "/organisation/people",
+      "icon": "users",
       "order": 7
     }
   ]
