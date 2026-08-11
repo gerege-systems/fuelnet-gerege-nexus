@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { Settings, Clock } from "lucide-react";
+import { Settings, Clock, ArrowUpCircle, ShieldAlert, Pin } from "lucide-react";
 
 interface InstalledApp {
   id: string;
@@ -14,6 +14,11 @@ interface InstalledApp {
   status: string;
   enabled: boolean;
   installed_at: string;
+  auto_update: boolean;
+  pinned_version?: string;
+  latest_version?: string;
+  update_available: boolean;
+  held_for?: string[];
 }
 
 export default function InstalledAppsSettingsPage() {
@@ -37,6 +42,33 @@ export default function InstalledAppsSettingsPage() {
     setLoading(true);
     loadInstalled();
   }, [locale]);
+
+  // An app whose new version asks for more is held rather than applied, so
+  // approving it is the same action as updating it: the server moves the pin
+  // forward with the version.
+  const handleUpdate = async (app: InstalledApp) => {
+    setActionLoading(app.slug);
+    try {
+      await api.upgradeApp(app.slug);
+      await loadInstalled();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAutoUpdate = async (app: InstalledApp) => {
+    setActionLoading(app.slug);
+    try {
+      await api.setAutoUpdate(app.slug, !app.auto_update);
+      await loadInstalled();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const handleToggle = async (app: InstalledApp) => {
     setActionLoading(app.slug);
@@ -83,6 +115,7 @@ export default function InstalledAppsSettingsPage() {
                 <th className="py-3 px-4">{t("app_store.field.application_name")}</th>
                 <th className="py-3 px-4">{t("app_store.field.module_id")}</th>
                 <th className="py-3 px-4">{t("app_store.field.installed_version")}</th>
+                <th className="py-3 px-4">{t("app_store.field.updates")}</th>
                 <th className="py-3 px-4">{t("base.field.status")}</th>
                 <th className="py-3 px-4">{t("app_store.field.installed_date")}</th>
                 <th className="py-3 px-4 text-right">{t("base.field.actions")}</th>
@@ -93,7 +126,46 @@ export default function InstalledAppsSettingsPage() {
                 <tr key={app.id} className="hover:bg-slate-50">
                   <td className="py-3.5 px-4 font-bold text-slate-900">{app.name}</td>
                   <td className="py-3.5 px-4 font-mono text-xs text-slate-500">{app.app_id}</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-700">v{app.installed_version}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-700">
+                    v{app.installed_version}
+                    {app.update_available && app.latest_version && (
+                      <span className="ml-1.5 text-xs font-normal text-indigo-600">→ v{app.latest_version}</span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="flex flex-col gap-1.5 items-start">
+                      {/* The switch, said in words rather than as a bare toggle:
+                          this decides whether somebody else's release reaches
+                          this organisation without anybody looking at it. */}
+                      <button
+                        onClick={() => handleAutoUpdate(app)}
+                        disabled={actionLoading === app.slug}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
+                          app.auto_update
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${app.auto_update ? "bg-emerald-500" : "bg-slate-400"}`} />
+                        <span>{app.auto_update ? t("app_store.state.auto_update_on") : t("app_store.state.auto_update_off")}</span>
+                      </button>
+                      {app.pinned_version && (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                          <Pin className="w-3 h-3" />
+                          {t("app_store.state.pinned", { version: app.pinned_version })}
+                        </span>
+                      )}
+                      {app.held_for && app.held_for.length > 0 && (
+                        <span className="inline-flex items-start gap-1 text-xs text-amber-700 max-w-56">
+                          <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            {t("app_store.message.held_for_approval")}{" "}
+                            <span className="font-mono">{app.held_for.join(", ")}</span>
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-3.5 px-4">
                     <span
                       className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -103,7 +175,7 @@ export default function InstalledAppsSettingsPage() {
                       }`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${app.enabled ? "bg-emerald-500" : "bg-slate-400"}`}></span>
-                      <span>{app.enabled ? "Active" : "Disabled"}</span>
+                      <span>{app.enabled ? t("base.state.active") : t("app_store.state.disabled")}</span>
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-xs text-slate-500 flex items-center space-x-1 pt-4">
@@ -111,6 +183,21 @@ export default function InstalledAppsSettingsPage() {
                     <span>{new Date(app.installed_at).toLocaleDateString()}</span>
                   </td>
                   <td className="py-3.5 px-4 text-right">
+                    {app.update_available && (
+                      <button
+                        onClick={() => handleUpdate(app)}
+                        disabled={actionLoading === app.slug}
+                        className="mr-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition border border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center gap-1.5"
+                      >
+                        <ArrowUpCircle className="w-3.5 h-3.5" />
+                        {/* Approving a held version and updating an ordinary
+                            one are the same request; only the wording differs,
+                            because only one of them is a decision. */}
+                        {app.held_for && app.held_for.length > 0
+                          ? t("app_store.action.approve_update")
+                          : t("app_store.action.update")}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleToggle(app)}
                       disabled={actionLoading === app.slug}
@@ -120,7 +207,7 @@ export default function InstalledAppsSettingsPage() {
                           : "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
                       }`}
                     >
-                      {app.enabled ? "Disable" : "Enable"}
+                      {app.enabled ? t("app_store.action.disable") : t("app_store.action.enable")}
                     </button>
                   </td>
                 </tr>

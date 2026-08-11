@@ -220,8 +220,25 @@ export const api = {
         status: string;
         enabled: boolean;
         installed_at: string;
+        auto_update: boolean;
+        pinned_version?: string;
+        latest_version?: string;
+        update_available: boolean;
+        // What a waiting version asks for that the installed one did not.
+        // Non-empty means the update is being held for an administrator to
+        // approve rather than offered as an ordinary one.
+        held_for?: string[];
       }>
     >("/installed-apps"),
+
+  // Whether an app follows the catalogue on its own. Turning it on also clears
+  // a hold, which is why this refreshes the menus like the other store
+  // mutations: an app held back can start contributing menus again.
+  setAutoUpdate: (slug: string, enabled: boolean) =>
+    fetcher<{ app: string; auto_update: boolean }>(`/store/apps/${slug}/auto-update`, {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
 
   installApp: (slug: string) => mutateApp(`/store/apps/${slug}/install`),
 

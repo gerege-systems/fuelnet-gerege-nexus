@@ -169,7 +169,11 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 	}
 
 	rows, err := s.db.Query(r.Context(),
-		`SELECT ai.id, ai.app_id, a.slug, a.name, ai.installed_version, ai.status, ai.enabled, ai.installed_at
+		`SELECT ai.id, ai.app_id, a.slug, a.name, ai.installed_version, ai.status, ai.enabled,
+		        ai.installed_at, ai.auto_update, COALESCE(ai.pinned_version, ''),
+		        COALESCE((SELECT e.details ->> 'added' FROM installation_events e
+		                   WHERE e.installation_id = ai.id AND e.event_type = 'held'
+		                   ORDER BY e.created_at DESC LIMIT 1), '')
 		 FROM app_installations ai
 		 JOIN apps a ON a.id = ai.app_id
 		 WHERE ai.tenant_id = $1`, tenantID)
@@ -188,6 +192,15 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		Status           string    `json:"status"`
 		Enabled          bool      `json:"enabled"`
 		InstalledAt      time.Time `json:"installed_at"`
+		// What this app does about new versions, and what is waiting.
+		AutoUpdate      bool   `json:"auto_update"`
+		PinnedVersion   string `json:"pinned_version,omitempty"`
+		LatestVersion   string `json:"latest_version,omitempty"`
+		UpdateAvailable bool   `json:"update_available"`
+		// HeldFor lists what a waiting version asks for that the installed one
+		// did not. Non-empty means an administrator has a decision to make
+		// rather than a button to press — see appinstaller.AutoUpdate.
+		HeldFor []string `json:"held_for,omitempty"`
 	}
 
 	locale := config.LocaleFromRequest(r)
@@ -196,7 +209,10 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		var item InstalledApp
 		// Skipping unreadable rows reported a tenant's app as not installed,
 		// and the store then offered to install it again over the top.
-		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion, &item.Status, &item.Enabled, &item.InstalledAt); err != nil {
+		var heldFor string
+		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion,
+			&item.Status, &item.Enabled, &item.InstalledAt, &item.AutoUpdate,
+			&item.PinnedVersion, &heldFor); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "failed to read installed apps")
 			return
 		}
@@ -209,6 +225,14 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		if catalogApp, ok := s.installer.GetAppBySlug(item.Slug); ok {
 			if localized := catalogApp.Localized(locale).Name; localized != "" {
 				item.Name = localized
+			}
+			item.LatestVersion = catalogApp.Version
+			item.UpdateAvailable = appcatalog.IsNewerVersion(catalogApp.Version, item.InstalledVersion)
+			// Only report a hold that is still true: once the pin is at the
+			// version being offered, or the offer is gone, the recorded reason
+			// is history rather than a decision.
+			if heldFor != "" && item.UpdateAvailable && item.PinnedVersion == item.InstalledVersion {
+				item.HeldFor = parseHeldFor(heldFor)
 			}
 		}
 		list = append(list, item)
@@ -337,6 +361,61 @@ func (s *Server) handleSyncCatalog(w http.ResponseWriter, r *http.Request) {
 		"status": status,
 		"apps":   len(s.installer.GetCatalog()),
 	})
+}
+
+// parseHeldFor reads back what holdForApproval recorded.
+//
+// It was written with fmt.Sprint over a slice — "[a b c]" — because the details
+// column is a flat string map. Read here rather than at the point of storage so
+// the event keeps the shape everything else in that table has.
+func parseHeldFor(recorded string) []string {
+	trimmed := strings.Trim(recorded, "[]")
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Fields(trimmed)
+}
+
+// handleSetAutoUpdate records whether an app should follow the catalogue.
+//
+// Turning it on also clears any pin: an administrator saying "keep this current"
+// and one saying "hold this version" are the same decision from either end, and
+// leaving the pin would make the switch look broken.
+func (s *Server) handleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	if !security.IsValidSlug(slug) {
+		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
+		return
+	}
+
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&body); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		return
+	}
+
+	switch err := s.installer.SetAutoUpdate(r.Context(), claims.TenantID, slug, body.Enabled); {
+	case errors.Is(err, appinstaller.ErrAppNotFound):
+		httpx.Error(w, http.StatusNotFound, "app not found")
+		return
+	case errors.Is(err, appinstaller.ErrNotInstalled):
+		httpx.Error(w, http.StatusNotFound, "this app is not installed for your organisation")
+		return
+	case err != nil:
+		slog.Error("could not set auto-update", "error", err, "app_slug", slug, "tenant_id", claims.TenantID)
+		httpx.Error(w, http.StatusInternalServerError, "could not save that preference")
+		return
+	}
+
+	httpx.JSON(w, http.StatusOK, map[string]any{"app": slug, "auto_update": body.Enabled})
 }
 
 func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
