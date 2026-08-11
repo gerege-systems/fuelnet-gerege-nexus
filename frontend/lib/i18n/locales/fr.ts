@@ -68,6 +68,8 @@ export const fr: Record<string, string> = {
   "app_store.action.enable": "Activer l'application",
   "app_store.action.install": "Installer l'application",
   "app_store.action.update": "Mettre à jour",
+  "app_store.action.view_grid": "Vue en cartes",
+  "app_store.action.view_list": "Vue en liste",
   "app_store.field.app_count": "{count} applications",
   "app_store.field.application_name": "Nom de l'application",
   "app_store.field.installed_date": "Date d'installation",

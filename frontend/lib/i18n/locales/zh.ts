@@ -68,6 +68,8 @@ export const zh: Record<string, string> = {
   "app_store.action.enable": "启用应用",
   "app_store.action.install": "安装应用",
   "app_store.action.update": "更新",
+  "app_store.action.view_grid": "卡片视图",
+  "app_store.action.view_list": "列表视图",
   "app_store.field.app_count": "{count} 个应用",
   "app_store.field.application_name": "应用程序名称",
   "app_store.field.installed_date": "安装日期",
