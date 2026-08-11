@@ -122,8 +122,12 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		cr.With(read).Get("/departments", m.handleListDepartments)
 		cr.With(manage).Post("/departments", m.handleCreateDepartment)
 		cr.With(manage).Put("/departments/{id}", m.handleUpdateDepartment)
-		cr.With(manage).Delete("/departments/{id}", m.handleArchiveDepartment)
+		// Archiving and deleting are different acts and now say so. DELETE
+		// used to archive, which left the screen with a Delete that did not
+		// delete and no way to actually remove a unit created by mistake.
+		cr.With(manage).Post("/departments/{id}/archive", m.handleArchiveDepartment)
 		cr.With(manage).Post("/departments/{id}/restore", m.handleRestoreDepartment)
+		cr.With(manage).Delete("/departments/{id}", m.handleDeleteDepartment)
 
 		// Who is in it.
 		cr.With(read).Get("/people", m.handleListPeople)

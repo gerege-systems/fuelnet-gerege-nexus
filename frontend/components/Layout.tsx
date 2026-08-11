@@ -70,6 +70,19 @@ const GROUPS_KEY="gerege_sidebar_groups";
 // the rail and render its own menu — leaving the sibling unreachable whenever
 // both are installed.
 function isUnder(pathname:string,path:string){return pathname===path||pathname.startsWith(path.endsWith("/")?path:path+"/")}
+// Which entry is *the* current one, when several of them match.
+//
+// isUnder is the right test for "does this app own this route" — an app claims
+// its whole subtree — but the wrong one for highlighting a single link, because
+// a menu that nests answers yes twice: /organisation/people is under
+// /organisation, so Organisation and People both lit up and the sidebar showed
+// two current pages. The longest match is the specific one, and the specific
+// one is where you are.
+function currentPath(pathname:string,paths:string[]){
+  let best="";
+  for(const path of paths) if(path&&isUnder(pathname,path)&&path.length>best.length) best=path;
+  return best;
+}
 
 const APP_ORDER=["io.gerege.nexus.core","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.developer_portal","io.gerege.nexus.gov_services"];
 
@@ -301,6 +314,10 @@ function MenuGroup({id,title,closed,onToggle,children}:{id:string;title:string;c
     </div>
   </section>;
 }
-function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];pathname:string;closedGroups:string[];onToggle:(id:string)=>void}){const roots=menus.filter(item=>!item.parent_id).sort((a,b)=>a.order-b.order);return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
-  ?<NavLink key={item.id} href={item.path} active={isUnder(pathname,item.path)} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>
+function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];pathname:string;closedGroups:string[];onToggle:(id:string)=>void}){const roots=menus.filter(item=>!item.parent_id).sort((a,b)=>a.order-b.order);
+  // Decided once across the whole menu, not per link: the answer depends on
+  // what the other entries claim.
+  const here=currentPath(pathname,menus.map(item=>item.path||""));
+  return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
+  ?<NavLink key={item.id} href={item.path} active={item.path===here} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>
   :<ExternalNavLink key={item.id} href={item.external_url!} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}

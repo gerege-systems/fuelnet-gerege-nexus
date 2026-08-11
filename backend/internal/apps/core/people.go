@@ -9,6 +9,7 @@ package core
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -343,12 +344,37 @@ func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) 
 		httpx.Error(w, http.StatusBadRequest, "a department needs a name")
 		return
 	}
-	// A department cannot be its own parent. Deeper cycles are left to the
-	// screen, which draws the tree and cannot offer a descendant as a parent;
-	// the schema stops the one case that would make the tree unreadable.
-	if body.ParentID != nil && *body.ParentID == id {
-		httpx.Error(w, http.StatusBadRequest, "a department cannot report to itself")
-		return
+	// A department cannot be its own parent, and cannot be moved under one of
+	// its own descendants either. The schema refuses the first; the second is a
+	// walk and no CHECK can see it. Leaving it to the screen was not enough —
+	// the screen offers a tree it drew from the same data, and anything that
+	// posts this endpoint directly could tie a knot that makes every reader
+	// that follows parent_id loop for ever.
+	if body.ParentID != nil && strings.TrimSpace(*body.ParentID) != "" {
+		parent := strings.TrimSpace(*body.ParentID)
+		if parent == id {
+			httpx.Error(w, http.StatusBadRequest, "a department cannot report to itself")
+			return
+		}
+		var descendant bool
+		if err := m.db.QueryRow(r.Context(),
+			`WITH RECURSIVE below AS (
+			    SELECT id FROM departments WHERE parent_id = $1 AND tenant_id = $3
+			    UNION ALL
+			    SELECT d.id FROM departments d JOIN below b ON d.parent_id = b.id
+			     WHERE d.tenant_id = $3
+			 )
+			 SELECT EXISTS (SELECT 1 FROM below WHERE id = $2::uuid)`,
+			id, parent, tenantID).Scan(&descendant); err != nil {
+			slog.Error("core: could not check the department tree", "error", err, "department_id", id)
+			httpx.Error(w, http.StatusInternalServerError, "could not save the department")
+			return
+		}
+		if descendant {
+			httpx.Error(w, http.StatusConflict,
+				"that unit is already below this one; the two would report to each other")
+			return
+		}
 	}
 
 	tag, err := m.db.Exec(r.Context(),
@@ -442,6 +468,53 @@ func (m *Module) handleRestoreDepartment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "restored"})
+}
+
+// handleDeleteDepartment removes a unit that never really existed.
+//
+// Archiving is for a unit that did: people worked in it, documents name it, and
+// the row has to stay for those to keep meaning anything. This is for the other
+// case — a typo, a duplicate, a structure sketched out and thought better of —
+// and it is refused the moment anything at all points at the row.
+//
+// Which is why the refusal counts rather than just saying no: "3 people and 2
+// units report to this one" tells the operator what to move, and "nothing does"
+// would not have been a refusal at all.
+func (m *Module) handleDeleteDepartment(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "id")
+
+	var people, children int
+	if err := m.db.QueryRow(r.Context(),
+		`SELECT (SELECT count(*) FROM memberships WHERE department_id = $1 AND tenant_id = $2),
+		        (SELECT count(*) FROM departments  WHERE parent_id     = $1 AND tenant_id = $2)`,
+		id, tenantID).Scan(&people, &children); err != nil {
+		slog.Error("core: could not check what a department holds", "error", err, "department_id", id)
+		httpx.Error(w, http.StatusInternalServerError, "could not check the department")
+		return
+	}
+	if people > 0 || children > 0 {
+		httpx.Error(w, http.StatusConflict, fmt.Sprintf(
+			"this unit still has %d people and %d units under it; move them first, or archive it instead",
+			people, children))
+		return
+	}
+
+	tag, err := m.db.Exec(r.Context(),
+		`DELETE FROM departments WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	if err != nil {
+		slog.Error("core: could not delete a department", "error", err, "department_id", id)
+		httpx.Error(w, http.StatusInternalServerError, "could not delete the department")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		httpx.Error(w, http.StatusNotFound, "department not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // emptyToNil turns an absent or blank identifier into SQL NULL, so "no parent"

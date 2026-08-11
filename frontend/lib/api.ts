@@ -307,7 +307,13 @@ export const api = {
   updateDepartment: (id: string, body: { name: string; parent_id?: string; manager_membership_id?: string }) =>
     fetcher(`/core/departments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 
-  archiveDepartment: (id: string) => fetcher(`/core/departments/${id}`, { method: "DELETE" }),
+  // Archiving keeps the row, because people and documents point at it.
+  archiveDepartment: (id: string) =>
+    fetcher(`/core/departments/${id}/archive`, { method: "POST" }),
+
+  // Deleting removes it, and the server refuses the moment anything does point
+  // at it — this is for the unit created by mistake, not the one that was used.
+  deleteDepartment: (id: string) => fetcher(`/core/departments/${id}`, { method: "DELETE" }),
 
   // The other half of archiving. It is reversible by design, so the screen that
   // lists what it archived can put one back.
