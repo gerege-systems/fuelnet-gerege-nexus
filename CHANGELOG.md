@@ -55,6 +55,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   had set since the page moved to the banner, and the warehouses screen imported
   `useMemo` without using it.
 
+### Added — An organisation to be about
+
+The module Odoo calls `base`, as a core app: the organisation itself, the
+people in it, and how it is arranged. The platform had tenants, users and
+memberships carrying only what signing somebody in needs — a slug, a name, an
+email. A document that has to print a registration number, an approval that has
+to name a department, a deadline counted in some timezone: none of those had
+anywhere to come from, so each app either invented its own or went without.
+
+- **Three screens** — `/organisation` (legal identity, address, contact, and the
+  defaults everything else inherits: timezone, locale, currency),
+  `/organisation/people` (the directory, with job title, department and roles),
+  `/organisation/departments` (the structure as a tree, with a manager per unit).
+- **The split follows Odoo's**, because the distinctions it draws are real:
+  `res.company` → tenants + tenant_profiles, `res.users` → users, `hr.employee`
+  → memberships, `hr.department` → departments. A language preference belongs to
+  a person and follows them between organisations; a job title does not — the
+  same person can be a director in one tenant and a clerk in another.
+- **What the schema refuses rather than checks.** A department whose parent or
+  manager belongs to another organisation is unrepresentable, not merely
+  rejected: the foreign keys are composite over `(id, tenant_id)`. A tenant
+  without a profile is impossible — a trigger creates one with the tenant, so no
+  reader needs the null check. Both new tables carry the same forced RLS policy
+  as everything else; migration 00029 wrote those once, over the tables that
+  existed then, and a table added later has to say so itself.
+- **What the handlers refuse**: deactivating yourself, and deactivating the last
+  administrator. Both are support tickets otherwise. Nobody is deleted — a
+  membership is referenced by everything the person did here, so people and
+  departments are deactivated and archived instead.
+- **Editing is partial by design.** The form sends the fields it touched and the
+  server merges field by field, so correcting a phone number cannot blank a
+  registration number.
+- **Being core means two things the store now honours**: every tenant has it
+  whether or not anybody installed it, and nobody can disable it. Settings →
+  Apps says so where the Disable button would be, rather than offering one whose
+  only outcome is a refusal.
+- **A module with no blueprint no longer goes unlisted.** The sidebar was built
+  only for apps named in `menu/blueprints.go` — the list of screens still to be
+  built — so an app that had built everything it meant to build contributed
+  nothing, including the menus it registers itself. Core walked into exactly
+  that: three working screens and nothing pointing at them.
+- The registry imports the bundled catalogue on every boot rather than only when
+  it is empty. Otherwise a platform app added later reaches nobody: the registry
+  is long past empty, the import is skipped, and every instance polls a
+  catalogue without it.
+
 ### Added — The App Store moved to appstore.gerege.mn
 
 The catalogue now comes from a registry of its own, and the apps in it can
