@@ -127,12 +127,13 @@ from **Settings → Appearance**. See the
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Contacts | `io.example.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
-| 2 | Products | `io.example.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
-| 3 | Inventory | `io.example.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
-| 4 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
-| 5 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | Document routing, signatures, approvals |
-| 6 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | OAuth2 client registration |
+| 1 | Organisation & People | `io.example.core` | `/organisation` | The organisation's legal identity, its departments and its people — a core app, which cannot be disabled |
+| 2 | Contacts | `io.example.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
+| 3 | Products | `io.example.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
+| 4 | Inventory | `io.example.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
+| 5 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
+| 6 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | Document routing, signatures, approvals |
+| 7 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | OAuth2 client registration |
 
 Routes only open once the app is installed and enabled for the tenant; otherwise
 the gate returns `403 Forbidden`.

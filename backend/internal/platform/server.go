@@ -407,6 +407,13 @@ func (s *Server) syncCatalogFromRegistry(ctx context.Context) (changed bool, err
 // startup, where there is nobody to hand an error to, and an installation left
 // where it is is the safe outcome — the store still offers the update.
 func (s *Server) applyCatalogToInstallations(ctx context.Context) {
+	// The platform's own apps first: a tenant without them has no organisation
+	// screen, and no way to install one — the store is behind the app that is
+	// missing.
+	if err := s.installer.EnsureCoreApps(ctx); err != nil {
+		slog.Error("catalog: could not install the core apps", "error", err)
+	}
+
 	swept, err := s.installer.AutoUpdate(ctx)
 	if err != nil {
 		slog.Error("catalog: could not apply the catalogue to installations", "error", err)

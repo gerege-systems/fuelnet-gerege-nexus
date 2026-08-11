@@ -112,12 +112,13 @@
 
 | # | 应用 | ID | 路由 | 说明 |
 | --- | --- | --- | --- | --- |
-| 1 | Contacts | `io.example.contacts` | `/contacts` | 客户与供应商目录，支持 XYP 自动填充 |
-| 2 | Products | `io.example.products` | `/products` | 商品目录、定价与租户级 SKU |
-| 3 | Inventory | `io.example.inventory` | `/inventory` | 仓库、库存与出入库流水 |
-| 4 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | 开票、10% 增值税与 e-Barimt 税务凭证 |
-| 5 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | 文档流转、签名与审批 |
-| 6 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | OAuth2 客户端注册 |
+| 1 | 组织与人员 | `io.example.core` | `/organisation` | 组织的法律信息、部门结构与人员名录 — 平台核心应用，无法停用 |
+| 2 | Contacts | `io.example.contacts` | `/contacts` | 客户与供应商目录，支持 XYP 自动填充 |
+| 3 | Products | `io.example.products` | `/products` | 商品目录、定价与租户级 SKU |
+| 4 | Inventory | `io.example.inventory` | `/inventory` | 仓库、库存与出入库流水 |
+| 5 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | 开票、10% 增值税与 e-Barimt 税务凭证 |
+| 6 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | 文档流转、签名与审批 |
+| 7 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | OAuth2 客户端注册 |
 
 只有当应用在该租户下安装并启用后路由才会开放，否则网关返回 `403 Forbidden`。
 

@@ -229,6 +229,10 @@ export const api = {
         // approve rather than offered as an ordinary one.
         held_for?: string[];
         held_reason?: string;
+        // Part of the platform. Such an app has no Disable button, because
+        // disabling it is refused server-side and a button that only ever
+        // fails is worse than no button.
+        core: boolean;
       }>
     >("/installed-apps"),
 
@@ -270,6 +274,60 @@ export const api = {
   enableApp: (slug: string) => mutateApp(`/store/apps/${slug}/enable`),
 
   disableApp: (slug: string) => mutateApp(`/store/apps/${slug}/disable`),
+
+  // Organisation & People — the platform's own core app. What the organisation
+  // is, how it is arranged, and who works in it.
+  getOrganisation: () =>
+    fetcher<{
+      tenant_id: string; slug: string; name: string; legal_name: string;
+      registration_number: string; tax_number: string; country_code: string;
+      province: string; district: string; khoroo: string; address_line: string;
+      postal_code: string; phone: string; email: string; website: string;
+      logo_url: string; timezone: string; locale: string; currency: string;
+    }>("/core/organisation"),
+
+  // Partial by design: a form that sends the fields it changed must not blank
+  // the ones it did not mention.
+  updateOrganisation: (patch: Record<string, string>) =>
+    fetcher("/core/organisation", { method: "PUT", body: JSON.stringify(patch) }),
+
+  getDepartments: () =>
+    fetcher<Array<{
+      id: string; code: string; name: string; parent_id?: string;
+      manager_membership_id?: string; manager_name?: string;
+      active: boolean; people_count: number;
+    }>>("/core/departments"),
+
+  createDepartment: (body: { code: string; name: string; parent_id?: string; manager_membership_id?: string }) =>
+    fetcher<{ id: string }>("/core/departments", { method: "POST", body: JSON.stringify(body) }),
+
+  updateDepartment: (id: string, body: { name: string; parent_id?: string; manager_membership_id?: string }) =>
+    fetcher(`/core/departments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+
+  archiveDepartment: (id: string) => fetcher(`/core/departments/${id}`, { method: "DELETE" }),
+
+  getPeople: () =>
+    fetcher<Array<{
+      membership_id: string; user_id: string; name: string; email: string;
+      phone: string; job_title: string; department_id?: string;
+      department_name?: string; active: boolean; is_admin: boolean;
+      roles: string[]; joined_at: string;
+    }>>("/core/people"),
+
+  updatePerson: (id: string, body: { job_title?: string; department_id?: string }) =>
+    fetcher(`/core/people/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+
+  setPersonActive: (id: string, active: boolean) =>
+    fetcher(`/core/people/${id}/${active ? "reactivate" : "deactivate"}`, { method: "POST" }),
+
+  getPreferences: () =>
+    fetcher<{
+      name: string; email: string; phone: string; locale: string; timezone: string;
+      organisation_locale: string; organisation_timezone: string;
+    }>("/core/me/preferences"),
+
+  updatePreferences: (patch: { name?: string; phone?: string; locale?: string; timezone?: string }) =>
+    fetcher("/core/me/preferences", { method: "PUT", body: JSON.stringify(patch) }),
 
   // Contacts App
   getContacts: () =>

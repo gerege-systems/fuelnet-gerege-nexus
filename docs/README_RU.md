@@ -123,12 +123,13 @@ PostgreSQL определяет, какие приложения активны 
 
 | # | Приложение | ID | Маршрут | Описание |
 | --- | --- | --- | --- | --- |
-| 1 | Contacts | `io.example.contacts` | `/contacts` | Справочник клиентов и поставщиков с автозаполнением из XYP |
-| 2 | Products | `io.example.products` | `/products` | Каталог, цены и SKU в рамках арендатора |
-| 3 | Inventory | `io.example.inventory` | `/inventory` | Склады, остатки, журнал движений |
-| 4 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | Счета, НДС 10%, налоговые чеки e-Barimt |
-| 5 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | Маршрутизация документов, подписи, согласования |
-| 6 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | Регистрация OAuth2-клиентов |
+| 1 | Организация и сотрудники | `io.example.core` | `/organisation` | Юридические данные организации, её подразделения и сотрудники — базовое приложение, отключить нельзя |
+| 2 | Contacts | `io.example.contacts` | `/contacts` | Справочник клиентов и поставщиков с автозаполнением из XYP |
+| 3 | Products | `io.example.products` | `/products` | Каталог, цены и SKU в рамках арендатора |
+| 4 | Inventory | `io.example.inventory` | `/inventory` | Склады, остатки, журнал движений |
+| 5 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | Счета, НДС 10%, налоговые чеки e-Barimt |
+| 6 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | Маршрутизация документов, подписи, согласования |
+| 7 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | Регистрация OAuth2-клиентов |
 
 Маршруты открываются только после установки и включения приложения для
 арендатора, иначе шлюз возвращает `403 Forbidden`.
