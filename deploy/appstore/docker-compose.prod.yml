@@ -4,10 +4,18 @@
 # already there: images from GHCR, published on loopback only, nginx in front.
 # It never builds on the server.
 #
-# Loopback ports (see deploy/nginx/*.conf):
-#   8083  registry API      appstore.gerege.mn/api, /.well-known
-#   3009  storefront        appstore.gerege.mn
-#   3010  developer console developer.gerege.mn
+# Loopback ports (see deploy/nginx/*.conf — the two files must agree).
+#
+# Six stacks share this host, and the obvious next numbers were already taken:
+# 8083 and 3009 by Salus, 3010 by app-js, 5435 by the SSO stack's Postgres. The
+# ports below were free when they were chosen; anything new should be checked
+# against the host rather than assumed, because Docker's failure when they are
+# not is "port is already allocated" from a container that never starts.
+#
+#   8085  registry API      appstore.gerege.mn/api, /.well-known
+#   3013  storefront        appstore.gerege.mn
+#   3014  developer console developer.gerege.mn
+#   5439  registry Postgres  (not proxied; loopback for operators)
 #
 # Required environment (written by .github/workflows/deploy-appstore.yml):
 #   IMAGE_BACKEND, IMAGE_STOREFRONT, IMAGE_CONSOLE, IMAGE_TAG,
@@ -32,7 +40,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${APPSTORE_POSTGRES_PASSWORD:?APPSTORE_POSTGRES_PASSWORD is required}
     ports:
-      - "127.0.0.1:5435:5432"
+      - "127.0.0.1:5439:5432"
     volumes:
       - gerege_appstore_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -74,7 +82,7 @@ services:
       # image, so the store is not empty on the day it opens.
       APP_CATALOG_PATH: /app/catalog/apps.json
     ports:
-      - "127.0.0.1:8083:8080"
+      - "127.0.0.1:8085:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,7 +103,7 @@ services:
       REGISTRY_URL: http://registry:8080
       PORT: 3000
     ports:
-      - "127.0.0.1:3009:3000"
+      - "127.0.0.1:3013:3000"
     depends_on:
       registry:
         condition: service_healthy
@@ -112,7 +120,7 @@ services:
       CONSOLE_CLIENT_ID: ${CONSOLE_CLIENT_ID:-gerege-developer-console}
       PORT: 3000
     ports:
-      - "127.0.0.1:3010:3000"
+      - "127.0.0.1:3014:3000"
     depends_on:
       registry:
         condition: service_healthy
