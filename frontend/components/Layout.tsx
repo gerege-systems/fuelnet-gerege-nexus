@@ -71,7 +71,7 @@ const GROUPS_KEY="gerege_sidebar_groups";
 // both are installed.
 function isUnder(pathname:string,path:string){return pathname===path||pathname.startsWith(path.endsWith("/")?path:path+"/")}
 
-const APP_ORDER=["io.example.core","io.example.contacts","io.example.products","io.example.inventory","io.example.billing","io.example.documents","io.example.esign","io.example.developer_portal","io.example.gov_services"];
+const APP_ORDER=["io.gerege.nexus.core","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.developer_portal","io.gerege.nexus.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);

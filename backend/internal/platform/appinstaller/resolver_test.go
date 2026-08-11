@@ -10,46 +10,46 @@ import (
 
 func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
 	contacts := appcatalog.Manifest{
-		ID:           "io.example.contacts",
+		ID:           "io.gerege.nexus.contacts",
 		Name:         "Contacts",
 		Version:      "1.0.0",
 		Dependencies: nil,
 	}
 
 	products := appcatalog.Manifest{
-		ID:           "io.example.products",
+		ID:           "io.gerege.nexus.products",
 		Name:         "Products",
 		Version:      "1.0.0",
 		Dependencies: nil,
 	}
 
 	inventory := appcatalog.Manifest{
-		ID:      "io.example.inventory",
+		ID:      "io.gerege.nexus.inventory",
 		Name:    "Inventory",
 		Version: "1.0.0",
 		Dependencies: []internal.Dependency{
-			{ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
-			{ID: "io.example.products", VersionConstraint: "^1.0.0"},
+			{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
+			{ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
 		},
 	}
 
 	t.Run("Happy path: Inventory resolves Contacts and Products first", func(t *testing.T) {
 		g := appinstaller.NewDependencyGraph([]appcatalog.Manifest{contacts, products, inventory})
-		order, err := g.ResolveInstallOrder("io.example.inventory")
+		order, err := g.ResolveInstallOrder("io.gerege.nexus.inventory")
 		if err != nil {
 			t.Fatalf("expected resolution to succeed, got: %v", err)
 		}
 		if len(order) != 3 {
 			t.Fatalf("expected 3 apps, got %d", len(order))
 		}
-		if order[len(order)-1] != "io.example.inventory" {
+		if order[len(order)-1] != "io.gerege.nexus.inventory" {
 			t.Errorf("inventory must be last, got %v", order)
 		}
 	})
 
 	t.Run("Missing dependency fails resolution", func(t *testing.T) {
 		g := appinstaller.NewDependencyGraph([]appcatalog.Manifest{inventory}) // missing contacts & products
-		_, err := g.ResolveInstallOrder("io.example.inventory")
+		_, err := g.ResolveInstallOrder("io.gerege.nexus.inventory")
 		if err == nil {
 			t.Fatal("expected error due to missing dependencies, got nil")
 		}

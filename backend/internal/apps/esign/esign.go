@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Gerege Systems Development Team & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * PDF e-signature app (io.example.esign). Two signing rails share one document
+ * PDF e-signature app (io.gerege.nexus.esign). Two signing rails share one document
  * store:
  *
  *   HSM — Gerege eSign hardware module. The citizen proves a certificate with
@@ -77,7 +77,7 @@ func New(db *pgxpool.Pool, hsm *gerege.EsignService, eid *eidmongolia.Service, e
 	return m
 }
 
-func (m *Module) ID() string      { return "io.example.esign" }
+func (m *Module) ID() string      { return "io.gerege.nexus.esign" }
 func (m *Module) Name() string    { return "PDF E-Sign (Тоон гарын үсэг)" }
 func (m *Module) Version() string { return "2.0.0" }
 

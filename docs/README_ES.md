@@ -125,13 +125,13 @@ los microservicios.
 
 | # | Aplicación | ID | Ruta | Descripción |
 | --- | --- | --- | --- | --- |
-| 1 | Organización y personas | `io.example.core` | `/organisation` | La identidad legal de la organización, sus departamentos y sus personas — app base, no se puede desactivar |
-| 2 | Contactos | `io.example.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
-| 3 | Productos | `io.example.products` | `/products` | Catálogo, precios y SKU por inquilino |
-| 4 | Inventario | `io.example.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
-| 5 | Facturación y e-Barimt | `io.example.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
-| 6 | Documentos digitales y firma electrónica | `io.example.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
-| 7 | Portal de desarrolladores y SSO OAuth2 | `io.example.developer_portal` | `/developer/apps` | Registro de clientes OAuth2 |
+| 1 | Organización y personas | `io.gerege.nexus.core` | `/organisation` | La identidad legal de la organización, sus departamentos y sus personas — app base, no se puede desactivar |
+| 2 | Contactos | `io.gerege.nexus.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
+| 3 | Productos | `io.gerege.nexus.products` | `/products` | Catálogo, precios y SKU por inquilino |
+| 4 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
+| 5 | Facturación y e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
+| 6 | Documentos digitales y firma electrónica | `io.gerege.nexus.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
+| 7 | Portal de desarrolladores y SSO OAuth2 | `io.gerege.nexus.developer_portal` | `/developer/apps` | Registro de clientes OAuth2 |
 
 Las rutas solo se abren una vez que la aplicación está instalada y habilitada
 para el inquilino; de lo contrario el control devuelve `403 Forbidden`.

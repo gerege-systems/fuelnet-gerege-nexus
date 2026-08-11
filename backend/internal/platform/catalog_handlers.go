@@ -83,19 +83,19 @@ func (s *Server) appReadPermission(appID string) string {
 
 func appReadPermission(appID string) string {
 	switch appID {
-	case "io.example.contacts":
+	case "io.gerege.nexus.contacts":
 		return "contacts.read"
-	case "io.example.products":
+	case "io.gerege.nexus.products":
 		return "products.read"
-	case "io.example.inventory":
+	case "io.gerege.nexus.inventory":
 		return "inventory.read"
-	case "io.example.billing":
+	case "io.gerege.nexus.billing":
 		return "billing.read"
-	case "io.example.documents":
+	case "io.gerege.nexus.documents":
 		return "documents.read"
-	case "io.example.developer_portal":
+	case "io.gerege.nexus.developer_portal":
 		return "developer.read"
-	case "io.example.gov_services":
+	case "io.gerege.nexus.gov_services":
 		return "gov.read"
 	default:
 		return ""

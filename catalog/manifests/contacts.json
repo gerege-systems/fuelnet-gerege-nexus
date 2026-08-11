@@ -1,5 +1,5 @@
 {
-  "id": "io.example.contacts",
+  "id": "io.gerege.nexus.contacts",
   "name": "Contacts",
   "version": "1.0.0",
   "platform": ">=0.1.0 <2.0.0",

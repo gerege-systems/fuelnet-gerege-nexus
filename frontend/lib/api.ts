@@ -547,7 +547,7 @@ export const api = {
       { method: "POST", body: JSON.stringify(integrationId ? { integration_id: integrationId } : {}) }
     ),
 
-  // Billing App (io.example.billing)
+  // Billing App (io.gerege.nexus.billing)
   getInvoices: () =>
     fetcher<
       Array<{
@@ -565,7 +565,7 @@ export const api = {
   createInvoice: (data: { contact_name: string; amount: number }) =>
     fetcher("/billing/invoices", { method: "POST", body: JSON.stringify(data) }),
 
-  // Documents App (io.example.documents)
+  // Documents App (io.gerege.nexus.documents)
   // One page of a tenant's documents, newest first, with how many there are in total —
   // each row counts its own signatures and outstanding steps, so the list cannot be
   // unbounded, and a screen showing part of it has to be able to say so.
@@ -753,7 +753,7 @@ export const api = {
   rejectDocument: (id: string) =>
     fetcher(`/documents/${id}/reject`, { method: "POST" }),
 
-  // PDF E-Sign App (io.example.esign)
+  // PDF E-Sign App (io.gerege.nexus.esign)
   getEsignDocuments: () =>
     fetcher<
       Array<{

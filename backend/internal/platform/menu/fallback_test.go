@@ -18,7 +18,7 @@ import (
 // This is the module that has no blueprint, standing in for the next one.
 type blueprintlessModule struct{}
 
-func (blueprintlessModule) ID() string                          { return "io.example.noblueprint" }
+func (blueprintlessModule) ID() string                          { return "io.gerege.nexus.noblueprint" }
 func (blueprintlessModule) Name() string                        { return "No Blueprint" }
 func (blueprintlessModule) Version() string                     { return "1.0.0" }
 func (blueprintlessModule) Dependencies() []internal.Dependency { return nil }

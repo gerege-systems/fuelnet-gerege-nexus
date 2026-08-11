@@ -127,13 +127,13 @@ d'exploitation des microservices.
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation et personnes | `io.example.core` | `/organisation` | L'identité légale de l'organisation, ses départements et ses collaborateurs — application socle, non désactivable |
-| 2 | Contacts | `io.example.contacts` | `/contacts` | Répertoire clients et fournisseurs avec préremplissage XYP |
-| 3 | Produits | `io.example.products` | `/products` | Catalogue, tarifs et SKU par locataire |
-| 4 | Stocks | `io.example.inventory` | `/inventory` | Entrepôts, niveaux de stock, journal des mouvements |
-| 5 | Facturation & e-Barimt | `io.example.billing` | `/billing` | Facturation, TVA 10 %, reçus e-Barimt |
-| 6 | Documents & signature électronique | `io.example.documents` | `/documents` | Circulation des documents, signatures, approbations |
-| 7 | Portail développeur & SSO OAuth2 | `io.example.developer_portal` | `/developer/apps` | Enregistrement des clients OAuth2 |
+| 1 | Organisation et personnes | `io.gerege.nexus.core` | `/organisation` | L'identité légale de l'organisation, ses départements et ses collaborateurs — application socle, non désactivable |
+| 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Répertoire clients et fournisseurs avec préremplissage XYP |
+| 3 | Produits | `io.gerege.nexus.products` | `/products` | Catalogue, tarifs et SKU par locataire |
+| 4 | Stocks | `io.gerege.nexus.inventory` | `/inventory` | Entrepôts, niveaux de stock, journal des mouvements |
+| 5 | Facturation & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturation, TVA 10 %, reçus e-Barimt |
+| 6 | Documents & signature électronique | `io.gerege.nexus.documents` | `/documents` | Circulation des documents, signatures, approbations |
+| 7 | Portail développeur & SSO OAuth2 | `io.gerege.nexus.developer_portal` | `/developer/apps` | Enregistrement des clients OAuth2 |
 
 Les routes ne s'ouvrent qu'une fois l'application installée et activée pour le
 locataire ; sinon le contrôle renvoie `403 Forbidden`.

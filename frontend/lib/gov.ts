@@ -1,6 +1,6 @@
 /**
  * Typed client for the configurable government service workflow
- * (io.example.gov_services). Every DTO here mirrors the Go structs in
+ * (io.gerege.nexus.gov_services). Every DTO here mirrors the Go structs in
  * backend/internal/apps/gov_services; nothing on this screen uses `any`.
  */
 

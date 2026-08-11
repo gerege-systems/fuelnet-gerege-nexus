@@ -55,6 +55,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   had set since the page moved to the banner, and the warehouses screen imported
   `useMemo` without using it.
 
+### Changed — The platform's apps stop calling themselves examples
+
+`io.example.*` was placeholder vocabulary from the first week — the reverse
+domain of nobody, borrowed the way `example.com` is borrowed — and it had been
+the primary key of every app in the store ever since. These are Gerege Nexus's
+own apps and they now say so: **`io.gerege.nexus.*`**.
+
+- A rename of a primary key is a data migration, not a search and replace.
+  `00035` moves `apps`, `app_installations`, `app_versions` and
+  `app_dependencies`, and rewrites the id inside each stored manifest — the copy
+  an upgrade compares against to decide whether a new version asks for more than
+  the installed one. Both foreign keys are `ON UPDATE NO ACTION`, so they come
+  off and go back on around the update.
+- The registry carries the matching migration and is deployed first. Between the
+  two deployments an instance can sync a catalogue that already carries the new
+  ids and file them as apps it has never seen; `00035` folds those back into the
+  rows that hold the tenant's history — including an installation somebody made
+  in that window — rather than colliding with them and failing the deployment.
+- The migrations before `00035` are left as they were. They already ran
+  everywhere, and a fresh database is expected to seed the old ids and then
+  arrive here, which is what makes the migration equally true of a database
+  created yesterday and one created next year. The entries above this one keep
+  the ids they shipped with, for the same reason this file keeps the old
+  repository name.
+- `mn.example.hrms` in the test fixtures stays as it is: it stands in for
+  somebody else's app, and there `example` is the point.
+
 ### Added — An organisation to be about
 
 The module Odoo calls `base`, as a core app: the organisation itself, the

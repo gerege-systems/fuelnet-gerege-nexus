@@ -1,11 +1,11 @@
 {
-  "id": "io.example.billing",
+  "id": "io.gerege.nexus.billing",
   "name": "Public Billing & e-Barimt",
   "version": "1.0.0",
   "platform": ">=0.1.0 <2.0.0",
   "dependencies": [
     {
-      "id": "io.example.contacts",
+      "id": "io.gerege.nexus.contacts",
       "version_constraint": "^1.0.0"
     }
   ],

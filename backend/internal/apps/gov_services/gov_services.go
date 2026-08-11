@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  *
  * Package gov_services implements the State Services Go module
- * (io.example.gov_services): a service passport registry, citizen
+ * (io.gerege.nexus.gov_services): a service passport registry, citizen
  * applications with a status timeline, appointments and the officer queue.
  *
  * The domain mirrors the service delivery model of
@@ -158,7 +158,7 @@ func New(db *pgxpool.Pool, meetings MeetingBooker) *Module {
 	return m
 }
 
-func (m *Module) ID() string      { return "io.example.gov_services" }
+func (m *Module) ID() string      { return "io.gerege.nexus.gov_services" }
 func (m *Module) Name() string    { return "State Services" }
 func (m *Module) Version() string { return "1.1.0" }
 
@@ -166,7 +166,7 @@ func (m *Module) Version() string { return "1.1.0" }
 // XYP-verified citizen records live.
 func (m *Module) Dependencies() []internal.Dependency {
 	return []internal.Dependency{
-		{ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
+		{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
 	}
 }
 

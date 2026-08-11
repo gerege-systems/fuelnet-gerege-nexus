@@ -43,7 +43,7 @@ import (
 
 // ID is the catalogue identifier. It is referenced by the platform, which
 // installs this app for every tenant and refuses to disable it.
-const ID = "io.example.core"
+const ID = "io.gerege.nexus.core"
 
 type Module struct {
 	db    *pgxpool.Pool
