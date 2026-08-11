@@ -302,6 +302,14 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	ensureCtx, cancelEnsure := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelEnsure()
 	s.ssoProvider.EnsureConsoleClient(ensureCtx)
+
+	// And the catalogue in hand is applied once at startup, in either mode. A
+	// release that carries a new module version is a catalogue change as much
+	// as a publication is, and a file-mode instance only ever sees one at a
+	// deploy — where nothing else would notice it.
+	sweepCtx, cancelSweep := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancelSweep()
+	s.applyCatalogToInstallations(sweepCtx)
 }
 
 // startCatalogSync keeps this instance's catalogue in step with the registry.
@@ -347,31 +355,47 @@ func (s *Server) startCatalogSync(ctx context.Context) {
 // than one, because a catalogue change is not a tenant's act.
 func (s *Server) syncCatalogFromRegistry(ctx context.Context) (bool, error) {
 	catalog, changed, err := s.catalogSource.Refresh(ctx)
-	if err != nil || !changed {
+	if err != nil {
 		return false, err
 	}
 
-	s.installer.SetCatalog(catalog)
-	if err := s.installer.SyncCatalog(ctx); err != nil {
-		return true, fmt.Errorf("sync the new catalogue into the database: %w", err)
-	}
-	s.bus.Invalidate(appGateCacheName, "")
-
-	// A new catalogue is only news if something acts on it. Tenants who have
-	// not said otherwise are carried forward; the ones a new version would ask
-	// more of are held for their administrator to decide — see
-	// appinstaller.AutoUpdate.
-	swept, err := s.installer.AutoUpdate(ctx)
-	if err != nil {
-		return true, fmt.Errorf("apply the new catalogue to installations: %w", err)
-	}
-	if len(swept.Upgraded) > 0 || len(swept.Held) > 0 {
-		slog.Info("catalog: installations followed the new catalogue",
-			"upgraded", len(swept.Upgraded), "held_for_approval", len(swept.Held))
-		// Their menus and gates were decided by the version that just moved.
+	if changed {
+		s.installer.SetCatalog(catalog)
+		if err := s.installer.SyncCatalog(ctx); err != nil {
+			return true, fmt.Errorf("sync the new catalogue into the database: %w", err)
+		}
 		s.bus.Invalidate(appGateCacheName, "")
 	}
-	return true, nil
+
+	// After every sync, not only after a change.
+	//
+	// A catalogue that has not moved can still be ahead of an installation —
+	// one made before the version was published, or one whose upgrade failed
+	// the first time — and an instance that only ever swept on change would
+	// leave those behind for ever, with an update the store offers and nothing
+	// takes. The sweep is a no-op where there is nothing to do.
+	s.applyCatalogToInstallations(ctx)
+	return changed, nil
+}
+
+// applyCatalogToInstallations carries tenants forward to the catalogue in hand.
+//
+// Its failures are logged rather than returned: this runs on a timer and at
+// startup, where there is nobody to hand an error to, and an installation left
+// where it is is the safe outcome — the store still offers the update.
+func (s *Server) applyCatalogToInstallations(ctx context.Context) {
+	swept, err := s.installer.AutoUpdate(ctx)
+	if err != nil {
+		slog.Error("catalog: could not apply the catalogue to installations", "error", err)
+		return
+	}
+	if len(swept.Upgraded) == 0 && len(swept.Held) == 0 {
+		return
+	}
+	slog.Info("catalog: installations followed the catalogue",
+		"upgraded", len(swept.Upgraded), "held_for_approval", len(swept.Held))
+	// Their menus and gates were decided by the version that just moved.
+	s.bus.Invalidate(appGateCacheName, "")
 }
 
 func (s *Server) Router() *chi.Mux {
