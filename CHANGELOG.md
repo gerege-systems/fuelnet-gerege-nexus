@@ -15,6 +15,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — The App Store moved to appstore.gerege.mn
+
+The catalogue now comes from a registry of its own, and the apps in it can
+be published by people who do not work here.
+
+- **A registry service** (`backend/cmd/appstore`) serving a signed catalogue
+  every instance pulls: Ed25519 over the raw bytes of the apps array, an ETag
+  so an unchanged catalogue costs a 304, and the document built once per
+  revision and stored as the bytes that were signed — rebuilding per request
+  would hold only for as long as Go's encoder is byte-stable, and the failure
+  when it is not is silent everywhere at once. It shares the platform's
+  `appcatalog` types with the client that reads it, and a test signs a
+  catalogue the way the endpoint does and feeds it to that client.
+- **A storefront** (`appstore.gerege.mn`) that needs no account: server-rendered,
+  seven languages as path segments, real 404s, and no install button — installing
+  happens inside an organisation's own Nexus, so every page says that instead.
+- **A publishing console** (`developer.gerege.mn`) where a publisher registers,
+  submits a manifest and watches it through review. The authorization code is
+  exchanged server-side and the identity token lives in an httpOnly cookie, so
+  no token reaches page JavaScript and the platform needs no new CORS origin.
+- **Installations follow the catalogue on their own**, unless the new version
+  asks for more than the installed one — a widened permission, a widened OAuth
+  scope, or a launch URL that has moved to another host. Those are held at the
+  version they are on, with what they added recorded, and offered to the
+  tenant's administrator as a decision rather than a button.
+- `catalog-sign` generates the signing pair and signs a catalogue offline, for
+  an air-gapped operator or for testing a client with no registry running.
+- The OIDC endpoints at the root of nexus.gerege.mn are routed to the API. Only
+  `/oauth2/token` ever was, which was enough for the platform's own screens and
+  for nothing outside it.
+
 ### Added — Preparing the App Store to live at appstore.gerege.mn
 
 The catalogue is on its way out of this repository and into a registry of its
