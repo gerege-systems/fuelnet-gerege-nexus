@@ -94,11 +94,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	locked := lockedUntil.Valid && lockedUntil.Time.After(time.Now())
 	if !passwordOK || locked {
 		if userID != "" && !locked {
-			_, _ = s.db.Exec(r.Context(),
-				`UPDATE users SET
-				 failed_login_attempts=failed_login_attempts+1,
-				 locked_until=CASE WHEN failed_login_attempts+1 >= $2 THEN NOW()+$3::interval ELSE locked_until END
-				 WHERE id=$1`, userID, maxLoginFailures, loginLockoutWindow.String())
+			s.recordLoginFailure(r.Context(), userID)
 		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
 		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
@@ -126,6 +122,43 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			"is_admin":  isAdmin,
 		},
 	})
+}
+
+// loginFailureStatement counts one failed sign-in and locks the account once
+// the count reaches maxLoginFailures.
+//
+// A lockout that has run its course starts the count again. Adding to a counter
+// that stopped at maxLoginFailures meant the threshold was still met by the
+// next single failure: after one lockout, every subsequent mistyped password
+// re-locked the account for another full window, and anybody who knew the
+// address could hold it shut with one request every loginLockoutWindow. The
+// lapsed lock is cleared in the same statement — the CASE has no ELSE, so a
+// count below the threshold writes NULL — rather than left to assert a lockout
+// that has expired.
+//
+// Callers must not use it on an account that is currently locked; handleLogin
+// checks that before calling, so a live lockout is never extended by attempts
+// made during it.
+const loginFailureStatement = `
+	UPDATE users u SET
+	   failed_login_attempts = next.count,
+	   locked_until = CASE WHEN next.count >= $2 THEN NOW() + $3::interval END
+	  FROM (
+	      SELECT CASE WHEN locked_until IS NOT NULL AND locked_until <= NOW()
+	                  THEN 1 ELSE failed_login_attempts + 1 END AS count
+	        FROM users WHERE id = $1
+	  ) AS next
+	 WHERE u.id = $1`
+
+// recordLoginFailure applies loginFailureStatement. A failure to record one is
+// logged rather than surfaced: the caller is already answering 401, and turning
+// a bookkeeping error into a 500 would tell whoever is guessing that this
+// address exists.
+func (s *Server) recordLoginFailure(ctx context.Context, userID string) {
+	if _, err := s.db.Exec(ctx, loginFailureStatement,
+		userID, maxLoginFailures, loginLockoutWindow.String()); err != nil {
+		slog.Error("failed to record a login failure", "user_id", userID, "error", err)
+	}
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

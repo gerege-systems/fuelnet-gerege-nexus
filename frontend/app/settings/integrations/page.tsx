@@ -65,7 +65,6 @@ export default function IntegrationsPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [encryptionReady, setEncryptionReady] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const { loading: checking, isAdmin } = useAccess();
   const [showModal, setShowModal] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -199,11 +198,6 @@ export default function IntegrationsPage() {
 
   return (
     <div className="space-y-6">
-      {error && (
-        <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
