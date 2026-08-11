@@ -14,15 +14,20 @@ export const app_store = {
   "app_store.field.installed_date": { mn: "Суулгасан огноо", en: "Installed Date" },
 
   "app_store.field.latest_version": { mn: "Сүүлийн хувилбар", en: "Latest version" },
+  "app_store.field.updates": { mn: "Шинэчлэлт", en: "Updates" },
 
   "app_store.action.install": { mn: "Суулгах", en: "Install App" },
   "app_store.action.enable": { mn: "Идэвхжүүлэх", en: "Enable App" },
   "app_store.action.disable": { mn: "Идэвхгүй болгох", en: "Disable App" },
   "app_store.action.update": { mn: "Шинэчлэх", en: "Update" },
+  "app_store.action.approve_update": { mn: "Зөвшөөрч шинэчлэх", en: "Approve and update" },
 
   "app_store.state.installed": { mn: "Суулгасан ба идэвхтэй", en: "Installed & Enabled" },
   "app_store.state.disabled": { mn: "Идэвхгүй", en: "Disabled" },
   "app_store.state.update_available": { mn: "Шинэчлэлт бэлэн", en: "Update available" },
+  "app_store.state.auto_update_on": { mn: "Автоматаар шинэчилнэ", en: "Updates automatically" },
+  "app_store.state.auto_update_off": { mn: "Гараар шинэчилнэ", en: "Updated by hand" },
+  "app_store.state.pinned": { mn: "{version} хувилбар дээр тогтоосон", en: "Held at {version}" },
 
   "app_store.filter.all": { mn: "Бүгд", en: "All" },
 
@@ -59,4 +64,12 @@ export const app_store = {
   "app_store.message.update_failed": { mn: "{app}-ыг шинэчилж чадсангүй.", en: "Could not update {app}." },
   "app_store.message.enabled": { mn: "{app} идэвхжлээ.", en: "Enabled {app}." },
   "app_store.message.disabled": { mn: "{app} идэвхгүй боллоо.", en: "Disabled {app}." },
+
+  // Said where the decision is made. An app whose new version asks for more
+  // than the installed one is not updated on its own — the administrator is
+  // shown what it added and decides.
+  "app_store.message.held_for_approval": {
+    mn: "Шинэ хувилбар нэмэлт эрх шаардаж байна:",
+    en: "The new version asks for more:",
+  },
 } as const;

@@ -356,6 +356,21 @@ func (s *Server) syncCatalogFromRegistry(ctx context.Context) (bool, error) {
 		return true, fmt.Errorf("sync the new catalogue into the database: %w", err)
 	}
 	s.bus.Invalidate(appGateCacheName, "")
+
+	// A new catalogue is only news if something acts on it. Tenants who have
+	// not said otherwise are carried forward; the ones a new version would ask
+	// more of are held for their administrator to decide — see
+	// appinstaller.AutoUpdate.
+	swept, err := s.installer.AutoUpdate(ctx)
+	if err != nil {
+		return true, fmt.Errorf("apply the new catalogue to installations: %w", err)
+	}
+	if len(swept.Upgraded) > 0 || len(swept.Held) > 0 {
+		slog.Info("catalog: installations followed the new catalogue",
+			"upgraded", len(swept.Upgraded), "held_for_approval", len(swept.Held))
+		// Their menus and gates were decided by the version that just moved.
+		s.bus.Invalidate(appGateCacheName, "")
+	}
 	return true, nil
 }
 
@@ -542,6 +557,10 @@ func (s *Server) setupRoutes() {
 				ar.Use(s.requireAdmin)
 				ar.Post("/store/apps/{slug}/install", s.handleInstallApp)
 				ar.Post("/store/apps/{slug}/upgrade", s.handleUpgradeApp)
+				// Whether an app follows the catalogue on its own. Reading it
+				// is part of the installed-apps list; deciding it is
+				// administrative, like every other store mutation.
+				ar.Post("/store/apps/{slug}/auto-update", s.handleSetAutoUpdate)
 				// Asking the registry for a new catalogue on demand. Admin-only
 				// like the rest: it reaches out of this deployment and changes
 				// what every tenant on it is offered.
