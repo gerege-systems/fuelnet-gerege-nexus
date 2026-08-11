@@ -180,7 +180,7 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	}
 	// Refusing here saves pushing a request that could never be turned into a
 	// signature, and tells the operator why before the citizen is involved.
-	if err := checkSigner(pre.Position, pre.DocType, regNumber); err != nil {
+	if err := checkSigner(pre.Position, pre.DocType, regNumber, pre.Policy.RequireNamedSigner); err != nil {
 		return nil, err
 	}
 	// Asking somebody to approve on their own device and then discarding it because
@@ -244,7 +244,13 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	if at := parseExpiry(started.ExpiresAt); !at.IsZero() {
 		expiresAt = &at
 	}
-	if _, err := m.db.Exec(context.WithoutCancel(ctx),
+	// Uncancellable, because the citizen's phone is already showing the request — but on
+	// its own deadline, the way recordSignature is. Without one there is nothing to stop
+	// a stalled database holding this handler, and the connection it is waiting on, for
+	// as long as the stall lasts.
+	bookkeeping, cancelBookkeeping := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancelBookkeeping()
+	if _, err := m.db.Exec(bookkeeping,
 		`INSERT INTO document_eid_sign_sessions
 		        (session_id, tenant_id, document_id, reg_number, display_text, expires_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -261,7 +267,7 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// then failed left the citizen holding a prompt for a session nothing could redeem —
 	// their approval given and lost. Best-effort for the same reason the sweep is: the
 	// prompt on their phone is real whatever this row does.
-	if _, err := m.db.Exec(context.WithoutCancel(ctx),
+	if _, err := m.db.Exec(bookkeeping,
 		`DELETE FROM document_eid_sign_sessions
 		  WHERE tenant_id = $1 AND document_id = $2 AND reg_number = $3
 		    AND session_id <> $4 AND consumed_at IS NULL`,
@@ -420,7 +426,7 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	if err != nil {
 		return refuse(err)
 	}
-	if err := checkSigner(pre.Position, pre.DocType, approved); err != nil {
+	if err := checkSigner(pre.Position, pre.DocType, approved, pre.Policy.RequireNamedSigner); err != nil {
 		return refuse(err)
 	}
 

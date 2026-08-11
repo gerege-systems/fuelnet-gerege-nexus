@@ -247,8 +247,8 @@ export const documents = {
   "documents.message.policies_failed": { mn: "Бодлогуудыг ачаалж чадсангүй", en: "Could not load policies" },
   "documents.message.policy_saved": { mn: "{type}-ийн бодлого хадгалагдлаа.", en: "The {type} policy was saved." },
   "documents.message.policy_named_signer_hint": {
-    mn: "\"Зөвхөн нэрлэсэн хүн\" гэдэг нь баримтын урсгалд регистрийн дугаараар нэрлэгдсэн хүн л гарын үсэг зурна гэсэн үг. Урсгалд хэн ч нэрлэгдээгүй бол энэ тохиргоо хадгалагдахгүй — тэр төрөл гарын үсэг зурах боломжгүй болох тул.",
-    en: "\"Named signer only\" means the signature must come from a registration number the type's approval chain names. It cannot be saved while the chain names nobody, because that would leave the type unsignable.",
+    mn: "\"Зөвхөн нэрлэсэн хүн\" гэдэг нь баримтын урсгалд регистрийн дугаараар нэрлэгдсэн хүн л гарын үсэг зурна гэсэн үг. Урсгалд хэн ч нэрлэгдээгүй бол энэ тохиргоо хадгалагдахгүй — тэр төрөл гарын үсэг зурах боломжгүй болох тул. Мөн баримт бүр өөрийн эхэлж авсан хэлхээгээрээ явдаг тул, аль хэдийн хүлээгдэж байгаа баримтуудын дунд хэн ч нэрлэгдээгүй нь байвал энэ тохиргоог асаахгүй — эхлээд тэднийг шийднэ.",
+    en: "\"Named signer only\" means the signature must come from a registration number the type's approval chain names. It cannot be saved while the chain names nobody, because that would leave the type unsignable. Documents already waiting are held to the chain they started under, so it also cannot be turned on while any of them names nobody for an approval still to come — decide those first.",
   },
 
   // Approval chains
