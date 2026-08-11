@@ -38,5 +38,12 @@ export const web = {
 
   "web.message.loading_platform": { mn: "Платформыг ачаалж байна...", en: "Loading Gerege Nexus..." },
   "web.message.only_tenant": { mn: "Та зөвхөн энэ байгууллагад харьяалагдаж байна.", en: "You belong to this organisation only." },
+  // Reading alongside is not switching, and the wording has to carry that or
+  // somebody will tick a box expecting new records to land somewhere else.
+  "web.label.read_alongside": { mn: "Хамт харах", en: "Read alongside" },
+  "web.message.read_alongside_hint": {
+    mn: "Сонгосон байгууллагуудын жагсаалтыг хамт харна. Шинэ бичлэг одоогийн байгууллагад л үүснэ.",
+    en: "Lists span the organisations you tick. New records are still created in the one you are working in.",
+  },
   "web.message.tenant_switch_failed": { mn: "Байгууллага солиж чадсангүй. Дахин оролдоно уу.", en: "Could not switch organisation. Please try again." },
 } as const;

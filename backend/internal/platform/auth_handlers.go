@@ -194,7 +194,60 @@ func (s *Server) handleTenants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]any{"current": claims.TenantID, "tenants": options})
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"current": claims.TenantID,
+		"tenants": options,
+		// Which of them this session is reading across. Empty would be
+		// ambiguous on the client — "none" and "just the current one" look the
+		// same — so the acting organisation is always named.
+		"active": activeOrCurrent(claims),
+	})
+}
+
+func activeOrCurrent(claims auth.UserClaims) []string {
+	if len(claims.AllowedTenantIDs) > 0 {
+		return claims.AllowedTenantIDs
+	}
+	return []string{claims.TenantID}
+}
+
+// handleSetActiveTenants chooses which organisations this session reads across.
+//
+// The list is a request, not an instruction: every id is held against an active
+// membership and the ones that do not survive are dropped rather than refused,
+// so a tab left open since before somebody changed jobs narrows quietly instead
+// of failing. The organisation being acted in is always kept.
+func (s *Server) handleSetActiveTenants(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TenantIDs []string `json:"tenant_ids"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&body); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		return
+	}
+	// A group with this many organisations in it is not what this feature is
+	// for, and an unbounded array becomes an unbounded query parameter.
+	if len(body.TenantIDs) > 64 {
+		httpx.Error(w, http.StatusBadRequest, "too many organisations")
+		return
+	}
+
+	token := auth.TokenFromRequest(r)
+	if token == "" {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	active, err := s.sessions.SetActiveTenants(r.Context(), token, body.TenantIDs)
+	if err != nil {
+		if errors.Is(err, auth.ErrSessionInvalid) {
+			httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		slog.Error("could not set the active organisations", "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "could not save the selection")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"active": active})
 }
 
 // handleSwitchTenant moves the caller's session to another of their tenants.

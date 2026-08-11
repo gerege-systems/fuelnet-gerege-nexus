@@ -23,11 +23,20 @@ export default function PeoplePage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  // Rows belonging to another organisation are shown but not editable: a write
+  // lands in the organisation being acted in, and the policies refuse anything
+  // else — so the controls say so rather than failing on save.
+  const [currentTenant, setCurrentTenant] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [staff, units] = await Promise.all([api.getPeople(), api.getDepartments()]);
+      const [staff, units, me] = await Promise.all([
+        api.getPeople(),
+        api.getDepartments(),
+        api.getTenants().catch(() => null),
+      ]);
+      setCurrentTenant(me?.current || "");
       setPeople(staff || []);
       setDepartments((units || []).filter((d) => d.active));
     } catch (err: any) {
@@ -68,6 +77,10 @@ export default function PeoplePage() {
     }
   };
 
+  // Shown only when the session is actually reading across more than one: a
+  // column repeating the same organisation on every row is noise.
+  const spanning = new Set(people.map((p) => p.tenant_id)).size > 1;
+
   return (
     <div className="space-y-6">
       <div className="border-b border-slate-200 pb-4 flex items-center gap-3">
@@ -85,6 +98,7 @@ export default function PeoplePage() {
           <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-600">
             <tr>
               <th className="py-3 px-4">{t("base.field.name")}</th>
+              {spanning && <th className="py-3 px-4">{t("core.field.organisation")}</th>}
               <th className="py-3 px-4">{t("core.field.job_title")}</th>
               <th className="py-3 px-4">{t("core.field.department")}</th>
               <th className="py-3 px-4">{t("core.field.roles")}</th>
@@ -98,10 +112,11 @@ export default function PeoplePage() {
                   <div className="font-semibold text-slate-900">{person.name}</div>
                   <div className="text-xs text-slate-500">{person.email}</div>
                 </td>
+                {spanning && <td className="py-3 px-4 text-slate-600">{person.tenant_name}</td>}
                 <td className="py-3 px-4">
                   <input
                     defaultValue={person.job_title}
-                    disabled={!canManage || busy === person.membership_id}
+                    disabled={!canManage || busy === person.membership_id || person.tenant_id !== currentTenant}
                     onBlur={(e) =>
                       e.target.value !== person.job_title && patch(person, { job_title: e.target.value })
                     }
@@ -112,7 +127,7 @@ export default function PeoplePage() {
                 <td className="py-3 px-4">
                   <select
                     value={person.department_id || ""}
-                    disabled={!canManage || busy === person.membership_id}
+                    disabled={!canManage || busy === person.membership_id || person.tenant_id !== currentTenant}
                     onChange={(e) => patch(person, { department_id: e.target.value })}
                     className="px-2 py-1 text-sm border border-slate-200 rounded bg-white disabled:bg-transparent disabled:border-transparent"
                   >

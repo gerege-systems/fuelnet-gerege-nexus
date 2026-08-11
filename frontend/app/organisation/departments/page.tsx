@@ -29,11 +29,17 @@ export default function DepartmentsPage() {
   const [draft, setDraft] = useState({ code: "", name: "", parent_id: "" });
   const [editing, setEditing] = useState<{ id: string; name: string; parent_id: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [currentTenant, setCurrentTenant] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [units, staff] = await Promise.all([api.getDepartments(), api.getPeople()]);
+      const [units, staff, me] = await Promise.all([
+        api.getDepartments(),
+        api.getPeople(),
+        api.getTenants().catch(() => null),
+      ]);
+      setCurrentTenant(me?.current || "");
       setDepartments(units || []);
       setPeople((staff || []).filter((p) => p.active));
     } catch (err: any) {
@@ -51,6 +57,11 @@ export default function DepartmentsPage() {
   // Built once per change rather than per row: the old screen walked up the
   // parent chain for every unit it drew, which is the same tree rebuilt as many
   // times as there are branches on it.
+  // One tree per organisation when the session reads across more than one.
+  // Merging them would be wrong rather than merely confusing: two organisations
+  // have two structures, and a unit in one never reports to a unit in the other.
+  const spanning = useMemo(() => new Set(departments.map((d) => d.tenant_id)).size > 1, [departments]);
+
   const roots = useMemo(() => {
     const byID = new Map<string, Node>(active.map((d) => [d.id, { ...d, children: [] }]));
     const top: Node[] = [];
@@ -200,7 +211,7 @@ export default function DepartmentsPage() {
               <span className="block text-[11px] font-medium text-slate-500">{t("core.field.manager")}</span>
               <select
                 value={node.manager_membership_id || ""}
-                disabled={!canManage || busy}
+                disabled={!canManage || busy || node.tenant_id !== currentTenant}
                 onChange={(e) =>
                   run(() =>
                     api.updateDepartment(node.id, {
@@ -222,7 +233,10 @@ export default function DepartmentsPage() {
             </label>
           )}
 
-          {canManage && (
+          {/* Only the organisation being acted in can be edited: a write lands
+              there and the policies refuse anything else, so the controls are
+              absent rather than present and failing. */}
+          {canManage && node.tenant_id === currentTenant && (
             <div className="flex items-center gap-1.5 shrink-0">
               {isEditing ? (
                 <>
@@ -341,12 +355,26 @@ export default function DepartmentsPage() {
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
-        {roots.map((node, i) => row(node, 0, i === roots.length - 1, []))}
-        {roots.length === 0 && (
-          <div className="py-10 text-center text-sm text-slate-500">{t("base.message.no_data")}</div>
-        )}
-      </div>
+      {spanning ? (
+        Array.from(new Set(roots.map((r) => r.tenant_id))).map((tenantID) => {
+          const owned = roots.filter((r) => r.tenant_id === tenantID);
+          return (
+            <div key={tenantID} className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-700">{owned[0]?.tenant_name}</h2>
+              <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+                {owned.map((node, i) => row(node, 0, i === owned.length - 1, []))}
+              </div>
+            </div>
+          );
+        })
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+          {roots.map((node, i) => row(node, 0, i === roots.length - 1, []))}
+          {roots.length === 0 && (
+            <div className="py-10 text-center text-sm text-slate-500">{t("base.message.no_data")}</div>
+          )}
+        </div>
+      )}
 
       {archived.length > 0 && (
         <details className="text-sm">

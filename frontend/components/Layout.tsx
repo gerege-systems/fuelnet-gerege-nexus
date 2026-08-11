@@ -244,7 +244,7 @@ export default function Layout({children}:{children:React.ReactNode}){
 function TenantSwitcher({current,currentName,children}:{current?:string;currentName?:string;children:React.ReactNode}){
   const {t}=useI18n();
   const [open,setOpen]=useState(false);
-  const {tenants,switching,failed,switchTo}=useTenants(open);
+  const {tenants,activeIDs,switching,failed,switchTo,toggleActive}=useTenants(open);
   const box=useRef<HTMLDivElement>(null);
   const label=currentName?`${currentName} — ${t("web.action.switch_tenant")}`:t("web.action.switch_tenant");
 
@@ -264,7 +264,7 @@ function TenantSwitcher({current,currentName,children}:{current?:string;currentN
     </button>
     {open&&<div role="menu" aria-label={t("web.view.tenants")} className="gerege-topbar-onlight absolute left-2 top-14 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">
       <p className="px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t("web.view.tenants")}</p>
-      <TenantChoices current={current} tenants={tenants} switching={switching} failed={failed} onChoose={id=>void switchTo(id)} onStay={()=>setOpen(false)}/>
+      <TenantChoices current={current} tenants={tenants} activeIDs={activeIDs} switching={switching} failed={failed} onChoose={id=>void switchTo(id)} onStay={()=>setOpen(false)} onToggleActive={id=>void toggleActive(id,current||"")}/>
     </div>}
   </div>;
 }

@@ -211,3 +211,66 @@ func TestConnectionReuseDoesNotLeakTheBinding(t *testing.T) {
 		}
 	}
 }
+
+// Reading across organisations is the point of the active set; writing across
+// them is the thing that must stay impossible.
+//
+// The policies are what draw that line — USING spans the set, WITH CHECK does
+// not — so this is the test that would fail if either half were widened by
+// accident.
+func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
+	pool := openGuardedPool(t)
+	ctx := context.Background()
+
+	here, there := seedTwoTenants(t, pool)
+	seed := func(tenantID, code string) {
+		t.Helper()
+		if _, err := pool.Exec(tenant.Without(ctx),
+			`INSERT INTO departments (tenant_id, code, name) VALUES ($1, $2, $2)`, tenantID, code); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed(here, "here-unit")
+	seed(there, "there-unit")
+
+	// Acting in one organisation and reading across both.
+	both := tenant.WithAllowed(tenant.WithTenantID(ctx, here), []string{here, there})
+
+	var seen int
+	if err := pool.QueryRow(both,
+		`SELECT count(*) FROM departments WHERE code IN ('here-unit', 'there-unit')`).Scan(&seen); err != nil {
+		t.Fatal(err)
+	}
+	if seen != 2 {
+		t.Fatalf("expected both organisations' units to be readable, saw %d", seen)
+	}
+
+	// The same connection, the same set: a row may still only be created in the
+	// organisation being acted in.
+	_, err := pool.Exec(both,
+		`INSERT INTO departments (tenant_id, code, name) VALUES ($1, 'sneaked', 'Sneaked')`, there)
+	if err == nil {
+		t.Fatal("a row was written into an organisation the session is not acting in")
+	}
+	if !strings.Contains(err.Error(), "row-level security") {
+		t.Fatalf("expected the policy to refuse the write, got %v", err)
+	}
+
+	// And into the acting one it works, which is what makes the refusal above
+	// about the organisation rather than about writing at all.
+	if _, err := pool.Exec(both,
+		`INSERT INTO departments (tenant_id, code, name) VALUES ($1, 'written', 'Written')`, here); err != nil {
+		t.Fatalf("writing into the acting organisation was refused: %v", err)
+	}
+
+	// A session that asked for nothing is unchanged: one organisation, exactly
+	// as before this existed.
+	var alone int
+	if err := pool.QueryRow(tenant.WithTenantID(ctx, here),
+		`SELECT count(*) FROM departments WHERE code IN ('here-unit', 'there-unit')`).Scan(&alone); err != nil {
+		t.Fatal(err)
+	}
+	if alone != 1 {
+		t.Fatalf("a session with no active set saw %d organisations' rows", alone)
+	}
+}

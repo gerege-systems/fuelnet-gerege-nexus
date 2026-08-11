@@ -10,10 +10,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -152,6 +154,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		       AND last_seen_at < NOW() - $3::interval
 		)
 		SELECT s.user_id::text, s.tenant_id::text, u.email,
+		        ARRAY(SELECT a::text FROM unnest(s.allowed_tenant_ids) a) AS allowed,
 		        EXISTS (
 		            SELECT 1 FROM memberships m
 		            JOIN membership_roles mr ON mr.membership_id=m.id
@@ -164,7 +167,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		   JOIN users u ON u.id = s.user_id
 		   JOIN memberships sm ON sm.tenant_id=s.tenant_id AND sm.user_id=s.user_id`,
 		hashToken(token), nullableTime(idleCutoff), touchInterval.String()).
-		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.IsAdmin)
+		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.AllowedTenantIDs, &claims.IsAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return UserClaims{}, ErrSessionInvalid
@@ -297,6 +300,84 @@ func (s *SessionStore) SwitchTenant(ctx context.Context, token, tenantID string)
 		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
 	}
 	return next, expiresAt, nil
+}
+
+// SetActiveTenants records which organisations a session reads across.
+//
+// Odoo calls this the allowed companies, and the shape is the same: a person
+// ticks several of the organisations they belong to and every list that opts in
+// spans them, while new rows still go to the one they are acting in. That
+// asymmetry is the safety of it, and it lives in the policies (see migration
+// 00037) rather than being remembered by each caller.
+//
+// Every id is checked against an active membership before it is written, and
+// the acting tenant is always included — a session that could read a set not
+// containing the organisation it writes into would be able to create rows it
+// then could not see.
+func (s *SessionStore) SetActiveTenants(ctx context.Context, token string, tenantIDs []string) ([]string, error) {
+	if token == "" {
+		return nil, ErrSessionInvalid
+	}
+	// Crossing tenants is the point, so this runs on the platform path: under
+	// the caller's own policies, memberships in another organisation are not
+	// visible and every id would look like one they do not hold.
+	ctx = tenant.Without(ctx)
+
+	var current string
+	if err := s.db.QueryRow(ctx,
+		`SELECT tenant_id::text FROM sessions
+		  WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+		hashToken(token)).Scan(&current); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSessionInvalid
+		}
+		return nil, fmt.Errorf("read session: %w", err)
+	}
+
+	wanted := map[string]bool{current: true}
+	for _, id := range tenantIDs {
+		if id != "" {
+			wanted[id] = true
+		}
+	}
+	candidates := make([]string, 0, len(wanted))
+	for id := range wanted {
+		candidates = append(candidates, id)
+	}
+
+	// One query rather than one per id, and it answers with what the person
+	// actually holds — an id they do not is dropped rather than refused, so a
+	// stale tab that still lists an organisation somebody has left narrows
+	// quietly instead of failing.
+	rows, err := s.db.Query(ctx,
+		`SELECT m.tenant_id::text FROM memberships m
+		  JOIN sessions s ON s.token_hash = $1 AND s.user_id = m.user_id
+		 WHERE m.tenant_id = ANY($2::uuid[]) AND m.active`,
+		hashToken(token), candidates)
+	if err != nil {
+		return nil, fmt.Errorf("check memberships: %w", err)
+	}
+	defer rows.Close()
+
+	allowed := make([]string, 0, len(candidates))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("check memberships: %w", err)
+		}
+		allowed = append(allowed, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("check memberships: %w", err)
+	}
+	sort.Strings(allowed)
+
+	if _, err := s.db.Exec(ctx,
+		`UPDATE sessions SET allowed_tenant_ids = $2::uuid[] WHERE token_hash = $1`,
+		hashToken(token), allowed); err != nil {
+		return nil, fmt.Errorf("save the active organisations: %w", err)
+	}
+	return allowed, nil
 }
 
 // RevokeAllForUser ends every session a person holds, on every device.

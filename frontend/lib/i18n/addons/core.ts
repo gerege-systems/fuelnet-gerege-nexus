@@ -53,6 +53,7 @@ export const core = {
   "core.field.people_count": { mn: "{count} ажилтан", en: "{count} people" },
   "core.field.job_title": { mn: "Албан тушаал", en: "Job title" },
   "core.field.department": { mn: "Хэлтэс, нэгж", en: "Department" },
+  "core.field.organisation": { mn: "Байгууллага", en: "Organisation" },
   "core.field.roles": { mn: "Эрх", en: "Roles" },
   "core.label.admin": { mn: "Админ", en: "Admin" },
 

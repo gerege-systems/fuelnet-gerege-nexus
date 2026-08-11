@@ -164,7 +164,22 @@ export const api = {
   // The organisations the signed-in person may act for. A membership in one is
   // the common case, so callers should expect a list of one rather than treat
   // it as an error.
-  getTenants: () => fetcher<{ current: string; tenants: Array<{ id: string; name: string; slug: string }> }>("/auth/tenants"),
+  getTenants: () =>
+    fetcher<{
+      current: string;
+      tenants: Array<{ id: string; name: string; slug: string }>;
+      // Which of them this session is reading across. Always contains current.
+      active: string[];
+    }>("/auth/tenants"),
+
+  // Read across several organisations at once, the way Odoo's allowed companies
+  // work. New rows still go to the one being acted in — that is decided by the
+  // row-level policies, not here.
+  setActiveTenants: (tenantIds: string[]) =>
+    fetcher<{ active: string[] }>("/auth/tenants/active", {
+      method: "POST",
+      body: JSON.stringify({ tenant_ids: tenantIds }),
+    }),
 
   // Moves the session to another of them. The server rotates the token and
   // re-sets the cookie, so everything fetched before this call belongs to the
@@ -299,6 +314,7 @@ export const api = {
       id: string; code: string; name: string; parent_id?: string;
       manager_membership_id?: string; manager_name?: string;
       active: boolean; people_count: number;
+      tenant_id: string; tenant_name: string;
     }>>("/core/departments"),
 
   createDepartment: (body: { code: string; name: string; parent_id?: string; manager_membership_id?: string }) =>
@@ -326,6 +342,10 @@ export const api = {
       phone: string; job_title: string; department_id?: string;
       department_name?: string; active: boolean; is_admin: boolean;
       roles: string[]; joined_at: string;
+      // Which organisation this membership is in. The list spans every
+      // organisation the session is reading across, so a row can belong to one
+      // other than the one being acted in.
+      tenant_id: string; tenant_name: string;
     }>>("/core/people"),
 
   updatePerson: (id: string, body: { job_title?: string; department_id?: string }) =>

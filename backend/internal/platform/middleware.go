@@ -35,6 +35,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 		ctx := auth.WithUserContext(r.Context(), claims)
 		ctx = tenant.WithTenantID(ctx, claims.TenantID)
+		// The organisations this session reads across, straight from the
+		// session row. dbguard turns it into the policy's array; almost every
+		// session carries none and behaves exactly as it always has.
+		ctx = tenant.WithAllowed(ctx, claims.AllowedTenantIDs)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

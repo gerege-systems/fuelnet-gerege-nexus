@@ -32,7 +32,7 @@ export default function UserMenu({
   const containerRef = useRef<HTMLDivElement>(null);
   // The brand mark in the header offers the same list, but the mobile shell
   // hides the brand — this is the only way to change organisation on a phone.
-  const { tenants, switching, failed, switchTo } = useTenants(open);
+  const { tenants, activeIDs, switching, failed, switchTo, toggleActive } = useTenants(open);
 
   // Close on an outside click or Escape, the way a menu is expected to behave.
   useEffect(() => {
@@ -92,6 +92,8 @@ export default function UserMenu({
                 {t("web.view.tenants")}
               </p>
               <TenantChoices
+          activeIDs={activeIDs}
+          onToggleActive={(id) => void toggleActive(id, user?.tenant_id || "")}
                 current={user?.tenant_id}
                 tenants={tenants}
                 switching={switching}
