@@ -57,7 +57,19 @@ jobs:
       matrix:
         include:
           # The registry ships inside the platform's own image — same module,
-          # same catalogue types, one build. Only the two web faces are new.
+          # same catalogue types, one build.
+          #
+          # It is built here as well as in deploy.yml, rather than waiting for
+          # that workflow to push it. The two rollouts share a concurrency
+          # group, so whichever goes second finds this image missing if it was
+          # the other one's job to build it — which is exactly what happened
+          # the first time the App Store deployed before the platform did.
+          # Building it twice costs a mostly-cached minute and removes an
+          # ordering dependency between two workflows that are otherwise
+          # independent; the tag is the commit, so both pushes are identical.
+          - component: backend
+            context: .
+            dockerfile: deploy/Dockerfile
           - component: appstore-web
             context: ./services/appstore-web
           - component: developer-web
@@ -83,7 +95,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.context }}/Dockerfile
+          file: ${{ matrix.context }}/${{ matrix.dockerfile || 'Dockerfile' }}
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:latest

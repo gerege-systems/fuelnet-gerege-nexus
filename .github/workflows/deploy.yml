@@ -358,11 +358,22 @@ jobs:
             else
               BACKUP="${LIVE}.bak.$(date +%s)"
               sudo cp "$LIVE" "$BACKUP"
-              # Inserted after the first `listen 443`, which is the TLS server
-              # block — never the port-80 one, where these endpoints would then
-              # answer over plain HTTP instead of redirecting to HTTPS.
-              sudo awk 'BEGIN{done=0} {print} /listen[[:space:]]+443/ && !done {print "    include snippets/nexus-oauth.conf;"; done=1}' \
+              # Inserted after the first real `listen 443` directive, which is
+              # the TLS server block — never the port-80 one, where these
+              # endpoints would answer over plain HTTP instead of redirecting.
+              #
+              # Anchored to the start of the line so a comment mentioning
+              # `listen 443` does not match: the vhost's own header explains
+              # what certbot adds, and matching that put the include above every
+              # server block, where nginx rightly refuses a location directive.
+              sudo awk 'BEGIN{done=0} {print} /^[[:space:]]*listen[[:space:]]+443/ && !done {print "    include snippets/nexus-oauth.conf;"; done=1}' \
                 "$LIVE" | sudo tee "${LIVE}.new" >/dev/null
+
+              if ! grep -q "snippets/nexus-oauth.conf" "${LIVE}.new"; then
+                echo "::error::no `listen 443` directive in $LIVE; the include was not added"
+                sudo rm -f "${LIVE}.new"
+                exit 1
+              fi
               sudo mv "${LIVE}.new" "$LIVE"
               if ! sudo nginx -t; then
                 echo "::error::nginx rejected the patched vhost; restoring $BACKUP"
