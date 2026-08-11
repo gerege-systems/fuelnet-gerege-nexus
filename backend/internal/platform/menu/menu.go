@@ -88,7 +88,7 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 	return menus, nil
 }
 
-// routeSlug is the last segment of an app id — io.example.core -> core — which
+// routeSlug is the last segment of an app id — io.gerege.nexus.core -> core — which
 // is the convention every blueprint slug already follows.
 func routeSlug(appID string) string {
 	slug := appID

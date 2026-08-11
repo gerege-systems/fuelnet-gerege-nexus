@@ -21,8 +21,8 @@ import (
 // come from another machine.
 
 const (
-	bundledApp = "io.example.bundled"
-	remoteApp  = "io.example.remote"
+	bundledApp = "io.gerege.nexus.bundled"
+	remoteApp  = "io.gerege.nexus.remote"
 )
 
 // writeCatalogDir lays out the catalog/apps.json + manifests/ shape on disk.

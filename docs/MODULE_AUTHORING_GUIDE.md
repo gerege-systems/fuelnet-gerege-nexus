@@ -56,14 +56,14 @@ func New(db *pgxpool.Pool) *Module {
     return m
 }
 
-func (m *Module) ID() string      { return "io.example.invoices" }
+func (m *Module) ID() string      { return "io.gerege.nexus.invoices" }
 func (m *Module) Name() string    { return "Invoicing & Billing" }
 func (m *Module) Version() string { return "1.0.0" }
 
 func (m *Module) Dependencies() []internal.Dependency {
     return []internal.Dependency{
-        {ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
-        {ID: "io.example.products", VersionConstraint: "^1.0.0"},
+        {ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
+        {ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
     }
 }
 ```
@@ -145,13 +145,13 @@ Add a manifest file in `catalog/manifests/invoices.json`:
 
 ```json
 {
-  "id": "io.example.invoices",
+  "id": "io.gerege.nexus.invoices",
   "name": "Invoices",
   "version": "1.0.0",
   "platform": ">=0.1.0 <2.0.0",
   "dependencies": [
-    { "id": "io.example.contacts", "version_constraint": "^1.0.0" },
-    { "id": "io.example.products", "version_constraint": "^1.0.0" }
+    { "id": "io.gerege.nexus.contacts", "version_constraint": "^1.0.0" },
+    { "id": "io.gerege.nexus.products", "version_constraint": "^1.0.0" }
   ],
   "permissions": [
     {

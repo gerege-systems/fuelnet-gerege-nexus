@@ -136,13 +136,13 @@ PostgreSQL أي التطبيقات مفعَّلة لكل مستأجر — فصل
 
 | # | التطبيق | المعرِّف | المسار | الوصف |
 | --- | --- | --- | --- | --- |
-| ١ | المؤسسة والأشخاص | `io.example.core` | `/organisation` | الهوية القانونية للمؤسسة وأقسامها والعاملون فيها — تطبيق أساسي لا يمكن تعطيله |
-| ٢ | جهات الاتصال | `io.example.contacts` | `/contacts` | دليل العملاء والمورِّدين مع تعبئة تلقائية من XYP |
-| ٣ | المنتجات | `io.example.products` | `/products` | الفهرس والتسعير ووحدات SKU لكل مستأجر |
-| ٤ | المخزون | `io.example.inventory` | `/inventory` | المستودعات ومستويات المخزون وسجل الحركة |
-| ٥ | الفوترة و e-Barimt | `io.example.billing` | `/billing` | إصدار الفواتير، ضريبة ١٠٪، إيصالات e-Barimt |
-| ٦ | المستندات الرقمية والتوقيع الإلكتروني | `io.example.documents` | `/documents` | توجيه المستندات والتوقيعات والموافقات |
-| ٧ | بوابة المطوِّرين و SSO عبر OAuth2 | `io.example.developer_portal` | `/developer/apps` | تسجيل عملاء OAuth2 |
+| ١ | المؤسسة والأشخاص | `io.gerege.nexus.core` | `/organisation` | الهوية القانونية للمؤسسة وأقسامها والعاملون فيها — تطبيق أساسي لا يمكن تعطيله |
+| ٢ | جهات الاتصال | `io.gerege.nexus.contacts` | `/contacts` | دليل العملاء والمورِّدين مع تعبئة تلقائية من XYP |
+| ٣ | المنتجات | `io.gerege.nexus.products` | `/products` | الفهرس والتسعير ووحدات SKU لكل مستأجر |
+| ٤ | المخزون | `io.gerege.nexus.inventory` | `/inventory` | المستودعات ومستويات المخزون وسجل الحركة |
+| ٥ | الفوترة و e-Barimt | `io.gerege.nexus.billing` | `/billing` | إصدار الفواتير، ضريبة ١٠٪، إيصالات e-Barimt |
+| ٦ | المستندات الرقمية والتوقيع الإلكتروني | `io.gerege.nexus.documents` | `/documents` | توجيه المستندات والتوقيعات والموافقات |
+| ٧ | بوابة المطوِّرين و SSO عبر OAuth2 | `io.gerege.nexus.developer_portal` | `/developer/apps` | تسجيل عملاء OAuth2 |
 
 <div dir="rtl">
 

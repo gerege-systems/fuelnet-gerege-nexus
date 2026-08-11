@@ -25,7 +25,7 @@ type blueprint struct {
 }
 
 var blueprints = map[string]blueprint{
-	"io.example.contacts": {Slug: "contacts",
+	"io.gerege.nexus.contacts": {Slug: "contacts",
 		Modules: []futureMenu{
 			{ID: "segments", EN: "Segments", Icon: "users", Labels: map[string]string{
 				"mn": "Сегментүүд", "ar": "الشرائح", "zh": "客户分组", "fr": "Segments", "ru": "Сегменты", "es": "Segmentos"}},
@@ -40,9 +40,9 @@ var blueprints = map[string]blueprint{
 	// products has one working screen and nothing else to stand on: the table
 	// holds sku, name, price and active, so categories, price lists, units,
 	// attributes and tax profiles would each be a menu entry over no data.
-	"io.example.products": {Slug: "products"},
+	"io.gerege.nexus.products": {Slug: "products"},
 
-	"io.example.inventory": {Slug: "inventory",
+	"io.gerege.nexus.inventory": {Slug: "inventory",
 		Modules: []futureMenu{
 			{ID: "replenishment", EN: "Replenishment", Icon: "refresh-cw", Labels: map[string]string{
 				"mn": "Нөхөн дүүргэлт", "ar": "إعادة التزويد", "zh": "补货", "fr": "Réapprovisionnement", "ru": "Пополнение", "es": "Reabastecimiento"}},
@@ -52,13 +52,13 @@ var blueprints = map[string]blueprint{
 				"mn": "Агуулах", "ar": "المستودعات", "zh": "仓库", "fr": "Entrepôts", "ru": "Склады", "es": "Almacenes"}},
 		}},
 
-	"io.example.billing": {Slug: "billing",
+	"io.gerege.nexus.billing": {Slug: "billing",
 		Modules: []futureMenu{
 			{ID: "reports", EN: "Revenue reports", Icon: "chart-column", Labels: map[string]string{
 				"mn": "Орлогын тайлан", "ar": "تقارير الإيرادات", "zh": "收入报表", "fr": "Rapports de revenus", "ru": "Отчёты о доходах", "es": "Informes de ingresos"}},
 		}},
 
-	"io.example.documents": {Slug: "documents",
+	"io.gerege.nexus.documents": {Slug: "documents",
 		Modules: []futureMenu{
 			{ID: "approvals", EN: "Approval queue", Icon: "list-checks", Labels: map[string]string{
 				"mn": "Батлах дараалал", "ar": "قائمة الموافقات", "zh": "审批队列", "fr": "File d'approbation", "ru": "Очередь согласования", "es": "Cola de aprobación"}},
@@ -74,7 +74,7 @@ var blueprints = map[string]blueprint{
 				"mn": "Хадгалалтын дүрэм", "ar": "قواعد الاحتفاظ", "zh": "保留规则", "fr": "Règles de conservation", "ru": "Правила хранения", "es": "Reglas de retención"}},
 		}},
 
-	"io.example.esign": {Slug: "esign",
+	"io.gerege.nexus.esign": {Slug: "esign",
 		Modules: []futureMenu{
 			{ID: "logs", EN: "Signature logs", Icon: "scroll-text", Labels: map[string]string{
 				"mn": "Гарын үсгийн лог", "ar": "سجلات التوقيع", "zh": "签名日志", "fr": "Journaux de signature", "ru": "Журналы подписей", "es": "Registros de firma"}},
@@ -90,7 +90,7 @@ var blueprints = map[string]blueprint{
 				"mn": "Гарын үсгийн бодлого", "ar": "سياسات التوقيع", "zh": "签署策略", "fr": "Politiques de signature", "ru": "Политики подписания", "es": "Políticas de firma"}},
 		}},
 
-	"io.example.developer_portal": {Slug: "developer",
+	"io.gerege.nexus.developer_portal": {Slug: "developer",
 		Modules: []futureMenu{
 			// API, OAuth and Webhook are product vocabulary, not prose. They stay
 			// Latin even in the scripts that would otherwise transliterate them.
@@ -114,7 +114,7 @@ var blueprints = map[string]blueprint{
 				"mn": "Гарын үсгийн түлхүүр", "ar": "مفاتيح التوقيع", "zh": "签名密钥", "fr": "Clés de signature", "ru": "Ключи подписи", "es": "Claves de firma"}},
 		}},
 
-	"io.example.gov_services": {Slug: "gov-services",
+	"io.gerege.nexus.gov_services": {Slug: "gov-services",
 		Modules: []futureMenu{
 			{ID: "requests", EN: "Service requests", Icon: "inbox", Labels: map[string]string{
 				"mn": "Үйлчилгээний хүсэлт", "ar": "طلبات الخدمة", "zh": "服务申请", "fr": "Demandes de service", "ru": "Заявки на услуги", "es": "Solicitudes de servicio"}},

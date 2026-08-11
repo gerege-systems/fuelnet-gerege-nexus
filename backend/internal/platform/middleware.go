@@ -95,9 +95,9 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 
 func appRequestPermission(appID, method, path string) string {
 	prefixes := map[string]string{
-		"io.example.contacts": "contacts", "io.example.products": "products",
-		"io.example.inventory": "inventory", "io.example.billing": "billing",
-		"io.example.developer_portal": "developer",
+		"io.gerege.nexus.contacts": "contacts", "io.gerege.nexus.products": "products",
+		"io.gerege.nexus.inventory": "inventory", "io.gerege.nexus.billing": "billing",
+		"io.gerege.nexus.developer_portal": "developer",
 	}
 	prefix := prefixes[appID]
 	if prefix == "" {

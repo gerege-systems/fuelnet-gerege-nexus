@@ -142,14 +142,14 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 | # | Апп | ID | Зам | Тайлбар |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation & People | `io.example.core` | `/organisation` | Байгууллагын хуулийн мэдээлэл, хэлтэс нэгж, ажилтнууд — платформын үндсэн апп, устгах боломжгүй |
-| 2 | Contacts | `io.example.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
-| 3 | Products | `io.example.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
-| 4 | Inventory | `io.example.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
-| 5 | Public Billing & e-Barimt | `io.example.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
-| 6 | Digital Documents & E-Sign | `io.example.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
-| 7 | Developer Portal & OAuth2 SSO | `io.example.developer_portal` | `/developer/apps` | OAuth2 client апп бүртгэл |
-| 8 | PDF цахим гарын үсэг | `io.example.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
+| 1 | Organisation & People | `io.gerege.nexus.core` | `/organisation` | Байгууллагын хуулийн мэдээлэл, хэлтэс нэгж, ажилтнууд — платформын үндсэн апп, устгах боломжгүй |
+| 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
+| 3 | Products | `io.gerege.nexus.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
+| 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
+| 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
+| 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
+| 7 | Developer Portal & OAuth2 SSO | `io.gerege.nexus.developer_portal` | `/developer/apps` | OAuth2 client апп бүртгэл |
+| 8 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
 
 Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрутууд нээгдэнэ. Суулгаагүй апп
 руу хандвал `403 Forbidden` буцна.

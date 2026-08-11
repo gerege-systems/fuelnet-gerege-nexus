@@ -39,14 +39,14 @@ func TestACatalogVersionMustMatchTheCompiledModule(t *testing.T) {
 	// The registry is filled by apps.Bootstrap, which a unit test does not run,
 	// so a real app id would still find no module here. Registering a stub is
 	// what makes the comparison happen at all.
-	appregistryRegisterStub(t, "io.example.stub", "1.0.0")
+	appregistryRegisterStub(t, "io.gerege.nexus.stub", "1.0.0")
 
 	catalog := []appcatalog.CatalogApp{{
-		ID:      "io.example.stub",
+		ID:      "io.gerege.nexus.stub",
 		Slug:    "stub",
 		Version: "1.1.0",
 		Manifest: appcatalog.Manifest{
-			ID: "io.example.stub", Name: "Stub", Version: "1.1.0",
+			ID: "io.gerege.nexus.stub", Name: "Stub", Version: "1.1.0",
 		},
 	}}
 
@@ -54,7 +54,7 @@ func TestACatalogVersionMustMatchTheCompiledModule(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a catalog entry ahead of its compiled module to be refused")
 	}
-	if !strings.Contains(err.Error(), "io.example.stub") {
+	if !strings.Contains(err.Error(), "io.gerege.nexus.stub") {
 		t.Fatalf("the error should name the app; got %v", err)
 	}
 }

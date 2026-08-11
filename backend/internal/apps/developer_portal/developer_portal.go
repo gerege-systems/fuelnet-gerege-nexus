@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  *
  * Package developer_portal implements the Developer Apps & OAuth2 SSO client
- * portal (io.example.developer_portal): the tenant-facing management surface
+ * portal (io.gerege.nexus.developer_portal): the tenant-facing management surface
  * for the OAuth2 clients that platform.ssoprovider then authenticates.
  */
 
@@ -40,7 +40,7 @@ func NewDeveloperPortalModule(sso *ssoprovider.SSOProvider) *DeveloperPortalModu
 	return m
 }
 
-func (m *DeveloperPortalModule) ID() string      { return "io.example.developer_portal" }
+func (m *DeveloperPortalModule) ID() string      { return "io.gerege.nexus.developer_portal" }
 func (m *DeveloperPortalModule) Name() string    { return "Developer Portal & OAuth2 SSO" }
 func (m *DeveloperPortalModule) Version() string { return "2.0.0" }
 

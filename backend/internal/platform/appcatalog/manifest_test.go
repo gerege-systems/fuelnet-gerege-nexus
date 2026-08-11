@@ -8,7 +8,7 @@ import (
 
 func TestValidateManifest(t *testing.T) {
 	validManifest := appcatalog.Manifest{
-		ID:       "io.example.test",
+		ID:       "io.gerege.nexus.test",
 		Name:     "Test App",
 		Version:  "1.0.0",
 		Platform: ">=0.1.0 <2.0.0",

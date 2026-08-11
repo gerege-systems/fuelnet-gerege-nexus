@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package documents implements Digital Documents & E-Signatures Go module (io.example.documents).
+ * Package documents implements Digital Documents & E-Signatures Go module (io.gerege.nexus.documents).
  */
 
 package documents
@@ -155,7 +155,7 @@ type DocumentsModule struct {
 }
 
 // New builds the module and registers it in the compile-time app registry so
-// the app store can resolve and install io.example.documents. The module owns
+// the app store can resolve and install io.gerege.nexus.documents. The module owns
 // its own E-ID and DAN clients so signing stays self-contained; both read their
 // configuration from the environment and default to mock mode.
 // Starting an E-ID signature pushes a notification to a real person's phone, so it is
@@ -192,7 +192,7 @@ func New(db *pgxpool.Pool) *DocumentsModule {
 	return m
 }
 
-func (m *DocumentsModule) ID() string      { return "io.example.documents" }
+func (m *DocumentsModule) ID() string      { return "io.gerege.nexus.documents" }
 func (m *DocumentsModule) Name() string    { return "Digital Documents & Signatures" }
 func (m *DocumentsModule) Version() string { return "1.0.0" }
 

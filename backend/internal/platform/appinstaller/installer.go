@@ -30,7 +30,7 @@ import (
 // It is a list in the platform rather than a flag in the manifest, because a
 // third party publishing an app that declares itself uninstallable is not a
 // thing this store should be able to express.
-var CoreApps = []string{"io.example.core"}
+var CoreApps = []string{"io.gerege.nexus.core"}
 
 // IsCoreApp reports whether an app belongs to the platform itself.
 func IsCoreApp(appID string) bool {

@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package billing implements Public Billing & e-Barimt tax receipt Go module (io.example.billing).
+ * Package billing implements Public Billing & e-Barimt tax receipt Go module (io.gerege.nexus.billing).
  */
 
 package billing
@@ -43,7 +43,7 @@ type BillingModule struct {
 }
 
 // New builds the module and registers it in the compile-time app registry.
-// Without registration the app store refused to install io.example.billing
+// Without registration the app store refused to install io.gerege.nexus.billing
 // ("module is not present in binary registry") and its menu never appeared.
 func New(db *pgxpool.Pool) *BillingModule {
 	m := &BillingModule{db: db}
@@ -51,13 +51,13 @@ func New(db *pgxpool.Pool) *BillingModule {
 	return m
 }
 
-func (m *BillingModule) ID() string      { return "io.example.billing" }
+func (m *BillingModule) ID() string      { return "io.gerege.nexus.billing" }
 func (m *BillingModule) Name() string    { return "Public Billing & e-Barimt" }
 func (m *BillingModule) Version() string { return "1.0.0" }
 
 func (m *BillingModule) Dependencies() []internal.Dependency {
 	return []internal.Dependency{
-		{ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
+		{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
 	}
 }
 
