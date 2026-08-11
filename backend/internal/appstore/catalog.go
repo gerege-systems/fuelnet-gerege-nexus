@@ -153,7 +153,22 @@ func (c *CatalogService) loadSnapshot(ctx context.Context, channel, platform str
 	return &s, nil
 }
 
+// maxSnapshotsPerChannel bounds the cache the catalogue endpoint writes to.
+//
+// That endpoint is deliberately unauthenticated, and it keeps one row per
+// platform version asked for — so anything that can send a request can also
+// make this table grow, one semver at a time, for as long as it likes. The
+// number of platform versions in the field is small; the number a stranger can
+// invent is not. Beyond this many, the least recently built are dropped: they
+// rebuild on demand, so the only cost of being wrong here is arithmetic.
+const maxSnapshotsPerChannel = 64
+
 func (c *CatalogService) saveSnapshot(ctx context.Context, channel, platform string, s *Snapshot) error {
+	defer func() {
+		if err := c.pruneSnapshots(ctx, channel); err != nil {
+			slog.Warn("could not prune the catalog snapshot cache", "error", err, "channel", channel)
+		}
+	}()
 	_, err := c.store.db.Exec(ctx,
 		`INSERT INTO catalog_snapshots (channel, platform, revision, generated_at, etag, document, built_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -161,6 +176,19 @@ func (c *CatalogService) saveSnapshot(ctx context.Context, channel, platform str
 		     revision = EXCLUDED.revision, generated_at = EXCLUDED.generated_at,
 		     etag = EXCLUDED.etag, document = EXCLUDED.document, built_at = NOW()`,
 		channel, platform, s.Revision, s.GeneratedAt, s.ETag, s.Document)
+	return err
+}
+
+// pruneSnapshots keeps the cache to its bound, newest first.
+func (c *CatalogService) pruneSnapshots(ctx context.Context, channel string) error {
+	_, err := c.store.db.Exec(ctx,
+		`DELETE FROM catalog_snapshots
+		  WHERE channel = $1
+		    AND platform NOT IN (
+		        SELECT platform FROM catalog_snapshots
+		         WHERE channel = $1
+		         ORDER BY built_at DESC
+		         LIMIT $2)`, channel, maxSnapshotsPerChannel)
 	return err
 }
 

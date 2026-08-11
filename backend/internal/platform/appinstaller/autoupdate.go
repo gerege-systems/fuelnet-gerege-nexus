@@ -23,6 +23,10 @@ import (
 // have rather than an empty string that would read as "unknown".
 const SystemActor = "system"
 
+// autoUpdateLockKey names the advisory lock the sweep runs under. Any constant
+// would do; this one is a word so a `pg_locks` reading is legible.
+const autoUpdateLockKey = 0x6175746F757064 // "autoupd"
+
 // AutoUpdateResult is what one sweep did.
 type AutoUpdateResult struct {
 	Upgraded []AutoUpdateEntry
@@ -38,6 +42,9 @@ type AutoUpdateEntry struct {
 	To       string
 	// Added lists what a held version asks for that the installed one did not.
 	Added []string
+	// Reason is why it was held, in words an administrator can act on. Empty
+	// means it was not held.
+	Reason string
 }
 
 // AutoUpdate moves installations forward to the catalogue, and refuses to move
@@ -60,6 +67,35 @@ type AutoUpdateEntry struct {
 //     updating.
 func (ai *AppInstaller) AutoUpdate(ctx context.Context) (AutoUpdateResult, error) {
 	var result AutoUpdateResult
+
+	// One replica at a time. Every replica syncs on its own timer, so without
+	// this they would all sweep the same installations at the same moment: the
+	// upgrades are idempotent, but the trail would carry three 'upgraded'
+	// events for one move and the database would do the work three times.
+	//
+	// try, not wait: a sweep somebody else is already doing is a sweep that
+	// does not need doing again, and holding the timer open to find that out
+	// is worse than skipping this tick.
+	conn, err := ai.db.Acquire(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer conn.Release()
+
+	var acquired bool
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, autoUpdateLockKey).Scan(&acquired); err != nil {
+		return result, err
+	}
+	if !acquired {
+		slog.Info("auto-update: another replica is sweeping; skipping this round")
+		return result, nil
+	}
+	defer func() {
+		if _, err := conn.Exec(context.WithoutCancel(ctx),
+			`SELECT pg_advisory_unlock($1)`, autoUpdateLockKey); err != nil {
+			slog.Warn("auto-update: could not release the sweep lock", "error", err)
+		}
+	}()
 
 	rows, err := ai.db.Query(ctx,
 		`SELECT tenant_id::text, app_id, installed_version, auto_update, COALESCE(pinned_version, '')
@@ -96,21 +132,28 @@ func (ai *AppInstaller) AutoUpdate(ctx context.Context) (AutoUpdateResult, error
 			continue
 		}
 
-		added, err := ai.widenedGrant(ctx, app, c.installed)
-		if err != nil {
-			// Not knowing what the installed version asked for is not a licence
-			// to assume it asked for everything the new one does.
-			slog.Warn("auto-update: could not compare versions; leaving the installation alone",
-				"error", err, "app_id", c.appID, "tenant_id", c.tenantID)
-			continue
-		}
-
 		entry := AutoUpdateEntry{
 			TenantID: c.tenantID, AppID: app.ID, Slug: app.Slug,
-			From: c.installed, To: app.Version, Added: added,
+			From: c.installed, To: app.Version,
 		}
 
-		if len(added) > 0 {
+		added, err := ai.widenedGrant(ctx, app, c.installed)
+		switch {
+		case err != nil:
+			// Not knowing what the installed version asked for is not a licence
+			// to assume it asked for nothing more. It is held rather than
+			// skipped, because a skip is invisible: the administrator would see
+			// an update on offer, auto-update on, and nothing happening, with
+			// the reason only in a log they are not reading.
+			slog.Warn("auto-update: could not compare versions; holding for approval",
+				"error", err, "app_id", c.appID, "tenant_id", c.tenantID)
+			entry.Reason = "the installed version's manifest is not on record, so what the new one adds cannot be established"
+		case len(added) > 0:
+			entry.Added = added
+			entry.Reason = "the new version asks for more than the installed one"
+		}
+
+		if entry.Reason != "" {
 			if err := ai.holdForApproval(ctx, entry); err != nil {
 				slog.Error("auto-update: could not hold an installation for approval",
 					"error", err, "app_id", c.appID, "tenant_id", c.tenantID)
@@ -220,7 +263,7 @@ func (ai *AppInstaller) holdForApproval(ctx context.Context, entry AutoUpdateEnt
 
 	details := map[string]string{
 		"from": entry.From, "to": entry.To, "user_id": SystemActor,
-		"reason": "the new version asks for more than the installed one",
+		"reason": entry.Reason,
 		"added":  fmt.Sprint(entry.Added),
 	}
 	if err := recordInstallationEvent(ctx, tx, installID, "held", details, time.Now()); err != nil {

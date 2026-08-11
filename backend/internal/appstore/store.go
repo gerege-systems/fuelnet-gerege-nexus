@@ -51,6 +51,11 @@ type Store struct{ db *pgxpool.Pool }
 
 func NewStore(db *pgxpool.Pool) *Store { return &Store{db: db} }
 
+// DB exposes the pool for tests that assert on rows this package writes but no
+// caller reads — the snapshot cache in particular, whose whole contract is that
+// it stays small.
+func (s *Store) DB() *pgxpool.Pool { return s.db }
+
 // Publisher is an organisation that publishes apps.
 type Publisher struct {
 	ID              string    `json:"id"`

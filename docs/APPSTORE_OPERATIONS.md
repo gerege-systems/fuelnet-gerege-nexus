@@ -124,6 +124,24 @@ Manifest-ыг registry нь Nexus-ийн ашигладаг **яг тэр** ша
 
 ---
 
+## 4.1 Түлхүүрийн нөөц ба эргэлт
+
+`APPSTORE_SIGNING_KEY`-ийн хувийн хэсгийг **offline** нөөцлөнө (secret manager
+эсвэл битүүмжилсэн хуулбар). Алдагдвал сэргээх зам байхгүй — шинэ хос үүсгэж,
+шинэ `SIGNING_KEY_ID`-тайгаар registry-д тавиад, instance бүрийн
+`APPSTORE_PUBLIC_KEY`-г шинэчилнэ. Хуучин түлхүүрээр зурсан каталогийг
+instance-үүд шууд хаяж, өөрсдийн cache/файл руугаа унана — эвдрэхгүй, харин
+шинэчлэлт зогсоно.
+
+## 4.2 `VERSION` build-arg (одоогоор бүү дамжуул)
+
+`deploy/Dockerfile` нь `--build-arg VERSION=` дэмждэг ба уг утга нь
+`platform.PlatformVersion` болж, **manifest шалгалтаар semver гэж уншигддаг**.
+Repo-д git tag байхгүй тул `git describe` нь `31e63f30` маягийн утга буцаана —
+энэ нь semver биш тул instance boot дээр `invalid platform version` алдаагаар
+унана. Тиймээс CI-д дамжуулахын өмнө эхлээд semver tag-ийн схем (жишээ нь
+`v1.2.0`) тогтоож, `git describe --tags --abbrev=0` хэлбэрээр авах ёстой.
+
 ## 5. Гэмтэл олох
 
 | Шинж тэмдэг | Хаанаас харах |
@@ -134,6 +152,8 @@ Manifest-ыг registry нь Nexus-ийн ашигладаг **яг тэр** ша
 | Консол `401` | id_token хугацаа дуусав (1 цаг) — дахин нэвтэрнэ |
 | Консол `403` | `APPSTORE_ADMIN_EMAILS`-д байхгүй хүн хяналтын үйлдэл хийхийг оролдов |
 | Каталог хоцорсон | `catalog_snapshots`-ын `revision` ба `registry_state.revision` — зөрвөл дараагийн хүсэлтэд дахин угсрагдана |
+| Sync ажиллаж байгаа эсэх | Nexus-д Тохиргоо → Суулгасан аппууд дээрх мөр: эх сурвалж, сүүлд шалгасан цаг, алдаа. API: `GET /api/v1/admin/store/status` |
+| Апп шинэчлэгдэхгүй байна | Тухайн мөрөнд "тогтоосон" badge ба шалтгаан харагдана; "Зөвшөөрч шинэчлэх" дарж шийднэ |
 
 Буцаах: `deploy-appstore.yml` → `workflow_dispatch` → өмнөх commit sha-г `tag`-аар
 өгнө. Image бүр sha tag-тай тул буцаалт нь шинэ build шаарддаггүй.

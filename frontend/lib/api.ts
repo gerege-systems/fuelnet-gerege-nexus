@@ -228,6 +228,7 @@ export const api = {
         // Non-empty means the update is being held for an administrator to
         // approve rather than offered as an ordinary one.
         held_for?: string[];
+        held_reason?: string;
       }>
     >("/installed-apps"),
 
@@ -249,6 +250,20 @@ export const api = {
   // Ask the registry for a catalog now rather than at the next scheduled sync.
   // Answers 501 on a deployment that reads its catalog from a file, which is
   // every self-hosted one — the button is hidden there rather than failing.
+  // Where the catalogue comes from and how the last refresh went. The hourly
+  // sync leaves only a log line, so this is the one place a registry that has
+  // been failing for a week is distinguishable from one that has published
+  // nothing.
+  getCatalogStatus: () =>
+    fetcher<{
+      source: "file" | "registry";
+      apps: number;
+      sync_interval: string;
+      last_sync_at?: string;
+      last_sync_ok?: boolean;
+      last_sync_error?: string;
+    }>("/admin/store/status"),
+
   syncStore: () =>
     fetcher<{ status: "updated" | "unchanged"; apps: number }>("/admin/store/sync", { method: "POST" }),
 
