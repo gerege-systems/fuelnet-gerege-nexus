@@ -1,0 +1,17 @@
+{
+  "app_id": "io.gerege.nexus.products",
+  "entries": [
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-05",
+      "kind": "feature",
+      "summary": {
+        "mn": "Бараа үйлчилгээний каталог, SKU ба үнэ.",
+        "en": "The product catalogue: SKUs, names and prices."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}

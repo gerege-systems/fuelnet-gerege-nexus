@@ -1,0 +1,17 @@
+{
+  "app_id": "io.gerege.nexus.inventory",
+  "entries": [
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-05",
+      "kind": "feature",
+      "summary": {
+        "mn": "Агуулах, барааны үлдэгдэл, хөдөлгөөний бүртгэл.",
+        "en": "Warehouses, stock levels and stock movements."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}
