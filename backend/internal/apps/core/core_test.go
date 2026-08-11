@@ -245,3 +245,74 @@ func TestPeopleAreListedWithWhatThisOrganisationKnows(t *testing.T) {
 		t.Fatalf("the person's identity is missing: %+v", people[0])
 	}
 }
+
+// Archiving exists so that a unit with people and history behind it can leave
+// the lists without taking them with it. That is only true if it can come back.
+func TestAnArchivedDepartmentCanComeBack(t *testing.T) {
+	f := newFixture(t)
+
+	create := func(code, name, parent string) string {
+		t.Helper()
+		body := `{"code":"` + code + `","name":"` + name + `"`
+		if parent != "" {
+			body += `,"parent_id":"` + parent + `"`
+		}
+		res := f.do(t, http.MethodPost, "/api/v1/core/departments", body+`}`)
+		if res.Code != http.StatusCreated {
+			t.Fatalf("create %s: %d %s", code, res.Code, res.Body.String())
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+			t.Fatal(err)
+		}
+		return created.ID
+	}
+
+	parent := create("ops", "Үйл ажиллагаа", "")
+	child := create("ops-sales", "Борлуулалт", parent)
+
+	// Archived, then brought back on its own: the ordinary case.
+	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+child, ""); res.Code != http.StatusOK {
+		t.Fatalf("archive: %d", res.Code)
+	}
+	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/restore", ""); res.Code != http.StatusOK {
+		t.Fatalf("restore answered %d: %s", res.Code, res.Body.String())
+	}
+	var active bool
+	if err := f.pool.QueryRow(context.Background(),
+		`SELECT active FROM departments WHERE id = $1`, child).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if !active {
+		t.Fatal("the department did not come back")
+	}
+
+	// And the one case that is refused: a unit cannot stand under a parent that
+	// is still archived, or the tree draws it as a root with a parent missing
+	// from every list that offers one.
+	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+parent, ""); res.Code != http.StatusOK {
+		t.Fatalf("archive parent: %d", res.Code)
+	}
+	if res := f.do(t, http.MethodDelete, "/api/v1/core/departments/"+child, ""); res.Code != http.StatusOK {
+		t.Fatalf("archive child: %d", res.Code)
+	}
+	res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/restore", "")
+	if res.Code != http.StatusConflict {
+		t.Fatalf("expected a refusal while the parent is archived, got %d: %s", res.Code, res.Body.String())
+	}
+	// The refusal names the unit that has to come back first, because that is
+	// the whole of what the operator has to do next.
+	if !strings.Contains(res.Body.String(), "Үйл ажиллагаа") {
+		t.Fatalf("the refusal should name the parent; got %s", res.Body.String())
+	}
+
+	// Parent first, then the child: the order the refusal asked for.
+	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+parent+"/restore", ""); res.Code != http.StatusOK {
+		t.Fatalf("restore parent: %d", res.Code)
+	}
+	if res := f.do(t, http.MethodPost, "/api/v1/core/departments/"+child+"/restore", ""); res.Code != http.StatusOK {
+		t.Fatalf("restore child after its parent: %d %s", res.Code, res.Body.String())
+	}
+}

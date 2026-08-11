@@ -236,6 +236,7 @@ export const zh: Record<string, string> = {
   "core.action.archive": "归档",
   "core.action.deactivate": "停用",
   "core.action.reactivate": "启用",
+  "core.action.restore": "恢复",
   "core.field.address_line": "详细地址",
   "core.field.code": "编码",
   "core.field.currency": "货币",

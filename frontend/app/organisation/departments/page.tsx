@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Banner } from "@/components/ui";
 import { useAccess } from "@/lib/permissions";
-import { Network, Archive, Plus } from "lucide-react";
+import { Network, Archive, ArchiveRestore, Plus } from "lucide-react";
 
 type Department = Awaited<ReturnType<typeof api.getDepartments>>[number];
 type Person = Awaited<ReturnType<typeof api.getPeople>>[number];
@@ -70,6 +70,21 @@ export default function DepartmentsPage() {
       });
       await load();
     } catch (err: any) {
+      setMessage({ type: "error", text: err.message || t("base.message.error") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restore = async (unit: Department) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.restoreDepartment(unit.id);
+      await load();
+    } catch (err: any) {
+      // The server refuses one case in a sentence — a parent that is still
+      // archived — and that sentence is the whole explanation.
       setMessage({ type: "error", text: err.message || t("base.message.error") });
     } finally {
       setBusy(false);
@@ -214,8 +229,20 @@ export default function DepartmentsPage() {
           </summary>
           <ul className="mt-2 space-y-1 text-slate-500">
             {archived.map((unit) => (
-              <li key={unit.id}>
-                {unit.name} <code className="text-xs">{unit.code}</code>
+              <li key={unit.id} className="flex items-center gap-2 py-0.5">
+                <span className="flex-1">
+                  {unit.name} <code className="text-xs">{unit.code}</code>
+                </span>
+                {canManage && (
+                  <button
+                    onClick={() => restore(unit)}
+                    disabled={busy}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-white inline-flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <ArchiveRestore className="w-3.5 h-3.5" />
+                    {t("core.action.restore")}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

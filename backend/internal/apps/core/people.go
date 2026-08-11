@@ -397,6 +397,53 @@ func (m *Module) handleArchiveDepartment(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "archived"})
 }
 
+// handleRestoreDepartment brings an archived department back.
+//
+// Archiving is reversible by design — it exists so that a unit which still has
+// people and history behind it can leave the lists without taking them with it
+// — and until now the only half that was reachable was the archiving. A screen
+// that lists what it archived and cannot undo it is a delete with extra steps.
+func (m *Module) handleRestoreDepartment(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := tenant.Require(w, r)
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "id")
+
+	// A unit cannot come back under a parent that is still archived: the tree
+	// would draw it as a root, its own parent would be missing from every list
+	// that offers one, and the next edit would silently reparent it.
+	var parentArchived bool
+	var parentName string
+	err := m.db.QueryRow(r.Context(),
+		`SELECT p.name, NOT p.active
+		   FROM departments d JOIN departments p ON p.id = d.parent_id
+		  WHERE d.id = $1 AND d.tenant_id = $2`, id, tenantID).Scan(&parentName, &parentArchived)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		httpx.Error(w, http.StatusInternalServerError, "could not read the department")
+		return
+	}
+	if parentArchived {
+		httpx.Error(w, http.StatusConflict,
+			"the unit this one reports to is archived; restore "+parentName+" first")
+		return
+	}
+
+	tag, err := m.db.Exec(r.Context(),
+		`UPDATE departments SET active = TRUE, updated_at = NOW()
+		 WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	if err != nil {
+		slog.Error("core: could not restore a department", "error", err, "department_id", id)
+		httpx.Error(w, http.StatusInternalServerError, "could not restore the department")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		httpx.Error(w, http.StatusNotFound, "department not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "restored"})
+}
+
 // emptyToNil turns an absent or blank identifier into SQL NULL, so "no parent"
 // and "unchanged" do not both arrive as the empty string.
 func emptyToNil(value *string) *string {

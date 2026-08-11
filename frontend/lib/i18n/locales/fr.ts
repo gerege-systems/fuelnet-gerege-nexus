@@ -236,6 +236,7 @@ export const fr: Record<string, string> = {
   "core.action.archive": "Archiver",
   "core.action.deactivate": "Désactiver",
   "core.action.reactivate": "Réactiver",
+  "core.action.restore": "Restaurer",
   "core.field.address_line": "Adresse",
   "core.field.code": "Code",
   "core.field.currency": "Devise",

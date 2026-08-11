@@ -306,6 +306,11 @@ export const api = {
 
   archiveDepartment: (id: string) => fetcher(`/core/departments/${id}`, { method: "DELETE" }),
 
+  // The other half of archiving. It is reversible by design, so the screen that
+  // lists what it archived can put one back.
+  restoreDepartment: (id: string) =>
+    fetcher(`/core/departments/${id}/restore`, { method: "POST" }),
+
   getPeople: () =>
     fetcher<Array<{
       membership_id: string; user_id: string; name: string; email: string;
