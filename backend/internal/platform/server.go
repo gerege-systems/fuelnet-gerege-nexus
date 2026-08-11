@@ -265,7 +265,9 @@ const catalogLoadTimeout = 20 * time.Second
 // An app with no compiled module is not an error. External apps have none by
 // definition.
 func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
+	present := make(map[string]bool, len(catalog))
 	for _, app := range catalog {
+		present[app.ID] = true
 		mod, ok := appregistry.Get(app.ID)
 		if !ok {
 			continue
@@ -273,6 +275,23 @@ func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
 		if mod.Version() != app.Version {
 			return fmt.Errorf("module %s is compiled at version %q but the catalog declares %q",
 				app.ID, mod.Version(), app.Version)
+		}
+	}
+
+	// A catalogue without the platform's own apps is not a catalogue this build
+	// should run on — it is one that predates it. The version check above
+	// cannot see that: it skips ids with no compiled module, and after a rename
+	// every renamed app looks exactly like a third party's, so an entire stale
+	// catalogue passes without a word.
+	//
+	// That is not hypothetical. A cache written before the ids were renamed was
+	// accepted whole, the core app was absent from it, no tenant got the
+	// screens, and every app in the store offered an install that failed on a
+	// foreign key. The bundled file always matches the binary, so refusing here
+	// is what reaches it.
+	for _, appID := range appinstaller.CoreApps {
+		if !present[appID] {
+			return fmt.Errorf("catalog does not carry the platform's own app %s", appID)
 		}
 	}
 	return nil
