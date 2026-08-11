@@ -40,6 +40,11 @@ type Person struct {
 	IsAdmin        bool     `json:"is_admin"`
 	Roles          []string `json:"roles"`
 	JoinedAt       string   `json:"joined_at"`
+	// Which organisation this membership is in. Only meaningful when the
+	// session is reading across more than one, which is when the screen shows
+	// it — a column repeating the same name on every row is noise.
+	TenantID   string `json:"tenant_id"`
+	TenantName string `json:"tenant_name"`
 }
 
 func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
@@ -48,19 +53,25 @@ func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Across every organisation this session is active in, which is just the
+	// one it is acting in unless somebody has asked for more. The row-level
+	// policies allow exactly the same set, so this widens what is asked for
+	// without widening what could be reached.
 	rows, err := m.db.Query(r.Context(),
 		`SELECT ms.id::text, u.id::text, u.name, u.email, u.phone, ms.job_title,
 		        COALESCE(ms.department_id::text, ''), COALESCE(d.name, ''),
 		        ms.active, u.is_admin, ms.created_at::text,
-		        COALESCE(ARRAY_AGG(r.code) FILTER (WHERE r.code IS NOT NULL), '{}')
+		        COALESCE(ARRAY_AGG(r.code) FILTER (WHERE r.code IS NOT NULL), '{}'),
+		        ms.tenant_id::text, tn.name
 		   FROM memberships ms
 		   JOIN users u ON u.id = ms.user_id
+		   JOIN tenants tn ON tn.id = ms.tenant_id
 		   LEFT JOIN departments d ON d.id = ms.department_id
 		   LEFT JOIN membership_roles mr ON mr.membership_id = ms.id
 		   LEFT JOIN roles r ON r.id = mr.role_id
-		  WHERE ms.tenant_id = $1
-		  GROUP BY ms.id, u.id, d.name
-		  ORDER BY ms.active DESC, u.name`, tenantID)
+		  WHERE ms.tenant_id = ANY($1::uuid[])
+		  GROUP BY ms.id, u.id, d.name, tn.name
+		  ORDER BY tn.name, ms.active DESC, u.name`, tenant.Allowed(r.Context()))
 	if err != nil {
 		slog.Error("core: could not list people", "error", err, "tenant_id", tenantID)
 		httpx.Error(w, http.StatusInternalServerError, "could not load the people")
@@ -73,7 +84,7 @@ func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
 		var p Person
 		if err := rows.Scan(&p.MembershipID, &p.UserID, &p.Name, &p.Email, &p.Phone,
 			&p.JobTitle, &p.DepartmentID, &p.DepartmentName, &p.Active, &p.IsAdmin,
-			&p.JoinedAt, &p.Roles); err != nil {
+			&p.JoinedAt, &p.Roles, &p.TenantID, &p.TenantName); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "could not read the people")
 			return
 		}
@@ -237,6 +248,8 @@ type Department struct {
 	ManagerName string `json:"manager_name,omitempty"`
 	Active      bool   `json:"active"`
 	PeopleCount int    `json:"people_count"`
+	TenantID    string `json:"tenant_id"`
+	TenantName  string `json:"tenant_name"`
 }
 
 func (m *Module) handleListDepartments(w http.ResponseWriter, r *http.Request) {
@@ -248,12 +261,14 @@ func (m *Module) handleListDepartments(w http.ResponseWriter, r *http.Request) {
 	rows, err := m.db.Query(r.Context(),
 		`SELECT d.id::text, d.code, d.name, COALESCE(d.parent_id::text, ''),
 		        COALESCE(d.manager_membership_id::text, ''), COALESCE(u.name, ''), d.active,
-		        (SELECT count(*) FROM memberships ms WHERE ms.department_id = d.id AND ms.active)
+		        (SELECT count(*) FROM memberships ms WHERE ms.department_id = d.id AND ms.active),
+		        d.tenant_id::text, tn.name
 		   FROM departments d
+		   JOIN tenants tn ON tn.id = d.tenant_id
 		   LEFT JOIN memberships mgr ON mgr.id = d.manager_membership_id
 		   LEFT JOIN users u ON u.id = mgr.user_id
-		  WHERE d.tenant_id = $1
-		  ORDER BY d.active DESC, d.name`, tenantID)
+		  WHERE d.tenant_id = ANY($1::uuid[])
+		  ORDER BY tn.name, d.active DESC, d.name`, tenant.Allowed(r.Context()))
 	if err != nil {
 		slog.Error("core: could not list departments", "error", err, "tenant_id", tenantID)
 		httpx.Error(w, http.StatusInternalServerError, "could not load the departments")
@@ -265,7 +280,7 @@ func (m *Module) handleListDepartments(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var d Department
 		if err := rows.Scan(&d.ID, &d.Code, &d.Name, &d.ParentID, &d.ManagerID,
-			&d.ManagerName, &d.Active, &d.PeopleCount); err != nil {
+			&d.ManagerName, &d.Active, &d.PeopleCount, &d.TenantID, &d.TenantName); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "could not read the departments")
 			return
 		}

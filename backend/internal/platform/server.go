@@ -554,6 +554,7 @@ func (s *Server) setupRoutes() {
 			// session to one of them. Both cross tenants by definition, so
 			// they run on the platform path — see handleTenants.
 			pr.Get("/auth/tenants", s.handleTenants)
+			pr.Post("/auth/tenants/active", s.handleSetActiveTenants)
 			pr.Post("/auth/switch-tenant", s.handleSwitchTenant)
 			pr.Get("/menus", s.handleMenus)
 
