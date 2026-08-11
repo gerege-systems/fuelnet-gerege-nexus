@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type ManifestReleaseNotes, type ReleaseKind } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Banner } from "@/components/ui";
+import AppHistory from "@/components/AppHistory";
 import {
   Search,
   Download,
@@ -15,6 +16,8 @@ import {
   ArrowUpCircle,
   LayoutGrid,
   Rows3,
+  Sparkles,
+  History,
 } from "lucide-react";
 
 interface AppItem {
@@ -32,8 +35,24 @@ interface AppItem {
   update_available: boolean;
   manifest: {
     dependencies?: Array<{ id: string; version_constraint: string }>;
+    // The chronicle entry for the version being offered. Its summary is the
+    // one sentence that makes an update a decision rather than a badge.
+    release_notes?: ManifestReleaseNotes;
   };
 }
+
+/**
+ * How a release reads at a glance.
+ *
+ * Only breaking and security get a colour. An update that changes how the app
+ * behaves, or that closes a hole, is one somebody has to plan around; a feature
+ * or a fix is one they can take on a Tuesday. Colouring all five would say
+ * nothing — everything urgent means nothing is.
+ */
+const releaseTone: Partial<Record<NonNullable<ReleaseKind>, string>> = {
+  breaking: "bg-rose-50 text-rose-700 border-rose-200",
+  security: "bg-amber-50 text-amber-700 border-amber-200",
+};
 
 const appIcons: Record<string, React.ReactNode> = {
   contacts: <Users className="w-8 h-8 text-indigo-500" />,
@@ -56,7 +75,7 @@ type ViewMode = "grid" | "list";
 const VIEW_STORAGE_KEY = "gerege_apps_view";
 
 export default function AppStorePage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [apps, setApps] = useState<AppItem[]>([]);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -67,6 +86,8 @@ export default function AppStorePage() {
   // applied in an effect rather than during initial state — the same rule the
   // sidebar follows for its collapsed groups.
   const [view, setView] = useState<ViewMode>("grid");
+  // Which app's timeline is open, by slug. Null is closed.
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (window.localStorage.getItem(VIEW_STORAGE_KEY) === "list") setView("list");
@@ -186,6 +207,46 @@ export default function AppStorePage() {
     </div>
   );
 
+  /**
+   * What the version on offer changed.
+   *
+   * Shown only where it is actionable: on an installed app with an update
+   * waiting. On an app nobody has installed, the latest release note is a
+   * fact about a product the reader has never run, and it would crowd out the
+   * description — which is the sentence that actually helps them decide.
+   */
+  const renderReleaseNote = (app: AppItem) => {
+    const notes = app.manifest.release_notes;
+    const summary = notes?.summary;
+    if (!app.installed || !app.update_available || !summary) return null;
+    // The server resolves nothing here — this is the raw manifest — so the
+    // fallback is the platform's own: asked-for language, then the source, then
+    // English. A note reaching this point always has mn and en.
+    const line = summary[locale] || summary.mn || summary.en;
+    if (!line) return null;
+    const tone = notes?.kind ? releaseTone[notes.kind] : undefined;
+    const kindLabel =
+      notes?.kind === "breaking"
+        ? t("app_store.release_kind.breaking")
+        : notes?.kind === "security"
+          ? t("app_store.release_kind.security")
+          : "";
+    return (
+      <p className="text-xs text-slate-600 mt-1 flex items-start gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-px" />
+        <span className="min-w-0">
+          <span className="font-semibold text-slate-700">{t("app_store.field.whats_new")}</span>{" "}
+          {line}
+          {tone && kindLabel && (
+            <span className={`ml-1.5 border px-1 py-px rounded text-[10px] font-semibold ${tone}`}>
+              {kindLabel}
+            </span>
+          )}
+        </span>
+      </p>
+    );
+  };
+
   // In a card the buttons fill the width and sit under a rule; in a row they
   // are as wide as their words and sit at the end of the line.
   const renderActions = (app: AppItem, mode: ViewMode) => {
@@ -211,6 +272,17 @@ export default function AppStorePage() {
           </button>
         ) : (
           <>
+            {/* Offered only on an installed app: a history is the publisher's
+                releases interleaved with this organisation's dealings, and an
+                app nobody has installed has only the first half — which the
+                card's release note already shows. */}
+            <button
+              onClick={() => setHistoryFor(app.slug)}
+              className={`${width} bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition`}
+            >
+              <History className="w-4 h-4" />
+              <span>{t("app_store.action.history")}</span>
+            </button>
             {/* Update sits beside enable/disable rather than replacing it: a
                 tenant that has deliberately switched an app off should still be
                 able to bring it up to date. */}
@@ -326,6 +398,8 @@ export default function AppStorePage() {
         </div>
       </div>
 
+      {historyFor && <AppHistory slug={historyFor} onClose={() => setHistoryFor(null)} />}
+
       {/* Notifications */}
       {message && (
         <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />
@@ -351,6 +425,7 @@ export default function AppStorePage() {
                   <span className="text-xs font-medium text-indigo-600">{app.category}</span>
                 </div>
                 <p className="text-sm text-slate-600 truncate">{app.description}</p>
+                {renderReleaseNote(app)}
                 {app.manifest.dependencies && app.manifest.dependencies.length > 0 && (
                   <p className="text-xs text-slate-500 mt-0.5">
                     <span className="font-semibold text-slate-700">{t("app_store.field.requires")}</span>
@@ -380,7 +455,9 @@ export default function AppStorePage() {
 
                 <h2 className="text-lg font-bold text-slate-900">{app.name}</h2>
                 <p className="text-xs font-medium text-indigo-600 mb-2">{app.category}</p>
-                <p className="text-sm text-slate-600 mb-4 line-clamp-2">{app.description}</p>
+                <p className="text-sm text-slate-600 line-clamp-2">{app.description}</p>
+                {renderReleaseNote(app)}
+                <div className="mb-4" />
 
                 {/* Dependencies info */}
                 {app.manifest.dependencies && app.manifest.dependencies.length > 0 && (

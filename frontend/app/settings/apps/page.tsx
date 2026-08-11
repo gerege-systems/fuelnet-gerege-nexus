@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type StoreOverviewApp } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { Settings, Clock, ArrowUpCircle, ShieldAlert, Pin } from "lucide-react";
+import { Settings, Clock, ArrowUpCircle, ShieldAlert, Pin, GitCompareArrows } from "lucide-react";
 
 interface InstalledApp {
   id: string;
@@ -36,6 +36,11 @@ export default function InstalledAppsSettingsPage() {
   const { t, locale } = useI18n();
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [status, setStatus] = useState<CatalogStatus | null>(null);
+  // Rows where the compiled module and the catalogue disagree. Unlike an update
+  // waiting or an app held back, this is nobody's decision — it means this
+  // instance is serving a catalogue that does not describe the code it runs,
+  // which from every other screen looks exactly like a healthy one.
+  const [drifted, setDrifted] = useState<StoreOverviewApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -52,6 +57,14 @@ export default function InstalledAppsSettingsPage() {
     // address, so a refusal here is expected rather than a fault.
     try {
       setStatus(await api.getCatalogStatus());
+      // Administrator-only, and this page already is. A failure here must not
+      // cost the page its list of installed apps, so it is asked for on its own.
+      try {
+        const overview = await api.getStoreOverview();
+        setDrifted((overview.apps || []).filter((row) => row.drifted));
+      } catch {
+        setDrifted([]);
+      }
     } catch {
       setStatus(null);
     }
@@ -137,6 +150,24 @@ export default function InstalledAppsSettingsPage() {
               {t("app_store.message.sync_failed")}: {status.last_sync_error}
             </span>
           )}
+        </div>
+      )}
+
+      {drifted.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm">
+          <p className="font-semibold text-rose-800 flex items-center gap-2">
+            <GitCompareArrows className="w-4 h-4" />
+            {t("app_store.overview.drifted")}
+          </p>
+          <p className="text-rose-700 mt-0.5">{t("app_store.overview.drift_note")}</p>
+          <ul className="mt-2 space-y-0.5">
+            {drifted.map((row) => (
+              <li key={row.app_id} className="text-rose-800 font-mono text-xs">
+                {row.name}: {t("app_store.overview.binary")} v{row.binary_version} ≠{" "}
+                {t("app_store.overview.catalog")} v{row.catalog_version}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
