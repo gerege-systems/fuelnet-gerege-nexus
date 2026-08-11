@@ -15,6 +15,8 @@ export const app_store = {
 
   "app_store.field.latest_version": { mn: "Сүүлийн хувилбар", en: "Latest version" },
   "app_store.field.updates": { mn: "Шинэчлэлт", en: "Updates" },
+  "app_store.field.last_sync": { mn: "Сүүлд шалгасан", en: "Last checked" },
+  "app_store.field.app_count": { mn: "{count} апп", en: "{count} apps" },
 
   "app_store.action.install": { mn: "Суулгах", en: "Install App" },
   "app_store.action.enable": { mn: "Идэвхжүүлэх", en: "Enable App" },
@@ -28,6 +30,8 @@ export const app_store = {
   "app_store.state.auto_update_on": { mn: "Автоматаар шинэчилнэ", en: "Updates automatically" },
   "app_store.state.auto_update_off": { mn: "Гараар шинэчилнэ", en: "Updated by hand" },
   "app_store.state.pinned": { mn: "{version} хувилбар дээр тогтоосон", en: "Held at {version}" },
+  "app_store.state.source_registry": { mn: "Каталогийг апп сторын бүртгэлээс авдаг", en: "Catalogue comes from the app registry" },
+  "app_store.state.source_file": { mn: "Каталог нь энэ хувилбартай хамт ирсэн файл", en: "Catalogue is the file shipped with this release" },
 
   "app_store.filter.all": { mn: "Бүгд", en: "All" },
 
@@ -68,6 +72,13 @@ export const app_store = {
   // Said where the decision is made. An app whose new version asks for more
   // than the installed one is not updated on its own — the administrator is
   // shown what it added and decides.
+  // A registry that has been failing for a week looks exactly like one that has
+  // published nothing: the store keeps serving the catalogue it already holds.
+  "app_store.message.sync_failed": {
+    mn: "Сүүлийн шалгалт амжилтгүй",
+    en: "The last check failed",
+  },
+
   "app_store.message.held_for_approval": {
     mn: "Шинэ хувилбар нэмэлт эрх шаардаж байна:",
     en: "The new version asks for more:",

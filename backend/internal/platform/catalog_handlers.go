@@ -173,6 +173,9 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		        ai.installed_at, ai.auto_update, COALESCE(ai.pinned_version, ''),
 		        COALESCE((SELECT e.details ->> 'added' FROM installation_events e
 		                   WHERE e.installation_id = ai.id AND e.event_type = 'held'
+		                   ORDER BY e.created_at DESC LIMIT 1), ''),
+		        COALESCE((SELECT e.details ->> 'reason' FROM installation_events e
+		                   WHERE e.installation_id = ai.id AND e.event_type = 'held'
 		                   ORDER BY e.created_at DESC LIMIT 1), '')
 		 FROM app_installations ai
 		 JOIN apps a ON a.id = ai.app_id
@@ -198,9 +201,11 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		LatestVersion   string `json:"latest_version,omitempty"`
 		UpdateAvailable bool   `json:"update_available"`
 		// HeldFor lists what a waiting version asks for that the installed one
-		// did not. Non-empty means an administrator has a decision to make
-		// rather than a button to press — see appinstaller.AutoUpdate.
-		HeldFor []string `json:"held_for,omitempty"`
+		// did not, and HeldReason says why it is waiting at all. Either being
+		// set means an administrator has a decision to make rather than a
+		// button to press — see appinstaller.AutoUpdate.
+		HeldFor    []string `json:"held_for,omitempty"`
+		HeldReason string   `json:"held_reason,omitempty"`
 	}
 
 	locale := config.LocaleFromRequest(r)
@@ -209,10 +214,10 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		var item InstalledApp
 		// Skipping unreadable rows reported a tenant's app as not installed,
 		// and the store then offered to install it again over the top.
-		var heldFor string
+		var heldFor, heldReason string
 		if err := rows.Scan(&item.ID, &item.AppID, &item.Slug, &item.Name, &item.InstalledVersion,
 			&item.Status, &item.Enabled, &item.InstalledAt, &item.AutoUpdate,
-			&item.PinnedVersion, &heldFor); err != nil {
+			&item.PinnedVersion, &heldFor, &heldReason); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "failed to read installed apps")
 			return
 		}
@@ -231,8 +236,9 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 			// Only report a hold that is still true: once the pin is at the
 			// version being offered, or the offer is gone, the recorded reason
 			// is history rather than a decision.
-			if heldFor != "" && item.UpdateAvailable && item.PinnedVersion == item.InstalledVersion {
+			if item.UpdateAvailable && item.PinnedVersion == item.InstalledVersion {
 				item.HeldFor = parseHeldFor(heldFor)
+				item.HeldReason = heldReason
 			}
 		}
 		list = append(list, item)
@@ -416,6 +422,41 @@ func (s *Server) handleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.JSON(w, http.StatusOK, map[string]any{"app": slug, "auto_update": body.Enabled})
+}
+
+// handleCatalogStatus reports where the catalogue comes from and how the last
+// attempt to refresh it went.
+//
+// The manual sync button answers for itself; the hourly one leaves a log line
+// on a server nobody is watching, so a registry that has been unreachable for a
+// week looks exactly like one that has published nothing. This is the screen
+// that tells them apart — and it is also where an app that is held back stops
+// being a mystery, because the reason is on the installed-apps list beside it.
+func (s *Server) handleCatalogStatus(w http.ResponseWriter, r *http.Request) {
+	s.syncMu.RLock()
+	at, ok, failure := s.lastSyncAt, s.lastSyncOK, s.lastSyncErr
+	s.syncMu.RUnlock()
+
+	status := map[string]any{
+		"source":        "file",
+		"apps":          len(s.installer.GetCatalog()),
+		"sync_interval": s.catalogSource.SyncInterval().String(),
+	}
+	if s.catalogSource.Remote() {
+		status["source"] = "registry"
+	}
+	if !at.IsZero() {
+		status["last_sync_at"] = at
+		status["last_sync_ok"] = ok
+		// The registry's own words, not a redaction: this is a tenant
+		// administrator being told why their store is not moving, and "an error
+		// occurred" is not something anybody can act on. It says nothing about
+		// this deployment that the catalogue URL does not.
+		if failure != "" {
+			status["last_sync_error"] = failure
+		}
+	}
+	httpx.JSON(w, http.StatusOK, status)
 }
 
 func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {

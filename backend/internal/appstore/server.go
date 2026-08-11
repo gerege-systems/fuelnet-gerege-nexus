@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/go-chi/chi/v5"
@@ -149,6 +150,20 @@ func (s *Server) handleKeys(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	channel := r.URL.Query().Get("channel")
 	platform := r.URL.Query().Get("platform")
+
+	// A platform that is not a version is the caller's mistake. It used to
+	// come back as a 500, which puts somebody's typo in the same alert as a
+	// database that has gone away.
+	if platform != "" {
+		if _, err := semver.NewVersion(platform); err != nil {
+			httpx.Error(w, http.StatusBadRequest, "platform must be a semver version, for example 1.0.0")
+			return
+		}
+	}
+	if channel != "" && channel != "stable" && channel != "beta" {
+		httpx.Error(w, http.StatusBadRequest, `channel must be "stable" or "beta"`)
+		return
+	}
 
 	snapshot, err := s.catalog.Catalog(r.Context(), channel, platform)
 	if err != nil {

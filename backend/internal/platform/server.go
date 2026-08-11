@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
@@ -95,6 +96,15 @@ type Server struct {
 	sharedVerify   *security.SharedLimiter
 	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
+
+	// The last thing the catalogue sync did. An administrator pressing "check
+	// for updates" gets an answer; the hourly one leaves only a log line, and a
+	// registry that has been failing for a week is exactly the thing nobody
+	// notices. See handleCatalogStatus.
+	syncMu      sync.RWMutex
+	lastSyncAt  time.Time
+	lastSyncOK  bool
+	lastSyncErr string
 }
 
 // appGateTTL bounds how long the gate keeps believing an app is installed after
@@ -347,13 +357,26 @@ func (s *Server) startCatalogSync(ctx context.Context) {
 	})
 }
 
+// recordSync remembers how the last attempt went.
+func (s *Server) recordSync(err error) {
+	s.syncMu.Lock()
+	s.lastSyncAt, s.lastSyncOK = time.Now(), err == nil
+	s.lastSyncErr = ""
+	if err != nil {
+		s.lastSyncErr = err.Error()
+	}
+	s.syncMu.Unlock()
+}
+
 // syncCatalogFromRegistry fetches, accepts and publishes a new catalogue.
 //
 // The order matters: the apps table has to carry a row before an installation
 // can reference it, and every replica's app gate has to stop answering from a
 // catalogue that no longer exists. The gate is dropped for every tenant rather
 // than one, because a catalogue change is not a tenant's act.
-func (s *Server) syncCatalogFromRegistry(ctx context.Context) (bool, error) {
+func (s *Server) syncCatalogFromRegistry(ctx context.Context) (changed bool, err error) {
+	defer func() { s.recordSync(err) }()
+
 	catalog, changed, err := s.catalogSource.Refresh(ctx)
 	if err != nil {
 		return false, err
@@ -589,6 +612,10 @@ func (s *Server) setupRoutes() {
 				// like the rest: it reaches out of this deployment and changes
 				// what every tenant on it is offered.
 				ar.Post("/admin/store/sync", s.handleSyncCatalog)
+				// Where the catalogue comes from and how the last refresh
+				// went. A read, but an administrative one: it names the
+				// registry and reports its failures.
+				ar.Get("/admin/store/status", s.handleCatalogStatus)
 				ar.Post("/store/apps/{slug}/enable", s.handleEnableApp)
 				ar.Post("/store/apps/{slug}/disable", s.handleDisableApp)
 			})

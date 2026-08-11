@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -273,5 +274,47 @@ func TestThePublicApiDescribesAnApp(t *testing.T) {
 	}
 	if versions, _ := view["versions"].([]any); len(versions) == 0 {
 		t.Fatal("an app detail with no versions cannot be installed from")
+	}
+}
+
+func TestAMalformedPlatformIsTheCallersMistake(t *testing.T) {
+	server, store, _ := testRegistry(t)
+	seedRegistry(t, store)
+
+	// A typo used to answer 500, which puts it in the same alert as a database
+	// that has gone away.
+	if res := get(t, server, "/api/v1/registry/catalog?platform=not-a-version", nil); res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an unparseable platform, got %d", res.Code)
+	}
+	if res := get(t, server, "/api/v1/registry/catalog?channel=nightly", nil); res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an unknown channel, got %d", res.Code)
+	}
+	// And the valid one still works, which is the half that matters.
+	if res := get(t, server, "/api/v1/registry/catalog?platform=1.0.0", nil); res.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a real platform, got %d", res.Code)
+	}
+}
+
+func TestTheSnapshotCacheCannotBeGrownWithoutBound(t *testing.T) {
+	server, store, _ := testRegistry(t)
+	seedRegistry(t, store)
+
+	// The catalogue endpoint is deliberately unauthenticated and caches per
+	// platform version asked for, so anything that can send a request can also
+	// write rows. A stranger can invent far more versions than exist.
+	for minor := range 90 {
+		target := fmt.Sprintf("/api/v1/registry/catalog?platform=9.%d.0", minor)
+		if res := get(t, server, target, nil); res.Code != http.StatusOK {
+			t.Fatalf("%s answered %d", target, res.Code)
+		}
+	}
+
+	var rows int
+	if err := store.DB().QueryRow(context.Background(),
+		`SELECT count(*) FROM catalog_snapshots WHERE channel = 'stable'`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows > 64 {
+		t.Fatalf("the snapshot cache grew to %d rows; it is meant to be bounded", rows)
 	}
 }
