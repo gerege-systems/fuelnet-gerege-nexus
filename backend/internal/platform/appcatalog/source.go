@@ -206,6 +206,15 @@ func (p *Provider) Load(ctx context.Context) ([]CatalogApp, error) {
 				slog.Warn("catalog: the disk cache could not be used; falling back to the bundled file",
 					"path", p.cfg.CachePath, "error", err)
 			}
+		} else if err := p.check(cached); err != nil {
+			// The cache is the only source that was accepted without being held
+			// against the binary that is about to serve it, and it is the one
+			// source that can be older than that binary: it was written by a
+			// previous build, from a registry that has since moved on. A cache
+			// naming apps this build no longer knows is worse than no cache —
+			// the bundled file always matches the code.
+			slog.Warn("catalog: the disk cache does not match this build; falling back to the bundled file",
+				"path", p.cfg.CachePath, "error", err)
 		} else {
 			slog.Warn("catalog: serving the last catalogue accepted from the registry",
 				"path", p.cfg.CachePath, "apps", len(cached))
@@ -218,13 +227,19 @@ func (p *Provider) Load(ctx context.Context) ([]CatalogApp, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p.cfg.Verify != nil {
-		if err := p.cfg.Verify(apps); err != nil {
-			return nil, err
-		}
+	if err := p.check(apps); err != nil {
+		return nil, err
 	}
 	p.remember(apps)
 	return apps, nil
+}
+
+// check holds a candidate catalogue against the binary about to serve it.
+func (p *Provider) check(apps []CatalogApp) error {
+	if p.cfg.Verify == nil {
+		return nil
+	}
+	return p.cfg.Verify(apps)
 }
 
 // Refresh asks the registry for a catalogue newer than the one held.
@@ -358,10 +373,8 @@ func (p *Provider) parseSigned(body []byte) ([]CatalogApp, error) {
 	if err := ValidateCatalog(apps, p.cfg.PlatformVersion); err != nil {
 		return nil, err
 	}
-	if p.cfg.Verify != nil {
-		if err := p.cfg.Verify(apps); err != nil {
-			return nil, err
-		}
+	if err := p.check(apps); err != nil {
+		return nil, err
 	}
 	return apps, nil
 }

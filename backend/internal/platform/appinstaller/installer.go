@@ -460,7 +460,17 @@ func (ai *AppInstaller) EnableApp(ctx context.Context, tenantID, appSlug, userID
 // the six shipped apps. Installing any of the others — or any app added to the
 // catalog later — failed with a foreign-key violation. The catalog file is the
 // single source of truth; the table is now derived from it on every boot.
+//
+// One entry that cannot be written no longer takes the other eight with it.
+// It used to return on the first failure, and a single stale row was enough to
+// stop the whole catalogue reaching the database: a `slug` is unique across
+// apps, so a catalogue naming an app under an id the platform had since
+// renamed collided on the slug, the sync aborted before the rest, and every
+// app the store went on offering failed to install on the foreign key it never
+// got. The failures are still reported — an aggregate reaches the caller and
+// each one is logged with the app it belongs to — but what can be written is.
 func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
+	var failed []string
 	for _, app := range ai.GetCatalog() {
 		_, err := ai.db.Exec(ctx,
 			`INSERT INTO apps (id, slug, name, description, icon_url, category, visibility)
@@ -474,7 +484,9 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 			     visibility  = EXCLUDED.visibility`,
 			app.ID, app.Slug, app.Name, app.Description, app.IconURL, app.Category, app.Visibility)
 		if err != nil {
-			return fmt.Errorf("sync catalog app %s: %w", app.ID, err)
+			slog.Error("could not sync a catalogue app", "error", err, "app_id", app.ID, "slug", app.Slug)
+			failed = append(failed, app.ID)
+			continue
 		}
 
 		// The version the catalogue currently carries is kept as history.
@@ -488,7 +500,9 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 		// a publisher error, and overwriting the row here would hide it.
 		manifest, err := json.Marshal(app.Manifest)
 		if err != nil {
-			return fmt.Errorf("encode manifest for %s: %w", app.ID, err)
+			slog.Error("could not encode a manifest", "error", err, "app_id", app.ID)
+			failed = append(failed, app.ID)
+			continue
 		}
 		platformConstraint := app.Manifest.Platform
 		if platformConstraint == "" {
@@ -500,8 +514,13 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 			 ON CONFLICT (app_id, version) DO NOTHING`,
 			app.ID, app.Version, platformConstraint, manifest)
 		if err != nil {
-			return fmt.Errorf("record version %s of %s: %w", app.Version, app.ID, err)
+			slog.Error("could not record a catalogue version",
+				"error", err, "app_id", app.ID, "version", app.Version)
+			failed = append(failed, app.ID)
 		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("could not sync %d catalogue app(s): %s", len(failed), strings.Join(failed, ", "))
 	}
 	return nil
 }

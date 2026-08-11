@@ -368,7 +368,11 @@ html[data-theme="dark"] .border-slate-300 { border-color: var(--gerege-border) !
   .gerege-mobile-more-app.is-active > span { color: var(--gerege-blue); }
   .gerege-copilot-trigger { bottom: calc(var(--gerege-mobile-tabs-h) + env(safe-area-inset-bottom, 0px) + 0.75rem); }
   .gerege-copilot-panel {
-    right: 0.75rem; bottom: calc(var(--gerege-mobile-tabs-h) + env(safe-area-inset-bottom, 0px) + 4.75rem);
+    /* Logical, to match the trigger: on a phone the panel is full-width
+       anyway, but the offset has to come off the same edge or it drifts by
+       0.75rem in Arabic. */
+    inset-inline-start: 0.75rem; inset-inline-end: auto;
+    bottom: calc(var(--gerege-mobile-tabs-h) + env(safe-area-inset-bottom, 0px) + 4.75rem);
     width: calc(100vw - 1.5rem); max-width: none; height: min(600px, calc(100dvh - 10rem));
   }
 }
