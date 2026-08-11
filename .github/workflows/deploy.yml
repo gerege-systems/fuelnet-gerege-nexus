@@ -161,7 +161,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER || 'deploy' }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: docker-compose.prod.yml
+          source: "docker-compose.prod.yml,deploy/nginx/nexus-oauth.conf"
           target: /opt/open-gerege-nexus
 
       - name: Pull images, migrate and restart
@@ -319,3 +319,65 @@ jobs:
             echo "::error::backend did not become healthy within 150s"
             docker compose -f /opt/open-gerege-nexus/docker-compose.prod.yml logs --tail=80 backend migrate
             exit 1
+
+      - name: Route the OIDC endpoints to the API
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -uo pipefail
+            # /oauth2/auth and the two well-known documents were never routed to
+            # the API: the vhost sends / to the frontend and named only
+            # /oauth2/token. So a sign-in started by any client outside this
+            # deployment landed on the Next.js shell.
+            #
+            # The fix is one include line. It is added rather than the vhost
+            # being replaced, because certbot owns the TLS block in that file
+            # and rewriting it would take the site off HTTPS between the copy
+            # and the next certbot run.
+            if ! sudo -n true 2>/dev/null; then
+              echo "::warning::No passwordless sudo; add 'include snippets/nexus-oauth.conf;' to the nexus vhost by hand."
+              exit 0
+            fi
+
+            LIVE=$(sudo grep -rl "server_name nexus.gerege.mn" /etc/nginx/sites-available /etc/nginx/conf.d 2>/dev/null | head -1)
+            if [ -z "$LIVE" ]; then
+              echo "::warning::Could not find the nexus vhost; OIDC endpoints stay unrouted."
+              exit 0
+            fi
+
+            sudo install -d /etc/nginx/snippets
+            sudo cp /opt/open-gerege-nexus/deploy/nginx/nexus-oauth.conf /etc/nginx/snippets/nexus-oauth.conf
+
+            if sudo grep -q "snippets/nexus-oauth.conf" "$LIVE"; then
+              echo "already routed; refreshing the snippet only"
+            else
+              BACKUP="${LIVE}.bak.$(date +%s)"
+              sudo cp "$LIVE" "$BACKUP"
+              # Inserted after the first `listen 443`, which is the TLS server
+              # block — never the port-80 one, where these endpoints would then
+              # answer over plain HTTP instead of redirecting to HTTPS.
+              sudo awk 'BEGIN{done=0} {print} /listen[[:space:]]+443/ && !done {print "    include snippets/nexus-oauth.conf;"; done=1}' \
+                "$LIVE" | sudo tee "${LIVE}.new" >/dev/null
+              sudo mv "${LIVE}.new" "$LIVE"
+              if ! sudo nginx -t; then
+                echo "::error::nginx rejected the patched vhost; restoring $BACKUP"
+                sudo cp "$BACKUP" "$LIVE"
+                sudo nginx -t && sudo systemctl reload nginx
+                exit 1
+              fi
+            fi
+
+            sudo nginx -t && sudo systemctl reload nginx
+            # Proof rather than hope: the discovery document is JSON from the
+            # API, and HTML if this is still hitting the frontend.
+            if curl -fsS https://nexus.gerege.mn/.well-known/openid-configuration | head -c 1 | grep -q '{'; then
+              echo "OIDC discovery is served by the API"
+            else
+              echo "::error::/.well-known/openid-configuration is still not the API"
+              exit 1
+            fi
