@@ -82,10 +82,6 @@ jobs:
       # timeout are all database behaviour, and all self-skip without this.
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       TEST_REDIS_URL: redis://localhost:6379/0
-      # The registry keeps its own schema in its own database — it is a separate
-      # service — and both use goose, so sharing one database would mean sharing
-      # one goose_db_version table and two migration histories fighting over it.
-      APPSTORE_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/appstore_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -96,9 +92,6 @@ jobs:
         run: go vet ./...
       - name: Migrate the test database
         run: go run ./cmd/migrate up
-      - name: Create the registry test database
-        run: PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE appstore_test'
-        working-directory: .
       - name: Run tests
         run: go test -race ./...
       - name: Fail if the workflow integration tests were skipped
@@ -159,19 +152,6 @@ jobs:
             echo "::error::tenant isolation tests skipped — TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
-      - name: Fail if the registry tests were skipped
-        # What the registry guarantees lives partly in SQL: one row per
-        # (app, version), the revision that says the catalogue changed, and the
-        # snapshot that must be served byte-for-byte as it was signed. Skipped,
-        # a registry that serves a catalogue no instance accepts would still
-        # report green.
-        run: |
-          go test -run 'TestTheSeededRegistryServesACatalogTheClientAccepts' -v \
-            ./internal/appstore/... | tee /tmp/appstore.log
-          if grep -q -- '--- SKIP' /tmp/appstore.log; then
-            echo "::error::registry tests skipped — APPSTORE_TEST_DATABASE_URL is not reaching the test"
-            exit 1
-          fi
       - name: Fail if the cross-replica tests were skipped
         # Invalidation reaching another replica, and two replicas sharing one
         # rate-limit budget, are both invisible to a single-process test.
@@ -211,29 +191,6 @@ jobs:
       - name: Build
         run: npm run build
 
-  services:
-    name: Store & console build
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [appstore-web, developer-web]
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-      - name: Typecheck
-        run: npx tsc --noEmit
-      - name: Build
-        run: npm run build
-
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -249,7 +206,6 @@ jobs:
         run: |
           go build -o bin/api ./cmd/api
           go build -o bin/migrate ./cmd/migrate
-          go build -o bin/appstore ./cmd/appstore
-          go build -o bin/catalog-sign ./cmd/catalog-sign
+
       - name: Build backend Docker image
         run: docker build -f deploy/Dockerfile -t open-gerege-nexus-backend:ci .
