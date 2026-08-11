@@ -76,10 +76,13 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	}
 }
 
+// Menus are the three screens this app is. No parent is named: the platform
+// hangs an app's own menus under its Modules group, and a ParentID set here
+// would be overwritten — which reads as a decision that was silently ignored.
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
 		{
-			ID: "core_organisation", ParentID: "platform_tools", Label: "Organisation",
+			ID: "core_organisation", Label: "Organisation",
 			Path: "/organisation", Icon: "building-2", Order: 5,
 			Labels: map[string]string{
 				"mn": "Байгууллага", "ar": "المؤسسة", "zh": "组织",
@@ -87,7 +90,7 @@ func (m *Module) Menus() []internal.MenuDefinition {
 			},
 		},
 		{
-			ID: "core_people", ParentID: "platform_tools", Label: "People",
+			ID: "core_people", Label: "People",
 			Path: "/organisation/people", Icon: "users", Order: 6,
 			Labels: map[string]string{
 				"mn": "Ажилтнууд", "ar": "الأشخاص", "zh": "人员",
@@ -95,7 +98,7 @@ func (m *Module) Menus() []internal.MenuDefinition {
 			},
 		},
 		{
-			ID: "core_departments", ParentID: "platform_tools", Label: "Departments",
+			ID: "core_departments", Label: "Departments",
 			Path: "/organisation/departments", Icon: "network", Order: 7,
 			Labels: map[string]string{
 				"mn": "Хэлтэс, нэгж", "ar": "الأقسام", "zh": "部门",

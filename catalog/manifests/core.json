@@ -19,7 +19,6 @@
   "menus": [
     {
       "id": "core_organisation",
-      "parent_id": "platform_tools",
       "label": "Organisation",
       "path": "/organisation",
       "icon": "building-2",
@@ -27,7 +26,6 @@
     },
     {
       "id": "core_people",
-      "parent_id": "platform_tools",
       "label": "People",
       "path": "/organisation/people",
       "icon": "users",
@@ -35,7 +33,6 @@
     },
     {
       "id": "core_departments",
-      "parent_id": "platform_tools",
       "label": "Departments",
       "path": "/organisation/departments",
       "icon": "network",
