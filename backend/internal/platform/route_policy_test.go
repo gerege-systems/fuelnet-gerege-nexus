@@ -62,6 +62,22 @@ var publicRoutes = []string{
 	"/api/v1/auth/eid/poll",
 	"/api/v1/auth/dan/login",
 
+	// The App Store registry, when this instance is the one publishing a
+	// catalogue. Public because a catalogue is read by an instance that holds
+	// no session — that is what a catalogue is for — and because what makes it
+	// trustworthy is the Ed25519 signature over its bytes rather than who
+	// asked. A client verifies against a pinned key before reading a single
+	// field, and rejects a document that fails however well authenticated the
+	// connection was.
+	//
+	// An instance with no signing key answers 503 here rather than serving an
+	// unsigned document; see appstore_registry.requireCatalogue.
+	"/api/v1/registry/*",
+	// The keys those catalogues may be signed with, so an instance can follow a
+	// rotation without a redeploy. Public by the same reasoning as
+	// /.well-known/jwks.json.
+	"/.well-known/appstore-keys.json",
+
 	// Two landings reached by people who are not signed in and may hold no
 	// account here at all. In both cases a single-use reference in the query is
 	// the whole authority — see handleIntegrationOAuthCallback and

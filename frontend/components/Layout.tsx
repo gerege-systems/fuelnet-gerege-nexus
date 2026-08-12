@@ -28,6 +28,10 @@ const iconMap: Record<string, React.ReactNode> = {
   "credit-card":<CreditCard className="w-5 h-5"/>, "file-text":<FileText className="w-5 h-5"/>, code:<Code2 className="w-5 h-5"/>, landmark:<Landmark className="w-5 h-5"/>,
   "pen-tool":<PenTool className="w-5 h-5"/>, settings:<Settings className="w-5 h-5"/>,
   "mail-check":<MailCheck className="w-5 h-5"/>,
+  // Named by the external-app example manifest, and by any third party
+  // that copies it. Without this such an app's menu entry fell back to a
+  // box, which is the icon for "we did not recognise yours".
+  "share-2":<Share2 className="w-5 h-5"/>,
   // core
   "building-2":<Building2 className="w-5 h-5"/>, network:<Network className="w-5 h-5"/>,
   // esign
