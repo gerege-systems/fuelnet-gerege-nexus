@@ -307,6 +307,42 @@ export interface ReportScheduleInput {
   active?: boolean;
 }
 
+export interface ReportGrant {
+  id: string;
+  report_key: string;
+  grantor_tenant_id: string;
+  grantor_name: string;
+  grantee_tenant_id: string;
+  grantee_name: string;
+  scope: "counterparty" | "full";
+  counterparty_ref?: string;
+  valid_from: string;
+  valid_until?: string;
+  revoked_at?: string;
+  accepted_at?: string;
+  note?: string;
+  created_at: string;
+  /** Which side of the agreement this organisation is on. */
+  direction: "given" | "received";
+  titles?: Record<string, string>;
+}
+
+export interface ReportGrantRequest {
+  grantor_registration_number: string;
+  report_key: string;
+  scope: "counterparty" | "full";
+  valid_until?: string;
+  note?: string;
+}
+
+/** One line of "who read our data". */
+export interface ReportAccessEntry {
+  at: string;
+  report_key: string;
+  by: string;
+  details: Record<string, unknown>;
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -909,6 +945,27 @@ export const api = {
 
   deleteReportSchedule: (id: string) =>
     fetcher<void>(`/reports/schedules/${id}`, { method: "DELETE" }),
+
+  // Cross-tenant sharing (§3.5 of the monitoring and reporting proposal).
+  getReportGrants: () => fetcher<{ grants: ReportGrant[] }>("/reports/grants"),
+
+  getReportAccessHistory: () =>
+    fetcher<{ history: ReportAccessEntry[] }>("/reports/grants/history"),
+
+  requestReportGrant: (input: ReportGrantRequest) =>
+    fetcher<{ id: string }>("/reports/grants", { method: "POST", body: JSON.stringify(input) }),
+
+  acceptReportGrant: (id: string) =>
+    fetcher<{ id: string }>(`/reports/grants/${id}/accept`, { method: "POST" }),
+
+  revokeReportGrant: (id: string) =>
+    fetcher<{ id: string }>(`/reports/grants/${id}/revoke`, { method: "POST" }),
+
+  runConsolidatedReport: (key: string, params: Record<string, string>) =>
+    fetcher<{ key: string; title: string; result: ReportResult }>(
+      `/reports/${encodeURIComponent(key)}/run-consolidated`,
+      { method: "POST", body: JSON.stringify({ params }) },
+    ),
 
   // Billing App (io.gerege.nexus.billing)
   getInvoices: () =>

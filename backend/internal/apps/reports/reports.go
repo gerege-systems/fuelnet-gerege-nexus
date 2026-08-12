@@ -38,6 +38,11 @@ const ID = "io.gerege.nexus.reports"
 const (
 	PermissionView     = "reports.view"
 	PermissionSchedule = "reports.schedule"
+	// PermissionShare covers both directions of a sharing agreement: asking
+	// another organisation to show you a report, and agreeing to show them
+	// yours. Separate from the other two because it is the only one that
+	// crosses the tenant boundary at all.
+	PermissionShare = "reports.share"
 )
 
 // InstalledApps answers which apps a tenant has, which is how the module
@@ -86,6 +91,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	return []internal.PermissionDefinition{
 		{Code: PermissionView, Name: "View Reports", Description: "Run and export the reports of the apps this organisation has installed"},
 		{Code: PermissionSchedule, Name: "Schedule Reports", Description: "Create and remove scheduled reports that are mailed out automatically"},
+		{Code: PermissionShare, Name: "Share Reports Across Organisations", Description: "Ask another organisation to share a report, and agree to share this organisation's own"},
 	}
 }
 
@@ -126,10 +132,28 @@ func (m *Module) RegisterRoutes(r chi.Router, gateMiddleware func(http.Handler) 
 		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/run", m.handleRun)
 		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/export", m.handleExport)
 
+		// The consolidated view. Reading, from this organisation's side: the
+		// permission that matters on the other side is the grant, and it was
+		// given by the organisation that owns the data rather than by anything
+		// here.
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/run-consolidated", m.handleRunConsolidated)
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/grants", m.handleListGrants)
+		// Who has read our data. A read, and one this organisation is entitled
+		// to — see handleAccessHistory.
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/grants/history", m.handleAccessHistory)
+
 		// Scheduling. Administrative: it sends this organisation's numbers to
 		// an address list, on a timer, without anybody present.
 		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Post("/schedules", m.handleCreateSchedule)
 		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Put("/schedules/{id}", m.handleUpdateSchedule)
 		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Delete("/schedules/{id}", m.handleDeleteSchedule)
+
+		// Sharing. Under reports.share, not reports.schedule: asking another
+		// organisation for their numbers, and agreeing to hand over your own,
+		// is a different decision from mailing your own out — and the second
+		// one is the one this platform is most careful about.
+		rr.With(rbac.RequirePermission(m.perms, PermissionShare)).Post("/grants", m.handleRequestGrant)
+		rr.With(rbac.RequirePermission(m.perms, PermissionShare)).Post("/grants/{id}/accept", m.handleAcceptGrant)
+		rr.With(rbac.RequirePermission(m.perms, PermissionShare)).Post("/grants/{id}/revoke", m.handleRevokeGrant)
 	})
 }

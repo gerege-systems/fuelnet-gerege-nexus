@@ -54,6 +54,13 @@ export const reports = {
   "reports.message.export_failed": { mn: "Гаргаж чадсангүй", en: "The export failed" },
   "reports.message.schedule_saved": { mn: "Хуваарь хадгалагдлаа.", en: "The schedule was saved." },
   "reports.message.schedule_removed": { mn: "Хуваарь устгагдлаа.", en: "The schedule was removed." },
+  "reports.action.run_consolidated": { mn: "Нэгдсэн", en: "Consolidated" },
+  "reports.badge.consolidated": { mn: "Нэгдсэн", en: "Consolidated" },
+  "reports.toggle.by_company": { mn: "Компаниар задлах", en: "Break down by organisation" },
+  "reports.hint.consolidated": {
+    mn: "Танд энэ тайланг хуваалцсан байгууллага бүрийн дүн. Хуваалцаагүй бол юу ч харагдахгүй — Тохиргоо → Тайлан хуваалцах.",
+    en: "The figures of every organisation that shares this report with you. Nothing is shown without an agreement — Settings → Report sharing.",
+  },
   "reports.message.delivery_off": {
     mn: "Энэ суулгацад и-мэйл илгээх тохиргоо байхгүй тул товлосон тайлан бэлтгэгдэх боловч илгээгдэхгүй. REPORT_SMTP_URL-ийг тохируулна уу.",
     en: "This deployment has no mail transport, so a scheduled report is produced but not delivered. Set REPORT_SMTP_URL.",

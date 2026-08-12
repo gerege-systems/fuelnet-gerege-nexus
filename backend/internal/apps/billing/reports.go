@@ -27,6 +27,25 @@ func registerReports() {
 	reporting.Register(invoiceStatus{})
 }
 
+// Sharing. Both billing reports opt in to ScopeFull and neither to
+// ScopeCounterparty, and the difference is the schema rather than a decision:
+//
+//   - ScopeFull is the hierarchical case from §3.5(a) — a parent organisation
+//     consolidating a subsidiary's revenue. It needs no filter, so any report
+//     can honour it.
+//   - ScopeCounterparty is the contracted-parties case, and it needs a column
+//     saying which counterparty a row belongs to. `billing_invoices` records a
+//     contact *name*, not a registration number, and matching organisations by
+//     typed-in name is exactly the mistake §3.5 avoids by keying the grant on a
+//     registration number. A report that declared the scope and then filtered
+//     on nothing would hand over every invoice the agreement never covered.
+//
+// A module whose rows do carry a counterparty registration number — the
+// transport case the proposal describes — declares both and filters on
+// p.Counterparty(). See docs/REPORT_SHARING.md.
+func (revenueByMonth) Scopes() []string { return []string{reporting.ScopeFull} }
+func (invoiceStatus) Scopes() []string  { return []string{reporting.ScopeFull} }
+
 // ---------------------------------------------------------------- revenue
 
 type revenueByMonth struct{}

@@ -52,7 +52,7 @@ func (m *Module) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	locale := config.LocaleFromRequest(r)
+	locale := localeOf(r)
 	groups := map[string][]reportSummary{}
 	for _, report := range reporting.ForApps(installed) {
 		groups[report.App()] = append(groups[report.App()], reportSummary{
@@ -132,7 +132,7 @@ func (m *Module) handleRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	locale := config.LocaleFromRequest(r)
+	locale := localeOf(r)
 
 	params, err := reporting.Bind(report, raw, locale)
 	if err != nil {
@@ -175,7 +175,7 @@ func (m *Module) handleExport(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	locale := config.LocaleFromRequest(r)
+	locale := localeOf(r)
 
 	params, err := reporting.Bind(report, raw, locale)
 	if err != nil {
@@ -311,6 +311,9 @@ func decodeParams(w http.ResponseWriter, r *http.Request) (map[string]string, bo
 	}
 	return raw, true
 }
+
+// localeOf is the caller's language, as every screen-facing handler reads it.
+func localeOf(r *http.Request) string { return config.LocaleFromRequest(r) }
 
 // record writes the audit entry. Every run and every export, by name.
 //

@@ -28,6 +28,11 @@
       "code": "reports.schedule",
       "name": "Schedule Reports",
       "description": "Create and remove scheduled reports that are mailed out automatically"
+    },
+    {
+      "code": "reports.share",
+      "name": "Share Reports Across Organisations",
+      "description": "Ask another organisation to share a report, and agree to share this organisation's own"
     }
   ],
   "menus": [

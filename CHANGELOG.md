@@ -15,6 +15,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — One organisation seeing another's report, with their permission
+
+A coal mine contracts a hundred transport companies. Each keeps its trips in its
+own tenant; the mine wants one consolidated "Transport" report. That request
+runs against everything this platform is built to prevent, so the answer is not
+to weaken the isolation but to add a separate, permissioned path beside it.
+§3.5 of the design; guide in
+[`docs/REPORT_SHARING.md`](docs/REPORT_SHARING.md).
+
+- **Nothing crosses a tenant boundary.** A consolidated run calls the *ordinary*
+  report once per grantor, **inside that grantor's own tenant context**. No
+  policy is relaxed, no clause is rewritten, no query reads across
+  organisations, and the report cannot tell it is being consolidated except by
+  the counterparty reference it is handed.
+- **Default deny, in three places.** No grant, no rows. A report must
+  implement `Shareable` to be nameable in a grant at all — a report written
+  assuming one organisation may aggregate in ways its rows do not. A request is
+  not a permission: `accepted_at` is null until the owning organisation's
+  administrator answers, and the query that reads grants ignores anything
+  unaccepted, revoked or expired.
+- **The scope is the agreement.** `counterparty` shows the mine the work done
+  *for the mine*; `full` is the hierarchical case, a parent consolidating a
+  subsidiary. A report that cannot filter by counterparty cannot be granted that
+  scope — refused, rather than quietly widening to everything.
+- **A two-sided row-level policy**, which is why `report_grants` deliberately
+  has no `tenant_id` column: the general policy from 00029 would have attached
+  itself and hidden each party's own agreements from the other, leaving the
+  receiving side unable to see what it had been given. Accepting is still the
+  owner's alone — the `grantor_tenant_id = $2` clause on that one statement is
+  what stops a grantee accepting their own request.
+- **Both sides are audited, every run.** The reader records that it read; the
+  owner records that it was read, and can open "who has read our data" and see
+  the organisation, the report, the moment and the row count. A transport
+  company will only agree to this if it can check afterwards.
+- **Revoking is immediate and grants are never deleted.** `DELETE` is not
+  granted on the table: "who could see our data, and when" is a question asked
+  after the fact.
+- **One grantor failing does not fail the run.** A hundred organisations is a
+  hundred chances of one slow query, and the ninety-seventh timing out must not
+  produce nothing. That company is named in the result's notes instead — a total
+  quietly missing a company is worse than one that says so.
+- **Neither shipped billing report offers counterparty scope**, and that is the
+  schema rather than a decision: `billing_invoices` records a contact *name*,
+  not a registration number, and matching organisations by typed-in name is the
+  mistake §3.5 avoids by keying grants on a registration number. Both offer
+  `full`. The mechanism is complete and proven against a live database by the
+  four tests §3.5 asks for, plus three more.
+
 ### Added — Reports, as a platform layer rather than a screen
 
 `io.gerege.nexus.reports`. Every app that keeps data now has reports; the module

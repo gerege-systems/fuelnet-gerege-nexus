@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  Building2,
   CalendarClock,
   Download,
   FileSpreadsheet,
@@ -74,6 +75,11 @@ export default function ReportsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ReportResult | null>(null);
   const [title, setTitle] = useState("");
+  // Whether the last run crossed organisations. Kept beside the result rather
+  // than derived from it: the two runs answer different questions and the
+  // table must never be labelled as one while showing the other.
+  const [consolidated, setConsolidated] = useState(false);
+  const [byCompany, setByCompany] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -125,14 +131,17 @@ export default function ReportsPage() {
     }
   };
 
-  const run = async () => {
+  const run = async (across = false) => {
     if (!selected) return;
     setRunning(true);
     setFailure("");
     try {
-      const answer = await api.runReport(selected.key, values);
+      const answer = across
+        ? await api.runConsolidatedReport(selected.key, values)
+        : await api.runReport(selected.key, values);
       setResult(answer.result);
       setTitle(answer.title);
+      setConsolidated(across);
     } catch (err) {
       setFailure(`${t("reports.message.run_failed")}: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -167,7 +176,15 @@ export default function ReportsPage() {
     reloadSchedules();
   };
 
-  const chart = useMemo(() => chartShape(result), [result]);
+  // The organisation breakdown, folded away when the reader wants one set of
+  // figures. Merging is done here rather than asked of the server: the rows are
+  // already in hand, and a second round trip to see the same numbers grouped
+  // differently is a round trip for nothing.
+  const displayed = useMemo(
+    () => (consolidated && !byCompany && result ? mergeOrganisations(result) : result),
+    [consolidated, byCompany, result],
+  );
+  const chart = useMemo(() => chartShape(displayed), [displayed]);
 
   if (loading) return <LoadingBlock label={t("base.message.loading")} />;
 
@@ -183,12 +200,24 @@ export default function ReportsPage() {
           selected ? (
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={run}
+                onClick={() => run(false)}
                 disabled={running}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition"
               >
                 <Play className="w-4 h-4" />
                 {t("reports.action.run")}
+              </button>
+              {/* The consolidated run is a separate button rather than a
+                  mode, because it answers a different question and a toggle
+                  somebody left on would silently change what the numbers mean. */}
+              <button
+                onClick={() => run(true)}
+                disabled={running}
+                className="bg-white border border-indigo-200 hover:bg-indigo-50 disabled:opacity-50 text-indigo-700 text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition"
+                title={t("reports.hint.consolidated")}
+              >
+                <Building2 className="w-4 h-4" />
+                {t("reports.action.run_consolidated")}
               </button>
               <button
                 onClick={() => download("xlsx")}
@@ -284,7 +313,7 @@ export default function ReportsPage() {
 
           {running && <LoadingBlock label={t("reports.message.running")} />}
 
-          {result && !running && (
+          {result && displayed && !running && (
             <>
               {result.notes?.map((note, index) => (
                 <Banner
@@ -321,7 +350,25 @@ export default function ReportsPage() {
                 </div>
               )}
 
-              <ResultTable result={result} title={title} label={label} totalLabel={t("reports.field.total")} rowsLabel={t("reports.field.rows")} emptyLabel={t("reports.message.empty")} locale={locale} />
+              {consolidated && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="bg-indigo-50 text-indigo-700 text-[11px] font-semibold px-2.5 py-1 rounded-full border border-indigo-200 flex items-center gap-1">
+                    <Building2 className="w-3 h-3" />
+                    {t("reports.badge.consolidated")}
+                  </span>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={byCompany}
+                      onChange={(e) => setByCompany(e.target.checked)}
+                      className="rounded border-slate-300"
+                    />
+                    {t("reports.toggle.by_company")}
+                  </label>
+                </div>
+              )}
+
+              <ResultTable result={displayed} title={title} label={label} totalLabel={t("reports.field.total")} rowsLabel={t("reports.field.rows")} emptyLabel={t("reports.message.empty")} locale={locale} />
             </>
           )}
 
@@ -456,11 +503,47 @@ function ParamField({
   );
 }
 
+/** mergeOrganisations folds a consolidated result back into one set of figures.
+ *
+ *  Every row keyed by the same category is summed across organisations, and the
+ *  organisation column is dropped. Text columns other than the category are
+ *  dropped too rather than being picked arbitrarily from one company's row —
+ *  showing one organisation's label above another's numbers is worse than
+ *  showing none. */
+function mergeOrganisations(result: ReportResult): ReportResult {
+  const columns = result.columns.filter((column) => column.key !== "__organisation");
+  const category = columns.find((column) => column.chart === "category");
+  if (!category) {
+    return { ...result, columns };
+  }
+
+  const grouped = new Map<string, Record<string, unknown>>();
+  for (const row of result.rows) {
+    const key = String(row[category.key] ?? "");
+    const existing = grouped.get(key);
+    if (!existing) {
+      const copy: Record<string, unknown> = { [category.key]: row[category.key] };
+      for (const column of columns) {
+        if (isNumeric(column)) copy[column.key] = Number(row[column.key] ?? 0);
+      }
+      grouped.set(key, copy);
+      continue;
+    }
+    for (const column of columns) {
+      if (isNumeric(column)) {
+        existing[column.key] = Number(existing[column.key] ?? 0) + Number(row[column.key] ?? 0);
+      }
+    }
+  }
+
+  return { ...result, columns, rows: Array.from(grouped.values()) };
+}
+
 /** chartShape decides whether a result can be drawn, using the hints the report
  *  declared: exactly one category column and at least one value column. Nothing
  *  else is guessed — a report that does not say how it should be charted is
  *  shown as a table, which is the honest outcome. */
-function chartShape(result: ReportResult | null) {
+function chartShape(result: ReportResult | null | undefined) {
   if (!result || result.rows.length === 0) return null;
 
   const category = result.columns.find((column) => column.chart === "category");
