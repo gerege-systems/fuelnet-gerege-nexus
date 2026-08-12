@@ -1,0 +1,45 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import ts from "typescript";
+
+const root = process.cwd();
+const locales = ["mn", "en", "ar", "zh", "fr", "ru", "es"];
+const out = path.resolve(root, "../native-apps/generated-i18n");
+await mkdir(out, { recursive: true });
+const androidRoot = path.resolve(root, "../native-apps/android/app/src/main/res");
+const windowsRoot = path.resolve(root, "../native-apps/windows/Resources");
+const iosCatalog = path.resolve(root, "../native-apps/iOS/Sources/GeregeShellUI/Resources/Login.xcstrings");
+const xml = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "\\'");
+const resourceKey = key => key.replaceAll(".", "_").replace(/[^a-zA-Z0-9_]/g, "_");
+const catalog = { sourceLanguage: "mn", strings: {}, version: "1.0" };
+
+async function loadTs(file) {
+  const source = await (await import("node:fs/promises")).readFile(file, "utf8");
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+}
+
+const { auth } = await loadTs(path.resolve(root, "lib/i18n/addons/auth.ts"));
+const overlays = {};
+for (const locale of locales.slice(2)) {
+  const localeModule = await loadTs(path.resolve(root, `lib/i18n/locales/${locale}.ts`));
+  overlays[locale] = localeModule[locale] ?? {};
+}
+
+for (const locale of locales) {
+  const strings = Object.fromEntries(Object.entries(auth).map(([key, translations]) => [key, overlays[locale]?.[key] ?? translations[locale] ?? translations.en]));
+  await writeFile(path.join(out, `${locale}.json`), `${JSON.stringify(strings, null, 2)}\n`);
+  const qualifier = locale === "mn" ? "values" : `values-${locale}`;
+  await mkdir(path.join(androidRoot, qualifier), { recursive: true });
+  await writeFile(path.join(androidRoot, qualifier, "auth.xml"), `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n${Object.entries(strings).map(([key,value])=>`    <string name="${resourceKey(key)}">${xml(value)}</string>`).join("\n")}\n</resources>\n`);
+  await mkdir(windowsRoot, { recursive: true });
+  const suffix = locale === "mn" ? "" : `.${locale}`;
+  await writeFile(path.join(windowsRoot, `Login${suffix}.resx`), `<?xml version="1.0" encoding="utf-8"?>\n<root>\n  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>\n  <resheader name="version"><value>2.0</value></resheader>\n${Object.entries(strings).map(([key,value])=>`  <data name="${resourceKey(key)}" xml:space="preserve"><value>${xml(value)}</value></data>`).join("\n")}\n</root>\n`);
+  for (const [key,value] of Object.entries(strings)) {
+    catalog.strings[key] ??= { localizations: {} };
+    catalog.strings[key].localizations[locale] = { stringUnit: { state: "translated", value } };
+  }
+}
+await mkdir(path.dirname(iosCatalog), { recursive: true });
+await writeFile(iosCatalog, `${JSON.stringify(catalog, null, 2)}\n`);
+console.log(`Exported native auth strings to ${out}`);

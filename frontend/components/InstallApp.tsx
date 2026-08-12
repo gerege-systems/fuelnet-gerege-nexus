@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { currentDeviceLine } from "@/lib/deviceLine";
 import { Download, X, Share } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
@@ -77,6 +78,10 @@ export default function InstallApp() {
 
   useEffect(() => {
     if (runningInstalled()) return;
+    // Төхөөрөмжийн domain шугам дээр энэ санал утгагүй: хүн аль хэдийн native
+    // апп дотор сууж байгаа бөгөөд түүнийг PWA болгож "суулгах" нь тэр аппыг
+    // өөрийг нь хоёр дахин үүсгэнэ гэсэн үг. Хөтчийн шугам дээр урьдын адил.
+    if (currentDeviceLine()) return;
     if (window.localStorage.getItem(DISMISSED_KEY) === "1") return;
 
     const onPrompt = (event: Event) => {

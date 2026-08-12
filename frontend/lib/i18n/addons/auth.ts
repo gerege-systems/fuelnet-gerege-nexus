@@ -35,6 +35,11 @@ export const auth = {
   "auth.action.cancel": { mn: "Цуцлах", en: "Cancel" },
   "auth.action.admin_disclosure": { mn: "Системийн админ нэвтрэлт", en: "System administrator sign-in" },
   "auth.action.admin_sign_in": { mn: "Админаар нэвтрэх", en: "Sign in as administrator" },
+  "auth.field.email": { mn: "И-мэйл", en: "Email" },
+  "auth.field.password": { mn: "Нууц үг", en: "Password" },
+  "auth.field.staff_pin": { mn: "Ажилтны PIN", en: "Staff PIN" },
+  "auth.action.app_to_app": { mn: "eID апп-аар шууд нэвтрэх", en: "Open the eID app" },
+  "auth.action.staff_sign_in": { mn: "Ээлжийн ажилтнаар нэвтрэх", en: "Sign in as shift staff" },
 
   "auth.message.starting": { mn: "Хүсэлт үүсгэж байна…", en: "Creating the request…" },
   "auth.message.scan_qr": { mn: "eID Mongolia апп-аар QR кодыг уншуулна уу.", en: "Scan the QR code with the eID Mongolia app." },

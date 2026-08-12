@@ -66,6 +66,7 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 - [Үндсэн боломжууд](#үндсэн-боломжууд)
 - [Бэлэн бизнес аппликейшнүүд](#бэлэн-бизнес-аппликейшнүүд)
 - [Төслийн бүтэц](#төслийн-бүтэц)
+- [Desktop бүрхүүлүүд](#desktop-бүрхүүлүүд)
 - [Ажиллуулах заавар](#ажиллуулах-заавар)
 - [Тохиргооны хувьсагчид](#тохиргооны-хувьсагчид)
 - [API-н тойм](#api-н-тойм)
@@ -168,20 +169,53 @@ backend/
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
 frontend/             Next.js 15 (App Router) вэб клиент
-catalog/              Апп сторын каталог ба manifest-ууд
+native-apps/       Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
 ```
 
 ---
 
-## Десктоп дээр суулгах
+## Desktop бүрхүүлүүд
 
-Тусдаа native клиент энэ агуулахад байхгүй. Вэб клиент нь PWA
+Архитектур нь **Native Shell + Web Work Area**: native бүрхүүл нь session-ий
+мөчлөг, толгой хэсэг, цэс, tray, төхөөрөмжийн хандалтыг эзэмшинэ; вэб клиент нь бүрхүүл
+дотор ажиллахдаа өөрийн chrome-оо нуугаад зөвхөн **ажлын муж** болж
+рендерлэгдэнэ. Хөтчөөр орвол бүрхүүл байхгүй тул вэб клиент урьдын адил бүрэн
+аппликейшн хэвээрээ ажиллана.
+
+Бүрхүүл ба вэб клиентийн хооронд бичигдсэн гэрээ бий —
+[`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md) нь `window.GeregeShell`-ийн
+method, event, capability, хувилбарын дүрэм, аюулгүй байдлын шаардлагыг
+тодорхойлно. Вэб клиент бүрхүүлийн дотоод бүтцийг мэдэхгүй — зөвхөн гэрээг л
+мэднэ.
+
+Клиентүүд [`native-apps/`](native-apps) дотор гурван native сангаар
+хөгжинө: Swift (macOS/iOS/iPadOS), C# (Windows desktop/kiosk/POS), Kotlin
+(Android mobile/tablet/kiosk/POS). Linux desktop нь PWA хэвээр.
+
+Бүх native клиент нэвтрэлтийг өөрийн native UI-аар хийж, session cookie-г
+webview store-д тарина. `/login` нь browser/PWA горимд л ашиглагдана:
+
+```bash
+make run-mac        # macOS хөгжүүлэлтийн горим
+make build-mac      # Swift/AppKit компиляц
+```
+
+### Хөтчөөс суулгах (Linux болон бусад)
+
+Native клиентгүй платформ дээр вэб клиент нь PWA
 (`/manifest.webmanifest`) тул хөтчөөс шууд суулгаж болно: Chrome/Edge дээр
 хаягийн мөрний суулгах товч, Safari дээр **File → Add to Dock**. Суулгасан
 хувилбар нь dock эсвэл taskbar-т орж, өөрийн цонхоор нээгддэг — татаж авах
 файлгүй, дэлгүүргүй, вэбтэй яг ижил хуудсуудыг үзүүлнэ.
+
+Платформ бүрийн урьдчилсан шаардлага, runtime endpoint, enrollment, code
+signing болон auto-update сувгийн зааврыг
+[`native-apps/README.md`](native-apps/README.md)-ээс үзнэ үү.
+
+> Native CI нь macOS Swift ба Windows .NET build-ийг тус тусын runner дээр
+> шалгана. Installer нь signing identity оруулсны дараах release ажил.
 
 ---
 
@@ -360,6 +394,7 @@ CI нь push ба pull request бүр дээр lint, тест, frontend build, D
 | [Баримт бичгийн төв](docs/README.md) | Бүх баримтын индекс ба орчуулгууд |
 | [Архитектурын тодорхойлолт](docs/ARCHITECTURE_SPECIFICATION.md) | Платформын давхаргууд ба шийдвэрүүд |
 | [Модуль хөгжүүлэх заавар](docs/MODULE_AUTHORING_GUIDE.md) | Шинэ апп модуль бичих алхмууд |
+| [Bridge Contract v1](docs/SHELL_CONTRACT.md) | Native бүрхүүл ба вэб ажлын мужийн гэрээ |
 | [Хамтран ажиллах заавар](CONTRIBUTING.md) | Хувь нэмэр оруулах журам |
 | [Аюулгүй байдлын бодлого](SECURITY.md) | Эмзэг байдал мэдээлэх |
 | [Ёс зүйн дүрэм](CODE_OF_CONDUCT.md) | Хамт олны хэм хэмжээ |

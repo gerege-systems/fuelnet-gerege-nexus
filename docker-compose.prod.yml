@@ -88,7 +88,11 @@ services:
       PORT: 8080
       ENVIRONMENT: production
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://nexus.gerege.mn}
-      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-https://nexus.gerege.mn}
+      # The browser line plus one origin per device line. Every device line is
+      # a separate host that nginx points at this same API container — the
+      # backend stays single, the origins do not, and both CORS and the CSRF
+      # origin check read this one list.
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-https://nexus.gerege.mn},${DEVICE_LINE_ORIGINS:-https://mac.nexus.gerege.mn,https://win.nexus.gerege.mn,https://ios.nexus.gerege.mn,https://android.nexus.gerege.mn,https://kiosk.nexus.gerege.mn,https://pos.nexus.gerege.mn}
       # Nginx terminates TLS in front of the API, so the forwarded client
       # address can be trusted here.
       TRUST_PROXY_HEADERS: "true"

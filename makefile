@@ -1,4 +1,4 @@
-.PHONY: dev-backend dev-frontend up down migrate seed test build
+.PHONY: dev-backend dev-frontend up down migrate seed test build build-mac run-mac
 
 DATABASE_URL ?= postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable
 
@@ -26,3 +26,10 @@ test:
 build:
 	cd backend && go build ./...
 	cd frontend && npm run build
+	cd native-apps/macOS && ./build.sh
+
+build-mac:
+	cd native-apps/macOS && ./build.sh
+
+run-mac: build-mac
+	native-apps/macOS/GeregeNexusNativeMac

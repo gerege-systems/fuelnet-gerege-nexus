@@ -12,7 +12,7 @@
  *         draw a signature, the service stamps it.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+import { apiBase } from "@/lib/apiBase";
 
 export type Provider = "EID" | "HSM";
 export type DocumentStatus = "PENDING" | "SIGNED";
@@ -214,7 +214,7 @@ function httpErrorMessage(status: number): string {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     ...init,
     headers: authHeaders({ "Content-Type": "application/json", ...(init.headers as Record<string, string>) }),
     credentials: "include",
@@ -238,7 +238,7 @@ const toQuery = (params: Record<string, string | number | boolean | undefined>) 
 };
 
 async function download(path: string): Promise<Blob> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(), credentials: "include" });
+  const res = await fetch(`${apiBase()}${path}`, { headers: authHeaders(), credentials: "include" });
   if (!res.ok) {
     const body = await readJSON<{ error?: string; code?: string }>(res);
     throw new EsignApiError(body?.error || httpErrorMessage(res.status), body?.code || "UNKNOWN", res.status);
@@ -287,7 +287,7 @@ export const esign = {
     form.set("file", file, file.name);
     if (title) form.set("title", title);
 
-    const res = await fetch(`${API_BASE}/esign/documents/upload`, {
+    const res = await fetch(`${apiBase()}/esign/documents/upload`, {
       method: "POST",
       headers: authHeaders(),
       body: form,
@@ -314,7 +314,7 @@ export const esign = {
     if (onBehalfOf) form.set("onBehalfOf", onBehalfOf);
     if (signerId) form.set("signer_id", signerId);
 
-    const res = await fetch(`${API_BASE}/esign/sign/init`, {
+    const res = await fetch(`${apiBase()}/esign/sign/init`, {
       method: "POST",
       headers: authHeaders(),
       body: form,

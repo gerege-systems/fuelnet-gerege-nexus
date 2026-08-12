@@ -36,6 +36,19 @@ tmp/
 coverage.out
 coverage.html
 
+# Xcode-ийн хэрэглэгчийн төлөв — машин бүрт өөр, түүхэнд хэрэггүй.
+xcuserdata/
+*.xcuserstate
+native-apps/macOS/build/
+native-apps/macOS/GeregeNexusNativeMac
+native-apps/android/**/build/
+native-apps/android/.gradle/
+native-apps/android/local.properties
+native-apps/iOS/.build/
+native-apps/iOS/.swiftpm/
+native-apps/windows/**/bin/
+native-apps/windows/**/obj/
+
 # Next.js build output for the store and console services
 services/*/.next/
 services/*/node_modules/

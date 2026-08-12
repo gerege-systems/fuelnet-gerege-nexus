@@ -11,7 +11,9 @@ import { useTheme } from "@/lib/theme";
 import UserMenu from "@/components/UserMenu";
 import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantChoices";
 import AICopilot from "@/components/AICopilot";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
+import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
+import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, MonitorCog, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number }
 // path is a route in this application; external_url is somewhere else. An app
@@ -60,7 +62,12 @@ const iconMap: Record<string, React.ReactNode> = {
 // Routes that render without the ERP chrome. /oauth/consent is signed-in but
 // belongs here too: it is an identity handoff to another product, and framing
 // it in this one's navigation invites the user to wander off mid-flow.
-const PUBLIC_ROUTES=["/","/login","/auth/eid/callback","/oauth/consent"];
+const PUBLIC_ROUTES=["/","/login","/auth/eid/callback","/oauth/consent","/kiosk"];
+// Шугамын нүүр дэлгэц нэвтрэлт шаардахгүй. Тэр нь ажлын мужид web-ийн нэвтрэх
+// дэлгэц гарч ирэхийг ОРЛОХЫН тулд байгаа тул session байхгүй үед ч зогсох
+// ёстой — эс бөгөөс дахин /login руу түлхэж, шийдэх гэсэн асуудлаа өөрөө
+// үүсгэнэ.
+const isPublicPath=(path:string)=>PUBLIC_ROUTES.includes(path)||path.startsWith("/line/");
 // The platform groups are the only ones not backed by a server menu row, so
 // they need ids of their own. Not the translated title: the collapsed set is
 // remembered across sessions and a Mongolian operator who switches to English
@@ -94,23 +101,85 @@ export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);
   const [mobileOpen,setMobileOpen]=useState(false),[mobileMoreOpen,setMobileMoreOpen]=useState(false),[panelOpen,setPanelOpen]=useState(true);
   const [query,setQuery]=useState("");
+  // Бүрхүүлийн доторх хайлт: толгой хэсэг зурагдахгүй тул хайлтын талбар нь
+  // ажлын мужид түр нээгддэг давхарга болно.
+  const [shellSearchOpen,setShellSearchOpen]=useState(false);
+  // Бүрхүүл нэвтрэлтийг барьж авсны дараа өгөгдлөө нэг удаа дахин татахад.
+  const [authNonce,setAuthNonce]=useState(0);
+  const reLoginTried=useRef(false);
+  const {shell,inShell}=useShell();
+  // Төхөөрөмжийн domain шугам. Гүүр байгаа эсэхээс үл хамааран эдгээр host нь
+  // зөвхөн native хүрээнд үйлчилдэг тул тэнд web өөрийн chrome-оо зурахгүй.
+  // SSR-д `window` байхгүй тул mount-ын дараа уншина.
+  const [deviceLine,setDeviceLine]=useState<DeviceLine|null>(null);
   // Which groups are shut, not which are open. A newly installed app arrives
   // with ids nobody has an opinion about yet, and the useful default for those
   // is the behaviour before this existed: open.
   const [closedGroups,setClosedGroups]=useState<string[]>([]);
   const pathname=usePathname(),router=useRouter(),{t,locale}=useI18n(),theme=useTheme();
-  const isPublic=PUBLIC_ROUTES.includes(pathname);
+  const isPublic=isPublicPath(pathname);
 
   useEffect(()=>setPanelOpen(localStorage.getItem("gerege_sidebar_open")!=="false"),[]);
   useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(GROUPS_KEY)||"[]");if(Array.isArray(saved))setClosedGroups(saved.filter(id=>typeof id==="string"))}catch{/* hand-edited or half-written storage is not worth a crashed shell */}},[]);
-  useEffect(()=>{if(isPublic){setLoading(false);return}void(async()=>{try{const [u,m]=await Promise.all([api.getMe(),api.getMenus()]);setUser(u);setMenus(m||[])}catch{router.push("/login")}finally{setLoading(false)}})()},[pathname,router,isPublic,locale]);
+  useEffect(()=>setDeviceLine(currentDeviceLine()),[]);
+  const workAreaOnly=inShell||deviceLine!==null;
+  useEffect(()=>{
+    if(isPublic){setLoading(false);return}
+    let cancelled=false;
+    void(async()=>{
+      try{
+        const [u,m]=await Promise.all([api.getMe(),api.getMenus()]);
+        if(cancelled)return;
+        reLoginTried.current=false;
+        setUser(u);setMenus(m||[]);
+      }catch{
+        if(cancelled)return;
+        // Бүрхүүл дотор /login гэдэг web хуудас байхгүй — нэвтрэлтийг native тал
+        // эзэмшдэг. Тэр барьж авч чадвал өгөгдлөө дахин татна. reLoginTried нь
+        // дахин нэвтэрсэн ч session хүчингүй хэвээр байх үед мөчлөг үүсгэхээс
+        // сэргийлнэ.
+        if(!reLoginTried.current){
+          reLoginTried.current=true;
+          const result=await invokeShell(SHELL_METHODS.AUTH_RE_LOGIN);
+          if(cancelled)return;
+          if(result.ok){setAuthNonce(n=>n+1);return}
+        }
+        // Төхөөрөмжийн шугам дээр `/login` нь шугамын нүүр рүү эргэж
+        // шилжүүлэгддэг тул энд түлхвэл мөчлөг үүснэ.
+        if(currentDeviceLine())return;
+        router.push("/login");
+      }finally{
+        if(!cancelled)setLoading(false);
+      }
+    })();
+    return()=>{cancelled=true};
+  },[pathname,router,isPublic,locale,authNonce]);
+  // Бүрхүүлийн цэс, toolbar, deep link нь ижил гэрээгээр ажлын мужтай ярина.
+  useEffect(()=>{
+    if(!shell)return;
+    const offNavigate=shell.on(SHELL_EVENTS.NAVIGATE,payload=>{
+      const path=(payload as ShellNavigatePayload|null)?.path;
+      // Зөвхөн апп доторх зам — "//host" нь протокол-харьцангуй гадаад хаяг.
+      if(typeof path==="string"&&path.startsWith("/")&&!path.startsWith("//"))router.push(path);
+    });
+    const offSearch=shell.on(SHELL_EVENTS.SEARCH,payload=>{
+      const incoming=(payload as ShellSearchPayload|null)?.query;
+      if(typeof incoming!=="string")return;
+      setQuery(incoming);setShellSearchOpen(true);
+    });
+    return()=>{offNavigate();offSearch()};
+  },[shell,router]);
   useEffect(()=>{
     if(isPublic)return;
-    const refreshMenus=()=>{void api.getMenus().then(m=>setMenus(m||[])).catch(()=>{})};
+    const refreshMenus=()=>{
+      void api.getMenus().then(m=>setMenus(m||[])).catch(()=>{});
+      // Native цэс нь яг энэ жагсаалтаас баригддаг тул бүрхүүлд ч дуулгана.
+      if(shell)void shell.invoke(SHELL_METHODS.MENU_CHANGED,{}).catch(()=>{});
+    };
     window.addEventListener(APP_MENU_CHANGED_EVENT,refreshMenus);
     return()=>window.removeEventListener(APP_MENU_CHANGED_EVENT,refreshMenus);
-  },[isPublic,locale]);
-  useEffect(()=>{setMobileOpen(false);setMobileMoreOpen(false)},[pathname]);
+  },[isPublic,locale,shell]);
+  useEffect(()=>{setMobileOpen(false);setMobileMoreOpen(false);setShellSearchOpen(false)},[pathname]);
 
   const apps=useMemo<AppNav[]>(()=>{
     const groups=new Map<string,MenuItem[]>();
@@ -177,6 +246,43 @@ export default function Layout({children}:{children:React.ReactNode}){
     {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={t("access.view.title")}/>}
   </MenuGroup></>;
 
+  // Бүрхүүл дотор ба төхөөрөмжийн domain шугам дээр: толгой хэсэг ба мобайл
+  // навигаци зурагдахгүй — хайлт, хэрэглэгч, нэвтрэлт, цонхны үйлдлүүдийг
+  // native тал эзэмшинэ. Хажуугийн цэс нь ЭНД үлдэнэ: тэр бол ажлын мужийн
+  // доторх навигаци бөгөөд аль апп идэвхтэй, ямар эрхтэй, ямар хэлээр гэдгийг
+  // web тал аль хэдийн мэддэг.
+  if(workAreaOnly)return <div className="gerege-shell gerege-workarea h-screen flex flex-col overflow-hidden">
+    <RibbonBar selected={selected} brandTitle={brandTitle} user={user} setShellSearchOpen={setShellSearchOpen} iconMap={iconMap} t={t} onLogout={logout} />
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="gerege-sidebar bottom-0 left-0 z-40 flex overflow-hidden is-desktop-open">
+        <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
+          <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
+          {apps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+        </nav>
+        <aside className="gerege-menu-panel overflow-hidden">
+          <div className="w-56 py-4"><nav className="space-y-1 px-2">
+            {selected?<AppMenuGroups menus={selected.menus} pathname={pathname} closedGroups={closedGroups} onToggle={toggleGroup}/>:platformMenus}
+          </nav></div>
+        </aside>
+      </div>
+      <main className="gerege-main flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+    </div>
+    <WorkareaFooter />
+    {shellSearchOpen&&<div className="gerege-shell-search" role="dialog" aria-modal="true" aria-label={t("web.view.search_placeholder")}>
+      <button type="button" className="gerege-shell-search-backdrop" aria-label={t("base.action.close")} onClick={()=>{setShellSearchOpen(false);setQuery("")}}/>
+      <div className="gerege-shell-search-panel">
+        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/>
+          <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{
+            if(e.key==="Escape"){setShellSearchOpen(false);setQuery("")}
+            if(e.key==="Enter"&&results[0]){router.push(results[0].path);setShellSearchOpen(false);setQuery("")}
+          }} placeholder={t("web.view.search_placeholder")} className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)]"/>
+        </div>
+        {results.length>0&&<div className="mt-2 space-y-0.5">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setShellSearchOpen(false);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
+      </div>
+    </div>}
+    <AICopilot/>
+  </div>;
+
   return <div className="gerege-shell min-h-screen flex flex-col">
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
       <TenantSwitcher current={user?.tenant_id} currentName={user?.tenant_name}>
@@ -230,6 +336,87 @@ export default function Layout({children}:{children:React.ReactNode}){
       {hasMobileMore&&<button type="button" onClick={()=>setMobileMoreOpen(v=>!v)} aria-expanded={mobileMoreOpen} className={`gerege-mobile-tab ${remainingMobileTabs.some(tab=>tab.active)||mobileMoreOpen?"is-active":""}`}><span><Ellipsis className="w-5 h-5"/></span><small>{t("web.action.more")}</small></button>}
     </nav>
   </div>;
+}
+
+/**
+ * Ажлын мужийн толгойн мөр — зөвхөн бүрхүүл ба төхөөрөмжийн шугам дээр.
+ *
+ * Хөтчийн 4rem өндөртэй толгой хэсгийг орлоно: тэнд байсан брэнд, tenant,
+ * хайлт, хэрэглэгч дөрвүүлээ энэ 2.5rem мөрөнд багтана. Native тал цонхны
+ * үйлдлүүд болон нэвтрэлтийг өөрөө эзэмшдэг тул давхардуулах шаардлагагүй.
+ */
+function RibbonBar({
+  selected,
+  brandTitle,
+  user,
+  setShellSearchOpen,
+  iconMap,
+  t,
+  onLogout,
+}: {
+  selected: AppNav | null;
+  brandTitle: string;
+  user: any;
+  setShellSearchOpen: (open: boolean) => void;
+  iconMap: Record<string, React.ReactNode>;
+  t: (key: any) => string;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="gerege-ribbon h-10 shrink-0 border-b border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-xs z-30 select-none">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="text-[var(--gerege-blue)] shrink-0">
+          {selected ? (iconMap[selected.icon] || <Package className="w-4 h-4" />) : <LayoutGrid className="w-4 h-4" />}
+        </span>
+        <div className="flex items-center gap-1.5 text-xs min-w-0">
+          <span className="font-bold text-slate-800 dark:text-slate-100">Gerege Nexus</span>
+          <span className="text-slate-300 dark:text-slate-600">/</span>
+          <span className="font-semibold text-[var(--gerege-blue)] truncate">{brandTitle}</span>
+        </div>
+        {user?.tenant_name && (
+          <div className="hidden md:flex items-center pl-3 border-l border-slate-200 dark:border-slate-800">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="truncate max-w-36">{user.tenant_name}</span>
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2.5 shrink-0 text-xs">
+        <button
+          onClick={() => setShellSearchOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+        >
+          <Search className="w-3.5 h-3.5 text-slate-400" />
+          <span>{t("web.view.search_placeholder")}</span>
+        </button>
+        <button
+          onClick={() => window.location.reload()}
+          title={t("web.action.reload")}
+          className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+        <UserMenu user={user} onLogout={onLogout} />
+      </div>
+    </div>
+  );
+}
+
+/** Ажлын мужийн хөл. Native footer нь цонхны мөр — энэ нь ажлын мужийнх. */
+function WorkareaFooter() {
+  return (
+    <footer className="gerege-footer h-7 shrink-0 border-t border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 select-none z-30">
+      <span className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>Gerege Nexus</span>
+      </span>
+      <span className="hidden sm:inline-flex items-center gap-1 text-slate-400">
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+        <span>TLS</span>
+      </span>
+    </footer>
+  );
 }
 
 /**

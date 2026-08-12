@@ -10,6 +10,7 @@
     "i18n:translate": "node scripts/i18n-translate.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
     "pwa:check": "node scripts/pwa-check.mjs"
+    ,"i18n:export-native": "node scripts/export-native-auth-i18n.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.66.0",

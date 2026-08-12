@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+import { apiBase } from "@/lib/apiBase";
+
+export { apiBase };
 
 async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
   // Server-owned content (menu labels, app store copy) is translated by the
@@ -9,7 +11,7 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
     "Accept-Language": locale,
     ...(options.headers as Record<string, string>),
   };
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(`${apiBase()}${url}`, {
     ...options,
     headers,
     credentials: "include",
@@ -302,6 +304,14 @@ export const api = {
   deleteRole: (id:string) => fetcher<void>(`/admin/access/roles/${id}`,{method:"DELETE"}),
   setRolePermissions: (id:string,permissions:string[]) => fetcher(`/admin/access/roles/${id}/permissions`,{method:"PUT",body:JSON.stringify({permissions})}),
   setMembershipRoles: (id:string,roles:string[]) => fetcher(`/admin/access/memberships/${id}/roles`,{method:"PUT",body:JSON.stringify({roles})}),
+  getDevices: () => fetcher<{devices:Array<{id:string;name:string;platform:string;form_factor:string;site:string;status:string;app_version:string;os_version:string;last_seen_at?:string;enrolled_at:string}>}>("/admin/devices"),
+  createDeviceEnrollmentCode: () => fetcher<{code:string;expires_at:string}>("/admin/devices/enrollment-codes",{method:"POST"}),
+  setStaffPin: (membershipId:string,pin:string) => fetcher<{status:string}>("/admin/devices/staff-pin",{method:"PUT",body:JSON.stringify({membership_id:membershipId,pin})}),
+  setDeviceStatus: (id:string,status:"ACTIVE"|"DISABLED"|"RETIRED") => fetcher<{status:string}>("/admin/devices/status",{method:"PUT",body:JSON.stringify({id,status})}),
+  registerPushToken: (provider:"APNS"|"FCM",token:string,appId:string) => fetcher<void>("/push-tokens",{method:"POST",body:JSON.stringify({provider,token,app_id:appId})}),
+  getCurrentShift: () => fetcher<{shift:null|{id:string;membership_id:string;opened_at:string;opening_float:number} }>("/devices/shifts/current"),
+  openShift: (openingFloat:number,notes="") => fetcher<{id:string;opened_at:string}>("/devices/shifts/open",{method:"POST",body:JSON.stringify({opening_float:openingFloat,notes})}),
+  closeShift: (closingTotal:number,notes="") => fetcher<{id:string;status:string}>("/devices/shifts/close",{method:"POST",body:JSON.stringify({closing_total:closingTotal,notes})}),
 
   // Store
   //
@@ -1001,7 +1011,7 @@ export const api = {
     >("/esign/logs"),
 
   downloadEsignDocument: async (id: string, variant: "original" | "signed"): Promise<Blob> => {
-    const res = await fetch(`${API_BASE}/esign/documents/${id}/download?variant=${variant}`, {
+    const res = await fetch(`${apiBase()}/esign/documents/${id}/download?variant=${variant}`, {
       credentials: "include",
     });
     if (!res.ok) throw new Error("Download failed");
