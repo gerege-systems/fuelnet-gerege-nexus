@@ -158,7 +158,7 @@ func valueOr(value, fallback string) string {
 // StartDeviceLink starts the same QR/App2App contract used by Gerege Platform.
 func (s *EIDService) StartDeviceLink(ctx context.Context, callbackURL string) (*StartResult, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_device_link",
-		func() (*StartResult, error) { return s.startDeviceLink(ctx, callbackURL) })
+		func(ctx context.Context) (*StartResult, error) { return s.startDeviceLink(ctx, callbackURL) })
 }
 
 func (s *EIDService) startDeviceLink(ctx context.Context, callbackURL string) (*StartResult, error) {
@@ -175,7 +175,9 @@ func (s *EIDService) startDeviceLink(ctx context.Context, callbackURL string) (*
 // StartByNationalID pushes an approval request to the citizen's eID Mongolia app.
 func (s *EIDService) StartByNationalID(ctx context.Context, nationalID, callbackURL string) (*StartResult, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_by_national_id",
-		func() (*StartResult, error) { return s.startByNationalID(ctx, nationalID, callbackURL) })
+		func(ctx context.Context) (*StartResult, error) {
+			return s.startByNationalID(ctx, nationalID, callbackURL)
+		})
 }
 
 func (s *EIDService) startByNationalID(ctx context.Context, nationalID, callbackURL string) (*StartResult, error) {
@@ -204,7 +206,9 @@ func (s *EIDService) startByNationalID(ctx context.Context, nationalID, callback
 // finish with Poll.
 func (s *EIDService) StartSignature(ctx context.Context, nationalID, displayText, callbackURL string) (*StartResult, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_signature",
-		func() (*StartResult, error) { return s.startSignature(ctx, nationalID, displayText, callbackURL) })
+		func(ctx context.Context) (*StartResult, error) {
+			return s.startSignature(ctx, nationalID, displayText, callbackURL)
+		})
 }
 
 func (s *EIDService) startSignature(ctx context.Context, nationalID, displayText, callbackURL string) (*StartResult, error) {
@@ -262,7 +266,7 @@ func (s *EIDService) startMock(nationalID string, deviceLink bool) *StartResult 
 // an incident.
 func (s *EIDService) Poll(ctx context.Context, sessionID string) (*PollResult, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemEID, "poll",
-		func() (*PollResult, error) { return s.poll(ctx, sessionID) })
+		func(ctx context.Context) (*PollResult, error) { return s.poll(ctx, sessionID) })
 }
 
 func (s *EIDService) poll(ctx context.Context, sessionID string) (*PollResult, error) {
@@ -314,7 +318,7 @@ func (s *EIDService) GetAuthorizeURL(redirectURI, state string) string {
 // ExchangeCode exchanges OAuth2 authorization code for E-ID Identity profile
 func (s *EIDService) ExchangeCode(ctx context.Context, code, redirectURI string) (*EIDIdentity, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemEID, "exchange_code",
-		func() (*EIDIdentity, error) { return s.exchangeCode(ctx, code, redirectURI) })
+		func(ctx context.Context) (*EIDIdentity, error) { return s.exchangeCode(ctx, code, redirectURI) })
 }
 
 func (s *EIDService) exchangeCode(ctx context.Context, code, redirectURI string) (*EIDIdentity, error) {

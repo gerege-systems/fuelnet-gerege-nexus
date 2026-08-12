@@ -521,8 +521,14 @@ func (s *Server) setupRoutes() {
 	// request. It is also what makes a log line joinable to a trace once
 	// tracing is on.
 	r.Use(chimiddleware.RequestID)
+	// Before the logger, so a log line can name the trace it belongs to. It is
+	// a no-op wrapper when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+	r.Use(observability.TracingMiddleware)
 	r.Use(observability.RequestLogger)
-	r.Use(chimiddleware.Recoverer)
+	// Not chi's Recoverer: that one prints a stack trace to stdout and nothing
+	// else. This one logs it with the request id and the tenant, and reports it
+	// to GlitchTip when SENTRY_DSN is set.
+	r.Use(observability.RecoveryMiddleware)
 	r.Use(resilience.NewLoadShedder(1000).Middleware)
 	r.Use(observability.MetricsMiddleware)
 	r.Use(security.HeadersMiddleware)

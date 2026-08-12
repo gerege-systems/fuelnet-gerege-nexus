@@ -203,6 +203,17 @@ services:
       APPSTORE_PUBLIC_KEY: ${APPSTORE_PUBLIC_KEY:-}
       CATALOG_SYNC_INTERVAL: ${CATALOG_SYNC_INTERVAL:-1h}
       CATALOG_CACHE_PATH: /var/lib/nexus/catalog.cache.json
+      # Observability. Both empty by default, and empty is genuinely off: no
+      # exporter, no batch processor, no background goroutine. The monitoring
+      # stack (deploy/docker-compose.monitoring.yml) runs the Tempo this points
+      # at, on this stack's own network — see docs/MONITORING.md.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
+      # Panic reporting over the Sentry protocol, to GlitchTip or to a hosted
+      # Sentry. Events carry the request id, the route and the tenant — never a
+      # body, a cookie, a query string or a person's address.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      RELEASE_VERSION: ${IMAGE_TAG:-latest}
       # The publishing console's OAuth2 client is registered from this at
       # startup. Empty registers nothing.
       DEVELOPER_CONSOLE_ORIGIN: ${CONSOLE_ORIGIN:-}
@@ -232,6 +243,14 @@ services:
     container_name: gerege_nexus_frontend
     restart: unless-stopped
     pull_policy: always
+    environment:
+      # The rendering server's own error reporting, read at runtime. The
+      # browser half is NEXT_PUBLIC_SENTRY_DSN and is baked into the bundle at
+      # image build time — see frontend/Dockerfile for why it cannot be set
+      # here.
+      SENTRY_DSN: ${FRONTEND_SENTRY_DSN:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      RELEASE_VERSION: ${IMAGE_TAG:-latest}
     ports:
       - "127.0.0.1:3008:3000"
     depends_on:

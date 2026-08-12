@@ -68,7 +68,7 @@ var ErrUnavailable = errors.New("dan.gerege.mn is not available")
 // VerifyDANToken verifies an active SSO session token issued by dan.gerege.mn
 func (s *DANService) VerifyDANToken(ctx context.Context, danToken string) (*DANProfile, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemDAN, "verify_token",
-		func() (*DANProfile, error) { return s.verifyDANToken(danToken) })
+		func(context.Context) (*DANProfile, error) { return s.verifyDANToken(danToken) })
 }
 
 func (s *DANService) verifyDANToken(danToken string) (*DANProfile, error) {
@@ -104,7 +104,7 @@ func (s *DANService) verifyDANToken(danToken string) (*DANProfile, error) {
 // AuthenticateDANCitizen authenticates Mongolian citizen via dan.gerege.mn OTP/PKI gateway
 func (s *DANService) AuthenticateDANCitizen(ctx context.Context, regNumber, otpCode string) (*DANProfile, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemDAN, "authenticate",
-		func() (*DANProfile, error) { return s.authenticateDANCitizen(regNumber, otpCode) })
+		func(context.Context) (*DANProfile, error) { return s.authenticateDANCitizen(regNumber, otpCode) })
 }
 
 func (s *DANService) authenticateDANCitizen(regNumber, otpCode string) (*DANProfile, error) {

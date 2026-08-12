@@ -3,8 +3,14 @@
 # A datasource created through the UI lives in Grafana's SQLite volume and
 # nowhere else: it survives a restart, does not survive the volume being
 # recreated, and is invisible in a diff. Every dashboard in this repository
-# refers to these two by uid, so the uids are fixed here and must not be
-# edited — changing one silently breaks every panel that names it.
+# refers to these by uid, so the uids are fixed here and must not be edited —
+# changing one silently breaks every panel that names it.
+#
+# What makes the three useful together is the linking below. A log line carries
+# `trace_id`, which becomes a button that opens the trace; the trace's view
+# offers the logs from the same container at that moment, and the RED metrics
+# for the service it names. That round trip is the whole reason for running all
+# three rather than only the first.
 
 apiVersion: 1
 
@@ -20,6 +26,12 @@ datasources:
       # asks for a resolution the data does not have.
       timeInterval: 15s
       httpMethod: POST
+      exemplarTraceIdDestinations:
+        # Exemplars are trace ids attached to individual histogram samples: the
+        # slow point on a latency graph becomes a link to the trace that made
+        # it slow.
+        - name: trace_id
+          datasourceUid: nexus-tempo
     editable: false
 
   - name: Loki
@@ -29,4 +41,49 @@ datasources:
     url: http://gerege_nexus_loki:3100
     jsonData:
       maxLines: 1000
+      derivedFields:
+        # The platform's slog handler writes trace_id on every line produced
+        # while serving a traced request. This turns it into a link.
+        - name: TraceID
+          matcherType: regex
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: nexus-tempo
+          urlDisplayLabel: "Trace"
+    editable: false
+
+  - name: Tempo
+    uid: nexus-tempo
+    type: tempo
+    access: proxy
+    url: http://gerege_nexus_tempo:3200
+    jsonData:
+      # Trace → logs. From a span, Grafana queries Loki for the same container
+      # around the same moment, then filters to the trace id in the line.
+      tracesToLogsV2:
+        datasourceUid: nexus-loki
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        filterByTraceID: true
+        filterBySpanID: false
+        tags:
+          - key: service.name
+            value: service
+      # Trace → metrics. The RED rates for the service the span belongs to.
+      tracesToMetrics:
+        datasourceUid: nexus-prometheus
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        queries:
+          - name: "Request rate"
+            query: 'sum(rate(http_requests_total[$__rate_interval]))'
+          - name: "Error rate"
+            query: 'sum(rate(http_requests_total{status=~"5.."}[$__rate_interval]))'
+      # The service graph Tempo's metrics generator writes into Prometheus.
+      serviceMap:
+        datasourceUid: nexus-prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
     editable: false

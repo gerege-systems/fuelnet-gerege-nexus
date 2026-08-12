@@ -84,6 +84,17 @@ func main() {
 		}()
 	}
 
+	// Panics and unhandled errors, grouped by what broke rather than scattered
+	// through the log. Off without SENTRY_DSN.
+	shutdownErrors, err := observability.SetupErrorTracking("gerege-nexus", os.Getenv("ENVIRONMENT"))
+	if err != nil {
+		slog.Error("failed to setup error tracking", "error", err)
+	} else {
+		defer func() {
+			_ = shutdownErrors(ctx)
+		}()
+	}
+
 	// Connect to shared-schema PostgreSQL database pool
 	poolConfig, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
@@ -100,6 +111,10 @@ func main() {
 	// it stays dormant until Probe confirms the database can enforce it.
 	guard := &dbguard.Guard{}
 	guard.Install(poolConfig)
+
+	// A span per query, so a slow request shows which statement it waited on
+	// rather than a gap between two spans. Also dormant without tracing.
+	observability.InstrumentPool(poolConfig)
 
 	db, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {

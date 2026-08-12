@@ -15,6 +15,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Traces, and errors that group themselves
+
+The third pillar and the tool beside it, both env-gated and both off by default.
+Guides in [`docs/MONITORING.md`](docs/MONITORING.md) §11 and §12.
+
+- **`SetupTracing` now sets up tracing.** It was a stub that logged
+  "opentelemetry tracing initialized" and initialized nothing — worse than no
+  tracing, because an operator reading the startup log had every reason to
+  believe traces existed somewhere. It is now the OTLP exporter, a batch
+  processor, and a `ParentBased(TraceIDRatioBased)` sampler at 10%.
+- **Off means off.** With `OTEL_EXPORTER_OTLP_ENDPOINT` unset there is no
+  exporter, no batch processor, no background goroutine and no sampling
+  decision: every span the code starts is a no-op. That is the condition for
+  putting tracing in the default path rather than behind a build tag.
+- **`otelhttp` on the router and `otelpgx` on the pool**, so a slow request
+  resolves into the queries it waited on. Spans are named by chi's route
+  pattern, never the URL — a span per document id is unbounded, the same
+  cardinality argument the metrics middleware already makes. `/health`,
+  `/ready` and `/metrics` are excluded: Docker and Prometheus call them every
+  few seconds, and at any sampling rate they would be most of what is stored.
+- **Query *parameters* are never recorded**, which is otelpgx's default and is
+  now a comment saying it must stay that way. The arguments are the row a query
+  is about — an address, a national identifier, a password hash on the way in —
+  and a span is readable by anyone who can open Grafana. Verified against a
+  live Tempo: `db.query.text` comes through as placeholders.
+- **Logs join traces.** Every `slog` line written inside a span carries
+  `trace_id` and `span_id`, and Grafana's Loki datasource turns the first into
+  a link. Deliberately *not* the `otelslog` bridge: that ships logs over OTLP,
+  a second delivery path for something Alloy already carries to Loki. Tempo's
+  datasource links back the other way, to the container's logs and to the RED
+  metrics for the service.
+- **Tempo** in the monitoring stack — 72h retention, filesystem storage, no
+  index over span contents. A trace is found by id from a log line, or through
+  the span metrics and service graph Tempo generates into Prometheus.
+- **GlitchTip** as `deploy/docker-compose.glitchtip.yml`, its own stack with its
+  own Postgres. Separate rather than a compose profile because compose resolves
+  `${VAR:?}` for every service in a file whether or not its profile is active,
+  so a required secret there would have stopped the metrics stack from starting
+  on a deployment that never wanted error tracking.
+- **Panics are reported, with a scrubber that fails closed.** chi's `Recoverer`
+  printed a stack trace to stdout and nothing else; the replacement logs it with
+  the request id, the route and the tenant, and sends an event when `SENTRY_DSN`
+  is set. What never leaves: the query string (where single-use references
+  live), cookies, the `Authorization` header, the request body, and the person —
+  e-mail, name and IP are dropped, the tenant id stays so "how many
+  organisations does this affect" still has an answer. Headers are an
+  allow-list, so one added by a future proxy is dropped rather than forwarded.
+  The frontend half is `@sentry/nextjs` with the same rules and **no Session
+  Replay**: it records the DOM of what the person was looking at, which here is
+  a registration number or a document awaiting signature.
+
 ### Added — A monitoring stack that reads the platform
 
 `deploy/docker-compose.monitoring.yml`: Prometheus, Alertmanager, Loki, Alloy,

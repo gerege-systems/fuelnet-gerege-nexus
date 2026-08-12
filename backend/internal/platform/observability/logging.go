@@ -18,6 +18,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ContextHandler adds request_id and tenant_id to every record written while a
@@ -48,6 +49,21 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 	if tenantID, err := tenant.FromContext(ctx); err == nil {
 		record.AddAttrs(slog.String("tenant_id", tenantID))
+	}
+	// The trace, when there is one. This is the join between the two halves of
+	// an investigation: Grafana's Loki datasource is configured with a derived
+	// field on `trace_id`, so the log line grows a button that opens the trace
+	// it belongs to, and Tempo's view links back to the logs.
+	//
+	// Deliberately not the otelslog bridge. That is a handler which *ships logs
+	// over OTLP* — a second delivery path for something Alloy already carries
+	// to Loki, and one that would put log delivery on the tracing endpoint's
+	// availability. Two attributes on a record is the part that was wanted.
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		record.AddAttrs(
+			slog.String("trace_id", span.TraceID().String()),
+			slog.String("span_id", span.SpanID().String()),
+		)
 	}
 	return h.Handler.Handle(ctx, record)
 }

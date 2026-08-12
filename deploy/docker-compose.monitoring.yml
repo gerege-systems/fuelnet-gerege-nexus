@@ -42,6 +42,10 @@ services:
       - --storage.tsdb.retention.time=60d
       - --storage.tsdb.retention.size=20GB
       - --web.enable-lifecycle
+      # Tempo's metrics generator writes the span metrics and the service graph
+      # here. Without this flag Prometheus refuses the writes and Tempo's search
+      # has nothing to start from.
+      - --web.enable-remote-write-receiver
       # ${DEPLOYMENT_NAME} in external_labels is expanded by this flag and by
       # nothing else — Prometheus does not otherwise read the environment.
       - --enable-feature=expand-external-labels
@@ -93,6 +97,34 @@ services:
       - "127.0.0.1:9093:9093"
     networks:
       - monitoring
+
+  # Traces. Does nothing at all until a backend is started with
+  # OTEL_EXPORTER_OTLP_ENDPOINT pointing at it, which is the deployment's
+  # decision rather than this file's.
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: gerege_nexus_tempo
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["-config.file=/etc/tempo/tempo-config.yml"]
+    volumes:
+      - ./monitoring/tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - gerege_nexus_monitoring_tempo:/var/tempo
+    ports:
+      # 3200 is Tempo's own API, which Grafana queries. 4318 is where the
+      # platform posts spans — on the platform network, so the backend
+      # container can reach it by name.
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4318:4318"
+    networks:
+      - monitoring
+      - platform
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3200/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   loki:
     image: grafana/loki:3.4.2
@@ -177,6 +209,7 @@ services:
     depends_on:
       - prometheus
       - loki
+      - tempo
 
   node_exporter:
     image: prom/node-exporter:v1.9.0
@@ -274,6 +307,8 @@ volumes:
   # directory — healthy container, no history, no sign anything was lost.
   gerege_nexus_monitoring_prometheus:
     name: gerege_nexus_monitoring_prometheus
+  gerege_nexus_monitoring_tempo:
+    name: gerege_nexus_monitoring_tempo
   gerege_nexus_monitoring_alertmanager:
     name: gerege_nexus_monitoring_alertmanager
   gerege_nexus_monitoring_loki:

@@ -49,7 +49,7 @@ func TestObserveExternalRecordsOutcome(t *testing.T) {
 	})
 
 	err := observability.ObserveExternal(context.Background(), observability.SystemEID, "unit_test",
-		func() error { return errors.New("upstream refused") })
+		func(context.Context) error { return errors.New("upstream refused") })
 	if err == nil {
 		t.Fatal("expected the call's error to be returned unchanged")
 	}

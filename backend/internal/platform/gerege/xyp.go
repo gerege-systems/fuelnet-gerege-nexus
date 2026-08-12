@@ -70,7 +70,7 @@ func NewGeregeService() *GeregeService {
 // have to read from a handler's error rate.
 func (s *GeregeService) GetCitizenInfo(ctx context.Context, regNumber string) (*CitizenInfo, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemXYP, "citizen_query",
-		func() (*CitizenInfo, error) { return s.getCitizenInfo(ctx, regNumber) })
+		func(ctx context.Context) (*CitizenInfo, error) { return s.getCitizenInfo(ctx, regNumber) })
 }
 
 func (s *GeregeService) getCitizenInfo(_ context.Context, regNumber string) (*CitizenInfo, error) {
@@ -102,7 +102,7 @@ func (s *GeregeService) getCitizenInfo(_ context.Context, regNumber string) (*Ci
 // GetCompanyInfo queries legal entity data from ХУР (xyp.gerege.mn)
 func (s *GeregeService) GetCompanyInfo(ctx context.Context, companyReg string) (*CompanyInfo, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemXYP, "company_query",
-		func() (*CompanyInfo, error) { return s.getCompanyInfo(ctx, companyReg) })
+		func(ctx context.Context) (*CompanyInfo, error) { return s.getCompanyInfo(ctx, companyReg) })
 }
 
 func (s *GeregeService) getCompanyInfo(_ context.Context, companyReg string) (*CompanyInfo, error) {

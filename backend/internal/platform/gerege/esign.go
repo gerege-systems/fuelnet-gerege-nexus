@@ -118,7 +118,7 @@ func NewEsignService() *EsignService {
 // service and verifies the certificate UID matches the supplied civil ID.
 func (s *EsignService) CheckCertificate(ctx context.Context, req EsignCertRequest) (*EsignCertResponse, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemESign, "check_certificate",
-		func() (*EsignCertResponse, error) { return s.checkCertificate(ctx, req) })
+		func(ctx context.Context) (*EsignCertResponse, error) { return s.checkCertificate(ctx, req) })
 }
 
 func (s *EsignService) checkCertificate(ctx context.Context, req EsignCertRequest) (*EsignCertResponse, error) {
@@ -152,7 +152,7 @@ func (s *EsignService) checkCertificate(ctx context.Context, req EsignCertReques
 // returns the signed PDF as base64.
 func (s *EsignService) SignPDF(ctx context.Context, req EsignDocSignRequest) (string, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemESign, "sign_pdf",
-		func() (string, error) { return s.signPDF(ctx, req) })
+		func(ctx context.Context) (string, error) { return s.signPDF(ctx, req) })
 }
 
 func (s *EsignService) signPDF(ctx context.Context, req EsignDocSignRequest) (string, error) {

@@ -37,5 +37,5 @@ func observe(inner generator, operation string) generator {
 
 func (o *observed) GenerateContent(ctx context.Context, req gemini.Request) (gemini.Response, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemGemini, o.operation,
-		func() (gemini.Response, error) { return o.inner.GenerateContent(ctx, req) })
+		func(ctx context.Context) (gemini.Response, error) { return o.inner.GenerateContent(ctx, req) })
 }

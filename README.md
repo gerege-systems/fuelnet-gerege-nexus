@@ -336,6 +336,9 @@ npm run dev
 | `GEMINI_API_KEY` | — | AI chat, voice, TTS, орчуулгыг идэвхжүүлэх түлхүүр |
 | `GEMINI_MODEL` / `GEMINI_TTS_MODEL` | Gemini 2.5 Flash загварууд | Chat ба дууны model сонголт |
 | `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Trace-ийг Tempo руу илгээх хаяг. Хоосон бол tracing бүрэн унтарсан |
+| `OTEL_TRACES_SAMPLER_ARG` | `0.1` | Trace-ийн хэдэн хувийг хадгалах (0-1) |
+| `SENTRY_DSN` | — | Алдааны бүртгэл (GlitchTip эсвэл Sentry). Хоосон бол унтарсан |
 
 Мониторингийн стек нь **өөрийн орчинтой** — платформын `.env`-д хамаарахгүй.
 `GRAFANA_ADMIN_PASSWORD`, `MONITORING_DB_PASSWORD` болон дохиоллын сувгийн

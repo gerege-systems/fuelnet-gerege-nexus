@@ -22,7 +22,8 @@ Gerege Nexus-ийн хэмжүүр, лог, дохиоллын систем: ю�
 | Alertmanager | `gerege_nexus_alertmanager` | 9093 | Групплэх, дарах, илгээх |
 | Loki | `gerege_nexus_loki` | 3100 | Лог, 31 хоног |
 | Alloy | `gerege_nexus_alloy` | 12345 | Docker логийг Loki руу |
-| Grafana | `gerege_nexus_grafana` | 3009 | Dashboard, лог хайлт |
+| Tempo | `gerege_nexus_tempo` | 3200, 4318 | Trace, 72 цаг |
+| Grafana | `gerege_nexus_grafana` | 3009 | Dashboard, лог, trace |
 | node_exporter | `gerege_nexus_node_exporter` | 9100 | Хостын CPU, RAM, диск |
 | cAdvisor | `gerege_nexus_cadvisor` | 8085 | Контейнер бүрийн хэрэглээ |
 | postgres_exporter | `gerege_nexus_postgres_exporter` | 9187 | `pg_stat_*` |
@@ -317,8 +318,117 @@ docker run -d --restart unless-stopped \
 
 ---
 
-## 11. Дараагийн үе шат
+## 11. Trace — OpenTelemetry ба Tempo
 
-Trace (Tempo + OpenTelemetry) ба алдааны бүртгэл (GlitchTip) нь
-[дизайны саналын](MONITORING_AND_REPORTING_PROPOSAL.md) 3-р үе шат. Тэдгээр
-нэмэгдэхэд энэ баримт тэдний хэсгээр өргөжинө.
+### Асаах
+
+Tempo нь мониторингийн стектэй хамт үргэлж асдаг ч **платформ түүн рүү юу ч
+илгээхгүй** — тэр нь платформын шийдвэр. Асаахын тулд үндсэн стекийн `.env`-д:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://gerege_nexus_tempo:4318
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+...дараа нь backend-ыг дахин асаана. Хоосон бол tracing нь **үнэхээр**
+унтарсан: exporter байхгүй, batch processor байхгүй, background goroutine
+байхгүй, код доторх span бүр no-op. Tempo огт ажиллуулахгүй суулгац
+хэмжигдэхүйц зардал төлөхгүй.
+
+### Sampling
+
+Өгөгдмөл нь 10%. Бүгдийг авах нь ямар ч эзлэхүүн дээр буруу хариулт: хүсэлт
+бүрийн доторх query бүр нэг span бөгөөд бүгд retention дуустал хадгалагдана.
+10% нь хоцролтыг тодорхойлж, давтагдах удаан замыг барихад хангалттай — тэр
+хоёр л зүйлийн төлөө trace уншдаг. **Тодорхой нэг** удаан хүсэлтийг олох
+хэрэгтэй бол тэр нь логийн `request_id`-ийн ажил.
+
+`/health`, `/ready`, `/metrics` гурав нь огт trace хийгддэггүй: Docker ба
+Prometheus тэднийг 10-15 секунд тутам дууддаг тул 10% дээр ч бүх trace-ийн
+дийлэнх нь тэд байх байсан.
+
+### Гурвыг хооронд нь холбох
+
+Grafana-д гурван datasource **хоорондоо холбогдсон**:
+
+- Логийн мөр дэх `trace_id` → **Trace** товч (derived field);
+- Trace дотроос → тухайн container-ийн лог, тухайн үеийн;
+- Trace дотроос → үйлчилгээний RED хэмжүүр;
+- Хоцролтын графикийн удаан цэг → түүнийг удаашруулсан trace (exemplar).
+
+Энэ гурвалсан аялал бол зөвхөн эхнийхийг нь биш гурвууланг нь ажиллуулж
+байгаагийн бүх шалтгаан.
+
+### Юуг trace хийхгүй вэ
+
+**Query-ийн параметр огт бичигдэхгүй** (`otelpgx`-ийн өгөгдмөл, түүнийг
+өөрчилж болохгүй). Тэдгээр нь query ямар мөрийн тухай болохыг хэлдэг —
+и-мэйл хаяг, регистрийн дугаар, орж ирж буй нууц үгийн хэш. Span нь Tempo-гийн
+retention-ий турш хадгалагдаж, Grafana нээж чадах хүн бүрт уншигдана. SQL
+текст өөрөө аюулгүй: тэнд зөвхөн `$1`, `$2` байна.
+
+---
+
+## 12. Алдааны бүртгэл — GlitchTip
+
+Sentry-ийн протокол ярьдаг, түүнээс олон дахин хөнгөн self-hosted хувилбар.
+**Тусдаа compose файл**: `deploy/docker-compose.glitchtip.yml`. Тусдаа
+байгаа шалтгаан нь дөрвөн нэмэлт контейнер ба хоёр дахь Postgres — үүнийг
+хүсэхгүй суулгац тугийн тухай уншилгүй татгалзаж чадах ёстой.
+
+### Босгох
+
+```bash
+cd /opt/open-gerege-nexus
+# .env.monitoring дотор GLITCHTIP_DB_PASSWORD ба GLITCHTIP_SECRET_KEY бөглөнө
+docker compose -f deploy/docker-compose.glitchtip.yml --env-file .env.monitoring up -d
+
+# Эхний хэрэглэгч (нээлттэй бүртгэл зориудаар хаалттай)
+docker exec -it gerege_nexus_glitchtip_web ./manage.py createsuperuser
+```
+
+Дараа нь `http://localhost:8000` (SSH tunnel) дээр орж, байгууллага ба
+төсөл үүсгээд DSN-ийг хуулна.
+
+### Залгах
+
+Backend — платформын `.env`-д:
+
+```bash
+SENTRY_DSN=http://<key>@gerege_nexus_glitchtip_web:8000/1
+```
+
+Frontend — DSN нь bundle дотор **build үед** шигтгэгддэг тул runtime
+хувьсагч биш, image-ийн build argument:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_SENTRY_DSN=<dsn> ...
+```
+
+Rendering server-ийн өөрийн алдааг runtime-ийн `FRONTEND_SENTRY_DSN`
+хувьсагчаар өгнө (compose дотор `SENTRY_DSN` болж дамжина).
+
+### Юу илгээгддэггүй вэ
+
+Энэ бол PII-ийн заавал мөрдөх хил. Backend талд
+`observability.scrubEvent`, frontend талд `beforeSend`:
+
+| Хасагддаг | Яагаад |
+| --- | --- |
+| Query string | `/api/v1/verify/landed?ref=…` нь нэг удаагийн итгэмжлэл |
+| Cookie, `Authorization` толгой | Амьд session, bearer token |
+| Хүсэлтийн бие | Регистрийн дугаар, нууц үг, гарын үсэг зурах PDF |
+| Хэрэглэгчийн и-мэйл, нэр, IP | Хүнийг нэрлэх шаардлагагүй |
+| Session Replay (frontend) | Хараад байсан дэлгэцийн DOM-ыг бичдэг |
+
+**Үлддэг**: tenant ID (хэдэн байгууллагад нөлөөлснийг тоолоход),
+`request_id`, `trace_id`, route pattern, `User-Agent`. Толгойн жагсаалт нь
+**allow-list** — ирээдүйд proxy нэмсэн толгой автоматаар гарахгүй.
+`errortracking_internal_test.go` энэ бүхнийг шалгана.
+
+---
+
+## 13. Дараагийн үе шат
+
+Тайлангийн модуль нь
+[дизайны саналын](MONITORING_AND_REPORTING_PROPOSAL.md) 4-р үе шат.

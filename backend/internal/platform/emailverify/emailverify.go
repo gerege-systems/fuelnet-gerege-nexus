@@ -359,7 +359,7 @@ type sendResponse struct {
 // rather than as success.
 func (s *Service) requestSend(ctx context.Context, address, returnURL string) (time.Time, error) {
 	return observability.ObserveExternalValue(ctx, observability.SystemEmailVerify, "send",
-		func() (time.Time, error) { return s.doRequestSend(ctx, address, returnURL) })
+		func(ctx context.Context) (time.Time, error) { return s.doRequestSend(ctx, address, returnURL) })
 }
 
 func (s *Service) doRequestSend(ctx context.Context, address, returnURL string) (time.Time, error) {
@@ -460,7 +460,7 @@ func (s *Service) Confirm(ctx context.Context, ref string) (*Verification, error
 // Health asks the provider whether it is up. Unauthenticated by its own design.
 func (s *Service) Health(ctx context.Context) error {
 	return observability.ObserveExternal(ctx, observability.SystemEmailVerify, "health",
-		func() error { return s.health(ctx) })
+		func(ctx context.Context) error { return s.health(ctx) })
 }
 
 func (s *Service) health(ctx context.Context) error {

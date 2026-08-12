@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // The systems this platform calls out to. A closed list, because `system` is a
@@ -85,22 +87,41 @@ func ExternalSystem(name string) string {
 // open-gerege-core and keep their http.Client private — so a RoundTripper could
 // only have covered half of them, and the half it covered would have been
 // labelled by URL rather than by the operation the caller meant.
-func ObserveExternal(ctx context.Context, system, operation string, call func() error) error {
-	_, err := ObserveExternalValue(ctx, system, operation, func() (struct{}, error) {
-		return struct{}{}, call()
-	})
+func ObserveExternal(ctx context.Context, system, operation string,
+	call func(context.Context) error) error {
+
+	_, err := ObserveExternalValue(ctx, system, operation,
+		func(callCtx context.Context) (struct{}, error) {
+			return struct{}{}, call(callCtx)
+		})
 	return err
 }
 
 // ObserveExternalValue is ObserveExternal for a call that returns something.
-func ObserveExternalValue[T any](_ context.Context, system, operation string,
-	call func() (T, error)) (T, error) {
+//
+// It also opens a span, so a trace of a slow sign-in shows the eID call as a
+// segment of it rather than as an unexplained gap. With tracing off the tracer
+// is a no-op and the two extra lines cost an interface call.
+func ObserveExternalValue[T any](ctx context.Context, system, operation string,
+	call func(context.Context) (T, error)) (T, error) {
+
+	// The call is handed the span's context rather than the caller's, so that
+	// anything instrumented further down — an otelhttp transport, a nested
+	// call — hangs off this span instead of off the request.
+	ctx, span := Tracer().Start(ctx, ExternalSystem(system)+"."+operation,
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(ExternalSpanAttributes(system, operation)...))
+	defer span.End()
 
 	start := time.Now()
-	result, err := call()
+	result, err := call(ctx)
 	status := statusOK
 	if err != nil {
 		status = statusError
+		// The message, not the error value: an error from an identity provider
+		// can carry a subject or a token fragment, and a span is stored for as
+		// long as Tempo keeps it. RecordError would attach the full string.
+		span.SetStatus(codes.Error, "the call failed")
 	}
 	ExternalRequestDuration.
 		WithLabelValues(ExternalSystem(system), operation, status).
