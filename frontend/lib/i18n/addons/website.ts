@@ -3,9 +3,11 @@
  * signs in.
  */
 export const website = {
-  "website.menu.features": { mn: "Боломжууд", en: "Capabilities" },
+  // The menu follows the order of the page, so a reader who picks the first
+  // item lands near the top rather than at the bottom.
+  "website.menu.architecture": { mn: "Архитектур", en: "Architecture" },
+  "website.menu.applications": { mn: "Аппууд", en: "Applications" },
   "website.menu.trust": { mn: "Аюулгүй байдал", en: "Security" },
-  "website.menu.technology": { mn: "Технологи", en: "Technology" },
   // Leaves the product for the published documentation. The other menu items
   // scroll within this page, so this one is marked as leaving.
   "website.menu.docs": { mn: "Баримт бичиг", en: "Documentation" },
@@ -15,18 +17,23 @@ export const website = {
   "website.action.see_features": { mn: "Боломжийг үзэх", en: "See what it does" },
 
   // The hero headline is one sentence with a highlighted middle, so it is
-  // stored in three parts rather than as markup inside a translation.
-  "website.view.hero_title_lead": { mn: "Нэг нэвтрэлт —", en: "One sign-in —" },
-  "website.view.hero_title_highlight": { mn: "таны бүх", en: "every app" },
-  "website.view.hero_title_tail": { mn: "апп", en: "you have" },
+  // stored in three parts rather than as markup inside a translation. The split
+  // falls mid-phrase on purpose: what is highlighted is the claim, not a whole
+  // clause, and each language chooses its own break.
+  "website.view.hero_title_lead": { mn: "Байгууллагын бүх систем", en: "Every system an organisation runs" },
+  "website.view.hero_title_highlight": { mn: "нэг цэгт", en: "meets in one" },
+  "website.view.hero_title_tail": { mn: "уулзана", en: "place" },
   "website.view.hero_lede": {
-    mn: "Gerege Nexus нь үндэсний цахим үнэмлэхэд суурилсан нэвтрэлтийг OIDC/SSO чадвартай нэгтгэв. Иргэн нэг удаа баталгаажаад эрхтэй бүх аппдаа найдвартай орно.",
-    en: "Gerege Nexus joins national digital identity to an OIDC/SSO provider. A citizen verifies once and reaches every application they are entitled to.",
+    mn: "Gerege Nexus нь байгууллагын үйлчилгээ, үйл ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ юм. Модулиуд нэг Go бинарид компиллогдож, тенант бүрт аль апп идэвхтэйг апп стор шийднэ.",
+    en: "Gerege Nexus is a modular platform that brings an organisation's services, operations, systems and data together. Modules compile into a single Go binary, and an app store decides which of them each tenant runs.",
   },
 
-  "website.stat.eid": { mn: "Баталгаат identity", en: "Verified identity" },
-  "website.stat.standards": { mn: "Нээлттэй стандарт", en: "Open standards" },
-  "website.stat.sso": { mn: "Нэг session", en: "One session" },
+  // Three numbers that hold still. A count of tests or contributors would drift
+  // out of true without anybody noticing; these change only when the platform
+  // itself does, and the sections below say the same numbers out loud.
+  "website.stat.apps": { mn: "бэлэн бизнес апп", en: "applications included" },
+  "website.stat.languages": { mn: "хэл — монгол + НҮБ-ын 6", en: "languages: Mongolian plus the UN six" },
+  "website.stat.binary": { mn: "суулгах бинари", en: "binary to deploy" },
 
   "website.view.features_eyebrow": { mn: "GEREGE IDENTITY LAYER", en: "GEREGE IDENTITY LAYER" },
   "website.view.features_title": {

@@ -6,10 +6,12 @@ import EIDLogin from "@/components/EIDLogin";
 import {useI18n} from "@/lib/i18n";
 
 /**
- * The first screen: what this is, and the eID panel to act on it.
+ * The first screen: what the platform is, and the eID panel to act on it.
  *
- * The sign-in panel sits in the hero rather than behind the header button
- * because the shortest path from landing to signed-in is the point of the page.
+ * The headline is about the platform rather than the sign-in, because that is
+ * the question a visitor arrives with. The sign-in panel still sits beside it
+ * rather than behind the header button: the shortest path from landing to
+ * signed-in is worth keeping even when it is no longer the argument.
  */
 export default function Hero() {
   const {t} = useI18n();
@@ -20,7 +22,7 @@ export default function Hero() {
       <div className="gp-hero__inner">
         <div className="gp-copy">
           <span className="gp-eyebrow">
-            <i /> NEXUS · eID · SSO
+            <i /> OPEN SOURCE · APACHE 2.0 · GO
           </span>
           <h1>
             {t("website.view.hero_title_lead")} <em>{t("website.view.hero_title_highlight")}</em>{" "}
@@ -31,22 +33,22 @@ export default function Hero() {
             <a href="#eid-login" className="gp-gold gp-gold--large">
               {t("website.action.eid_sign_in")} <ArrowRight />
             </a>
-            <a href="#features" className="gp-outline">
+            <a href="#architecture" className="gp-outline">
               {t("website.action.see_features")}
             </a>
           </div>
           <div className="gp-stats">
             <span>
-              <b>eID</b>
-              {t("website.stat.eid")}
+              <b>9</b>
+              {t("website.stat.apps")}
             </span>
             <span>
-              <b>OAuth2 · OIDC</b>
-              {t("website.stat.standards")}
+              <b>7</b>
+              {t("website.stat.languages")}
             </span>
             <span>
-              <b>SSO</b>
-              {t("website.stat.sso")}
+              <b>1</b>
+              {t("website.stat.binary")}
             </span>
           </div>
         </div>
