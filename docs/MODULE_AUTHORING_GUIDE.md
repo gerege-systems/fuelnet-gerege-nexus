@@ -95,6 +95,35 @@ func (m *Module) RegisterRoutes(r chi.Router, gateMiddleware func(http.Handler) 
 }
 ```
 
+#### Public routes, and the rule about them
+
+`RegisterRoutes` receives the **root** router, not a pre-gated group. Mounting a
+path outside `gateMiddleware` is one line and looks exactly like mounting one
+inside it.
+
+That is deliberate. A module may need to serve something to a caller who holds
+no session — the App Store registry serves a catalogue every instance reads
+before anybody signs in — and a platform that could not express that would force
+such a module out into a service of its own.
+
+The cost is that a private route can become public by accident, and nothing in
+the diff would say so. So the rule is:
+
+> A route reachable without a session must be named in `publicRoutes` in
+> `backend/internal/platform/route_policy_test.go`.
+
+The test walks the real routing table, calls every route with no credentials,
+and fails on anything that answers `200` or `201` without being on the list. It
+also fails on a name in the list that nothing serves any more, so a renamed
+route cannot leave an entry behind that quietly widens the next route to take
+its name.
+
+Adding a name is then a visible act in a review rather than a side effect of
+where a line was put. If you find yourself adding one, say in the same comment
+what authority the route relies on instead of a session — a signature, a
+single-use reference in the query, a client secret — because "public" is never
+the actual answer.
+
 ### Using platform services
 
 Anything more than one app needs lives in `internal/platform/` and reaches a
