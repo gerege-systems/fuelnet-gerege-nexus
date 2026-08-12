@@ -339,6 +339,7 @@ npm run dev
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Trace-ийг Tempo руу илгээх хаяг. Хоосон бол tracing бүрэн унтарсан |
 | `OTEL_TRACES_SAMPLER_ARG` | `0.1` | Trace-ийн хэдэн хувийг хадгалах (0-1) |
 | `SENTRY_DSN` | — | Алдааны бүртгэл (GlitchTip эсвэл Sentry). Хоосон бол унтарсан |
+| `REPORT_SMTP_URL` / `REPORT_MAIL_FROM` | — | Товлосон тайланг илгээх SMTP. Хоосон бол тайлан бэлтгэгдэнэ, илгээгдэхгүй |
 
 Мониторингийн стек нь **өөрийн орчинтой** — платформын `.env`-д хамаарахгүй.
 `GRAFANA_ADMIN_PASSWORD`, `MONITORING_DB_PASSWORD` болон дохиоллын сувгийн

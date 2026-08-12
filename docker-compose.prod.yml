@@ -214,6 +214,11 @@ services:
       # body, a cookie, a query string or a person's address.
       SENTRY_DSN: ${SENTRY_DSN:-}
       RELEASE_VERSION: ${IMAGE_TAG:-latest}
+      # Scheduled reports. Empty means a due schedule is still produced and
+      # still recorded, and nothing is sent — see docs/REPORTS.md.
+      REPORT_SMTP_URL: ${REPORT_SMTP_URL:-}
+      REPORT_MAIL_FROM: ${REPORT_MAIL_FROM:-}
+      REPORT_SMTP_STARTTLS: ${REPORT_SMTP_STARTTLS:-true}
       # The publishing console's OAuth2 client is registered from this at
       # startup. Empty registers nothing.
       DEVELOPER_CONSOLE_ORIGIN: ${CONSOLE_ORIGIN:-}

@@ -49,6 +49,7 @@ type BillingModule struct {
 func New(db *pgxpool.Pool) *BillingModule {
 	m := &BillingModule{db: db}
 	appregistry.Register(m)
+	registerReports()
 	return m
 }
 

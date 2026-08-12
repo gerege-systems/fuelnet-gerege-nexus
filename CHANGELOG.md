@@ -15,6 +15,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Reports, as a platform layer rather than a screen
+
+`io.gerege.nexus.reports`. Every app that keeps data now has reports; the module
+serving them knows about none of them. Guide in
+[`docs/REPORTS.md`](docs/REPORTS.md).
+
+- **A report is a declaration.** A module implements a Go interface saying what
+  it is called in seven languages, what parameters it accepts, what columns it
+  produces and how to produce them. The listing, the parameter form, the table,
+  the chart, the Excel and CSV export, the schedule and the audit entry are
+  written once and apply to every report anybody ever adds. Adding one is a file
+  in a module and a line in its constructor — no handler, no frontend change.
+- **Eight reports to start with**: revenue by month and invoice status
+  (billing); stock on hand and movement summary (inventory); signatures by rail
+  and signer activity (e-signature); user activity and headcount by unit (core).
+  The e-signature one separates the rails and marks which is qualified, because
+  only the eID rail produces a qualified signature in Mongolian law and a report
+  that counted both together would answer the wrong question.
+- **The tenant boundary is the database's, not the query author's.** A report
+  runs inside the caller's tenant binding, in a **read-only transaction**, under
+  a thirty-second `statement_timeout` — the SQL one, not a context deadline,
+  because a cancelled context stops this process waiting and does not stop
+  PostgreSQL working. A report that forgets its `WHERE tenant_id` returns
+  nothing rather than everyone's rows, and there is an integration test against
+  a real database that proves it.
+- **Three gates, not one.** A report belonging to an app the organisation has
+  not installed is absent from the listing, refused by key with a 404, and
+  refused again when a schedule names it. Filtering the list is not enough: the
+  API is a separate door.
+- **Every run and every export is audited**, separately. An export is a copy of
+  the organisation's numbers leaving the platform, which is a different act from
+  reading them on screen — and §3.5 of the design requires both before one
+  tenant may see anything of another's.
+- **Scheduled reports, with no second process.** A cron expression, a
+  minute-ticker goroutine in the API, and a PostgreSQL advisory lock. Due rows
+  are claimed *before* the report is produced, not after it is sent: a replica
+  restarting between "sent" and "recorded" would send the report twice, and a
+  second copy is indistinguishable from the first while its numbers may differ.
+- **Delivery is SMTP, and the design document said otherwise.** It called for
+  the hosted verification service; that service sends one thing, a verification
+  link, and has no endpoint for a subject, a body or an attachment. With
+  `REPORT_SMTP_URL` unset a due schedule is still produced and still recorded,
+  with "delivery not configured" as its outcome and a warning on the screen —
+  which is a different and more useful state than not running.
+- **Exports that can be used.** xlsx via `excelize` with real numeric cells, a
+  totals row and a frozen header; CSV with a UTF-8 BOM, without which Excel on
+  Windows renders every Mongolian heading as mojibake — the whole content of the
+  file.
+
 ### Added — Traces, and errors that group themselves
 
 The third pillar and the tool beside it, both env-gated and both off by default.

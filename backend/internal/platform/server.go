@@ -152,7 +152,14 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	}
 
 	ssoProvider := ssoprovider.NewSSOProvider(db)
-	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
+	// The server is not built yet, so the gate is handed over as a closure over
+	// the pointer that is about to be filled. Reports are listed per request,
+	// long after this line.
+	var server *Server
+	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider,
+		func(ctx context.Context, tenantID string) (map[string]bool, error) {
+			return server.installedAppSet(ctx, tenantID)
+		})
 
 	// The relying-party half. A deployment that names a provider but cannot
 	// reach it is a deployment nobody can sign in to, so a configuration that
@@ -250,6 +257,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
 	}
+
+	// And now the closure above has something to call.
+	server = s
 
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.

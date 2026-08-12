@@ -53,6 +53,7 @@ type Module struct {
 func New(db *pgxpool.Pool) *Module {
 	m := &Module{db: db, perms: rbac.NewSQLPermissionStore(db)}
 	appregistry.Register(m)
+	registerReports()
 	return m
 }
 

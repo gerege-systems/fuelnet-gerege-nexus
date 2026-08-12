@@ -47,6 +47,32 @@ func (s *Server) appInstalled(ctx context.Context, tenantID, appID string) (bool
 	return enabled, nil
 }
 
+// installedAppSet answers "which apps does this tenant have" in one query.
+//
+// The per-app gate above is the cached one, asked once per request for one
+// known app. The reports module needs the whole set, and asking the cache
+// twelve times would be twelve round trips on a cold cache to build a list.
+// Uncached deliberately: it is one query per report listing, and a stale answer
+// here would show a report for an app that had just been uninstalled.
+func (s *Server) installedAppSet(ctx context.Context, tenantID string) (map[string]bool, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT app_id FROM app_installations WHERE tenant_id = $1 AND enabled`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	installed := make(map[string]bool, 12)
+	for rows.Next() {
+		var appID string
+		if err := rows.Scan(&appID); err != nil {
+			return nil, err
+		}
+		installed[appID] = true
+	}
+	return installed, rows.Err()
+}
+
 // externalAppGate answers the SSO provider's question: may this tenant's user
 // sign in to this client?
 //

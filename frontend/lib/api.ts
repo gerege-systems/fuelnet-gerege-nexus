@@ -230,6 +230,83 @@ export interface IntegrationInput {
   config?: Record<string, string>;
 }
 
+/** One report, as the list shows it. */
+export interface ReportSummary {
+  key: string;
+  app: string;
+  title: string;
+  titles: Record<string, string>;
+}
+
+export interface ReportGroup {
+  app: string;
+  reports: ReportSummary[];
+}
+
+export interface ReportParamOption {
+  value: string;
+  titles: Record<string, string>;
+}
+
+export interface ReportParam {
+  key: string;
+  kind: "date_range" | "uuid" | "select" | "text" | "bool";
+  titles: Record<string, string>;
+  required: boolean;
+  options?: ReportParamOption[];
+  default?: unknown;
+}
+
+export interface ReportColumn {
+  key: string;
+  titles: Record<string, string>;
+  kind: "text" | "number" | "money" | "date" | "month" | "percent";
+  /** Which axis this column belongs on, when the report is drawn. */
+  chart?: "category" | "value";
+  total?: boolean;
+}
+
+export interface ReportMetadata {
+  key: string;
+  app: string;
+  titles: Record<string, string>;
+  params: ReportParam[];
+  columns: ReportColumn[];
+}
+
+export interface ReportResult {
+  columns: ReportColumn[];
+  rows: Array<Record<string, unknown>>;
+  totals?: Record<string, number>;
+  notes?: Array<{ level: string; message: string }>;
+}
+
+export interface ReportSchedule {
+  id: string;
+  report_key: string;
+  name: string;
+  params: Record<string, unknown>;
+  cron: string;
+  format: string;
+  recipients: string[];
+  active: boolean;
+  last_run_at?: string;
+  last_status?: string;
+  last_error?: string;
+  created_at: string;
+  titles?: Record<string, string>;
+}
+
+export interface ReportScheduleInput {
+  report_key: string;
+  name: string;
+  params: Record<string, string>;
+  cron: string;
+  format: string;
+  recipients: string[];
+  active?: boolean;
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -783,6 +860,55 @@ export const api = {
       `/esign/documents/${id}/export`,
       { method: "POST", body: JSON.stringify(integrationId ? { integration_id: integrationId } : {}) }
     ),
+
+  // Reports (io.gerege.nexus.reports)
+  //
+  // The engine is generic, so the client is too: nothing here names a report.
+  // A screen lists what the tenant may run, asks for one report's declaration,
+  // and posts parameters back against it.
+  getReports: () => fetcher<{ groups: ReportGroup[] }>("/reports"),
+
+  getReport: (key: string) => fetcher<ReportMetadata>(`/reports/${encodeURIComponent(key)}`),
+
+  runReport: (key: string, params: Record<string, string>) =>
+    fetcher<{ key: string; title: string; result: ReportResult }>(
+      `/reports/${encodeURIComponent(key)}/run`,
+      { method: "POST", body: JSON.stringify({ params }) },
+    ),
+
+  // Not fetcher: the answer is a spreadsheet, not JSON. The blob is handed
+  // back so the caller can name the download from the Content-Disposition the
+  // server set rather than guessing an extension.
+  exportReport: async (key: string, params: Record<string, string>, format: "xlsx" | "csv") => {
+    const locale = typeof window !== "undefined" ? window.localStorage.getItem("locale") || "mn" : "mn";
+    const res = await fetch(
+      `${apiBase()}/reports/${encodeURIComponent(key)}/export?format=${format}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "Accept-Language": locale },
+        body: JSON.stringify({ params }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error("Export failed");
+    }
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    return { blob: await res.blob(), filename: match?.[1] || `report.${format}` };
+  },
+
+  getReportSchedules: () =>
+    fetcher<{ schedules: ReportSchedule[]; delivery_configured: boolean }>("/reports/schedules"),
+
+  createReportSchedule: (input: ReportScheduleInput) =>
+    fetcher<{ id: string }>("/reports/schedules", { method: "POST", body: JSON.stringify(input) }),
+
+  updateReportSchedule: (id: string, input: ReportScheduleInput) =>
+    fetcher<{ id: string }>(`/reports/schedules/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+
+  deleteReportSchedule: (id: string) =>
+    fetcher<void>(`/reports/schedules/${id}`, { method: "DELETE" }),
 
   // Billing App (io.gerege.nexus.billing)
   getInvoices: () =>

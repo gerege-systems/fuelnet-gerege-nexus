@@ -1,0 +1,135 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package reports is the app that serves every other module's reports.
+ */
+
+// The reports module knows nothing about billing, inventory or e-signatures.
+//
+// It serves whatever is in the reporting registry, gated by which apps the
+// caller's tenant has installed. That is the Odoo shape: a report ships with
+// the module that understands the data, and the reporting layer is generic.
+// The alternative — this module importing every other one to know their
+// reports — is exactly the coupling the compile-time module registry was built
+// to avoid.
+package reports
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// ID is the app id, in the catalogue and in every installation row.
+const ID = "io.gerege.nexus.reports"
+
+// Permissions. Two, and the split matters: viewing a report is an ordinary act
+// for anybody who works with the data, while a schedule sends this
+// organisation's numbers to an address list on a timer, which is an
+// administrative decision.
+const (
+	PermissionView     = "reports.view"
+	PermissionSchedule = "reports.schedule"
+)
+
+// InstalledApps answers which apps a tenant has, which is how the module
+// decides which reports exist for them. Supplied by the platform rather than
+// queried here, because the platform already caches that answer and this module
+// must not become a second, differently-stale source of it.
+type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, error)
+
+// Module is the reports app.
+type Module struct {
+	db        *pgxpool.Pool
+	engine    *reporting.Engine
+	scheduler *reporting.Scheduler
+	perms     *rbac.SQLPermissionStore
+	installed InstalledApps
+}
+
+// New builds the module and registers it.
+//
+// installedApps is the platform's own gate, handed in: a tenant sees the
+// reports of the apps it has installed and no others, and "which apps" has
+// exactly one answer on this deployment.
+func New(db *pgxpool.Pool, installedApps InstalledApps) *Module {
+	engine := reporting.NewEngine(db)
+	m := &Module{
+		db:        db,
+		engine:    engine,
+		scheduler: reporting.NewScheduler(engine, reporting.NewSMTPDeliverer()),
+		perms:     rbac.NewSQLPermissionStore(db),
+		installed: installedApps,
+	}
+	appregistry.Register(m)
+	return m
+}
+
+func (m *Module) ID() string      { return ID }
+func (m *Module) Name() string    { return "Reports" }
+func (m *Module) Version() string { return "1.0.0" }
+
+// Dependencies is empty on purpose. Reports is useful with any combination of
+// the other apps and useless with none of them, and declaring a dependency on
+// billing would mean a tenant that only runs inventory could not install it.
+func (m *Module) Dependencies() []internal.Dependency { return nil }
+
+func (m *Module) Permissions() []internal.PermissionDefinition {
+	return []internal.PermissionDefinition{
+		{Code: PermissionView, Name: "View Reports", Description: "Run and export the reports of the apps this organisation has installed"},
+		{Code: PermissionSchedule, Name: "Schedule Reports", Description: "Create and remove scheduled reports that are mailed out automatically"},
+	}
+}
+
+func (m *Module) Menus() []internal.MenuDefinition {
+	return []internal.MenuDefinition{
+		{
+			ID: "reports", ParentID: "operations", Label: "Reports", Path: "/reports",
+			Icon: "bar-chart-3", Order: 90,
+			Labels: map[string]string{
+				"mn": "Тайлан", "ar": "التقارير", "zh": "报表",
+				"fr": "Rapports", "ru": "Отчёты", "es": "Informes",
+			},
+		},
+	}
+}
+
+// StartHousekeeping runs the schedule sweep. The platform calls it for every
+// module that has one, so scheduled reports need no process of their own.
+func (m *Module) StartHousekeeping(ctx context.Context) {
+	m.scheduler.Start(ctx)
+}
+
+// RegisterRoutes mounts the API behind the app gate.
+//
+// Every route is inside gateMiddleware: there is no public reporting endpoint
+// and there must never be one — a report is an aggregate of a tenant's data,
+// which is the thing this platform is most careful about.
+func (m *Module) RegisterRoutes(r chi.Router, gateMiddleware func(http.Handler) http.Handler) {
+	r.Route("/api/v1/reports", func(rr chi.Router) {
+		rr.Use(gateMiddleware)
+
+		// Reading. `reports.view` plus, per report, the app it belongs to —
+		// checked in the handler rather than here, because which app depends
+		// on which report was asked for.
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/", m.handleList)
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/schedules", m.handleListSchedules)
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/{key}", m.handleMetadata)
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/run", m.handleRun)
+		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/export", m.handleExport)
+
+		// Scheduling. Administrative: it sends this organisation's numbers to
+		// an address list, on a timer, without anybody present.
+		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Post("/schedules", m.handleCreateSchedule)
+		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Put("/schedules/{id}", m.handleUpdateSchedule)
+		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Delete("/schedules/{id}", m.handleDeleteSchedule)
+	})
+}

@@ -22,6 +22,7 @@ import { gov } from "./addons/gov";
 import { integrations } from "./addons/integrations";
 import { inventory } from "./addons/inventory";
 import { products } from "./addons/products";
+import { reports } from "./addons/reports";
 import { website } from "./addons/website";
 import { overlays } from "./locales";
 
@@ -95,6 +96,7 @@ const dictionary = {
   ...integrations,
   ...inventory,
   ...products,
+  ...reports,
   ...website,
 } as const;
 
