@@ -52,6 +52,18 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 		if err != nil {
 			return nil, fmt.Errorf("load manifest for %s: %w", app.ID, err)
 		}
+		// The chronicle entry for the version being shipped is folded into the
+		// manifest here, so nothing downstream has to know the chronicle exists:
+		// the store card, the history drawer and the registry all read
+		// Manifest.ReleaseNotes. Written in two places by hand, the two would
+		// disagree the first time somebody edited one of them.
+		notes, err := releaseNotesFor(catalogDir, app.Slug, manifest.Version)
+		if err != nil {
+			return nil, fmt.Errorf("load chronicle for %s: %w", app.ID, err)
+		}
+		if notes != nil {
+			manifest.ReleaseNotes = notes
+		}
 		app.Manifest = manifest
 		catalog = append(catalog, app)
 	}
@@ -60,6 +72,32 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 		return nil, err
 	}
 	return catalog, nil
+}
+
+// releaseNotesFor reads the chronicle entry for one version, or nil when the
+// app keeps no chronicle or has not recorded this version.
+//
+// Neither absence is an error here. The obligation to write an entry is
+// enforced by the CI guard in chronicle_test.go, where it can be stated once
+// against the whole catalogue and where failing it stops a release rather than
+// a running instance: a deployment whose bundled file predates the chronicle
+// must still boot.
+func releaseNotesFor(catalogDir, slug, version string) (*ReleaseNote, error) {
+	chronicle, kept, err := LoadChronicle(catalogDir, slug)
+	if err != nil {
+		return nil, err
+	}
+	if !kept {
+		return nil, nil
+	}
+	entry, found := chronicle.Find(version)
+	if !found {
+		return nil, nil
+	}
+	// The version is dropped: the manifest it is about to live in already
+	// declares it, and validateProvenance refuses the two disagreeing.
+	entry.Version = ""
+	return &entry, nil
 }
 
 // ValidateCatalog is what a catalogue has to satisfy whatever it arrived on.

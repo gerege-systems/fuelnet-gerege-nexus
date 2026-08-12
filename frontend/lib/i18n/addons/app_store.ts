@@ -91,4 +91,56 @@ export const app_store = {
     mn: "Шинэ хувилбар нэмэлт эрх шаардаж байна:",
     en: "The new version asks for more:",
   },
+
+  // What changed in the version being offered — the chronicle entry, on the
+  // card where the decision to take it is made.
+  "app_store.field.whats_new": { mn: "Шинэ юу байна:", en: "What's new:" },
+  "app_store.action.history": { mn: "Түүх", en: "History" },
+
+  // Only breaking and security are ever shown as a badge; the other three are
+  // named here because the history drawer lists every kind.
+  "app_store.release_kind.feature": { mn: "Шинэ боломж", en: "Feature" },
+  "app_store.release_kind.fix": { mn: "Засвар", en: "Fix" },
+  "app_store.release_kind.security": { mn: "Аюулгүй байдал", en: "Security" },
+  "app_store.release_kind.breaking": { mn: "Эвдрэлтэй өөрчлөлт", en: "Breaking" },
+  "app_store.release_kind.docs": { mn: "Баримтжуулалт", en: "Docs" },
+
+  // The history drawer: one timeline of what the publisher shipped and what
+  // this organisation did about it.
+  "app_history.view.subtitle": {
+    mn: "Хувилбарын түүх ба энэ байгууллагын үйлдлүүд",
+    en: "Release history, and what this organisation did about it",
+  },
+  "app_history.message.empty": {
+    mn: "Одоогоор бичигдсэн түүх алга.",
+    en: "Nothing has been recorded yet.",
+  },
+  "app_history.event.release": { mn: "Хувилбар гарлаа", en: "Released" },
+  "app_history.event.installed": { mn: "Суулгалаа", en: "Installed" },
+  "app_history.event.upgraded": { mn: "Шинэчиллээ", en: "Updated" },
+  "app_history.event.held": { mn: "Хүлээлгэв", en: "Held back" },
+  "app_history.event.disabled": { mn: "Идэвхгүй болголоо", en: "Disabled" },
+  // A version that moved with nobody deciding is the first thing anybody asks
+  // about, so the sweep is named rather than left as a blank actor.
+  "app_history.actor.system": { mn: "Автомат шинэчлэлт", en: "Automatic update" },
+  "app_history.actor.unknown": { mn: "Тодорхойгүй", en: "Unknown" },
+
+  // The administrator's overview of the whole store.
+  "app_store.overview.title": { mn: "Апп сторын тойм", en: "Store overview" },
+  "app_store.overview.subtitle": {
+    mn: "Binary, каталог, суулгасан хувилбар — хаана зөрж байгаа нь",
+    en: "Binary, catalogue and installed version — and where they disagree",
+  },
+  "app_store.overview.binary": { mn: "Binary", en: "Binary" },
+  "app_store.overview.catalog": { mn: "Каталог", en: "Catalogue" },
+  "app_store.overview.installed": { mn: "Суулгасан", en: "Installed" },
+  "app_store.overview.updates": { mn: "Шинэчлэлт хүлээж буй", en: "Updates waiting" },
+  "app_store.overview.held": { mn: "Шийдвэр хүлээж буй", en: "Awaiting a decision" },
+  "app_store.overview.drifted": { mn: "Хувилбар зөрсөн", en: "Version drift" },
+  // Drift is nobody's decision and always a fault: the catalogue this instance
+  // is serving does not match the code it is running.
+  "app_store.overview.drift_note": {
+    mn: "Энэ build-д компилчлагдсан хувилбар каталогийнхтай таарахгүй байна. Каталог хуучирсан эсвэл build зөрүүтэй.",
+    en: "The compiled version does not match the catalogue. Either the catalogue is stale or the build is.",
+  },
 } as const;

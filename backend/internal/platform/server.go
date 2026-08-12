@@ -626,6 +626,11 @@ func (s *Server) setupRoutes() {
 			pr.Get("/store/apps", s.handleListStoreApps)
 			pr.Get("/store/apps/{slug}", s.handleGetStoreApp)
 			pr.Get("/installed-apps", s.handleListInstalledApps)
+			// What changed in an app, and what this organisation did about it.
+			// A member-level read on purpose: "why did this move" is asked by
+			// the people using the app, and the answer names nobody outside
+			// their own tenant.
+			pr.Get("/store/apps/{slug}/history", s.handleAppHistory)
 
 			pr.Group(func(ar chi.Router) {
 				ar.Use(s.requireAdmin)
@@ -643,6 +648,11 @@ func (s *Server) setupRoutes() {
 				// went. A read, but an administrative one: it names the
 				// registry and reports its failures.
 				ar.Get("/admin/store/status", s.handleCatalogStatus)
+				// The whole store in one view: which versions the binary, the
+				// catalogue and this tenant each hold, and where they disagree.
+				// It is what makes a stale catalogue visible — from every other
+				// screen a week-old one looks exactly like a current one.
+				ar.Get("/admin/store/overview", s.handleStoreOverview)
 				ar.Post("/store/apps/{slug}/enable", s.handleEnableApp)
 				ar.Post("/store/apps/{slug}/disable", s.handleDisableApp)
 			})

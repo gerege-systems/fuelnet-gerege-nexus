@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
@@ -33,6 +35,24 @@ type Manifest struct {
 	Dependencies []internal.Dependency           `json:"dependencies"`
 	Permissions  []internal.PermissionDefinition `json:"permissions"`
 	Menus        []internal.MenuDefinition       `json:"menus"`
+
+	// Everything below is manifest v2.1: who stands behind this app and what
+	// changed in this version of it. Every field is optional and every one is
+	// omitempty, so a manifest written before any of this existed marshals to
+	// exactly the bytes it did before — which is what keeps the signed
+	// catalogue byte-reproducible across the two repositories that build it.
+	Publisher   string   `json:"publisher,omitempty"`
+	Authors     []Person `json:"authors,omitempty"`
+	Maintainers []Person `json:"maintainers,omitempty"`
+	Repository  string   `json:"repository,omitempty"`
+	Homepage    string   `json:"homepage,omitempty"`
+	// License is an SPDX identifier. It is shape-checked rather than looked up:
+	// a closed list would have to be maintained here and would reject a licence
+	// that is perfectly real and merely newer than this build.
+	License string `json:"license,omitempty"`
+	// ReleaseNotes is this version's chronicle entry, copied in as the
+	// catalogue is assembled. It is not authored here — see chronicle.go.
+	ReleaseNotes *ReleaseNote `json:"release_notes,omitempty"`
 }
 
 // ExternalSpec describes how to reach a third-party platform and how it signs
@@ -155,6 +175,10 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		return fmt.Errorf("app %s has an unknown type %q", m.ID, m.Type)
 	}
 
+	if err := validateProvenance(m); err != nil {
+		return err
+	}
+
 	for _, dep := range m.Dependencies {
 		if dep.ID == "" {
 			return fmt.Errorf("dependency ID cannot be empty in app %s", m.ID)
@@ -163,6 +187,64 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 			if _, err := semver.NewConstraint(dep.VersionConstraint); err != nil {
 				return fmt.Errorf("invalid dependency constraint %q for dep %s in app %s: %w", dep.VersionConstraint, dep.ID, m.ID, err)
 			}
+		}
+	}
+	return nil
+}
+
+// spdxLicense is the shape of an SPDX identifier, not a list of them: letters,
+// digits, dots and dashes, optionally joined by WITH/OR/AND. It catches a
+// sentence typed into the field and lets "Apache-2.0", "MIT" and
+// "GPL-3.0-or-later WITH Classpath-exception-2.0" through alike.
+var spdxLicense = regexp.MustCompile(`^[A-Za-z0-9.+-]+( (WITH|OR|AND) [A-Za-z0-9.+-]+)*$`)
+
+// validateProvenance checks the manifest v2.1 fields. Each is optional; each
+// that is present has to mean something.
+//
+// The rule worth stating is the one about people: an entry with no name is not
+// a weaker claim about who wrote the app, it is an empty line rendered in a
+// storefront credit list. An app may name nobody. It may not name a blank.
+func validateProvenance(m Manifest) error {
+	for _, group := range [...]struct {
+		field  string
+		people []Person
+	}{{"authors", m.Authors}, {"maintainers", m.Maintainers}} {
+		for i, person := range group.people {
+			if strings.TrimSpace(person.Name) == "" {
+				return fmt.Errorf("app %s: %s[%d] has no name", m.ID, group.field, i)
+			}
+		}
+	}
+
+	for _, link := range [...]struct {
+		field string
+		raw   string
+	}{{"repository", m.Repository}, {"homepage", m.Homepage}} {
+		if link.raw == "" {
+			continue
+		}
+		// Same reasoning as external.launch_url: these are put in front of a
+		// user as links this platform vouches for.
+		parsed, err := url.Parse(link.raw)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			return fmt.Errorf("app %s: %s must be an absolute https URL, got %q",
+				m.ID, link.field, link.raw)
+		}
+	}
+
+	if m.License != "" && !spdxLicense.MatchString(m.License) {
+		return fmt.Errorf("app %s: license %q is not an SPDX identifier", m.ID, m.License)
+	}
+
+	if m.ReleaseNotes != nil {
+		if err := validateNote("app "+m.ID+" release_notes", *m.ReleaseNotes); err != nil {
+			return err
+		}
+		// The note travels inside a manifest that already carries the version,
+		// so a second copy is a second thing that can disagree with it.
+		if v := m.ReleaseNotes.Version; v != "" && v != m.Version {
+			return fmt.Errorf("app %s: release_notes are for version %q but the manifest declares %q",
+				m.ID, v, m.Version)
 		}
 	}
 	return nil

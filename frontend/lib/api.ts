@@ -40,6 +40,64 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 export const APP_MENU_CHANGED_EVENT = "gerege:app-menu-changed";
 
+/** What kind of change a release was. The store colours by it. */
+export type ReleaseKind = "feature" | "fix" | "security" | "breaking" | "docs";
+
+/**
+ * One line of an app's timeline.
+ *
+ * `type` is "release" for the publisher's own record — the chronicle entry,
+ * already reduced to one language by the server — and the installation event
+ * type ("installed", "upgraded", "held", …) for everything this organisation
+ * did. `system` marks the lines the auto-update sweep is responsible for
+ * rather than a person.
+ */
+export interface AppHistoryEntry {
+  at: string;
+  type: string;
+  version?: string;
+  from?: string;
+  kind?: ReleaseKind;
+  summary?: string;
+  details?: string;
+  authors?: string[];
+  refs?: string[];
+  actor_id?: string;
+  actor_name?: string;
+  system?: boolean;
+  reason?: string;
+  added?: string;
+}
+
+/** One row of the administrator's store overview. */
+export interface StoreOverviewApp {
+  app_id: string;
+  slug: string;
+  name: string;
+  binary_version?: string;
+  catalog_version: string;
+  installed_version?: string;
+  installed: boolean;
+  enabled: boolean;
+  update_available: boolean;
+  auto_update: boolean;
+  held?: boolean;
+  pinned_version?: string;
+  /** The compiled module and the catalogue disagree. Always a fault. */
+  drifted?: boolean;
+  release_kind?: ReleaseKind;
+  release_summary?: string;
+}
+
+/** A manifest's release notes, as they arrive inside a catalogue entry. */
+export interface ManifestReleaseNotes {
+  kind?: ReleaseKind;
+  summary?: Record<string, string>;
+  details?: Record<string, string>;
+  authors?: string[];
+  refs?: string[];
+}
+
 async function mutateApp(url: string) {
   const result = await fetcher<{ status: string; app: string }>(url, { method: "POST" });
   // Layout lives above the App Store pages, so a route refresh does not
@@ -205,6 +263,11 @@ export const api = {
   setMembershipRoles: (id:string,roles:string[]) => fetcher(`/admin/access/memberships/${id}/roles`,{method:"PUT",body:JSON.stringify({roles})}),
 
   // Store
+  //
+  // A manifest carries release notes since the chronicle: one sentence saying
+  // what changed in the version being offered, already resolved to the
+  // caller's language by the server. It is what turns "an update is available"
+  // into something an administrator can decide about.
   getStoreApps: () =>
     fetcher<
       Array<{
@@ -250,6 +313,35 @@ export const api = {
         core: boolean;
       }>
     >("/installed-apps"),
+
+  // What changed in an app, and what this organisation did about it, merged
+  // into one timeline newest first. A "release" line is the publisher's; every
+  // other kind is this tenant's own installation history.
+  getAppHistory: (slug: string) =>
+    fetcher<{
+      app_id: string;
+      slug: string;
+      name: string;
+      installed_version: string;
+      latest_version: string;
+      timeline: AppHistoryEntry[];
+    }>(`/store/apps/${slug}/history`),
+
+  // The administrator's single view of the store: which versions the binary,
+  // the catalogue and this tenant each hold, and where they disagree.
+  getStoreOverview: () =>
+    fetcher<{
+      platform_version: string;
+      sync: {
+        source: "file" | "registry";
+        sync_interval: string;
+        last_sync_at?: string;
+        last_sync_ok?: boolean;
+        last_sync_error?: string;
+      };
+      apps: StoreOverviewApp[];
+      summary: { catalog: number; installed: number; updates: number; held: number; drifted: number };
+    }>("/admin/store/overview"),
 
   // Whether an app follows the catalogue on its own. Turning it on also clears
   // a hold, which is why this refreshes the menus like the other store
