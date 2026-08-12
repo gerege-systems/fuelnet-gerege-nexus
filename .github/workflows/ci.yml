@@ -33,6 +33,29 @@ jobs:
           # Compiling from source with the toolchain from setup-go keeps the two
           # in step automatically.
           install-mode: goinstall
+          # The analysis cache is not trustworthy here, so it is not kept.
+          #
+          # On 2026-08-12 a restored cache produced six SA5011 findings —
+          # "possible nil pointer dereference" on three test files that guard
+          # with `if x == nil { t.Fatalf(...) }` before dereferencing, which is
+          # the correct pattern and has been in the tree for days. staticcheck
+          # only knows that `t.Fatalf` does not return if it holds that fact
+          # about the testing package; the cached run did not, so it reported a
+          # dereference after a check it could not see was terminating.
+          #
+          # It was reproducible from the cache and not otherwise: the same
+          # commit, the same golangci-lint v2.1.6 built with the same Go, run
+          # with a cold cache on Linux and on macOS, reports zero issues. It
+          # survived a re-run, because the re-run restored the same cache. A
+          # dependency change had rotated the cache key shortly before, so the
+          # poisoned entry was written once and then served to everything after
+          # it.
+          #
+          # A lint that reports six failures on unchanged, correct code — and
+          # keeps reporting them until somebody notices the cache — is worse
+          # than a lint that takes another minute. The cost is about a minute
+          # per run.
+          skip-cache: true
 
   test:
     name: Test
