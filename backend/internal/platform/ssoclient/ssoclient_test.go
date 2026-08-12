@@ -53,8 +53,8 @@ func newFakeProvider(t *testing.T) *fakeProvider {
 	mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"keys": []any{map[string]any{
 			"kty": "RSA", "use": "sig", "alg": "RS256", "kid": p.kid,
-			"n": b64(key.PublicKey.N.Bytes()),
-			"e": b64(big.NewInt(int64(key.PublicKey.E)).Bytes()),
+			"n": b64(key.N.Bytes()),
+			"e": b64(big.NewInt(int64(key.E)).Bytes()),
 		}}})
 	})
 	mux.HandleFunc("/oauth2/token", func(w http.ResponseWriter, r *http.Request) {

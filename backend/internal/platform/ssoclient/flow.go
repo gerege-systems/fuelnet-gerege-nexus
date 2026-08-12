@@ -27,7 +27,11 @@ const (
 	FlowCookieName = "sso_flow"
 	FlowCookiePath = "/api/v1/auth/sso"
 
+	// #nosec G101 -- a cookie name, not a credential. gosec matches the
+	// identifier rather than the value, and every honest name for "the cookie
+	// the id_token is kept in" has "token" in it.
 	IDTokenCookieName = "sso_id_token"
+	// #nosec G101 -- and this one is a URL path, for the same reason.
 	IDTokenCookiePath = "/api/v1/auth/logout"
 )
 
