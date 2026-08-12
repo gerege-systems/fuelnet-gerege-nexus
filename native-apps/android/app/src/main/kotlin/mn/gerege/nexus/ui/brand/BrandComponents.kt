@@ -25,8 +25,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,12 +37,50 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import mn.gerege.nexus.ui.theme.LocalGw
+
+/**
+ * The primary button's leading arrow, drawn here rather than imported.
+ *
+ * Their app takes it from `androidx.compose.material.icons`, and this one
+ * cannot: material3 used to pull `material-icons-core` in transitively and no
+ * longer does, and that artifact stopped at 1.7.8 — so reaching for it would
+ * mean pinning a discontinued library beside a 2026 BOM to obtain one glyph.
+ * This is Material's own arrow_forward path, which keeps the design exact
+ * without the dependency.
+ */
+private val ArrowForwardVector: ImageVector = ImageVector.Builder(
+    name = "ArrowForward",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+    autoMirror = true,
+).apply {
+    // Material's arrow_forward, 24x24:
+    //   M12,4 l-1.41,1.41 L16.17,11 H4 v2 h12.17 l-5.58,5.59 L12,20 l8,-8 z
+    // The tint comes from Icon's `tint`, so the fill here is only what an
+    // untinted render would use.
+    path(fill = SolidColor(Color.White)) {
+        moveTo(12f, 4f)
+        lineToRelative(-1.41f, 1.41f)
+        lineTo(16.17f, 11f)
+        horizontalLineTo(4f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(12.17f)
+        lineToRelative(-5.58f, 5.59f)
+        lineTo(12f, 20f)
+        lineToRelative(8f, -8f)
+        close()
+    }
+}.build()
 
 /** Full-bleed canvas tinted with the `bg` token. */
 @Composable
@@ -118,7 +154,7 @@ fun LoadingPrimaryButton(
     label: String,
     isLoading: Boolean,
     isEnabled: Boolean,
-    leadingIcon: ImageVector? = Icons.AutoMirrored.Filled.ArrowForward,
+    leadingIcon: ImageVector? = ArrowForwardVector,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
