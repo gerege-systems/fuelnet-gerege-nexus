@@ -295,7 +295,11 @@ const appColumns = `SELECT a.id, a.publisher_id::text, a.slug, a.type, a.name, a
 	           WHERE v.app_id = a.id AND v.status = 'published' AND v.channel = 'stable'
 	           ORDER BY v.published_at DESC LIMIT 1), ''),
 	a.authors, a.maintainers, a.repository, a.homepage, a.license,
-	a.created_by, a.updated_by
+	-- Nullable columns read into strings. An app registered before anybody was
+	-- recorded, or imported from a registry that had no such column, carries
+	-- NULL here — and a catalogue that will not list an app because nobody is
+	-- named as having created it is worse than one that says nothing about who.
+	COALESCE(a.created_by::text, ''), COALESCE(a.updated_by::text, '')
 	FROM store_apps a JOIN store_publishers p ON p.id = a.publisher_id`
 
 // scanAppInto reads one row of appColumns. Both the single-row and the list
