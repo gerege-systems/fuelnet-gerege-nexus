@@ -1,5 +1,11 @@
 # Баримт бичгийн төв — Documentation Hub
 
+> Энэ бүх баримт нь вэб хэлбэрээр
+> **[gerege-systems.github.io/open-gerege-nexus](https://gerege-systems.github.io/open-gerege-nexus/)**
+> хаяг дээр нийтлэгддэг. Сайт нь энэ хавтасны Markdown файлуудаас
+> угсрагддаг тул эх сурвалж нь энд хэвээр байна —
+> [`docs/site/`](site/) хавтсыг үзнэ үү.
+
 Энэ хавтас нь **Gerege Nexus**-ын бүх баримт бичиг болон орчуулгыг
 агуулна. Үндсэн хэл нь монгол; орчуулгууд нь файлын нэрийн `_AR`, `_ZH`, `_EN`,
 `_FR`, `_RU`, `_ES` дагаварт хадгалагдана.
@@ -51,8 +57,13 @@ Spanish) — seven in total.
 | [`ARCHITECTURE_SPECIFICATION.md`](ARCHITECTURE_SPECIFICATION.md) | MN | Платформын давхаргууд, өгөгдлийн загвар, архитектурын шийдвэрүүд |
 | [`ARCHITECTURE_SPECIFICATION_EN.md`](ARCHITECTURE_SPECIFICATION_EN.md) | EN | Architecture specification |
 | [`SHELL_CONTRACT.md`](SHELL_CONTRACT.md) | MN | Native бүрхүүл ба web ажлын мужийн `window.GeregeShell` гэрээ |
+| [`NATIVE_LOGIN_SPEC.md`](NATIVE_LOGIN_SPEC.md) | MN | Swift, C#, Kotlin клиентүүдийн нэвтрэлтийн зан төлөв |
+| [`NATIVE_SETTINGS_SPEC.md`](NATIVE_SETTINGS_SPEC.md) | MN | Бүрхүүл, төхөөрөмж, peripheral, fleet тохиргоо |
 | [`MODULE_AUTHORING_GUIDE.md`](MODULE_AUTHORING_GUIDE.md) | EN | Шинэ апп модуль хөгжүүлэх алхам алхмаар заавар |
 | [`GOV_SERVICES_WORKFLOW.md`](GOV_SERVICES_WORKFLOW.md) | EN | Тохируулж болох төрийн үйлчилгээний урсгал, шилжүүлэлт, баталгаажуулалт |
+| [`DOCUMENTS_SIGNING.md`](DOCUMENTS_SIGNING.md) | EN | Цахим баримтын гарын үсэг ба батламжийн урсгал |
+| [`APPSTORE_OPERATIONS.md`](APPSTORE_OPERATIONS.md) | EN | Апп сторын каталог нийтлэх, хувилбар шилжүүлэх ажиллагаа |
+| [`TRANSLATION_GUIDE.md`](TRANSLATION_GUIDE.md) | MN | Долоон хэлний толь бичиг, орчуулга нэмэх урсгал |
 
 ## Төслийн журам — Project governance
 

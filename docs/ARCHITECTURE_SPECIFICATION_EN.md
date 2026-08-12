@@ -67,7 +67,7 @@ organizations, wired directly into Mongolia's national digital infrastructure.
                 +-------------------------+-------------------------+
                 |                                                   |
       +-------------------+                               +-------------------+
-      | Next.js 15 Client |                               |  Go 1.25 Backend  |
+      | Next.js 16 Client |                               |  Go 1.26 Backend  |
       |   (App Router)    |                               |   (Chi Router)    |
       +-------------------+                               +-------------------+
                 |                                                   |

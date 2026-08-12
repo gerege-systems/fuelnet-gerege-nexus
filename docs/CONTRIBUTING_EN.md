@@ -47,9 +47,9 @@ mind.
 
 1. **Create a branch** — `git checkout -b feature/amazing-feature`.
 2. **Follow the code conventions**:
-   - Backend: Go 1.25+, `gofmt` formatting, structured logging with `slog`,
+   - Backend: Go 1.26+, `gofmt` formatting, structured logging with `slog`,
      explicit error handling.
-   - Frontend: Next.js 15 App Router, TypeScript strict mode, Tailwind CSS.
+   - Frontend: Next.js 16 App Router, TypeScript strict mode, Tailwind CSS.
 3. **Write tests** — new backend logic ships with `*_test.go` coverage.
 4. **Run the verification suite**:
 

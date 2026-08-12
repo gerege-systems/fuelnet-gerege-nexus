@@ -97,13 +97,11 @@ export const app_store = {
   "app_store.field.whats_new": { mn: "Шинэ юу байна:", en: "What's new:" },
   "app_store.action.history": { mn: "Түүх", en: "History" },
 
-  // Only breaking and security are ever shown as a badge; the other three are
-  // named here because the history drawer lists every kind.
-  "app_store.release_kind.feature": { mn: "Шинэ боломж", en: "Feature" },
-  "app_store.release_kind.fix": { mn: "Засвар", en: "Fix" },
+  // Only breaking and security are ever named. They are the two kinds that
+  // turn an update into a decision, and a badge is how that decision reaches
+  // the person making it; the remaining kinds carry no badge and so no term.
   "app_store.release_kind.security": { mn: "Аюулгүй байдал", en: "Security" },
   "app_store.release_kind.breaking": { mn: "Эвдрэлтэй өөрчлөлт", en: "Breaking" },
-  "app_store.release_kind.docs": { mn: "Баримтжуулалт", en: "Docs" },
 
   // The history drawer: one timeline of what the publisher shipped and what
   // this organisation did about it.
@@ -126,16 +124,8 @@ export const app_store = {
   "app_history.actor.unknown": { mn: "Тодорхойгүй", en: "Unknown" },
 
   // The administrator's overview of the whole store.
-  "app_store.overview.title": { mn: "Апп сторын тойм", en: "Store overview" },
-  "app_store.overview.subtitle": {
-    mn: "Binary, каталог, суулгасан хувилбар — хаана зөрж байгаа нь",
-    en: "Binary, catalogue and installed version — and where they disagree",
-  },
   "app_store.overview.binary": { mn: "Binary", en: "Binary" },
   "app_store.overview.catalog": { mn: "Каталог", en: "Catalogue" },
-  "app_store.overview.installed": { mn: "Суулгасан", en: "Installed" },
-  "app_store.overview.updates": { mn: "Шинэчлэлт хүлээж буй", en: "Updates waiting" },
-  "app_store.overview.held": { mn: "Шийдвэр хүлээж буй", en: "Awaiting a decision" },
   "app_store.overview.drifted": { mn: "Хувилбар зөрсөн", en: "Version drift" },
   // Drift is nobody's decision and always a fault: the catalogue this instance
   // is serving does not match the code it is running.

@@ -22,8 +22,6 @@ export const appearance = {
     mn: "Орчуулагдаагүй үг англи хэлээр харагдана.",
     en: "Terms that are not translated yet appear in English.",
   },
-  "appearance.state.language_on": { mn: "Нээлттэй", en: "Available" },
-  "appearance.state.language_off": { mn: "Хаалттай", en: "Hidden" },
   "appearance.state.language_always": { mn: "Үндсэн", en: "Default" },
 
   "appearance.field.theme_style": { mn: "Theme загвар", en: "Theme style" },

@@ -10,6 +10,9 @@ out/
 frontend/out/
 *.tsbuildinfo
 
+# Documentation site build output (published from CI, never committed)
+docs/site/dist/
+
 # Local environment overrides
 .env
 .env.local

@@ -1,0 +1,263 @@
+<section class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow"><i></i> НЭЭЛТТЭЙ ЭХ · APACHE 2.0 · МОНГОЛ ХЭЛ ЭХ СУРВАЛЖ</span>
+    <h1>Байгууллагын бүх систем <em>нэг цэгт</em> уулзана</h1>
+    <p>
+      Gerege Nexus нь төрийн болон хувийн хэвшлийн байгууллагын үйлчилгээ, үйл
+      ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ юм. Нэг Go бинари
+      дотор модулиуд компиллогдож, тенант бүрт аль апп идэвхтэйг PostgreSQL
+      дээрх апп стор шийднэ — микросервисийн нарийн төвөгтэй байдалгүйгээр.
+    </p>
+    <div class="hero-cta">
+      <a class="gold" href="overview.html">Баримт бичиг үзэх</a>
+      <a class="ghost" href="https://github.com/gerege-systems/open-gerege-nexus" target="_blank" rel="noopener">GitHub дээрх эх код</a>
+    </div>
+    <div class="stats">
+      <div><b>9</b><span>бэлэн бизнес апп</span></div>
+      <div><b>7</b><span>хэл — монгол + НҮБ-ын 6</span></div>
+      <div><b>314</b><span>backend тест</span></div>
+      <div><b>1</b><span>суулгах бинари</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-head">
+    <span>ЯАГААД ЭНЭ АРХИТЕКТУР</span>
+    <h2>Модульт монолит — микросервисийн уян хатан байдал, монолитын хурд</h2>
+    <p>
+      Модуль бүр өөрийн домэйн, өөрийн миграц, өөрийн RBAC эрхтэй. Гэхдээ бүгд
+      нэг процесс дотор ажилладаг тул модуль хоорондын дуудлага сүлжээгээр
+      явахгүй — Go-ийн функцийн дуудлага л болно.
+    </p>
+  </div>
+  <div class="cards">
+    <div class="card card--dark">
+      <span class="tag">COMPILE-TIME</span>
+      <h3>Go апп модулиуд</h3>
+      <p>
+        Модуль бүр <code>Module</code> интерфэйсийг хэрэгжүүлж, нэг бинарид
+        компиллогдоно. Маршрут, цэс, эрх, миграц — бүгд модулийн өөрийнх.
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">RUNTIME</span>
+      <h3>Тенант бүрийн апп стор</h3>
+      <p>
+        Аль тенантад аль апп идэвхтэйг <code>app_installations</code> хүснэгт
+        шийднэ. Суулгаагүй апп руу хандвал <code>403</code> буцна — код нь
+        байгаа ч хаалга нь хаалттай.
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">DAG</span>
+      <h3>Хамаарал шийдвэрлэгч</h3>
+      <p>
+        Рекурсив шийдвэрлэлт, мөчлөг илрүүлэлт, semver шалгалт. Апп суулгахад
+        түүний хамаарал бүр зөв хувилбартайгаа хамт орно.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="band band--tint">
+  <div class="band-head">
+    <span>ТЭСВЭРЛЭЛТ</span>
+    <h2>Cloud-native хөдөлгүүр нь платформын нэг хэсэг</h2>
+    <p>
+      Ачаалал ихсэх, эх сурвалж унах, давхардсан хүсэлт орж ирэх — эдгээр нь
+      онцгой тохиолдол биш, өдөр тутмын байдал. Тиймээс тэдгээрийг зохицуулах
+      код нь платформын цөмд байрлана.
+    </p>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <h3>Adaptive circuit breaker</h3>
+      <p>Google SRE загварын таслуур — унасан эх сурвалж руу хүсэлт цутгахаас сэргийлнэ.</p>
+    </div>
+    <div class="card">
+      <h3>Load shedder</h3>
+      <p>Ачаалал хэтэрсэн үед <code>503</code> ба <code>Retry-After</code> буцааж, системийг бүхэлд нь унахаас хамгаална.</p>
+    </div>
+    <div class="card">
+      <h3>Singleflight</h3>
+      <p>Ижил хүсэлтүүдийг нэгтгэж, кэш хоосрох мөчид өгөгдлийн санг хамгаална.</p>
+    </div>
+    <div class="card">
+      <h3>Экспоненциал retry</h3>
+      <p>Түр зуурын алдааг ухарч давтах — jitter-тэй, дээд хязгаартай.</p>
+    </div>
+    <div class="card">
+      <h3>Prometheus хэмжүүр</h3>
+      <p><code>/metrics</code>, <code>/health</code>, <code>/ready</code> — ажиглалт эхний өдрөөс.</p>
+    </div>
+    <div class="card">
+      <h3>Аудит бүртгэл</h3>
+      <p>Хэн, юуг, хэзээ өөрчилсөн — эргэж харах боломжтой бүртгэл.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-head">
+    <span>ТӨРИЙН ЦАХИМ ДЭД БҮТЭЦ</span>
+    <h2>Монгол Улсын систем рүү шууд холбогдоно</h2>
+    <p>
+      Энэ бол дараа нэмэх төлөвлөгөө биш, аль хэдийн бичигдсэн интеграц.
+      Хөгжүүлэлтийн орчинд mock горимоор ажиллах ба
+      <code>ENVIRONMENT=production</code> үед mock автоматаар унтарна.
+    </p>
+  </div>
+  <div class="cards">
+    <div class="card card--dark">
+      <span class="tag">ХУР / XYP</span>
+      <h3>Мэдээлэл солилцооны систем</h3>
+      <p>
+        Иргэний бүртгэл (<code>WS100101</code>), хуулийн этгээдийн
+        баталгаажуулалт (<code>WS100201</code>) — харилцагч бүртгэхэд талбарууд
+        өөрөө бөглөгдөнө.
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">E-ID · ДАН</span>
+      <h3>Нууц үггүй нэвтрэлт</h3>
+      <p>
+        Тоон гарын үсэг (PKI), нэг удаагийн код (Mobile OTP), банкны суваг
+        (Bank SSO), царай танилт (Biometric).
+      </p>
+    </div>
+    <div class="card">
+      <span class="tag">OAuth2 · OIDC</span>
+      <h3>Өөрийн SSO provider</h3>
+      <p>
+        <code>/.well-known/openid-configuration</code> — гуравдагч систем
+        Gerege-ээр дамжуулан хэрэглэгчээ нэвтрүүлнэ.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="band band--tint">
+  <div class="band-head">
+    <span>БЭЛЭН АППЛИКЕЙШНҮҮД</span>
+    <h2>Эхний өдрөөс ажиллах есөн апп</h2>
+    <p>
+      Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрут нь нээгдэнэ. Каталог
+      нь <code>catalog/apps.json</code> — цорын ганц эх сурвалж.
+    </p>
+  </div>
+  <div class="table-scroll">
+    <table class="applist">
+      <thead>
+        <tr><th>Апп</th><th>Зам</th><th>Тайлбар</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>Байгууллага ба ажилтнууд</b></td><td><code>/organisation</code></td><td>Хуулийн мэдээлэл, хэлтэс нэгж, ажилтнууд — устгах боломжгүй цөм апп</td></tr>
+        <tr><td><b>Харилцагчид</b></td><td><code>/contacts</code></td><td>Харилцагчийн бүртгэл, ХУР авто-бөглөлт</td></tr>
+        <tr><td><b>Бараа</b></td><td><code>/products</code></td><td>Бараа, үнэ, тенантад хамаарах SKU</td></tr>
+        <tr><td><b>Агуулах</b></td><td><code>/inventory</code></td><td>Үлдэгдэл, хөдөлгөөн, AI эрэлт таамаглал</td></tr>
+        <tr><td><b>Нэхэмжлэх ба e-Barimt</b></td><td><code>/billing</code></td><td>Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт</td></tr>
+        <tr><td><b>Цахим баримт</b></td><td><code>/documents</code></td><td>Баримт, гарын үсэг, батламжийн урсгал</td></tr>
+        <tr><td><b>Төрийн үйлчилгээ</b></td><td><code>/gov-services</code></td><td>Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, цаг захиалга</td></tr>
+        <tr><td><b>PDF цахим гарын үсэг</b></td><td><code>/esign</code></td><td>eID Mongolia (PIN2) хуулийн хүчинтэй гарын үсэг, HSM, багц баталгаажуулалт</td></tr>
+        <tr><td><b>Хөгжүүлэгчийн портал</b></td><td><code>/developer/apps</code></td><td>OAuth2 client апп бүртгэл ба SSO</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-head">
+    <span>ХЭЛНИЙ БОДЛОГО</span>
+    <h2>Монгол хэл нь орчуулга биш, эх сурвалж</h2>
+    <p>
+      Платформ монгол хэл дээр бичигдэж, бусад хэл рүү орчуулагдана — эсрэгээр
+      нь биш. Монгол хэл дээр нэмээд НҮБ-ын албан ёсны зургаан хэл: араб,
+      хятад, англи, франц, орос, испани.
+    </p>
+  </div>
+  <div class="cards two">
+    <div class="card">
+      <h3>1050 нэр томьёо, долоон хэл, цоорхойгүй</h3>
+      <p>
+        <code>npm run i18n:check</code> нь орчуулга дутуу түлхүүр болон эзэнгүй
+        үлдсэн орчуулгыг хоёуланг нь барьж, CI дээр алдаа өгнө. Хагас
+        орчуулагдсан дэлгэц нийтлэгдэх боломжгүй.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Араб хэлний RTL бүрэн дэмжлэг</h3>
+      <p>
+        Баруунаас зүүн тийш бичигддэг хэл нь тусгай тохиолдол биш — байрлалын
+        CSS нь логик чиглэл ашигладаг тул бүх дэлгэц эргэнэ.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="band band--tint">
+  <div class="band-head">
+    <span>АЮУЛГҮЙ БАЙДАЛ</span>
+    <h2>Анхдагч тохиргоо нь аюулгүй тал руугаа</h2>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <h3>Session токен</h3>
+      <p>256 бит санамсаргүй утга. Өгөгдлийн санд зөвхөн SHA-256 хэш нь хадгалагдана — сан задарсан ч токен сэргээгдэхгүй.</p>
+    </div>
+    <div class="card">
+      <h3>Нууц үг ба хурдны хязгаар</h3>
+      <p>bcrypt хэшлэлт, IP-д суурилсан хязгаарлалт, нэвтрэх оролдлогын түгжээ.</p>
+    </div>
+    <div class="card">
+      <h3>Constant-time харьцуулалт</h3>
+      <p>OAuth2 client танилт тогтмол хугацаанд шалгагдана — цагийн суваг руу мэдээлэл алдагдахгүй.</p>
+    </div>
+    <div class="card">
+      <h3>RBAC эрхийн загвар</h3>
+      <p>Гишүүнчлэл → үүрэг → эрх. Кэш нь тенантын хэмжээнд, кластер даяар цуцлагдана.</p>
+    </div>
+    <div class="card">
+      <h3>Тенантын тусгаарлалт</h3>
+      <p>Өгөгдлийн сангийн хамгаалалт (<code>dbguard</code>) нь <code>tenant_id</code>-гүй асуулгыг барина.</p>
+    </div>
+    <div class="card">
+      <h3>Тасралтгүй шалгалт</h3>
+      <p>CI бүр дээр <code>govulncheck</code>, <code>gosec</code>, <code>golangci-lint</code>, race detector-тэй тест.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="band-head">
+    <span>AI</span>
+    <h2>Тенантын бодит өгөгдөлд холбогдсон туслах</h2>
+  </div>
+  <div class="cards two">
+    <div class="card card--dark">
+      <h3>AI Copilot</h3>
+      <p>
+        Зорилго ангилдаг харилцан яриа — тенантын өгөгдлийн сангийн бодит
+        төлөвт холбогдоно. Chat, яриа таних, унших, орчуулга нэг pipeline дээр.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Агуулахын эрэлт таамаглагч</h3>
+      <p>
+        Түүхэн хөдөлгөөнд тулгуурлан аюулгүйн үлдэгдэл болон дахин захиалгын
+        цэгийг санал болгоно.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="closing">
+  <div>
+    <h2>Эхлэхэд гурван команд хангалттай</h2>
+    <p><code>docker compose up -d</code> — миграц автоматаар ажиллаад API асна.</p>
+  </div>
+  <div class="row">
+    <a class="gold" href="overview.html#ажиллуулах-заавар">Ажиллуулах заавар</a>
+    <a class="ghost" href="module-authoring.html">Модуль бичих</a>
+  </div>
+</div>

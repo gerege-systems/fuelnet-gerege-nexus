@@ -36,8 +36,8 @@ PostgreSQL أي التطبيقات مفعَّلة لكل مستأجر — فصل
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](../CONTRIBUTING.md)
 
 ---
@@ -164,7 +164,7 @@ backend/
     module.go         عقد وحدة Go
     apps/             وحدات الأعمال
     platform/         خدمات نواة المنصة
-frontend/             عميل الويب Next.js 15 (App Router)
+frontend/             عميل الويب Next.js 16 (App Router)
 catalog/              فهرس متجر التطبيقات وبياناته الوصفية
 deploy/               Dockerfile الإنتاج وإعدادات Nginx
 docs/                 التوثيق والترجمات
@@ -178,7 +178,7 @@ docs/                 التوثيق والترجمات
 
 ### المتطلبات المسبقة
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+
 - PostgreSQL 16+ (أو Docker Compose)
 

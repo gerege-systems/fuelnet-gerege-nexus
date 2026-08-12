@@ -33,8 +33,8 @@ PostgreSQL определяет, какие приложения активны 
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](../CONTRIBUTING.md)
 
 ---
@@ -147,7 +147,7 @@ backend/
     module.go         Контракт Go Module
     apps/             Бизнес-модули
     platform/         Сервисы ядра платформы
-frontend/             Веб-клиент Next.js 15 (App Router)
+frontend/             Веб-клиент Next.js 16 (App Router)
 catalog/              Каталог магазина приложений и манифесты
 deploy/               Production Dockerfile, конфигурация Nginx
 docs/                 Документация и переводы
@@ -159,7 +159,7 @@ docs/                 Документация и переводы
 
 ### Требования
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+
 - PostgreSQL 16+ (или Docker Compose)
 
