@@ -64,6 +64,10 @@ const PAGES = [
   {src: "docs/GOV_SERVICES_WORKFLOW.md", slug: "gov-services", title: "Төрийн үйлчилгээний урсгал", group: "Модулиуд"},
   {src: "docs/DOCUMENTS_SIGNING.md", slug: "documents-signing", title: "Цахим гарын үсэг", group: "Модулиуд"},
 
+  {src: "docs/SHELL_CONTRACT.md", slug: "shell-contract", title: "Bridge гэрээ", group: "Native клиентүүд"},
+  {src: "docs/NATIVE_LOGIN_SPEC.md", slug: "native-login", title: "Native нэвтрэлт", group: "Native клиентүүд"},
+  {src: "docs/NATIVE_SETTINGS_SPEC.md", slug: "native-settings", title: "Native тохиргоо", group: "Native клиентүүд"},
+
   {src: "CONTRIBUTING.md", slug: "contributing", title: "Хувь нэмэр оруулах", group: "Төслийн журам"},
   {src: "docs/CONTRIBUTING_EN.md", slug: "contributing-en", title: "Contributing (EN)", group: "Төслийн журам"},
   {src: "SECURITY.md", slug: "security", title: "Аюулгүй байдал", group: "Төслийн журам"},
