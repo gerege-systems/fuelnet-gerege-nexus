@@ -62,7 +62,7 @@ public struct NativeSettingsView: View {
             if let selection { detail(selection).navigationTitle(selection.rawValue) }
             else { VStack(spacing: 12) { Image(systemName: "gearshape.2").font(.largeTitle); Text("Ангилал сонгоно уу") }.foregroundStyle(.secondary) }
         }
-        .tint(Color(red: 34/255, green: 163/255, blue: 165/255))
+        .tint(WalletTheme.Brand.hi)
         .task { await refreshDeviceIdentity() }
     }
 
@@ -192,7 +192,7 @@ public struct NativeShellView: View {
             tab("person.2", "Харилцагч", "/contacts")
             Button { pane = .settings } label: {
                 Label("Тохиргоо", systemImage: "gearshape").frame(maxWidth: .infinity)
-                    .foregroundStyle(pane == .settings ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(pane == .settings ? WalletTheme.Brand.hi : WalletTheme.Text.tertiary)
             }
             .accessibilityLabel("Тохиргоо")
         }
@@ -202,7 +202,7 @@ public struct NativeShellView: View {
     private func tab(_ icon: String, _ title: String, _ path: String) -> some View {
         Button { route = path; pane = .work } label: {
             Label(title, systemImage: icon).frame(maxWidth: .infinity)
-                .foregroundStyle(pane == .work && route == path ? Color.accentColor : Color.secondary)
+                .foregroundStyle(pane == .work && route == path ? WalletTheme.Brand.hi : WalletTheme.Text.tertiary)
         }
         .accessibilityLabel(title)
     }
