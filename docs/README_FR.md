@@ -35,8 +35,8 @@ d'exploitation des microservices.
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](../CONTRIBUTING.md)
 
 ---
@@ -151,7 +151,7 @@ backend/
     module.go         Le contrat de module Go
     apps/             Modules métier
     platform/         Services du cœur de plateforme
-frontend/             Client web Next.js 15 (App Router)
+frontend/             Client web Next.js 16 (App Router)
 catalog/              Catalogue et manifestes du magasin d'applications
 deploy/               Dockerfile de production, configuration Nginx
 docs/                 Documentation et traductions
@@ -163,7 +163,7 @@ docs/                 Documentation et traductions
 
 ### Prérequis
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+
 - PostgreSQL 16+ (ou Docker Compose)
 

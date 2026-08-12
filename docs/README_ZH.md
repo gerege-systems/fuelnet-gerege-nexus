@@ -29,8 +29,8 @@
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](../CONTRIBUTING.md)
 
 ---
@@ -135,7 +135,7 @@ backend/
     module.go         Go Module 契约
     apps/             业务模块
     platform/         平台核心服务
-frontend/             Next.js 15（App Router）Web 客户端
+frontend/             Next.js 16（App Router）Web 客户端
 catalog/              应用商店目录与 manifest
 deploy/               生产 Dockerfile 与 Nginx 配置
 docs/                 文档与翻译
@@ -147,7 +147,7 @@ docs/                 文档与翻译
 
 ### 环境要求
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+
 - PostgreSQL 16+（或 Docker Compose）
 

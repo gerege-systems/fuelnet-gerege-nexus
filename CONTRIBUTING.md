@@ -49,9 +49,9 @@
 
 1. **Салбар үүсгэх** — `git checkout -b feature/amazing-feature`.
 2. **Код бичих хэв маягийг мөрдөх**:
-   - Backend: Go 1.25+, `gofmt` форматлалт, `slog` бүтэцтэй логлолт, алдааг
+   - Backend: Go 1.26+, `gofmt` форматлалт, `slog` бүтэцтэй логлолт, алдааг
      тодорхой шалгах.
-   - Frontend: Next.js 15 App Router, TypeScript strict горим, Tailwind CSS.
+   - Frontend: Next.js 16 App Router, TypeScript strict горим, Tailwind CSS.
 3. **Тест бичих** — backend-д нэмэгдсэн логик бүрт `*_test.go` тест дагалдана.
 4. **Шалгалтуудыг ажиллуулах**:
 

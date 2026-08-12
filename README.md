@@ -40,11 +40,16 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-black.svg)](https://nextjs.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org)
 [![CI](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/ci.yml)
 [![Security](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/security.yml/badge.svg)](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/security.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Docs](https://img.shields.io/badge/Баримт-gerege--systems.github.io-0050b0.svg)](https://gerege-systems.github.io/open-gerege-nexus/)
+
+**Баримт бичиг:
+[gerege-systems.github.io/open-gerege-nexus](https://gerege-systems.github.io/open-gerege-nexus/)**
+— энэ репод байгаа бүх баримт долоон хэлээр, хайхад хялбар вэб хэлбэрээр.
 
 ---
 
@@ -150,7 +155,8 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 | 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
 | 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
 | 7 | Developer Portal & OAuth2 SSO | `io.gerege.nexus.developer_portal` | `/developer/apps` | OAuth2 client апп бүртгэл |
-| 8 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
+| 8 | State Services | `io.gerege.nexus.gov_services` | `/gov-services` | Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, баталгаажуулалт, цаг захиалга |
+| 9 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
 
 Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрутууд нээгдэнэ. Суулгаагүй апп
 руу хандвал `403 Forbidden` буцна.
@@ -168,8 +174,9 @@ backend/
     module.go         Модулийн Go гэрээ (Module interface)
     apps/             Бизнес модулиуд
     platform/         Платформын цөм үйлчилгээнүүд
-frontend/             Next.js 15 (App Router) вэб клиент
-native-apps/       Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)catalog/              Апп сторын каталог ба manifest-ууд
+frontend/             Next.js 16 (App Router) вэб клиент
+native-apps/          Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)
+catalog/              Апп сторын каталог ба manifest-ууд
 deploy/               Production Dockerfile, Nginx тохиргоо
 docs/                 Баримт бичиг ба орчуулгууд
 ```
@@ -223,7 +230,7 @@ signing болон auto-update сувгийн зааврыг
 
 ### Шаардлагатай програмууд
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+
 - PostgreSQL 16+ (эсвэл Docker Compose)
 
