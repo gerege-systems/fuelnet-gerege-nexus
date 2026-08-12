@@ -56,14 +56,14 @@ func New(db *pgxpool.Pool, allowNegativeStock bool) *Module {
 	return m
 }
 
-func (m *Module) ID() string      { return "io.example.inventory" }
+func (m *Module) ID() string      { return "io.gerege.nexus.inventory" }
 func (m *Module) Name() string    { return "Inventory" }
 func (m *Module) Version() string { return "1.0.0" }
 
 func (m *Module) Dependencies() []internal.Dependency {
 	return []internal.Dependency{
-		{ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
-		{ID: "io.example.products", VersionConstraint: "^1.0.0"},
+		{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
+		{ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
 	}
 }
 

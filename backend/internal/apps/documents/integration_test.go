@@ -2447,3 +2447,226 @@ func TestPoliciesAndChainsCoverEveryDocumentType(t *testing.T) {
 		t.Error("expected a nameless step to be refused")
 	}
 }
+
+// A title freezes at the first signature, because the title is what the citizen read on
+// their own device before approving. That guard used to live inside the UPDATE itself —
+// `AND NOT EXISTS (SELECT 1 FROM document_signatures …)` — which looked airtight and was
+// not: under READ COMMITTED an UPDATE that waits on a row lock re-checks its
+// qualification against the new version of the row it is updating, but a subquery over
+// another table is still evaluated on the statement's original snapshot. The signature
+// committing while the rename waited was therefore invisible to it.
+//
+// A chain of two is what makes it reachable. One signature on a chain of one moves the
+// document to APPROVED, and the status half of the guard caught that; on a chain of two
+// the document stays PENDING_APPROVAL and nothing caught it at all.
+func TestATitleCannotBeChangedByASignatureLandingUnderIt(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "CONTRACT", []WorkflowStep{
+		{Name: "Нэгдүгээр", SignerRegNumber: "AA90010111"},
+		{Name: "Хоёрдугаар", SignerRegNumber: "CC90010111"},
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	const approved = "Иргэний уншсан гарчиг"
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, approved, "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// A signing transaction stopped exactly where recordSignature holds one: the
+	// document's row locked, the signature written, nothing committed yet.
+	tx, err := f.m.db.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin the signing transaction: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx,
+		`SELECT id FROM document_records WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		doc.ID, f.tenantID); err != nil {
+		t.Fatalf("lock the document: %v", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO document_signatures
+		        (tenant_id, document_id, signer_name, signer_reg_number,
+		         signer_method, signature_hash, step_order)
+		 VALUES ($1, $2, 'Иргэн А', 'AA90010111', $3, 'eid_session_rename_race', 1)`,
+		f.tenantID, doc.ID, SignerEID); err != nil {
+		t.Fatalf("write the signature: %v", err)
+	}
+
+	renamed := make(chan error, 1)
+	go func() {
+		_, err := f.m.RenameDocument(ctx, f.tenantID, doc.ID, "Дараа нь солигдсон гарчиг")
+		renamed <- err
+	}()
+
+	waitUntilBlocked(t, f)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit the signature: %v", err)
+	}
+
+	select {
+	case err := <-renamed:
+		if !errors.Is(err, ErrTitleFrozen) {
+			t.Fatalf("renaming a document a signature had just landed on returned %v, want ErrTitleFrozen", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("the rename never returned")
+	}
+
+	after, err := f.m.getDocument(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if after.Title != approved {
+		t.Errorf("title = %q, want %q — the citizen approved the words, not the row", after.Title, approved)
+	}
+	if after.Status != StatusPending {
+		t.Errorf("status = %q, want %q: a chain of two is not complete on one signature",
+			after.Status, StatusPending)
+	}
+}
+
+// waitUntilBlocked waits until another backend in this database is queued on a lock,
+// which is how the test above knows the rename has reached the row it must wait for.
+// A fixed sleep would be either too short on a loaded CI runner or wasted on a fast one.
+func waitUntilBlocked(t *testing.T, f *fixture) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		var blocked int
+		if err := f.m.db.QueryRow(context.Background(),
+			`SELECT count(*) FROM pg_stat_activity
+			  WHERE datname = current_database()
+			    AND cardinality(pg_blocking_pids(pid)) > 0`).Scan(&blocked); err != nil {
+			t.Fatalf("look for a blocked backend: %v", err)
+		}
+		if blocked > 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("nothing ever queued on the document's lock")
+}
+
+// A policy that accepts only a signer the chain names has to decide who may sign, not
+// only what may be configured. It used to be read and thrown away: preflightSignature
+// loaded the policy and consulted allows() alone, so on a document whose own chain names
+// nobody — the ordinary shape for one created before the tenant configured a chain —
+// anybody holding documents.sign could still sign it, under a screen saying otherwise.
+func TestARequiredNamedSignerDecidesWhoMaySign(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Хуучин гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	steps, err := f.m.DocumentSteps(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("read the document's chain: %v", err)
+	}
+	if len(steps) != 0 {
+		t.Fatalf("the document was given %d steps, want none — this test is about one that names nobody", len(steps))
+	}
+
+	// Written straight into the table, the way it would already be stored on a tenant
+	// that turned the requirement on before SaveSignaturePolicy started guarding it.
+	if _, err := f.m.db.Exec(ctx,
+		`INSERT INTO document_signature_policies
+		        (tenant_id, doc_type, allow_eid, allow_dan, require_named_signer)
+		 VALUES ($1, 'CONTRACT', TRUE, TRUE, TRUE)`, f.tenantID); err != nil {
+		t.Fatalf("store the policy: %v", err)
+	}
+
+	_, err = signWithEID(t, f, doc.ID, "AA90010111")
+	if !errors.Is(err, ErrSignatureRejected) {
+		t.Fatalf("a document naming nobody was signed under a named-signer policy: got %v", err)
+	}
+
+	// Refused before the citizen was troubled, so nothing was recorded either.
+	applied, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("read the ledger: %v", err)
+	}
+	if len(applied) != 0 {
+		t.Errorf("the ledger holds %d signature(s) after a refusal, want none", len(applied))
+	}
+	after, err := f.m.getDocument(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if after.Status != StatusPending {
+		t.Errorf("status = %q, want %q", after.Status, StatusPending)
+	}
+}
+
+// The other half of that rule. Because a document is held to its own chain and a later
+// configuration change never reaches it, turning the requirement on can leave documents
+// already in the queue signable by nobody — so it is refused at the moment of the
+// decision, the way an unfillable chain is, rather than discovered by a stuck document.
+func TestTurningOnANamedSignerRequirementCannotStrandTheQueue(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	// Waiting under no chain at all: it names nobody.
+	stranded, err := f.m.CreateDocument(ctx, f.tenantID, "Хүлээгдэж буй хүсэлт", "REQUEST")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// A chain that would satisfy the requirement for everything created from now on.
+	if _, err := f.m.ReplaceWorkflow(ctx, f.tenantID, "REQUEST", []WorkflowStep{
+		{Name: "Захирал", SignerRegNumber: "CC90010111"},
+	}); err != nil {
+		t.Fatalf("configure chain: %v", err)
+	}
+
+	on := SignaturePolicy{DocType: "REQUEST", AllowEID: true, AllowDAN: true, RequireNamedSigner: true}
+	_, err = f.m.SaveSignaturePolicy(ctx, f.tenantID, on)
+	if !errors.Is(err, ErrInvalidConfiguration) {
+		t.Fatalf("turning the requirement on over a document nobody could then sign returned %v, want ErrInvalidConfiguration", err)
+	}
+	if !strings.Contains(err.Error(), "1 REQUEST") {
+		t.Errorf("got %q, want it to say how many documents it is about", err)
+	}
+
+	policy, err := f.m.SignaturePolicyFor(ctx, f.tenantID, "REQUEST")
+	if err != nil {
+		t.Fatalf("read policy: %v", err)
+	}
+	if policy.RequireNamedSigner {
+		t.Fatal("the refused save was stored anyway")
+	}
+
+	// Decided, so it is no longer waiting on anybody — and now the requirement may go on.
+	if _, err := f.m.RejectDocument(ctx, f.tenantID, stranded.ID); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	saved, err := f.m.SaveSignaturePolicy(ctx, f.tenantID, on)
+	if err != nil {
+		t.Fatalf("with nothing left to strand the requirement must save: %v", err)
+	}
+	if !saved.RequireNamedSigner {
+		t.Fatal("the saved policy does not carry the requirement")
+	}
+
+	// And it means something: a document created now takes the named chain.
+	fresh, err := f.m.CreateDocument(ctx, f.tenantID, "Шинэ хүсэлт", "REQUEST")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := signWithEID(t, f, fresh.ID, "AA90010111"); !errors.Is(err, ErrSignatureRejected) {
+		t.Errorf("somebody the chain does not name was allowed to sign: got %v", err)
+	}
+	signed, err := signWithEID(t, f, fresh.ID, "CC90010111")
+	if err != nil {
+		t.Fatalf("the named signer could not sign: %v", err)
+	}
+	if signed.Status != StatusApproved {
+		t.Errorf("status = %q, want %q", signed.Status, StatusApproved)
+	}
+}

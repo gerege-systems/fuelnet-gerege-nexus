@@ -29,6 +29,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/time/rate"
@@ -93,11 +94,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	locked := lockedUntil.Valid && lockedUntil.Time.After(time.Now())
 	if !passwordOK || locked {
 		if userID != "" && !locked {
-			_, _ = s.db.Exec(r.Context(),
-				`UPDATE users SET
-				 failed_login_attempts=failed_login_attempts+1,
-				 locked_until=CASE WHEN failed_login_attempts+1 >= $2 THEN NOW()+$3::interval ELSE locked_until END
-				 WHERE id=$1`, userID, maxLoginFailures, loginLockoutWindow.String())
+			s.recordLoginFailure(r.Context(), userID)
 		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
 		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
@@ -127,6 +124,43 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// loginFailureStatement counts one failed sign-in and locks the account once
+// the count reaches maxLoginFailures.
+//
+// A lockout that has run its course starts the count again. Adding to a counter
+// that stopped at maxLoginFailures meant the threshold was still met by the
+// next single failure: after one lockout, every subsequent mistyped password
+// re-locked the account for another full window, and anybody who knew the
+// address could hold it shut with one request every loginLockoutWindow. The
+// lapsed lock is cleared in the same statement — the CASE has no ELSE, so a
+// count below the threshold writes NULL — rather than left to assert a lockout
+// that has expired.
+//
+// Callers must not use it on an account that is currently locked; handleLogin
+// checks that before calling, so a live lockout is never extended by attempts
+// made during it.
+const loginFailureStatement = `
+	UPDATE users u SET
+	   failed_login_attempts = next.count,
+	   locked_until = CASE WHEN next.count >= $2 THEN NOW() + $3::interval END
+	  FROM (
+	      SELECT CASE WHEN locked_until IS NOT NULL AND locked_until <= NOW()
+	                  THEN 1 ELSE failed_login_attempts + 1 END AS count
+	        FROM users WHERE id = $1
+	  ) AS next
+	 WHERE u.id = $1`
+
+// recordLoginFailure applies loginFailureStatement. A failure to record one is
+// logged rather than surfaced: the caller is already answering 401, and turning
+// a bookkeeping error into a 500 would tell whoever is guessing that this
+// address exists.
+func (s *Server) recordLoginFailure(ctx context.Context, userID string) {
+	if _, err := s.db.Exec(ctx, loginFailureStatement,
+		userID, maxLoginFailures, loginLockoutWindow.String()); err != nil {
+		slog.Error("failed to record a login failure", "user_id", userID, "error", err)
+	}
+}
+
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// Logout previously only cleared the cookie; the token stayed valid
 	// forever for anyone who had captured it.
@@ -139,6 +173,139 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	auth.ClearSessionCookie(w)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "logged_out"})
+}
+
+// handleTenants answers which tenants the caller may act for.
+//
+// A user with one membership gets a list of one. That is not a wasted answer:
+// it is what lets the client show where it is without claiming there is
+// somewhere else to go.
+func (s *Server) handleTenants(w http.ResponseWriter, r *http.Request) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	options, err := s.sessions.TenantsForUser(tenant.Without(r.Context()), claims.UserID)
+	if err != nil {
+		slog.Error("failed to list the tenants a user belongs to", "user_id", claims.UserID, "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "failed to list tenants")
+		return
+	}
+
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"current": claims.TenantID,
+		"tenants": options,
+		// Which of them this session is reading across. Empty would be
+		// ambiguous on the client — "none" and "just the current one" look the
+		// same — so the acting organisation is always named.
+		"active": activeOrCurrent(claims),
+	})
+}
+
+func activeOrCurrent(claims auth.UserClaims) []string {
+	if len(claims.AllowedTenantIDs) > 0 {
+		return claims.AllowedTenantIDs
+	}
+	return []string{claims.TenantID}
+}
+
+// handleSetActiveTenants chooses which organisations this session reads across.
+//
+// The list is a request, not an instruction: every id is held against an active
+// membership and the ones that do not survive are dropped rather than refused,
+// so a tab left open since before somebody changed jobs narrows quietly instead
+// of failing. The organisation being acted in is always kept.
+func (s *Server) handleSetActiveTenants(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TenantIDs []string `json:"tenant_ids"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&body); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		return
+	}
+	// A group with this many organisations in it is not what this feature is
+	// for, and an unbounded array becomes an unbounded query parameter.
+	if len(body.TenantIDs) > 64 {
+		httpx.Error(w, http.StatusBadRequest, "too many organisations")
+		return
+	}
+
+	token := auth.TokenFromRequest(r)
+	if token == "" {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	active, err := s.sessions.SetActiveTenants(r.Context(), token, body.TenantIDs)
+	if err != nil {
+		if errors.Is(err, auth.ErrSessionInvalid) {
+			httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		slog.Error("could not set the active organisations", "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "could not save the selection")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"active": active})
+}
+
+// handleSwitchTenant moves the caller's session to another of their tenants.
+//
+// Until this existed, which tenant a person acted in was decided once, at
+// login, by whichever membership was oldest — someone who works for two
+// organisations could reach only one of them, and the only way to change that
+// was to edit the database. Signing out and back in would not have helped: the
+// login picks the same oldest membership every time, deliberately.
+func (s *Server) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
+	var req struct {
+		TenantID string `json:"tenant_id"`
+	}
+	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil || strings.TrimSpace(req.TenantID) == "" {
+		httpx.Error(w, http.StatusBadRequest, "tenant_id is required")
+		return
+	}
+	req.TenantID = strings.TrimSpace(req.TenantID)
+
+	// Already there. Answering rather than rotating keeps a double-click on the
+	// tenant you are in from replacing a working session with another one.
+	if req.TenantID == claims.TenantID {
+		httpx.JSON(w, http.StatusOK, map[string]any{"tenant_id": claims.TenantID, "switched": false})
+		return
+	}
+
+	token, expiresAt, err := s.sessions.SwitchTenant(tenant.Without(r.Context()), auth.TokenFromRequest(r), req.TenantID)
+	switch {
+	case errors.Is(err, auth.ErrNotAMember):
+		// Not 404: whether that tenant exists is not this caller's business.
+		httpx.Error(w, http.StatusForbidden, "no membership in that tenant")
+		return
+	case errors.Is(err, auth.ErrSessionInvalid):
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	case err != nil:
+		slog.Error("failed to switch tenant", "user_id", claims.UserID, "tenant_id", req.TenantID, "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "failed to switch tenant")
+		return
+	}
+
+	auth.SetSessionCookie(w, token, expiresAt)
+	// Recorded against the tenant being left, because that is the trail an
+	// administrator of it reads: this person stopped acting here, and when.
+	audit.Record(r.Context(), claims.TenantID, claims.UserID, "auth.tenant_switched", "session",
+		map[string]any{"from": claims.TenantID, "to": req.TenantID})
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"tenant_id":  req.TenantID,
+		"switched":   true,
+		"expires_at": expiresAt,
+	})
 }
 
 // handleLogoutEverywhere ends every session the caller holds.

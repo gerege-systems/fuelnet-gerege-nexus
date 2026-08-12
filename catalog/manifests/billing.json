@@ -1,11 +1,25 @@
 {
-  "id": "io.example.billing",
+  "id": "io.gerege.nexus.billing",
   "name": "Public Billing & e-Barimt",
   "version": "1.0.0",
   "platform": ">=0.1.0 <2.0.0",
+  "publisher": "gerege",
+  "authors": [
+    {
+      "name": "Gerege Systems Development Team"
+    }
+  ],
+  "maintainers": [
+    {
+      "name": "Gerege Systems Development Team"
+    }
+  ],
+  "repository": "https://github.com/gerege-systems/open-gerege-nexus",
+  "homepage": "https://nexus.gerege.mn",
+  "license": "Apache-2.0",
   "dependencies": [
     {
-      "id": "io.example.contacts",
+      "id": "io.gerege.nexus.contacts",
       "version_constraint": "^1.0.0"
     }
   ],

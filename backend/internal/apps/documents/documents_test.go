@@ -113,23 +113,23 @@ func TestSignaturePolicyDefaultsToBothChannels(t *testing.T) {
 // A signature is held to whoever the document's next step names, and held back
 // from anyone the chain still needs further along.
 func TestCheckSigner(t *testing.T) {
-	if err := checkSigner(nil, "CONTRACT", "AA90010111"); err != nil {
+	if err := checkSigner(nil, "CONTRACT", "AA90010111", false); err != nil {
 		t.Errorf("a document with no chain must accept any authorised signer: %v", err)
 	}
-	if err := checkSigner(&approvalPosition{}, "CONTRACT", "AA90010111"); err != nil {
+	if err := checkSigner(&approvalPosition{}, "CONTRACT", "AA90010111", false); err != nil {
 		t.Errorf("a position with no next step must accept any authorised signer: %v", err)
 	}
 
 	open := &approvalPosition{Next: &ApprovalStep{Order: 1, Name: "Хэн ч"}}
-	if err := checkSigner(open, "CONTRACT", "AA90010111"); err != nil {
+	if err := checkSigner(open, "CONTRACT", "AA90010111", false); err != nil {
 		t.Errorf("an open step must accept any authorised signer: %v", err)
 	}
 
 	named := &approvalPosition{Next: &ApprovalStep{Order: 2, Name: "Захирал", SignerRegNumber: "CC90010111"}}
-	if err := checkSigner(named, "CONTRACT", "CC90010111"); err != nil {
+	if err := checkSigner(named, "CONTRACT", "CC90010111", false); err != nil {
 		t.Errorf("the named signer must be accepted: %v", err)
 	}
-	err := checkSigner(named, "CONTRACT", "AA90010111")
+	err := checkSigner(named, "CONTRACT", "AA90010111", false)
 	if !errors.Is(err, ErrSignatureRejected) {
 		t.Fatalf("got %v, want ErrSignatureRejected", err)
 	}
@@ -145,15 +145,49 @@ func TestCheckSigner(t *testing.T) {
 		Next:     &ApprovalStep{Order: 1, Name: "Хянагч"},
 		Reserved: []string{"CC90010111"},
 	}
-	if err := checkSigner(reserved, "CONTRACT", "AA90010111"); err != nil {
+	if err := checkSigner(reserved, "CONTRACT", "AA90010111", false); err != nil {
 		t.Errorf("anyone else may still take the open step: %v", err)
 	}
-	err = checkSigner(reserved, "CONTRACT", "CC90010111")
+	err = checkSigner(reserved, "CONTRACT", "CC90010111", false)
 	if !errors.Is(err, ErrSignatureRejected) {
 		t.Fatalf("a citizen a later step names must be held back: got %v", err)
 	}
 	if !strings.Contains(err.Error(), "CC90010111") {
 		t.Errorf("got %q, want it to name the signer being held back", err)
+	}
+}
+
+// Under a policy that accepts only a signer the chain names, the two shapes that name
+// nobody have to be refused. The policy used to be read and dropped: preflightSignature
+// loaded it and consulted only allows(), so a tenant that had turned this on still let
+// anybody sign a document whose own chain named nobody.
+func TestCheckSignerUnderARequiredNamedSigner(t *testing.T) {
+	noChain := []struct {
+		what string
+		pos  *approvalPosition
+	}{
+		{"a document with no chain at all", nil},
+		{"a position with no next step", &approvalPosition{}},
+		{"an open step", &approvalPosition{Next: &ApprovalStep{Order: 1, Name: "Хэн ч"}}},
+	}
+	for _, tc := range noChain {
+		err := checkSigner(tc.pos, "CONTRACT", "AA90010111", true)
+		if !errors.Is(err, ErrSignatureRejected) {
+			t.Errorf("%s must be refused when the policy requires a named signer: got %v", tc.what, err)
+		}
+		// The operator has to be able to tell this from "that is not your step".
+		if err != nil && !strings.Contains(err.Error(), "names nobody") && !strings.Contains(err.Error(), "no approval chain") {
+			t.Errorf("%s: got %q, want it to say the chain names nobody", tc.what, err)
+		}
+	}
+
+	// The requirement changes nothing for a step that does name somebody.
+	named := &approvalPosition{Next: &ApprovalStep{Order: 1, Name: "Захирал", SignerRegNumber: "CC90010111"}}
+	if err := checkSigner(named, "CONTRACT", "CC90010111", true); err != nil {
+		t.Errorf("the named signer must still be accepted: %v", err)
+	}
+	if err := checkSigner(named, "CONTRACT", "AA90010111", true); !errors.Is(err, ErrSignatureRejected) {
+		t.Errorf("somebody else must still be refused: got %v", err)
 	}
 }
 

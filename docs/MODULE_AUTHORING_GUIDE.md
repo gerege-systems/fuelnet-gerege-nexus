@@ -56,14 +56,14 @@ func New(db *pgxpool.Pool) *Module {
     return m
 }
 
-func (m *Module) ID() string      { return "io.example.invoices" }
+func (m *Module) ID() string      { return "io.gerege.nexus.invoices" }
 func (m *Module) Name() string    { return "Invoicing & Billing" }
 func (m *Module) Version() string { return "1.0.0" }
 
 func (m *Module) Dependencies() []internal.Dependency {
     return []internal.Dependency{
-        {ID: "io.example.contacts", VersionConstraint: "^1.0.0"},
-        {ID: "io.example.products", VersionConstraint: "^1.0.0"},
+        {ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
+        {ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
     }
 }
 ```
@@ -94,6 +94,35 @@ func (m *Module) RegisterRoutes(r chi.Router, gateMiddleware func(http.Handler) 
     })
 }
 ```
+
+#### Public routes, and the rule about them
+
+`RegisterRoutes` receives the **root** router, not a pre-gated group. Mounting a
+path outside `gateMiddleware` is one line and looks exactly like mounting one
+inside it.
+
+That is deliberate. A module may need to serve something to a caller who holds
+no session — the App Store registry serves a catalogue every instance reads
+before anybody signs in — and a platform that could not express that would force
+such a module out into a service of its own.
+
+The cost is that a private route can become public by accident, and nothing in
+the diff would say so. So the rule is:
+
+> A route reachable without a session must be named in `publicRoutes` in
+> `backend/internal/platform/route_policy_test.go`.
+
+The test walks the real routing table, calls every route with no credentials,
+and fails on anything that answers `200` or `201` without being on the list. It
+also fails on a name in the list that nothing serves any more, so a renamed
+route cannot leave an entry behind that quietly widens the next route to take
+its name.
+
+Adding a name is then a visible act in a review rather than a side effect of
+where a line was put. If you find yourself adding one, say in the same comment
+what authority the route relies on instead of a session — a signature, a
+single-use reference in the query, a client secret — because "public" is never
+the actual answer.
 
 ### Using platform services
 
@@ -145,13 +174,13 @@ Add a manifest file in `catalog/manifests/invoices.json`:
 
 ```json
 {
-  "id": "io.example.invoices",
+  "id": "io.gerege.nexus.invoices",
   "name": "Invoices",
   "version": "1.0.0",
   "platform": ">=0.1.0 <2.0.0",
   "dependencies": [
-    { "id": "io.example.contacts", "version_constraint": "^1.0.0" },
-    { "id": "io.example.products", "version_constraint": "^1.0.0" }
+    { "id": "io.gerege.nexus.contacts", "version_constraint": "^1.0.0" },
+    { "id": "io.gerege.nexus.products", "version_constraint": "^1.0.0" }
   ],
   "permissions": [
     {
@@ -197,6 +226,60 @@ installing the app with an empty dependency, permission and menu set.
 And update `catalog/apps.json` to index the new app in the App Store! The
 `apps` database table is synchronised from that file on every boot, so no
 manual SQL is required.
+
+---
+
+## External apps: a platform that runs somewhere else
+
+Not every app in the store is a Go module compiled into this binary. A third
+party with a service already running — a payroll system, an HR platform, a
+sector-specific SaaS — is registered as an **external** app: this platform holds
+its catalogue entry, its permissions and its menu entry, and signs its users in
+over OIDC. None of its code runs here.
+
+```json
+{
+  "id": "mn.example.hrms",
+  "type": "external",
+  "name": "Example HRMS",
+  "version": "2026.8.0",
+  "platform": ">=1.0.0",
+  "external": {
+    "launch_url": "https://hrms.example.mn/sso/gerege",
+    "sso_client_id": "app_hrms_x1y2",
+    "scopes": ["openid", "profile", "email"],
+    "embed": "new_tab",
+    "health_url": "https://hrms.example.mn/healthz"
+  },
+  "permissions": [{ "code": "hrms.read", "name": "Open HRMS", "description": "…" }],
+  "menus": [{ "id": "hrms_home", "label": "HRMS",
+              "external_url": "https://hrms.example.mn/sso/gerege", "icon": "share-2" }]
+}
+```
+
+A worked example ships as `catalog/manifests/example-external.json`.
+
+What differs from a module manifest:
+
+- `type` is `"external"`. Absent or `"module"` means a compiled Go module, which
+  is what every manifest written before this existed says.
+- `external.launch_url` is required and must be **absolute HTTPS**. It is put in
+  front of a signed-in user as a link this platform vouches for.
+- `external.embed` defaults to `new_tab`. This platform sends
+  `X-Frame-Options: DENY`, so framing is a decision both sides have to make.
+- A menu entry carries `external_url` **instead of** `path`. The shell renders it
+  as `target="_blank" rel="noopener noreferrer"` with an external-link icon, and
+  it never highlights as "the page you are on" — it is not a route here.
+- No Go module is required or looked for. Permissions are granted from the
+  manifest rather than from a compiled `Permissions()`.
+
+**Installation is what authorises the sign-in.** `external.sso_client_id` names
+an OAuth2 client registered in this platform. At `/oauth2/auth`, a user whose
+tenant has not installed (and enabled) the app is refused with
+`error=access_denied` — the app gate that keeps an uninstalled module's routes
+unreachable, continued into an application that serves no routes here. Tokens
+carry `tenant_id` and `tenant_slug` so the third party knows which organisation
+the person is acting for.
 
 ---
 

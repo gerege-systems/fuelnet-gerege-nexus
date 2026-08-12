@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  *
  * Domain types and vocabularies for the configurable government service
- * workflow (io.example.gov_services).
+ * workflow (io.gerege.nexus.gov_services).
  */
 
 package gov_services

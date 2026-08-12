@@ -179,9 +179,16 @@ func (s *CopilotService) executeTool(ctx context.Context, tenantID string, call 
 		for rows.Next() {
 			var sku, name string
 			var price, stock float64
-			if rows.Scan(&sku, &name, &price, &stock) == nil {
-				items = append(items, map[string]any{"sku": sku, "name": name, "price": price, "stock": stock})
+			if err := rows.Scan(&sku, &name, &price, &stock); err != nil {
+				return map[string]any{"error": "search unavailable"}
 			}
+			items = append(items, map[string]any{"sku": sku, "name": name, "price": price, "stock": stock})
+		}
+		// A partial result is worse than none here: the model states whatever it
+		// is handed as fact, so a stream that broke halfway would become "you do
+		// not stock that" rather than a question the user can retry.
+		if rows.Err() != nil {
+			return map[string]any{"error": "search unavailable"}
 		}
 		return map[string]any{"items": items}
 	case "search_knowledge":
@@ -194,9 +201,13 @@ func (s *CopilotService) executeTool(ctx context.Context, tenantID string, call 
 		items := []map[string]any{}
 		for rows.Next() {
 			var title, content, url string
-			if rows.Scan(&title, &content, &url) == nil {
-				items = append(items, map[string]any{"title": title, "content": truncate(content, 1200), "source_url": url})
+			if err := rows.Scan(&title, &content, &url); err != nil {
+				return map[string]any{"error": "knowledge unavailable"}
 			}
+			items = append(items, map[string]any{"title": title, "content": truncate(content, 1200), "source_url": url})
+		}
+		if rows.Err() != nil {
+			return map[string]any{"error": "knowledge unavailable"}
 		}
 		return map[string]any{"items": items}
 	default:

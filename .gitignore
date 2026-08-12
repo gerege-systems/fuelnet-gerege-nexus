@@ -48,3 +48,7 @@ native-apps/iOS/.build/
 native-apps/iOS/.swiftpm/
 native-apps/windows/**/bin/
 native-apps/windows/**/obj/
+
+# Next.js build output for the store and console services
+services/*/.next/
+services/*/node_modules/

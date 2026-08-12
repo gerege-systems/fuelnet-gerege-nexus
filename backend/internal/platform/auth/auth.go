@@ -20,6 +20,14 @@ type UserClaims struct {
 	TenantID string `json:"tenant_id"`
 	Email    string `json:"email"`
 	IsAdmin  bool   `json:"is_admin"`
+	// AllowedTenantIDs is every organisation this session reads across, and
+	// TenantID is always among them. Empty means only TenantID, which is what
+	// every session is until somebody asks for more.
+	//
+	// IsAdmin is deliberately not widened with it: being an administrator is a
+	// role held in one organisation, and holding it in the parent says nothing
+	// about the subsidiary.
+	AllowedTenantIDs []string `json:"allowed_tenant_ids,omitempty"`
 }
 
 func HashPassword(password string) (string, error) {

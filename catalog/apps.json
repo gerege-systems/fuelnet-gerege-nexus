@@ -1,6 +1,48 @@
 [
   {
-    "id": "io.example.contacts",
+    "id": "io.gerege.nexus.core",
+    "slug": "core",
+    "name": "Organisation & People",
+    "description": "The organisation itself: its legal identity, its departments, and the people who work in it.",
+    "icon_url": "/icons/core.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Байгууллага ба ажилтнууд",
+        "description": "Байгууллагын хуулийн мэдээлэл, хэлтэс нэгж, ажилтнуудын бүртгэл.",
+        "category": "Платформ"
+      },
+      "ar": {
+        "name": "المؤسسة والأشخاص",
+        "description": "الهوية القانونية للمؤسسة وأقسامها والعاملون فيها.",
+        "category": "المنصة"
+      },
+      "zh": {
+        "name": "组织与人员",
+        "description": "组织的法律信息、部门结构与人员名录。",
+        "category": "平台"
+      },
+      "fr": {
+        "name": "Organisation et personnes",
+        "description": "L'identité légale de l'organisation, ses départements et ses collaborateurs.",
+        "category": "Plateforme"
+      },
+      "ru": {
+        "name": "Организация и сотрудники",
+        "description": "Юридические данные организации, её подразделения и сотрудники.",
+        "category": "Платформа"
+      },
+      "es": {
+        "name": "Organización y personas",
+        "description": "La identidad legal de la organización, sus departamentos y sus personas.",
+        "category": "Plataforma"
+      }
+    }
+  },
+  {
+    "id": "io.gerege.nexus.contacts",
     "slug": "contacts",
     "name": "Contacts",
     "description": "Manage business contacts, customers, and vendors.",
@@ -42,7 +84,7 @@
     }
   },
   {
-    "id": "io.example.products",
+    "id": "io.gerege.nexus.products",
     "slug": "products",
     "name": "Products",
     "description": "Product catalog management, pricing, and SKUs.",
@@ -84,7 +126,7 @@
     }
   },
   {
-    "id": "io.example.inventory",
+    "id": "io.gerege.nexus.inventory",
     "slug": "inventory",
     "name": "Inventory",
     "description": "Warehouse management, stock tracking, and adjustments.",
@@ -126,7 +168,7 @@
     }
   },
   {
-    "id": "io.example.billing",
+    "id": "io.gerege.nexus.billing",
     "slug": "billing",
     "name": "Public Billing & e-Barimt",
     "description": "State fee invoicing, public service payments, and e-Barimt tax receipts.",
@@ -168,7 +210,7 @@
     }
   },
   {
-    "id": "io.example.documents",
+    "id": "io.gerege.nexus.documents",
     "slug": "documents",
     "name": "Digital Documents & Signatures",
     "description": "Enterprise document routing, digital signatures, and approval workflows.",
@@ -210,14 +252,14 @@
     }
   },
   {
-    "id": "io.example.developer_portal",
+    "id": "io.gerege.nexus.developer_portal",
     "slug": "developer_portal",
     "name": "Developer Portal & OAuth2 SSO",
     "description": "OAuth2 / OpenID Connect client application management and API credentials.",
     "icon_url": "/icons/developer_portal.png",
     "category": "Developer Tools",
     "visibility": "public",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "translations": {
       "mn": {
         "name": "Хөгжүүлэгчийн портал ба OAuth2 SSO",
@@ -252,7 +294,7 @@
     }
   },
   {
-    "id": "io.example.gov_services",
+    "id": "io.gerege.nexus.gov_services",
     "slug": "gov-services",
     "name": "State Services",
     "description": "Configurable government service requests: organizational hierarchy, versioned workflows, delegation and verification.",
@@ -294,14 +336,14 @@
     }
   },
   {
-    "id": "io.example.esign",
+    "id": "io.gerege.nexus.esign",
     "slug": "esign",
     "name": "PDF E-Sign",
     "description": "Upload PDF documents and sign them with Mongolian digital signatures via the Gerege eSign HSM service.",
     "icon_url": "/icons/esign.png",
     "category": "Productivity",
     "visibility": "public",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "translations": {
       "mn": {
         "name": "PDF цахим гарын үсэг",

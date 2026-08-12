@@ -1,6 +1,6 @@
 # Configurable government service workflow
 
-How `io.example.gov_services` turns one codebase into a service-delivery
+How `io.gerege.nexus.gov_services` turns one codebase into a service-delivery
 capability that every tenant, and every service inside a tenant, configures for
 itself — locally fulfilled, delegated with verification, or routed per request.
 

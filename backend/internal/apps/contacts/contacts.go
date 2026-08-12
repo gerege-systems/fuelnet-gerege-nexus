@@ -37,7 +37,7 @@ func New(db *pgxpool.Pool) *Module {
 	return m
 }
 
-func (m *Module) ID() string      { return "io.example.contacts" }
+func (m *Module) ID() string      { return "io.gerege.nexus.contacts" }
 func (m *Module) Name() string    { return "Contacts" }
 func (m *Module) Version() string { return "1.0.0" }
 

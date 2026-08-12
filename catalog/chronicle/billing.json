@@ -1,0 +1,17 @@
+{
+  "app_id": "io.gerege.nexus.billing",
+  "entries": [
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-05",
+      "kind": "feature",
+      "summary": {
+        "mn": "Нэхэмжлэл, төлбөр, НӨАТ-ын бүртгэл.",
+        "en": "Invoices, payments and VAT."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}

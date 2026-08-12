@@ -46,10 +46,17 @@ func (p SignaturePolicy) allows(method string) bool {
 // SignaturePolicyFor reads the stored policy for a type, or the default when the
 // tenant has not configured one.
 func (m *DocumentsModule) SignaturePolicyFor(ctx context.Context, tenantID, docType string) (SignaturePolicy, error) {
+	return m.signaturePolicyTx(ctx, m.db, tenantID, docType)
+}
+
+// signaturePolicyTx is the same read through whatever querier it is given, so the
+// signature path can read the policy inside the transaction that holds the document's
+// lock — the policy is part of who may sign, and that decision is made under the lock.
+func (m *DocumentsModule) signaturePolicyTx(ctx context.Context, q querier, tenantID, docType string) (SignaturePolicy, error) {
 	policy := defaultSignaturePolicy(docType)
 	var updatedAt time.Time
 
-	err := m.db.QueryRow(ctx,
+	err := q.QueryRow(ctx,
 		`SELECT allow_eid, allow_dan, require_named_signer, updated_at
 		   FROM document_signature_policies
 		  WHERE tenant_id = $1 AND doc_type = $2`, tenantID, docType).
@@ -137,6 +144,20 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 		return nil, fmt.Errorf("lock approval chain: %w", err)
 	}
 
+	// What is stored now, read under the same lock. The guard below is about TURNING
+	// the requirement on, so a policy that already has it on can still have its other
+	// fields edited — otherwise a tenant who wanted to stop accepting DAN would be
+	// refused over documents that were already stranded before they touched anything.
+	var wasRequired bool
+	if err := tx.QueryRow(ctx,
+		`SELECT require_named_signer FROM document_signature_policies
+		  WHERE tenant_id = $1 AND doc_type = $2`, tenantID, docType).Scan(&wasRequired); err != nil {
+		if !isNoRows(err) {
+			return nil, fmt.Errorf("read the stored signature policy: %w", err)
+		}
+		wasRequired = false // an unconfigured type does not require a named signer
+	}
+
 	if policy.RequireNamedSigner {
 		steps, err := m.workflowStepsTx(ctx, tx, tenantID, docType)
 		if err != nil {
@@ -144,6 +165,11 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 		}
 		if err := stepsCanRequireNamedSigners(docType, steps); err != nil {
 			return nil, err
+		}
+		if !wasRequired {
+			if err := m.pendingCanRequireNamedSigners(ctx, tx, tenantID, docType); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -178,6 +204,46 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 	})
 
 	return &saved, nil
+}
+
+// pendingCanRequireNamedSigners refuses to turn the requirement on while documents are
+// already waiting that it would strand.
+//
+// A document is held to its OWN chain, copied when it started waiting, and a later
+// configuration change never reaches it. So a type whose chain names somebody at every
+// step can still have documents in the queue that name nobody: they were created before
+// the chain existed, or under a version of it with an open step. Under the requirement
+// no signature can land on those — no named signer to accept — and nothing else moves
+// them either, because the module deletes nothing.
+//
+// The sister rule to stepsCanRequireNamedSigners, which asks the same question of the
+// chain a FUTURE document would be given. Both refuse at the moment of the decision
+// rather than letting it be discovered by a document that sticks.
+func (m *DocumentsModule) pendingCanRequireNamedSigners(ctx context.Context, q querier, tenantID, docType string) error {
+	var stranded int
+	if err := q.QueryRow(ctx,
+		`SELECT count(*) FROM document_records d
+		  WHERE d.tenant_id = $1 AND d.doc_type = $2 AND d.status = $3
+		    AND (
+		          -- no chain of its own: it names nobody, so nobody could sign it
+		          NOT EXISTS (SELECT 1 FROM document_approval_steps st
+		                       WHERE st.document_id = d.id)
+		          -- or a step still to be filled that names nobody
+		          OR EXISTS (SELECT 1 FROM document_approval_steps st
+		                      WHERE st.document_id = d.id
+		                        AND st.signer_reg_number = ''
+		                        AND NOT EXISTS (SELECT 1 FROM document_signatures s
+		                                         WHERE s.document_id = st.document_id
+		                                           AND s.step_order = st.step_order))
+		        )`,
+		tenantID, docType, StatusPending).Scan(&stranded); err != nil {
+		return fmt.Errorf("count the pending documents a named-signer requirement would strand: %w", err)
+	}
+	if stranded > 0 {
+		return fmt.Errorf("%w: %d %s document(s) are already waiting under a chain that names nobody for at least one remaining approval, and requiring a named signer would leave them signable by nobody — decide those first, then turn this on",
+			ErrInvalidConfiguration, stranded, docType)
+	}
+	return nil
 }
 
 func (m *DocumentsModule) listSignaturePoliciesHandler(w http.ResponseWriter, r *http.Request) {

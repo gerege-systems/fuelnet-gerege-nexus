@@ -1,8 +1,22 @@
 {
-  "id": "io.example.developer_portal",
+  "id": "io.gerege.nexus.developer_portal",
   "name": "Developer Portal & OAuth2 SSO",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "platform": ">=0.1.0 <2.0.0",
+  "publisher": "gerege",
+  "authors": [
+    {
+      "name": "Gerege Systems Development Team"
+    }
+  ],
+  "maintainers": [
+    {
+      "name": "Gerege Systems Development Team"
+    }
+  ],
+  "repository": "https://github.com/gerege-systems/open-gerege-nexus",
+  "homepage": "https://nexus.gerege.mn",
+  "license": "Apache-2.0",
   "dependencies": [],
   "permissions": [
     {

@@ -25,73 +25,40 @@ type blueprint struct {
 }
 
 var blueprints = map[string]blueprint{
-	"io.example.contacts": {Slug: "contacts",
+	"io.gerege.nexus.contacts": {Slug: "contacts",
 		Modules: []futureMenu{
 			{ID: "segments", EN: "Segments", Icon: "users", Labels: map[string]string{
 				"mn": "Сегментүүд", "ar": "الشرائح", "zh": "客户分组", "fr": "Segments", "ru": "Сегменты", "es": "Segmentos"}},
-			{ID: "activity", EN: "Contact activity", Icon: "activity", Labels: map[string]string{
-				"mn": "Харилцааны түүх", "ar": "سجل التواصل", "zh": "联系人动态", "fr": "Activité des contacts", "ru": "История контактов", "es": "Actividad de contactos"}},
+			{ID: "duplicates", EN: "Duplicates", Icon: "copy", Labels: map[string]string{
+				"mn": "Давхардал", "ar": "التكرارات", "zh": "重复记录", "fr": "Doublons", "ru": "Дубликаты", "es": "Duplicados"}},
 		},
 		Settings: []futureMenu{
-			{ID: "fields", EN: "Custom fields", Icon: "settings", Labels: map[string]string{
-				"mn": "Нэмэлт талбар", "ar": "حقول مخصصة", "zh": "自定义字段", "fr": "Champs personnalisés", "ru": "Дополнительные поля", "es": "Campos personalizados"}},
-			{ID: "duplicates", EN: "Duplicate rules", Icon: "copy", Labels: map[string]string{
-				"mn": "Давхардлын дүрэм", "ar": "قواعد التكرار", "zh": "重复规则", "fr": "Règles de doublons", "ru": "Правила дубликатов", "es": "Reglas de duplicados"}},
-			{ID: "import", EN: "Import mapping", Icon: "upload", Labels: map[string]string{
-				"mn": "Импортын зураглал", "ar": "تعيين الاستيراد", "zh": "导入映射", "fr": "Mappage d'import", "ru": "Сопоставление импорта", "es": "Asignación de importación"}},
+			{ID: "import", EN: "Import contacts", Icon: "upload", Labels: map[string]string{
+				"mn": "Импорт", "ar": "استيراد جهات الاتصال", "zh": "导入联系人", "fr": "Importer des contacts", "ru": "Импорт контактов", "es": "Importar contactos"}},
 		}},
 
-	"io.example.products": {Slug: "products",
-		Modules: []futureMenu{
-			{ID: "categories", EN: "Categories", Icon: "tags", Labels: map[string]string{
-				"mn": "Ангилал", "ar": "الفئات", "zh": "分类", "fr": "Catégories", "ru": "Категории", "es": "Categorías"}},
-			{ID: "price-lists", EN: "Price lists", Icon: "badge-dollar-sign", Labels: map[string]string{
-				"mn": "Үнийн жагсаалт", "ar": "قوائم الأسعار", "zh": "价目表", "fr": "Listes de prix", "ru": "Прайс-листы", "es": "Listas de precios"}},
-		},
-		Settings: []futureMenu{
-			{ID: "units", EN: "Units of measure", Icon: "ruler", Labels: map[string]string{
-				"mn": "Хэмжих нэгж", "ar": "وحدات القياس", "zh": "计量单位", "fr": "Unités de mesure", "ru": "Единицы измерения", "es": "Unidades de medida"}},
-			{ID: "attributes", EN: "Product attributes", Icon: "sliders", Labels: map[string]string{
-				"mn": "Барааны шинж", "ar": "خصائص المنتج", "zh": "产品属性", "fr": "Attributs de produit", "ru": "Атрибуты товара", "es": "Atributos de producto"}},
-			{ID: "taxes", EN: "Tax profiles", Icon: "percent", Labels: map[string]string{
-				"mn": "Татварын тохиргоо", "ar": "ملفات الضرائب", "zh": "税务配置", "fr": "Profils fiscaux", "ru": "Налоговые профили", "es": "Perfiles fiscales"}},
-		}},
+	// products has one working screen and nothing else to stand on: the table
+	// holds sku, name, price and active, so categories, price lists, units,
+	// attributes and tax profiles would each be a menu entry over no data.
+	"io.gerege.nexus.products": {Slug: "products"},
 
-	"io.example.inventory": {Slug: "inventory",
+	"io.gerege.nexus.inventory": {Slug: "inventory",
 		Modules: []futureMenu{
-			{ID: "transfers", EN: "Stock transfers", Icon: "arrow-right-left", Labels: map[string]string{
-				"mn": "Бараа шилжүүлэг", "ar": "تحويلات المخزون", "zh": "库存调拨", "fr": "Transferts de stock", "ru": "Перемещения запасов", "es": "Transferencias de stock"}},
 			{ID: "replenishment", EN: "Replenishment", Icon: "refresh-cw", Labels: map[string]string{
 				"mn": "Нөхөн дүүргэлт", "ar": "إعادة التزويد", "zh": "补货", "fr": "Réapprovisionnement", "ru": "Пополнение", "es": "Reabastecimiento"}},
 		},
 		Settings: []futureMenu{
-			{ID: "warehouses", EN: "Warehouse settings", Icon: "warehouse", Labels: map[string]string{
-				"mn": "Агуулахын тохиргоо", "ar": "إعدادات المستودع", "zh": "仓库设置", "fr": "Paramètres d'entrepôt", "ru": "Настройки склада", "es": "Ajustes de almacén"}},
-			{ID: "routes", EN: "Logistics routes", Icon: "route", Labels: map[string]string{
-				"mn": "Ложистикийн маршрут", "ar": "مسارات اللوجستيات", "zh": "物流路线", "fr": "Itinéraires logistiques", "ru": "Логистические маршруты", "es": "Rutas logísticas"}},
-			{ID: "valuation", EN: "Valuation methods", Icon: "calculator", Labels: map[string]string{
-				"mn": "Өртөг тооцоолол", "ar": "طرق التقييم", "zh": "计价方法", "fr": "Méthodes de valorisation", "ru": "Методы оценки", "es": "Métodos de valoración"}},
+			{ID: "warehouses", EN: "Warehouses", Icon: "warehouse", Labels: map[string]string{
+				"mn": "Агуулах", "ar": "المستودعات", "zh": "仓库", "fr": "Entrepôts", "ru": "Склады", "es": "Almacenes"}},
 		}},
 
-	"io.example.billing": {Slug: "billing",
+	"io.gerege.nexus.billing": {Slug: "billing",
 		Modules: []futureMenu{
-			{ID: "payments", EN: "Payments", Icon: "wallet", Labels: map[string]string{
-				"mn": "Төлбөрүүд", "ar": "المدفوعات", "zh": "付款", "fr": "Paiements", "ru": "Платежи", "es": "Pagos"}},
 			{ID: "reports", EN: "Revenue reports", Icon: "chart-column", Labels: map[string]string{
 				"mn": "Орлогын тайлан", "ar": "تقارير الإيرادات", "zh": "收入报表", "fr": "Rapports de revenus", "ru": "Отчёты о доходах", "es": "Informes de ingresos"}},
-		},
-		Settings: []futureMenu{
-			{ID: "numbering", EN: "Invoice numbering", Icon: "list-ordered", Labels: map[string]string{
-				"mn": "Нэхэмжлэх дугаарлалт", "ar": "ترقيم الفواتير", "zh": "发票编号", "fr": "Numérotation des factures", "ru": "Нумерация счетов", "es": "Numeración de facturas"}},
-			// e-Barimt is the Mongolian tax authority's receipt system: a product
-			// name, so it survives translation untouched in every language.
-			{ID: "ebarimt", EN: "e-Barimt connection", Icon: "receipt", Labels: map[string]string{
-				"mn": "e-Barimt холболт", "ar": "اتصال e-Barimt", "zh": "e-Barimt 连接", "fr": "Connexion e-Barimt", "ru": "Подключение e-Barimt", "es": "Conexión e-Barimt"}},
-			{ID: "payment-methods", EN: "Payment methods", Icon: "credit-card", Labels: map[string]string{
-				"mn": "Төлбөрийн хэлбэр", "ar": "طرق الدفع", "zh": "支付方式", "fr": "Moyens de paiement", "ru": "Способы оплаты", "es": "Métodos de pago"}},
 		}},
 
-	"io.example.documents": {Slug: "documents",
+	"io.gerege.nexus.documents": {Slug: "documents",
 		Modules: []futureMenu{
 			{ID: "approvals", EN: "Approval queue", Icon: "list-checks", Labels: map[string]string{
 				"mn": "Батлах дараалал", "ar": "قائمة الموافقات", "zh": "审批队列", "fr": "File d'approbation", "ru": "Очередь согласования", "es": "Cola de aprobación"}},
@@ -107,7 +74,7 @@ var blueprints = map[string]blueprint{
 				"mn": "Хадгалалтын дүрэм", "ar": "قواعد الاحتفاظ", "zh": "保留规则", "fr": "Règles de conservation", "ru": "Правила хранения", "es": "Reglas de retención"}},
 		}},
 
-	"io.example.esign": {Slug: "esign",
+	"io.gerege.nexus.esign": {Slug: "esign",
 		Modules: []futureMenu{
 			{ID: "logs", EN: "Signature logs", Icon: "scroll-text", Labels: map[string]string{
 				"mn": "Гарын үсгийн лог", "ar": "سجلات التوقيع", "zh": "签名日志", "fr": "Journaux de signature", "ru": "Журналы подписей", "es": "Registros de firma"}},
@@ -123,25 +90,31 @@ var blueprints = map[string]blueprint{
 				"mn": "Гарын үсгийн бодлого", "ar": "سياسات التوقيع", "zh": "签署策略", "fr": "Politiques de signature", "ru": "Политики подписания", "es": "Políticas de firma"}},
 		}},
 
-	"io.example.developer_portal": {Slug: "developer",
+	"io.gerege.nexus.developer_portal": {Slug: "developer",
 		Modules: []futureMenu{
 			// API, OAuth and Webhook are product vocabulary, not prose. They stay
 			// Latin even in the scripts that would otherwise transliterate them.
 			{ID: "api-keys", EN: "API keys", Icon: "key-round", Labels: map[string]string{
 				"mn": "API түлхүүр", "ar": "مفاتيح API", "zh": "API 密钥", "fr": "Clés API", "ru": "Ключи API", "es": "Claves API"}},
-			{ID: "webhooks", EN: "Webhooks", Icon: "webhook", Labels: map[string]string{
-				"mn": "Webhook", "ar": "Webhooks", "zh": "Webhook", "fr": "Webhooks", "ru": "Webhooks", "es": "Webhooks"}},
+			// Access audit sits under Modules rather than Settings: it is
+			// something you read, not something you configure.
+			{ID: "audit", EN: "Access audit", Icon: "scroll-text", Labels: map[string]string{
+				"mn": "Хандалтын аудит", "ar": "تدقيق الوصول", "zh": "访问审计", "fr": "Audit des accès", "ru": "Аудит доступа", "es": "Auditoría de acceso"}},
+			// No Webhooks entry: Settings -> Integrations already registers
+			// webhook listeners with a target URL and a signing secret, and a
+			// second screen over the same records would only disagree with the
+			// first one eventually.
 		},
 		Settings: []futureMenu{
 			{ID: "scopes", EN: "OAuth scopes", Icon: "shield-check", Labels: map[string]string{
 				"mn": "OAuth scope", "ar": "نطاقات OAuth", "zh": "OAuth 权限范围", "fr": "Portées OAuth", "ru": "Области OAuth", "es": "Ámbitos OAuth"}},
 			{ID: "redirects", EN: "Redirect policies", Icon: "route", Labels: map[string]string{
 				"mn": "Redirect бодлого", "ar": "سياسات إعادة التوجيه", "zh": "重定向策略", "fr": "Politiques de redirection", "ru": "Политики перенаправления", "es": "Políticas de redirección"}},
-			{ID: "audit", EN: "Access audit", Icon: "scroll-text", Labels: map[string]string{
-				"mn": "Хандалтын аудит", "ar": "تدقيق الوصول", "zh": "访问审计", "fr": "Audit des accès", "ru": "Аудит доступа", "es": "Auditoría de acceso"}},
+			{ID: "signing-keys", EN: "Signing keys", Icon: "key-square", Labels: map[string]string{
+				"mn": "Гарын үсгийн түлхүүр", "ar": "مفاتيح التوقيع", "zh": "签名密钥", "fr": "Clés de signature", "ru": "Ключи подписи", "es": "Claves de firma"}},
 		}},
 
-	"io.example.gov_services": {Slug: "gov-services",
+	"io.gerege.nexus.gov_services": {Slug: "gov-services",
 		Modules: []futureMenu{
 			{ID: "requests", EN: "Service requests", Icon: "inbox", Labels: map[string]string{
 				"mn": "Үйлчилгээний хүсэлт", "ar": "طلبات الخدمة", "zh": "服务申请", "fr": "Demandes de service", "ru": "Заявки на услуги", "es": "Solicitudes de servicio"}},

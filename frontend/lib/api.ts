@@ -42,6 +42,64 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 export const APP_MENU_CHANGED_EVENT = "gerege:app-menu-changed";
 
+/** What kind of change a release was. The store colours by it. */
+export type ReleaseKind = "feature" | "fix" | "security" | "breaking" | "docs";
+
+/**
+ * One line of an app's timeline.
+ *
+ * `type` is "release" for the publisher's own record — the chronicle entry,
+ * already reduced to one language by the server — and the installation event
+ * type ("installed", "upgraded", "held", …) for everything this organisation
+ * did. `system` marks the lines the auto-update sweep is responsible for
+ * rather than a person.
+ */
+export interface AppHistoryEntry {
+  at: string;
+  type: string;
+  version?: string;
+  from?: string;
+  kind?: ReleaseKind;
+  summary?: string;
+  details?: string;
+  authors?: string[];
+  refs?: string[];
+  actor_id?: string;
+  actor_name?: string;
+  system?: boolean;
+  reason?: string;
+  added?: string;
+}
+
+/** One row of the administrator's store overview. */
+export interface StoreOverviewApp {
+  app_id: string;
+  slug: string;
+  name: string;
+  binary_version?: string;
+  catalog_version: string;
+  installed_version?: string;
+  installed: boolean;
+  enabled: boolean;
+  update_available: boolean;
+  auto_update: boolean;
+  held?: boolean;
+  pinned_version?: string;
+  /** The compiled module and the catalogue disagree. Always a fault. */
+  drifted?: boolean;
+  release_kind?: ReleaseKind;
+  release_summary?: string;
+}
+
+/** A manifest's release notes, as they arrive inside a catalogue entry. */
+export interface ManifestReleaseNotes {
+  kind?: ReleaseKind;
+  summary?: Record<string, string>;
+  details?: Record<string, string>;
+  authors?: string[];
+  refs?: string[];
+}
+
 async function mutateApp(url: string) {
   const result = await fetcher<{ status: string; app: string }>(url, { method: "POST" });
   // Layout lives above the App Store pages, so a route refresh does not
@@ -163,6 +221,35 @@ export const api = {
   // is empty for administrators, who bypass the check.
   getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[] }>("/auth/me"),
 
+  // The organisations the signed-in person may act for. A membership in one is
+  // the common case, so callers should expect a list of one rather than treat
+  // it as an error.
+  getTenants: () =>
+    fetcher<{
+      current: string;
+      tenants: Array<{ id: string; name: string; slug: string }>;
+      // Which of them this session is reading across. Always contains current.
+      active: string[];
+    }>("/auth/tenants"),
+
+  // Read across several organisations at once, the way Odoo's allowed companies
+  // work. New rows still go to the one being acted in — that is decided by the
+  // row-level policies, not here.
+  setActiveTenants: (tenantIds: string[]) =>
+    fetcher<{ active: string[] }>("/auth/tenants/active", {
+      method: "POST",
+      body: JSON.stringify({ tenant_ids: tenantIds }),
+    }),
+
+  // Moves the session to another of them. The server rotates the token and
+  // re-sets the cookie, so everything fetched before this call belongs to the
+  // tenant just left — the caller reloads rather than patching state.
+  switchTenant: (tenantId: string) =>
+    fetcher<{ tenant_id: string; switched: boolean; expires_at?: string }>("/auth/switch-tenant", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }),
+
   getMenus: () => fetcher<Array<{ id: string; app_id?: string; app_name?: string; parent_id?: string; label: string; path?: string; icon: string; order: number }>>("/menus"),
 
   // Odoo-style tenant access control
@@ -186,6 +273,11 @@ export const api = {
   closeShift: (closingTotal:number,notes="") => fetcher<{id:string;status:string}>("/devices/shifts/close",{method:"POST",body:JSON.stringify({closing_total:closingTotal,notes})}),
 
   // Store
+  //
+  // A manifest carries release notes since the chronicle: one sentence saying
+  // what changed in the version being offered, already resolved to the
+  // caller's language by the server. It is what turns "an update is available"
+  // into something an administrator can decide about.
   getStoreApps: () =>
     fetcher<
       Array<{
@@ -198,6 +290,9 @@ export const api = {
         version: string;
         installed: boolean;
         enabled: boolean;
+        installed_version?: string;
+        latest_version: string;
+        update_available: boolean;
         manifest: any;
       }>
     >("/store/apps"),
@@ -213,14 +308,162 @@ export const api = {
         status: string;
         enabled: boolean;
         installed_at: string;
+        auto_update: boolean;
+        pinned_version?: string;
+        latest_version?: string;
+        update_available: boolean;
+        // What a waiting version asks for that the installed one did not.
+        // Non-empty means the update is being held for an administrator to
+        // approve rather than offered as an ordinary one.
+        held_for?: string[];
+        held_reason?: string;
+        // Part of the platform. Such an app has no Disable button, because
+        // disabling it is refused server-side and a button that only ever
+        // fails is worse than no button.
+        core: boolean;
       }>
     >("/installed-apps"),
 
+  // What changed in an app, and what this organisation did about it, merged
+  // into one timeline newest first. A "release" line is the publisher's; every
+  // other kind is this tenant's own installation history.
+  getAppHistory: (slug: string) =>
+    fetcher<{
+      app_id: string;
+      slug: string;
+      name: string;
+      installed_version: string;
+      latest_version: string;
+      timeline: AppHistoryEntry[];
+    }>(`/store/apps/${slug}/history`),
+
+  // The administrator's single view of the store: which versions the binary,
+  // the catalogue and this tenant each hold, and where they disagree.
+  getStoreOverview: () =>
+    fetcher<{
+      platform_version: string;
+      sync: {
+        source: "file" | "registry";
+        sync_interval: string;
+        last_sync_at?: string;
+        last_sync_ok?: boolean;
+        last_sync_error?: string;
+      };
+      apps: StoreOverviewApp[];
+      summary: { catalog: number; installed: number; updates: number; held: number; drifted: number };
+    }>("/admin/store/overview"),
+
+  // Whether an app follows the catalogue on its own. Turning it on also clears
+  // a hold, which is why this refreshes the menus like the other store
+  // mutations: an app held back can start contributing menus again.
+  setAutoUpdate: (slug: string, enabled: boolean) =>
+    fetcher<{ app: string; auto_update: boolean }>(`/store/apps/${slug}/auto-update`, {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
+
   installApp: (slug: string) => mutateApp(`/store/apps/${slug}/install`),
+
+  // An upgrade changes which menus an app contributes just as an install does,
+  // so it goes through the same notification rather than beside it.
+  upgradeApp: (slug: string) => mutateApp(`/store/apps/${slug}/upgrade`),
+
+  // Ask the registry for a catalog now rather than at the next scheduled sync.
+  // Answers 501 on a deployment that reads its catalog from a file, which is
+  // every self-hosted one — the button is hidden there rather than failing.
+  // Where the catalogue comes from and how the last refresh went. The hourly
+  // sync leaves only a log line, so this is the one place a registry that has
+  // been failing for a week is distinguishable from one that has published
+  // nothing.
+  getCatalogStatus: () =>
+    fetcher<{
+      source: "file" | "registry";
+      apps: number;
+      sync_interval: string;
+      last_sync_at?: string;
+      last_sync_ok?: boolean;
+      last_sync_error?: string;
+    }>("/admin/store/status"),
+
+  syncStore: () =>
+    fetcher<{ status: "updated" | "unchanged"; apps: number }>("/admin/store/sync", { method: "POST" }),
 
   enableApp: (slug: string) => mutateApp(`/store/apps/${slug}/enable`),
 
   disableApp: (slug: string) => mutateApp(`/store/apps/${slug}/disable`),
+
+  // Organisation & People — the platform's own core app. What the organisation
+  // is, how it is arranged, and who works in it.
+  getOrganisation: () =>
+    fetcher<{
+      tenant_id: string; slug: string; name: string; legal_name: string;
+      registration_number: string; tax_number: string; country_code: string;
+      province: string; district: string; khoroo: string; address_line: string;
+      postal_code: string; phone: string; email: string; website: string;
+      logo_url: string; timezone: string; locale: string; currency: string;
+      // The organisation this one is a subsidiary of. A branch or an office is
+      // a department; this is another legal entity, and so another tenant.
+      parent_tenant_id?: string; parent_name?: string;
+    }>("/core/organisation"),
+
+  // Partial by design: a form that sends the fields it changed must not blank
+  // the ones it did not mention.
+  updateOrganisation: (patch: Record<string, string>) =>
+    fetcher("/core/organisation", { method: "PUT", body: JSON.stringify(patch) }),
+
+  getDepartments: () =>
+    fetcher<Array<{
+      id: string; code: string; name: string; parent_id?: string;
+      manager_membership_id?: string; manager_name?: string;
+      active: boolean; people_count: number;
+      tenant_id: string; tenant_name: string;
+    }>>("/core/departments"),
+
+  createDepartment: (body: { code: string; name: string; parent_id?: string; manager_membership_id?: string }) =>
+    fetcher<{ id: string }>("/core/departments", { method: "POST", body: JSON.stringify(body) }),
+
+  updateDepartment: (id: string, body: { name: string; parent_id?: string; manager_membership_id?: string }) =>
+    fetcher(`/core/departments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+
+  // Archiving keeps the row, because people and documents point at it.
+  archiveDepartment: (id: string) =>
+    fetcher(`/core/departments/${id}/archive`, { method: "POST" }),
+
+  // Deleting removes it, and the server refuses the moment anything does point
+  // at it — this is for the unit created by mistake, not the one that was used.
+  deleteDepartment: (id: string) => fetcher(`/core/departments/${id}`, { method: "DELETE" }),
+
+  // The other half of archiving. It is reversible by design, so the screen that
+  // lists what it archived can put one back.
+  restoreDepartment: (id: string) =>
+    fetcher(`/core/departments/${id}/restore`, { method: "POST" }),
+
+  getPeople: () =>
+    fetcher<Array<{
+      membership_id: string; user_id: string; name: string; email: string;
+      phone: string; job_title: string; department_id?: string;
+      department_name?: string; active: boolean; is_admin: boolean;
+      roles: string[]; joined_at: string;
+      // Which organisation this membership is in. The list spans every
+      // organisation the session is reading across, so a row can belong to one
+      // other than the one being acted in.
+      tenant_id: string; tenant_name: string;
+    }>>("/core/people"),
+
+  updatePerson: (id: string, body: { job_title?: string; department_id?: string }) =>
+    fetcher(`/core/people/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+
+  setPersonActive: (id: string, active: boolean) =>
+    fetcher(`/core/people/${id}/${active ? "reactivate" : "deactivate"}`, { method: "POST" }),
+
+  getPreferences: () =>
+    fetcher<{
+      name: string; email: string; phone: string; locale: string; timezone: string;
+      organisation_locale: string; organisation_timezone: string;
+    }>("/core/me/preferences"),
+
+  updatePreferences: (patch: { name?: string; phone?: string; locale?: string; timezone?: string }) =>
+    fetcher("/core/me/preferences", { method: "PUT", body: JSON.stringify(patch) }),
 
   // Contacts App
   getContacts: () =>
@@ -440,7 +683,7 @@ export const api = {
       { method: "POST", body: JSON.stringify(integrationId ? { integration_id: integrationId } : {}) }
     ),
 
-  // Billing App (io.example.billing)
+  // Billing App (io.gerege.nexus.billing)
   getInvoices: () =>
     fetcher<
       Array<{
@@ -458,7 +701,7 @@ export const api = {
   createInvoice: (data: { contact_name: string; amount: number }) =>
     fetcher("/billing/invoices", { method: "POST", body: JSON.stringify(data) }),
 
-  // Documents App (io.example.documents)
+  // Documents App (io.gerege.nexus.documents)
   // One page of a tenant's documents, newest first, with how many there are in total —
   // each row counts its own signatures and outstanding steps, so the list cannot be
   // unbounded, and a screen showing part of it has to be able to say so.
@@ -646,7 +889,7 @@ export const api = {
   rejectDocument: (id: string) =>
     fetcher(`/documents/${id}/reject`, { method: "POST" }),
 
-  // PDF E-Sign App (io.example.esign)
+  // PDF E-Sign App (io.gerege.nexus.esign)
   getEsignDocuments: () =>
     fetcher<
       Array<{
@@ -716,10 +959,127 @@ export const api = {
     fetcher<EmailVerification>("/verify/send", { method: "POST", body: JSON.stringify(data) }),
 
   // Developer Portal & OAuth2 SSO Apps
-  getDeveloperApps: () => fetcher<any[]>("/developer/apps"),
-  createDeveloperApp: (clientName: string, redirectURIs: string[], scopes?: string[]) =>
-    fetcher<any>("/developer/apps", {
-      method: "POST",
-      body: JSON.stringify({ client_name: clientName, redirect_uris: redirectURIs, scopes }),
+  //
+  // client_secret comes back only from create and rotate-secret; every other
+  // read omits it, because the server keeps a digest and cannot reproduce it.
+  getDeveloperApps: () => fetcher<OAuth2Client[]>("/developer/apps"),
+  getDeveloperApp: (clientID: string) =>
+    fetcher<OAuth2Client>(`/developer/apps/${encodeURIComponent(clientID)}`),
+  createDeveloperApp: (app: OAuth2ClientDraft) =>
+    fetcher<OAuth2Client>("/developer/apps", { method: "POST", body: JSON.stringify(app) }),
+  updateDeveloperApp: (clientID: string, app: OAuth2ClientDraft) =>
+    fetcher<OAuth2Client>(`/developer/apps/${encodeURIComponent(clientID)}`, {
+      method: "PUT",
+      body: JSON.stringify(app),
     }),
+  deleteDeveloperApp: (clientID: string) =>
+    fetcher<void>(`/developer/apps/${encodeURIComponent(clientID)}`, { method: "DELETE" }),
+  rotateDeveloperAppSecret: (clientID: string) =>
+    fetcher<OAuth2Client>(`/developer/apps/${encodeURIComponent(clientID)}/rotate-secret`, {
+      method: "POST",
+    }),
+  getDeveloperScopes: () =>
+    fetcher<{ scopes: OAuth2Scope[]; grant_types: string[] }>("/developer/scopes"),
+  getDeveloperEndpoints: () => fetcher<Record<string, string>>("/developer/endpoints"),
+  getDeveloperSigningKeys: () =>
+    fetcher<{ keys: SigningKey[]; jwks_uri: string }>("/developer/signing-keys"),
+  getDeveloperAudit: () =>
+    fetcher<{ clients: ClientActivity[]; consents: ConsentRecord[] }>("/developer/audit"),
+  revokeDeveloperAppTokens: (clientID: string) =>
+    fetcher<{ revoked: number }>(`/developer/apps/${encodeURIComponent(clientID)}/tokens`, {
+      method: "DELETE",
+    }),
+  withdrawDeveloperConsent: (clientID: string, userID: string) =>
+    fetcher<void>(
+      `/developer/apps/${encodeURIComponent(clientID)}/consents/${encodeURIComponent(userID)}`,
+      { method: "DELETE" },
+    ),
+
+  // OAuth2 consent screen. The query string is the authorization request the
+  // browser arrived with; the server re-validates all of it rather than
+  // trusting what the page echoes back.
+  getConsentPrompt: (query: string) => fetcher<ConsentPrompt>(`/oauth2/consent?${query}`),
+  decideConsent: (query: string, approved: boolean) => {
+    const form = new URLSearchParams(query);
+    form.set("approved", String(approved));
+    return fetcher<{ redirect_to: string }>("/oauth2/consent", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+  },
+};
+
+export type OAuth2Scope = {
+  name: string;
+  description: string;
+  description_mn: string;
+  sensitive?: boolean;
+};
+
+export type OAuth2ClientDraft = {
+  client_name: string;
+  client_uri?: string;
+  client_type?: "confidential" | "public";
+  redirect_uris: string[];
+  grant_types: string[];
+  scopes: string[];
+  disabled?: boolean;
+};
+
+export type OAuth2Client = {
+  id: string;
+  client_id: string;
+  client_name: string;
+  client_uri?: string;
+  client_type: "confidential" | "public";
+  redirect_uris: string[];
+  grant_types: string[];
+  scopes: string[];
+  disabled: boolean;
+  created_at: string;
+  updated_at: string;
+  secret_rotated_at?: string;
+  last_used_at?: string;
+  /** Present only in the response that created or rotated it. */
+  client_secret?: string;
+};
+
+export type SigningKey = {
+  kid: string;
+  algorithm: string;
+  active: boolean;
+  created_at: string;
+  retired_at?: string;
+};
+
+export type ClientActivity = {
+  client_id: string;
+  client_name: string;
+  client_type: "confidential" | "public";
+  disabled: boolean;
+  active_access_tokens: number;
+  active_refresh_tokens: number;
+  consented_users: number;
+  last_used_at?: string;
+};
+
+export type ConsentRecord = {
+  client_id: string;
+  client_name: string;
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  scopes: string[];
+  granted_at: string;
+};
+
+export type ConsentPrompt = {
+  client_id: string;
+  client_name: string;
+  client_uri?: string;
+  logo_uri?: string;
+  redirect_uri: string;
+  scopes: OAuth2Scope[];
+  already_granted: string[];
 };

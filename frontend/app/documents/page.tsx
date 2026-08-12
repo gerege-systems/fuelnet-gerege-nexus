@@ -421,7 +421,7 @@ export default function DocumentsPage() {
 
       {/* Modal */}
       {showModal && (
-        <Modal>
+        <Modal label={t("documents.view.create_title")}>
           <h2 className="text-xl font-bold text-slate-900 mb-4">{t("documents.view.create_title")}</h2>
 
           {createFailure && (

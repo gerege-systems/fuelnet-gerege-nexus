@@ -4,21 +4,79 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 )
 
+// App types. An app is a Go module compiled into this binary unless it says
+// otherwise, which is why the empty string means TypeModule: every manifest
+// written before external apps existed is a module manifest.
+const (
+	TypeModule   = "module"
+	TypeExternal = "external"
+)
+
 type Manifest struct {
-	ID           string                          `json:"id"`
-	Name         string                          `json:"name"`
-	Version      string                          `json:"version"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// Type is "module" (default) or "external". An external app is a service
+	// that runs somewhere else entirely: the platform holds its registration,
+	// its permissions and its menu entry, and hands its users over by OIDC.
+	// Nothing of it is compiled in.
+	Type         string                          `json:"type,omitempty"`
+	External     *ExternalSpec                   `json:"external,omitempty"`
 	Platform     string                          `json:"platform"`
 	Dependencies []internal.Dependency           `json:"dependencies"`
 	Permissions  []internal.PermissionDefinition `json:"permissions"`
 	Menus        []internal.MenuDefinition       `json:"menus"`
+
+	// Everything below is manifest v2.1: who stands behind this app and what
+	// changed in this version of it. Every field is optional and every one is
+	// omitempty, so a manifest written before any of this existed marshals to
+	// exactly the bytes it did before — which is what keeps the signed
+	// catalogue byte-reproducible across the two repositories that build it.
+	Publisher   string   `json:"publisher,omitempty"`
+	Authors     []Person `json:"authors,omitempty"`
+	Maintainers []Person `json:"maintainers,omitempty"`
+	Repository  string   `json:"repository,omitempty"`
+	Homepage    string   `json:"homepage,omitempty"`
+	// License is an SPDX identifier. It is shape-checked rather than looked up:
+	// a closed list would have to be maintained here and would reject a licence
+	// that is perfectly real and merely newer than this build.
+	License string `json:"license,omitempty"`
+	// ReleaseNotes is this version's chronicle entry, copied in as the
+	// catalogue is assembled. It is not authored here — see chronicle.go.
+	ReleaseNotes *ReleaseNote `json:"release_notes,omitempty"`
 }
+
+// ExternalSpec describes how to reach a third-party platform and how it signs
+// its users in.
+type ExternalSpec struct {
+	// LaunchURL is where a user is sent. It is the third party's own entry
+	// point, typically the one that starts the OIDC dance back at this issuer.
+	LaunchURL string `json:"launch_url"`
+	// SSOClientID ties the app to an OAuth2 client registered here. It is what
+	// makes "has this tenant installed the app" answerable at the authorization
+	// endpoint — see the install gate in ssoprovider.
+	SSOClientID string   `json:"sso_client_id,omitempty"`
+	Scopes      []string `json:"scopes,omitempty"`
+	// Embed is "new_tab" (default) or "iframe". new_tab is the default because
+	// this platform sends X-Frame-Options: DENY and a Content-Security-Policy
+	// to match: framing somebody else's product inside this one is a decision
+	// both sides have to make, not a default.
+	Embed string `json:"embed,omitempty"`
+	// HealthURL is an address an operator can check. Nothing polls it yet.
+	HealthURL string `json:"health_url,omitempty"`
+}
+
+// IsExternal reports whether this app runs outside the platform binary.
+func (m Manifest) IsExternal() bool { return m.Type == TypeExternal }
 
 type CatalogApp struct {
 	ID          string   `json:"id"`
@@ -88,6 +146,39 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		}
 	}
 
+	switch m.Type {
+	case "", TypeModule:
+		if m.External != nil {
+			return fmt.Errorf("app %s is a module but carries an external section", m.ID)
+		}
+	case TypeExternal:
+		if m.External == nil || m.External.LaunchURL == "" {
+			return fmt.Errorf("external app %s must declare external.launch_url", m.ID)
+		}
+		// Absolute and HTTPS, checked here rather than at the point of use.
+		// This URL is put in front of a user as a link this platform vouches
+		// for: a relative one would resolve against the platform's own origin
+		// and a plain-HTTP one would carry a signed-in person out of TLS on the
+		// way to a service that is about to receive their identity.
+		launch, err := url.Parse(m.External.LaunchURL)
+		if err != nil {
+			return fmt.Errorf("external app %s has an unparseable launch_url: %w", m.ID, err)
+		}
+		if launch.Scheme != "https" || launch.Host == "" {
+			return fmt.Errorf("external app %s must have an absolute https launch_url, got %q",
+				m.ID, m.External.LaunchURL)
+		}
+		if embed := m.External.Embed; embed != "" && embed != "new_tab" && embed != "iframe" {
+			return fmt.Errorf("external app %s has an unknown embed mode %q", m.ID, embed)
+		}
+	default:
+		return fmt.Errorf("app %s has an unknown type %q", m.ID, m.Type)
+	}
+
+	if err := validateProvenance(m); err != nil {
+		return err
+	}
+
 	for _, dep := range m.Dependencies {
 		if dep.ID == "" {
 			return fmt.Errorf("dependency ID cannot be empty in app %s", m.ID)
@@ -99,6 +190,86 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		}
 	}
 	return nil
+}
+
+// spdxLicense is the shape of an SPDX identifier, not a list of them: letters,
+// digits, dots and dashes, optionally joined by WITH/OR/AND. It catches a
+// sentence typed into the field and lets "Apache-2.0", "MIT" and
+// "GPL-3.0-or-later WITH Classpath-exception-2.0" through alike.
+var spdxLicense = regexp.MustCompile(`^[A-Za-z0-9.+-]+( (WITH|OR|AND) [A-Za-z0-9.+-]+)*$`)
+
+// validateProvenance checks the manifest v2.1 fields. Each is optional; each
+// that is present has to mean something.
+//
+// The rule worth stating is the one about people: an entry with no name is not
+// a weaker claim about who wrote the app, it is an empty line rendered in a
+// storefront credit list. An app may name nobody. It may not name a blank.
+func validateProvenance(m Manifest) error {
+	for _, group := range [...]struct {
+		field  string
+		people []Person
+	}{{"authors", m.Authors}, {"maintainers", m.Maintainers}} {
+		for i, person := range group.people {
+			if strings.TrimSpace(person.Name) == "" {
+				return fmt.Errorf("app %s: %s[%d] has no name", m.ID, group.field, i)
+			}
+		}
+	}
+
+	for _, link := range [...]struct {
+		field string
+		raw   string
+	}{{"repository", m.Repository}, {"homepage", m.Homepage}} {
+		if link.raw == "" {
+			continue
+		}
+		// Same reasoning as external.launch_url: these are put in front of a
+		// user as links this platform vouches for.
+		parsed, err := url.Parse(link.raw)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			return fmt.Errorf("app %s: %s must be an absolute https URL, got %q",
+				m.ID, link.field, link.raw)
+		}
+	}
+
+	if m.License != "" && !spdxLicense.MatchString(m.License) {
+		return fmt.Errorf("app %s: license %q is not an SPDX identifier", m.ID, m.License)
+	}
+
+	if m.ReleaseNotes != nil {
+		if err := validateNote("app "+m.ID+" release_notes", *m.ReleaseNotes); err != nil {
+			return err
+		}
+		// The note travels inside a manifest that already carries the version,
+		// so a second copy is a second thing that can disagree with it.
+		if v := m.ReleaseNotes.Version; v != "" && v != m.Version {
+			return fmt.Errorf("app %s: release_notes are for version %q but the manifest declares %q",
+				m.ID, v, m.Version)
+		}
+	}
+	return nil
+}
+
+// IsNewerVersion reports whether candidate is a later release than installed.
+//
+// It is the one place the store decides that an update exists, so both the API
+// that offers the button and the installer that refuses a pointless upgrade
+// answer the same question the same way. Semver, not string comparison: "1.10.0"
+// sorts before "1.9.0" as text and after it as a version.
+//
+// A version either side cannot parse falls back to "different means newer".
+// Manifest versions are validated as semver on the way in, so this only covers
+// a catalogue that reached this instance by some other route.
+func IsNewerVersion(candidate, installed string) bool {
+	if candidate == "" {
+		return false
+	}
+	newer, candidateErr := semver.NewVersion(candidate)
+	held, installedErr := semver.NewVersion(installed)
+	if candidateErr != nil || installedErr != nil {
+		return candidate != installed
+	}
+	return newer.GreaterThan(held)
 }
 
 // LoadManifestFile loads and validates a manifest file.
