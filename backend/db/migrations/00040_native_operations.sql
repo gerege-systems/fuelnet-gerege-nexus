@@ -1,7 +1,17 @@
+-- Дугаар нь 00032/00033-аас 00039/00040 болж шилжсэн: платформын мод дээр
+-- тэдгээр дугаарыг өөр migration аль хэдийн эзэлсэн байсан бөгөөд goose
+-- давхардсан хувилбар олоод panic хийдэг.
+--
+-- Тиймээс бүх зүйл дахин ажиллахад тэсвэртэй: DS-ийн мэдээллийн санд эдгээр
+-- объект хуучин дугаарын дор аль хэдийн үүссэн байгаа тул шинэ дугаараар
+-- дахин ажиллахад юу ч хийхгүй өнгөрөх ёстой. Шинэ сан дээр урьдын адил үүснэ.
+--
+-- CREATE POLICY нь IF NOT EXISTS-ийг PostgreSQL дээр дэмждэггүй тул бодлого
+-- бүрийн өмнө DROP POLICY IF EXISTS тавьсан.
 -- POS staff switching, shifts, mobile push registration and fleet telemetry.
 -- +goose Up
 
-CREATE TABLE staff_pin_credentials (
+CREATE TABLE IF NOT EXISTS staff_pin_credentials (
     membership_id UUID PRIMARY KEY REFERENCES memberships(id) ON DELETE CASCADE,
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     pin_hash TEXT NOT NULL,
@@ -10,7 +20,7 @@ CREATE TABLE staff_pin_credentials (
     locked_until TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE TABLE pos_shifts (
+CREATE TABLE IF NOT EXISTS pos_shifts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     device_id UUID NOT NULL REFERENCES devices(id),
@@ -21,8 +31,8 @@ CREATE TABLE pos_shifts (
     closing_total NUMERIC(18,2),
     notes TEXT NOT NULL DEFAULT ''
 );
-CREATE UNIQUE INDEX pos_one_open_shift_per_device ON pos_shifts(device_id) WHERE closed_at IS NULL;
-CREATE TABLE push_tokens (
+CREATE UNIQUE INDEX IF NOT EXISTS pos_one_open_shift_per_device ON pos_shifts(device_id) WHERE closed_at IS NULL;
+CREATE TABLE IF NOT EXISTS push_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -34,7 +44,7 @@ CREATE TABLE push_tokens (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (user_id IS NOT NULL OR device_id IS NOT NULL)
 );
-CREATE TABLE device_telemetry (
+CREATE TABLE IF NOT EXISTS device_telemetry (
     id BIGSERIAL PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
@@ -44,7 +54,7 @@ CREATE TABLE device_telemetry (
     occurred_at TIMESTAMPTZ NOT NULL,
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX device_telemetry_fleet ON device_telemetry(tenant_id,device_id,received_at DESC);
+CREATE INDEX IF NOT EXISTS device_telemetry_fleet ON device_telemetry(tenant_id,device_id,received_at DESC);
 
 GRANT SELECT,INSERT,UPDATE,DELETE ON staff_pin_credentials,pos_shifts,push_tokens,device_telemetry TO gerege_nexus_app;
 GRANT USAGE,SELECT ON SEQUENCE device_telemetry_id_seq TO gerege_nexus_app;
@@ -52,9 +62,13 @@ ALTER TABLE staff_pin_credentials ENABLE ROW LEVEL SECURITY; ALTER TABLE staff_p
 ALTER TABLE pos_shifts ENABLE ROW LEVEL SECURITY; ALTER TABLE pos_shifts FORCE ROW LEVEL SECURITY;
 ALTER TABLE push_tokens ENABLE ROW LEVEL SECURITY; ALTER TABLE push_tokens FORCE ROW LEVEL SECURITY;
 ALTER TABLE device_telemetry ENABLE ROW LEVEL SECURITY; ALTER TABLE device_telemetry FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON staff_pin_credentials;
 CREATE POLICY tenant_isolation ON staff_pin_credentials TO gerege_nexus_app USING (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid);
+DROP POLICY IF EXISTS tenant_isolation ON pos_shifts;
 CREATE POLICY tenant_isolation ON pos_shifts TO gerege_nexus_app USING (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid);
+DROP POLICY IF EXISTS tenant_isolation ON push_tokens;
 CREATE POLICY tenant_isolation ON push_tokens TO gerege_nexus_app USING (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid);
+DROP POLICY IF EXISTS tenant_isolation ON device_telemetry;
 CREATE POLICY tenant_isolation ON device_telemetry TO gerege_nexus_app USING (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting('app.current_tenant',true),'')::uuid);
 
 -- +goose Down
