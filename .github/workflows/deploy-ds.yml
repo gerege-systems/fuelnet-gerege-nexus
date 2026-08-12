@@ -65,14 +65,30 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.event.workflow_run.head_sha || github.sha }}
       - id: tag
         run: echo "value=${{ github.event.inputs.tag || github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
-      - uses: appleboy/scp-action@v0.1.7
+      # A clone without the DS secrets — a fork, or the platform repository
+      # this tree is shared with — has nowhere to roll out to. Without this the
+      # scp step runs with an empty key and fails the workflow on every push to
+      # main, which is a red tick that means nothing. deploy.yml already guards
+      # itself this way; this one did not.
+      - name: Check deployment secrets
+        id: guard
+        run: |
+          if [ -z "${{ secrets.DS_DEPLOY_SSH_KEY }}" ]; then
+            echo "::warning::DS_DEPLOY_SSH_KEY is not configured — skipping the DS rollout."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ vars.DS_DEPLOY_HOST }}
           username: root
           key: ${{ secrets.DS_DEPLOY_SSH_KEY }}
           source: docker-compose.prod.yml,docker-compose.ds.yml
           target: /opt/open-gerege-nexus-ds
-      - uses: appleboy/ssh-action@v1.2.0
+      - if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.value }}
           REGISTRY_USER: ${{ github.actor }}
@@ -107,6 +123,7 @@ jobs:
             docker compose -f docker-compose.prod.yml -f docker-compose.ds.yml up -d --remove-orphans
             docker logout ghcr.io
       - name: Verify DS
+        if: steps.guard.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ vars.DS_DEPLOY_HOST }}
