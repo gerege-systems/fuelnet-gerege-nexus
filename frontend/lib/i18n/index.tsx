@@ -7,6 +7,7 @@ import { web } from "./web";
 import { access } from "./addons/access";
 import { ai } from "./addons/ai";
 import { app_store } from "./addons/app_store";
+import { appstore_modules } from "./addons/appstore_modules";
 import { appearance } from "./addons/appearance";
 import { auth } from "./addons/auth";
 import { billing } from "./addons/billing";
@@ -79,6 +80,7 @@ const dictionary = {
   ...access,
   ...ai,
   ...app_store,
+  ...appstore_modules,
   ...appearance,
   ...auth,
   ...billing,
