@@ -23,6 +23,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
@@ -155,6 +156,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "E-ID verification failed: " + err.Error()
 		}
+		observability.RecordLogin(observability.LoginEID, false)
 		httpx.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
@@ -173,6 +175,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
 
+	observability.RecordLogin(observability.LoginEID, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.eid_login_success", "eid", map[string]any{
 		"reg_number": identity.RegNumber,
 		"civil_id":   identity.CivilID,
@@ -221,6 +224,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "dan.gerege.mn verification failed: " + err.Error()
 		}
+		observability.RecordLogin(observability.LoginDAN, false)
 		httpx.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
@@ -243,6 +247,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
 
+	observability.RecordLogin(observability.LoginDAN, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.dan_gerege_login_success", "dan", map[string]any{
 		"reg_number":  profile.RegNumber,
 		"dan_session": profile.DANSessionID,

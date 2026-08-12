@@ -152,7 +152,14 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	}
 
 	ssoProvider := ssoprovider.NewSSOProvider(db)
-	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
+	// The server is not built yet, so the gate is handed over as a closure over
+	// the pointer that is about to be filled. Reports are listed per request,
+	// long after this line.
+	var server *Server
+	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider,
+		func(ctx context.Context, tenantID string) (map[string]bool, error) {
+			return server.installedAppSet(ctx, tenantID)
+		})
 
 	// The relying-party half. A deployment that names a provider but cannot
 	// reach it is a deployment nobody can sign in to, so a configuration that
@@ -250,6 +257,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
 	}
+
+	// And now the closure above has something to call.
+	server = s
 
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.
@@ -516,8 +526,19 @@ func (s *Server) InstallAppForTenant(ctx context.Context, tenantID, appSlug, use
 func (s *Server) setupRoutes() {
 	r := s.router
 
-	r.Use(chimiddleware.Logger)
-	r.Use(chimiddleware.Recoverer)
+	// First, so everything below it — the access log, every slog line a handler
+	// writes, and the X-Request-Id header the caller gets back — names the same
+	// request. It is also what makes a log line joinable to a trace once
+	// tracing is on.
+	r.Use(chimiddleware.RequestID)
+	// Before the logger, so a log line can name the trace it belongs to. It is
+	// a no-op wrapper when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+	r.Use(observability.TracingMiddleware)
+	r.Use(observability.RequestLogger)
+	// Not chi's Recoverer: that one prints a stack trace to stdout and nothing
+	// else. This one logs it with the request id and the tenant, and reports it
+	// to GlitchTip when SENTRY_DSN is set.
+	r.Use(observability.RecoveryMiddleware)
 	r.Use(resilience.NewLoadShedder(1000).Middleware)
 	r.Use(observability.MetricsMiddleware)
 	r.Use(security.HeadersMiddleware)

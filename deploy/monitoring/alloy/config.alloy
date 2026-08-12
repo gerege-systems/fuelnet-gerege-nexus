@@ -1,0 +1,98 @@
+// Grafana Alloy — Docker container logs to Loki.
+//
+// Alloy replaced Promtail, which is why this is River rather than YAML. It
+// reads the Docker daemon directly instead of tailing /var/lib/docker/...
+// json files: the daemon knows which container a stream belongs to and what it
+// is called, so a container that is recreated keeps its identity across the
+// change, and a log driver that is not json-file still works.
+//
+// What is deliberately NOT done here: parsing the JSON body into labels. The
+// platform's log lines carry request_id and tenant_id, and both are exactly the
+// kind of high-cardinality value that turns Loki's label index into the
+// full-text index it exists to avoid. They stay in the line, where LogQL's
+// `| json | request_id="..."` finds them at query time — a filter over a
+// stream, rather than a stream per request.
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// Which containers exist, refreshed as they come and go.
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+}
+
+// Names into labels. The container name is the useful one — `gerege_nexus_backend`
+// is what an operator types — and Docker hands it over with a leading slash.
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // The compose service, so `service="backend"` works the same way across a
+  // stack whose container names carry a project prefix.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Everything on this host that is not ours — a sibling stack's containers —
+  // is dropped rather than shipped. Loki's disk is sized for this deployment.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(gerege_nexus_.*)"
+    action        = "keep"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  labels     = { job = "docker" }
+  forward_to = [loki.process.level.receiver]
+}
+
+// One derived label: the level. It is low cardinality by definition and it is
+// what every "show me the errors" query starts with, so paying for it in the
+// index is worth it where paying for request_id is not.
+loki.process "level" {
+  forward_to = [loki.write.default.receiver]
+
+  // The platform writes JSON with slog. Everything else on this host —
+  // Postgres, Redis, nginx — does not, and for those the stage simply finds
+  // nothing and the line passes through unchanged.
+  stage.json {
+    expressions = { level = "level" }
+  }
+
+  // Lower-cased before it becomes a label, not after: stage.labels copies the
+  // extracted value, so a template that runs afterwards rewrites the map and
+  // leaves the label as slog wrote it. That gave `level="ERROR"` and
+  // `level="error"` as two separate streams for the same thing.
+  stage.template {
+    source   = "level"
+    template = "{{ ToLower .Value }}"
+  }
+
+  stage.labels {
+    values = { level = "" }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://gerege_nexus_loki:3100/loki/api/v1/push"
+  }
+
+  // Attached to every stream, so a Grafana that later reads two deployments
+  // can tell them apart.
+  external_labels = {
+    deployment = sys.env("DEPLOYMENT_NAME"),
+  }
+}

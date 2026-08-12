@@ -15,6 +15,247 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — One organisation seeing another's report, with their permission
+
+A coal mine contracts a hundred transport companies. Each keeps its trips in its
+own tenant; the mine wants one consolidated "Transport" report. That request
+runs against everything this platform is built to prevent, so the answer is not
+to weaken the isolation but to add a separate, permissioned path beside it.
+§3.5 of the design; guide in
+[`docs/REPORT_SHARING.md`](docs/REPORT_SHARING.md).
+
+- **Nothing crosses a tenant boundary.** A consolidated run calls the *ordinary*
+  report once per grantor, **inside that grantor's own tenant context**. No
+  policy is relaxed, no clause is rewritten, no query reads across
+  organisations, and the report cannot tell it is being consolidated except by
+  the counterparty reference it is handed.
+- **Default deny, in three places.** No grant, no rows. A report must
+  implement `Shareable` to be nameable in a grant at all — a report written
+  assuming one organisation may aggregate in ways its rows do not. A request is
+  not a permission: `accepted_at` is null until the owning organisation's
+  administrator answers, and the query that reads grants ignores anything
+  unaccepted, revoked or expired.
+- **The scope is the agreement.** `counterparty` shows the mine the work done
+  *for the mine*; `full` is the hierarchical case, a parent consolidating a
+  subsidiary. A report that cannot filter by counterparty cannot be granted that
+  scope — refused, rather than quietly widening to everything.
+- **A two-sided row-level policy**, which is why `report_grants` deliberately
+  has no `tenant_id` column: the general policy from 00029 would have attached
+  itself and hidden each party's own agreements from the other, leaving the
+  receiving side unable to see what it had been given. Accepting is still the
+  owner's alone — the `grantor_tenant_id = $2` clause on that one statement is
+  what stops a grantee accepting their own request.
+- **Both sides are audited, every run.** The reader records that it read; the
+  owner records that it was read, and can open "who has read our data" and see
+  the organisation, the report, the moment and the row count. A transport
+  company will only agree to this if it can check afterwards.
+- **Revoking is immediate and grants are never deleted.** `DELETE` is not
+  granted on the table: "who could see our data, and when" is a question asked
+  after the fact.
+- **One grantor failing does not fail the run.** A hundred organisations is a
+  hundred chances of one slow query, and the ninety-seventh timing out must not
+  produce nothing. That company is named in the result's notes instead — a total
+  quietly missing a company is worse than one that says so.
+- **Neither shipped billing report offers counterparty scope**, and that is the
+  schema rather than a decision: `billing_invoices` records a contact *name*,
+  not a registration number, and matching organisations by typed-in name is the
+  mistake §3.5 avoids by keying grants on a registration number. Both offer
+  `full`. The mechanism is complete and proven against a live database by the
+  four tests §3.5 asks for, plus three more.
+
+### Added — Reports, as a platform layer rather than a screen
+
+`io.gerege.nexus.reports`. Every app that keeps data now has reports; the module
+serving them knows about none of them. Guide in
+[`docs/REPORTS.md`](docs/REPORTS.md).
+
+- **A report is a declaration.** A module implements a Go interface saying what
+  it is called in seven languages, what parameters it accepts, what columns it
+  produces and how to produce them. The listing, the parameter form, the table,
+  the chart, the Excel and CSV export, the schedule and the audit entry are
+  written once and apply to every report anybody ever adds. Adding one is a file
+  in a module and a line in its constructor — no handler, no frontend change.
+- **Eight reports to start with**: revenue by month and invoice status
+  (billing); stock on hand and movement summary (inventory); signatures by rail
+  and signer activity (e-signature); user activity and headcount by unit (core).
+  The e-signature one separates the rails and marks which is qualified, because
+  only the eID rail produces a qualified signature in Mongolian law and a report
+  that counted both together would answer the wrong question.
+- **The tenant boundary is the database's, not the query author's.** A report
+  runs inside the caller's tenant binding, in a **read-only transaction**, under
+  a thirty-second `statement_timeout` — the SQL one, not a context deadline,
+  because a cancelled context stops this process waiting and does not stop
+  PostgreSQL working. A report that forgets its `WHERE tenant_id` returns
+  nothing rather than everyone's rows, and there is an integration test against
+  a real database that proves it.
+- **Three gates, not one.** A report belonging to an app the organisation has
+  not installed is absent from the listing, refused by key with a 404, and
+  refused again when a schedule names it. Filtering the list is not enough: the
+  API is a separate door.
+- **Every run and every export is audited**, separately. An export is a copy of
+  the organisation's numbers leaving the platform, which is a different act from
+  reading them on screen — and §3.5 of the design requires both before one
+  tenant may see anything of another's.
+- **Scheduled reports, with no second process.** A cron expression, a
+  minute-ticker goroutine in the API, and a PostgreSQL advisory lock. Due rows
+  are claimed *before* the report is produced, not after it is sent: a replica
+  restarting between "sent" and "recorded" would send the report twice, and a
+  second copy is indistinguishable from the first while its numbers may differ.
+- **Delivery is SMTP, and the design document said otherwise.** It called for
+  the hosted verification service; that service sends one thing, a verification
+  link, and has no endpoint for a subject, a body or an attachment. With
+  `REPORT_SMTP_URL` unset a due schedule is still produced and still recorded,
+  with "delivery not configured" as its outcome and a warning on the screen —
+  which is a different and more useful state than not running.
+- **Exports that can be used.** xlsx via `excelize` with real numeric cells, a
+  totals row and a frozen header; CSV with a UTF-8 BOM, without which Excel on
+  Windows renders every Mongolian heading as mojibake — the whole content of the
+  file.
+
+### Added — Traces, and errors that group themselves
+
+The third pillar and the tool beside it, both env-gated and both off by default.
+Guides in [`docs/MONITORING.md`](docs/MONITORING.md) §11 and §12.
+
+- **`SetupTracing` now sets up tracing.** It was a stub that logged
+  "opentelemetry tracing initialized" and initialized nothing — worse than no
+  tracing, because an operator reading the startup log had every reason to
+  believe traces existed somewhere. It is now the OTLP exporter, a batch
+  processor, and a `ParentBased(TraceIDRatioBased)` sampler at 10%.
+- **Off means off.** With `OTEL_EXPORTER_OTLP_ENDPOINT` unset there is no
+  exporter, no batch processor, no background goroutine and no sampling
+  decision: every span the code starts is a no-op. That is the condition for
+  putting tracing in the default path rather than behind a build tag.
+- **`otelhttp` on the router and `otelpgx` on the pool**, so a slow request
+  resolves into the queries it waited on. Spans are named by chi's route
+  pattern, never the URL — a span per document id is unbounded, the same
+  cardinality argument the metrics middleware already makes. `/health`,
+  `/ready` and `/metrics` are excluded: Docker and Prometheus call them every
+  few seconds, and at any sampling rate they would be most of what is stored.
+- **Query *parameters* are never recorded**, which is otelpgx's default and is
+  now a comment saying it must stay that way. The arguments are the row a query
+  is about — an address, a national identifier, a password hash on the way in —
+  and a span is readable by anyone who can open Grafana. Verified against a
+  live Tempo: `db.query.text` comes through as placeholders.
+- **Logs join traces.** Every `slog` line written inside a span carries
+  `trace_id` and `span_id`, and Grafana's Loki datasource turns the first into
+  a link. Deliberately *not* the `otelslog` bridge: that ships logs over OTLP,
+  a second delivery path for something Alloy already carries to Loki. Tempo's
+  datasource links back the other way, to the container's logs and to the RED
+  metrics for the service.
+- **Tempo** in the monitoring stack — 72h retention, filesystem storage, no
+  index over span contents. A trace is found by id from a log line, or through
+  the span metrics and service graph Tempo generates into Prometheus.
+- **GlitchTip** as `deploy/docker-compose.glitchtip.yml`, its own stack with its
+  own Postgres. Separate rather than a compose profile because compose resolves
+  `${VAR:?}` for every service in a file whether or not its profile is active,
+  so a required secret there would have stopped the metrics stack from starting
+  on a deployment that never wanted error tracking.
+- **Panics are reported, with a scrubber that fails closed.** chi's `Recoverer`
+  printed a stack trace to stdout and nothing else; the replacement logs it with
+  the request id, the route and the tenant, and sends an event when `SENTRY_DSN`
+  is set. What never leaves: the query string (where single-use references
+  live), cookies, the `Authorization` header, the request body, and the person —
+  e-mail, name and IP are dropped, the tenant id stays so "how many
+  organisations does this affect" still has an answer. Headers are an
+  allow-list, so one added by a future proxy is dropped rather than forwarded.
+  The frontend half is `@sentry/nextjs` with the same rules and **no Session
+  Replay**: it records the DOM of what the person was looking at, which here is
+  a registration number or a document awaiting signature.
+
+### Added — A monitoring stack that reads the platform
+
+`deploy/docker-compose.monitoring.yml`: Prometheus, Alertmanager, Loki, Alloy,
+Grafana, node_exporter, cAdvisor, postgres_exporter, redis_exporter. Guides in
+[`docs/MONITORING.md`](docs/MONITORING.md) and, for every alert,
+[`docs/RUNBOOKS.md`](docs/RUNBOOKS.md).
+
+- **A separate compose file, brought up as a separate project.** Nothing in
+  `docker-compose.prod.yml` depends on anything in it, no service in it is in a
+  request path, and taking it down is a safe thing to do at any hour. It reaches
+  the platform by joining the platform's own Docker network as an external one,
+  so Prometheus scrapes `gerege_nexus_backend:8080` directly rather than through
+  a published port.
+- **Alerting on the error budget, not on a threshold.** The Google SRE Workbook's
+  multi-window multi-burn-rate pattern against a 99.9% objective: 14.4× over
+  1h+5m and 6× over 6h+30m page, 1× over 3d+6h opens a ticket. Both windows must
+  be over the rate, which is what stops a spike that has already ended from
+  waking anybody and what lets the alert clear itself. Every external-system rule
+  is additionally guarded by a traffic condition — without one, a system called
+  twice at 04:00 with one failure is a 50% error rate.
+- **Runbooks are part of the alert.** Each rule carries a `runbook` annotation
+  pointing at its section, and each section says what happened, what to check in
+  the first five minutes, how to fix it and when to escalate. An alert nobody
+  knows what to do about is an alert that gets silenced.
+- **Dashboards as code**, with `allowUiUpdates: false`. Four of them: API
+  overview (RED plus remaining error budget), external systems, infrastructure,
+  and resilience/volume. A panel fixed at 02:00 during an incident is worth
+  keeping, and the way to keep it is a commit rather than a row in a volume.
+- **`monitoring` database role** (migration 00044) holding `pg_monitor` and
+  nothing else — no table, no tenant row. Created without a password, because a
+  migration is a file in this repository; the operator sets one once, and
+  `docs/MONITORING.md` §2.2 is the command.
+- **No secret in the repository.** Grafana's password is required with no
+  default. Alertmanager's receivers are rendered at container start from the
+  environment, so leaving SMTP or Telegram empty genuinely disables that channel
+  instead of producing a config Alertmanager refuses to load — and a stack that
+  will not start because nobody has a mail server is a stack nobody installs.
+- **Logs, without turning Loki into Elasticsearch.** Alloy reads the Docker
+  socket read-only and attaches `container`, `service`, `level` and `deployment`.
+  `request_id` and `tenant_id` are deliberately *not* labels: each distinct value
+  would be its own stream. They stay in the line, where `| json | request_id=…`
+  finds them at query time.
+- **Uptime Kuma is documented and deliberately not deployed here.** A monitor on
+  the server it monitors goes down with it. `docs/MONITORING.md` §9 has the
+  instructions for running it somewhere else.
+
+### Added — The platform can now be measured
+
+`/metrics` carried two series: a request count and a request duration. That is
+the R and the D of RED and nothing else — no saturation, no business volume, no
+sign that a call to ХУР or eID had gone slow, and no way to tell a breach of the
+in-flight ceiling from any other 503. Everything a dashboard would need was
+missing before the dashboards were, which is why this lands before the stack
+that reads it (design: [`docs/MONITORING_AND_REPORTING_PROPOSAL.md`](docs/MONITORING_AND_REPORTING_PROPOSAL.md)).
+
+- **Saturation.** The Go runtime and process collectors are asserted rather than
+  assumed — client_golang registers both, and a test now fails if that ever
+  stops being true. The pgx pool is exported as a collector read at scrape time:
+  connections acquired, idle and total, the ceiling they are measured against,
+  and the counters for acquisitions that had to wait or were abandoned.
+- **Outbound calls.** One histogram,
+  `external_request_duration_seconds{system,operation,status}`, across ХУР, eID,
+  ДАН, the eSign HSM, Gemini and the address-verification service. It wraps the
+  call rather than the transport, because three of those six are reached through
+  clients whose `http.Client` is private to `open-gerege-core`. `system` is a
+  closed list and an unrecognised name folds into `other`, so a call site added
+  without a constant cannot widen the label set.
+- **Business volume.** `logins_total{method,result}`, `invoices_created_total`,
+  `documents_signed_total{rail,result}` and `ai_requests_total{kind}`, each
+  incremented at the one place every path through it converges — `failGoogle`
+  for one, `store.markSigned` for both e-signature rails. No tenant appears in
+  any label: that breakdown is a reporting question, answered against rows that
+  can be deleted rather than series that cannot.
+- **The load shedder is visible.** `resilience_load_shed_total` and
+  `resilience_in_flight_requests`. There is deliberately no breaker gauge: the
+  adaptive breaker the design document assumed was removed from
+  `platform/resilience` before this work began, and a gauge pinned at zero would
+  render a panel claiming every breaker is closed on a platform that has none.
+- **Logs carry the request.** Every `slog` line written while serving a request
+  now carries `request_id` and `tenant_id`, read from the context by a handler
+  wrapper rather than passed by hand through several hundred call sites. chi's
+  colour access logger is gone with it — it wrote an unparseable second format
+  into the middle of a JSON stream, named no request, and printed the raw path,
+  which for `/api/v1/verify/{ref}` meant logging a single-use credential.
+- **Audit events are kept.** New `audit_events` table (migration 00043) with the
+  00029 tenant policy, written alongside the existing log line by
+  `audit.Record` — same signature, so none of its sixty-eight call sites moved.
+  The write is best effort and bounded at one second: an audit row failing must
+  never fail the act it is recording, and the log line has already been written
+  by then. `user_id` is text and unconstrained, because the trail has to outlive
+  a deleted user and because the device handlers record `device:<id>` for an act
+  nobody signed in for.
+
 ### Added — Signing in with Google
 
 A "Google-ээр нэвтрэх" button beside eID on the platform's own sign-in screen,

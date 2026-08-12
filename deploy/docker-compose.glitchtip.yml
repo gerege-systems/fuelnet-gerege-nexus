@@ -1,0 +1,126 @@
+# GlitchTip — error tracking, as a stack of its own.
+#
+# Separate from docker-compose.monitoring.yml rather than a profile inside it,
+# for two reasons. It is four more containers and a second Postgres, which a
+# deployment should be able to decline without reading a flag; and compose
+# resolves `${VAR:?}` for every service in a file whether or not its profile is
+# active, so a required GLITCHTIP_SECRET_KEY in that file would have stopped the
+# metrics stack from starting on a deployment that never wanted error tracking.
+#
+# It speaks the Sentry protocol. That is what the backend's SENTRY_DSN and the
+# frontend's NEXT_PUBLIC_SENTRY_DSN talk to, and nothing on either side is
+# GlitchTip-specific — a hosted Sentry DSN replaces this whole file without a
+# code change.
+#
+# Bring it up:
+#   docker compose -f deploy/docker-compose.glitchtip.yml \
+#     --env-file .env.monitoring up -d
+#
+# Then create the first user (there is no open registration):
+#   docker exec -it gerege_nexus_glitchtip_web ./manage.py createsuperuser
+#
+# Required environment: GLITCHTIP_DB_PASSWORD, GLITCHTIP_SECRET_KEY. See
+# deploy/.env.monitoring.example and docs/MONITORING.md §12.
+
+name: gerege-nexus-glitchtip
+
+services:
+  # Its own database, deliberately not the platform's. An error tracker holds
+  # stack traces and event payloads from the service it is watching; putting
+  # that in the same cluster as the tenants' data means one more thing holding a
+  # connection to it, and a schema managed by somebody else's migrations.
+  postgres:
+    image: postgres:16-alpine
+    container_name: gerege_nexus_glitchtip_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: glitchtip
+      POSTGRES_USER: glitchtip
+      POSTGRES_PASSWORD: ${GLITCHTIP_DB_PASSWORD:?GLITCHTIP_DB_PASSWORD is required}
+    volumes:
+      - gerege_nexus_monitoring_glitchtip_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U glitchtip -d glitchtip"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: gerege_nexus_glitchtip_redis
+    restart: unless-stopped
+    # The Celery queue. Losing it on a restart loses at most the events still
+    # waiting to be written, so no persistence and no volume.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migrate:
+    image: glitchtip/glitchtip:v4.2.4
+    container_name: gerege_nexus_glitchtip_migrate
+    command: ["./manage.py", "migrate"]
+    environment: &glitchtip_env
+      DATABASE_URL: postgres://glitchtip:${GLITCHTIP_DB_PASSWORD}@postgres:5432/glitchtip
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?GLITCHTIP_SECRET_KEY is required}
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8000}
+      # Nobody signs themselves up for an internal error tracker. The first user
+      # is created with `manage.py createsuperuser`; leaving this on would put a
+      # registration form on whatever this ends up reachable from.
+      ENABLE_OPEN_USER_REGISTRATION: "false"
+      DEFAULT_FROM_EMAIL: ${ALERT_EMAIL_FROM:-glitchtip@localhost}
+      # consolemail:// writes invitations and alerts to the container log
+      # instead of sending them. Enough to read an invitation link out of
+      # `docker logs`; set a real URL to have them delivered.
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      CELERY_WORKER_AUTOSCALE: "1,3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: glitchtip/glitchtip:v4.2.4
+    container_name: gerege_nexus_glitchtip_web
+    restart: unless-stopped
+    environment: *glitchtip_env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - default
+      # Also on the platform network, so the backend can post events to it by
+      # container name rather than out through the host.
+      - platform
+
+  worker:
+    image: glitchtip/glitchtip:v4.2.4
+    container_name: gerege_nexus_glitchtip_worker
+    restart: unless-stopped
+    command: ["./bin/run-celery-with-beat.sh"]
+    environment: *glitchtip_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+networks:
+  # This stack's own, holding the database and the queue. Only `web` reaches
+  # beyond it.
+  default:
+    driver: bridge
+
+  platform:
+    external: true
+    name: ${NEXUS_NETWORK:-open-gerege-nexus_default}
+
+volumes:
+  gerege_nexus_monitoring_glitchtip_db:
+    name: gerege_nexus_monitoring_glitchtip_db

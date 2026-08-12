@@ -13,7 +13,7 @@ import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantCho
 import AICopilot from "@/components/AICopilot";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
-import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, MonitorCog, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { BarChart3, Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, MonitorCog, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number }
 // path is a route in this application; external_url is somewhere else. An app
@@ -45,6 +45,8 @@ const iconMap: Record<string, React.ReactNode> = {
   // products
   tags:<Tags className="w-5 h-5"/>, "badge-dollar-sign":<BadgeDollarSign className="w-5 h-5"/>,
   ruler:<Ruler className="w-5 h-5"/>, sliders:<Sliders className="w-5 h-5"/>, percent:<Percent className="w-5 h-5"/>,
+  // reports
+  "bar-chart-3":<BarChart3 className="w-5 h-5"/>,
   // inventory
   "arrow-right-left":<ArrowRightLeft className="w-5 h-5"/>, "refresh-cw":<RefreshCw className="w-5 h-5"/>,
   warehouse:<Warehouse className="w-5 h-5"/>, route:<Route className="w-5 h-5"/>, calculator:<Calculator className="w-5 h-5"/>,

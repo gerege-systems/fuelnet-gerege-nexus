@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 )
 
 type LoadShedder struct {
@@ -44,12 +45,21 @@ func NewLoadShedder(maxInFlight int64) *LoadShedder {
 }
 
 // Middleware returns HTTP middleware that sheds load when system capacity is reached.
+//
+// Both the depth and the refusals are exported to Prometheus. A shed request is
+// a 503 the caller sees and nobody here does — before this, the only trace of
+// one was an access-log line among every other 503, and there was no way to ask
+// how close to the ceiling a normal hour runs.
 func (ls *LoadShedder) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		current := atomic.AddInt64(&ls.current, 1)
-		defer atomic.AddInt64(&ls.current, -1)
+		observability.InFlightRequests.Set(float64(current))
+		defer func() {
+			observability.InFlightRequests.Set(float64(atomic.AddInt64(&ls.current, -1)))
+		}()
 
 		if current > ls.maxInFlight {
+			observability.RecordLoadShed()
 			w.Header().Set("Retry-After", "5")
 			httpx.Error(w, http.StatusServiceUnavailable, "service overloaded: load shedding active")
 			return

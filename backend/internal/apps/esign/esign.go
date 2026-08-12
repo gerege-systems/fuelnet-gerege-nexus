@@ -74,6 +74,7 @@ func New(db *pgxpool.Pool, hsm *gerege.EsignService, eid *eidmongolia.Service, e
 		exports: exports,
 	}
 	appregistry.Register(m)
+	registerReports()
 	return m
 }
 

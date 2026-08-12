@@ -1,0 +1,166 @@
+# The host, the containers, the database and the cache.
+#
+# These are threshold alerts rather than SLO alerts, and that is the right shape
+# for them: a disk at 90% is not a rate being burned, it is a wall being
+# approached, and the useful question is how long until it is hit rather than
+# how much budget is left.
+
+groups:
+  - name: nexus_infrastructure
+    rules:
+      # 85% on the root filesystem. Postgres data, container images and the
+      # monitoring stack's own volumes all live there, and the failure at 100%
+      # is not graceful: Postgres refuses writes and the platform stops
+      # accepting anything at all.
+      - alert: NexusDiskFillingUp
+        expr: |
+          (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+             / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 0.85
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Диск {{ $labels.mountpoint }} 85%-иас дүүрлээ"
+          description: >-
+            {{ $labels.mountpoint }} дээр сул зай 15%-иас бага үлдлээ. 100%
+            хүрэхэд Postgres бичихээ болино — платформ бүхэлдээ зогсоно.
+          runbook: "docs/RUNBOOKS.md#nexusdiskfillingup"
+
+      # The same wall, but close enough that the answer is not "open a ticket".
+      - alert: NexusDiskAlmostFull
+        expr: |
+          (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+             / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 0.93
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Диск {{ $labels.mountpoint }} 93%-иас дүүрлээ"
+          description: "Хэдхэн цагийн дотор бичих боломжгүй болно."
+          runbook: "docs/RUNBOOKS.md#nexusdiskfillingup"
+
+      - alert: NexusHostMemoryPressure
+        expr: |
+          (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Хостын санах ой 90%-иас дээш ашиглагдаж байна"
+          description: >-
+            Сул санах ой 10%-иас бага. Дараагийн алхам нь OOM killer бөгөөд тэр
+            нь ихэвчлэн хамгийн том процессыг — Postgres-ийг — алдаг.
+          runbook: "docs/RUNBOOKS.md#nexushostmemorypressure"
+
+      # 80% of max_connections. The pool is capped at 25 per API replica, so
+      # reaching this usually means something outside the pool is connecting —
+      # a stuck migration, a psql left open, a second stack on the same
+      # database.
+      - alert: NexusPostgresConnectionsHigh
+        expr: |
+          sum(pg_stat_activity_count)
+          /
+          clamp_min(sum(pg_settings_max_connections), 1) > 0.80
+        for: 10m
+        labels:
+          severity: ticket
+          service: postgres
+        annotations:
+          summary: "Postgres-ийн холболт 80%-иас давлаа"
+          description: >-
+            Зөвшөөрөгдсөн холболтын 80% нь эзлэгдсэн. Дүүрэхэд шинэ холболт
+            бүр татгалзагдана — API нь "failed to acquire connection" гэж
+            хариулж эхэлнэ.
+          runbook: "docs/RUNBOOKS.md#nexuspostgresconnectionshigh"
+
+      - alert: NexusPostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: page
+          service: postgres
+        annotations:
+          summary: "Postgres хариу өгөхгүй байна"
+          description: "postgres_exporter өгөгдлийн санд холбогдож чадахгүй байна."
+          runbook: "docs/RUNBOOKS.md#nexuspostgresdown"
+
+      # The pool itself, from the platform's own metrics rather than the
+      # database's. A pool that is full while Postgres is idle is a different
+      # fault from a database that is out of connections, and only this one
+      # sees it.
+      - alert: NexusDatabasePoolExhausted
+        expr: |
+          pgxpool_acquired_conns / clamp_min(pgxpool_max_conns, 1) > 0.90
+        for: 10m
+        labels:
+          severity: ticket
+          service: api
+        annotations:
+          summary: "Өгөгдлийн сангийн pool дүүрч байна"
+          description: >-
+            Pool-ын холболтын 90%-иас дээш нь эзлэгдсэн байдалтай 10 минут
+            өнгөрлөө. Хүсэлтүүд холболт хүлээж эхэлнэ — энэ нь удаашралыг
+            тайлбарлах хамгийн эхний газар.
+          runbook: "docs/RUNBOOKS.md#nexusdatabasepoolexhausted"
+
+      - alert: NexusRedisDown
+        expr: redis_up == 0
+        for: 5m
+        labels:
+          severity: ticket
+          service: redis
+        annotations:
+          summary: "Redis хариу өгөхгүй байна"
+          description: >-
+            Redis нь кэш хүчингүй болгох болон deployment-ийн хэмжээний хурдны
+            хязгаарын тоолуурыг барьдаг. Унасан ч платформ ажиллана — хязгаар нь
+            процесс тус бүрийн болж, эрх цуцлах нь бусад replica дээр
+            хоцрогдолтой хүрнэ.
+          runbook: "docs/RUNBOOKS.md#nexusredisdown"
+
+      # A container that keeps coming back is a container that keeps dying.
+      # cAdvisor reports the start time; a start time that moves is a restart.
+      - alert: NexusContainerRestarting
+        expr: |
+          changes(container_start_time_seconds{name=~"gerege_nexus_.*"}[30m]) > 3
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.name }} контейнер дахин дахин асч байна"
+          description: >-
+            Сүүлийн 30 минутад 3-аас олон удаа дахин эхэллээ. Docker-ийн
+            restart policy нь эвдрэлийг нуух гол арга — лог нь контейнер
+            бүрийн хамт алга болно.
+          runbook: "docs/RUNBOOKS.md#nexuscontainerrestarting"
+
+      # TLS. There is no blackbox exporter here — the certificate is on nginx,
+      # on the host, and node_exporter's textfile collector is what can see it.
+      # docs/MONITORING.md carries the cron job that writes the file; without
+      # it this alert never fires, which is why NexusTLSExpiryUnknown exists
+      # beside it.
+      - alert: NexusTLSCertificateExpiringSoon
+        expr: (nexus_tls_not_after_timestamp_seconds - time()) < 14 * 24 * 3600
+        for: 1h
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.domain }}-ийн TLS сертификат 14 хоногт дуусна"
+          description: >-
+            Certbot-ын автомат сунгалт ажиллаагүй байна. Дуусахад бүх браузер
+            сэрэмжлүүлэг үзүүлж, native клиентүүд огт холбогдохоо болино.
+          runbook: "docs/RUNBOOKS.md#nexustlscertificateexpiringsoon"
+
+      - alert: NexusTLSExpiryUnknown
+        expr: absent(nexus_tls_not_after_timestamp_seconds)
+        for: 6h
+        labels:
+          severity: ticket
+        annotations:
+          summary: "TLS-ийн хугацааг хэмжих өгөгдөл алга"
+          description: >-
+            node_exporter-ийн textfile collector-т сертификатын хугацаа
+            бичигдэхээ больсон байна — cron ажил унтарсан эсвэл зам буруу.
+            Энэ нь өөрөө асуудал биш ч, сертификат дуусахыг хэн ч мэдэхгүй
+            гэсэн үг.
+          runbook: "docs/RUNBOOKS.md#nexustlsexpiryunknown"

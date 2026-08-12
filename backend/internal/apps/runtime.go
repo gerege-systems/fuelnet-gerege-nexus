@@ -17,6 +17,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/publisher_studio"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/store_review"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
@@ -33,7 +34,13 @@ type Runtime struct {
 	Background []BackgroundModule
 }
 
-func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmongolia.Service, sso *ssoprovider.SSOProvider) Runtime {
+// InstalledApps is how the platform tells the reports module which apps a
+// tenant has. Passed in rather than queried there, so there is one answer to
+// that question on this deployment and one place it is cached.
+type InstalledApps = reports.InstalledApps
+
+func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmongolia.Service,
+	sso *ssoprovider.SSOProvider, installedApps InstalledApps) Runtime {
 	// First, and not merely in order: core is what the others assume. It is the
 	// organisation, the people in it and how it is arranged — the module Odoo
 	// calls base and never lets you uninstall.
@@ -55,5 +62,9 @@ func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmo
 	publisher_studio.New(db)
 	store_review.New(db)
 	esignModule := esign.New(db, gerege.NewEsignService(), eidMN, integrations)
-	return Runtime{Background: []BackgroundModule{esignModule}}
+	// Last, and after every module that registers a report: the reports app
+	// serves the registry, and a module constructed after it would have its
+	// reports missing from the first listing until something else rebuilt it.
+	reportsModule := reports.New(db, installedApps)
+	return Runtime{Background: []BackgroundModule{esignModule, reportsModule}}
 }

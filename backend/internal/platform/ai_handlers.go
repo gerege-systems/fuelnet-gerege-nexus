@@ -18,11 +18,13 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 )
 
 func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
+	observability.RecordAIRequest("copilot")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -50,6 +52,7 @@ func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
+	observability.RecordAIRequest("chat")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -69,6 +72,7 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAISTT(w http.ResponseWriter, r *http.Request) {
+	observability.RecordAIRequest("stt")
 	var req struct {
 		Audio ai.Audio `json:"audio"`
 	}
@@ -85,6 +89,7 @@ func (s *Server) handleAISTT(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
+	observability.RecordAIRequest("tts")
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -101,6 +106,7 @@ func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAITranslate(w http.ResponseWriter, r *http.Request) {
+	observability.RecordAIRequest("translate")
 	var req struct {
 		Text   string    `json:"text"`
 		Audio  *ai.Audio `json:"audio"`
@@ -241,6 +247,7 @@ func decodeLimitedJSON(r *http.Request, dst any, max int64) error {
 func aiStatus(error) int { return http.StatusBadGateway }
 
 func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
+	observability.RecordAIRequest("forecast")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return

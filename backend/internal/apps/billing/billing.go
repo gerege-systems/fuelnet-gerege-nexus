@@ -18,6 +18,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,7 @@ type BillingModule struct {
 func New(db *pgxpool.Pool) *BillingModule {
 	m := &BillingModule{db: db}
 	appregistry.Register(m)
+	registerReports()
 	return m
 }
 
@@ -146,6 +148,7 @@ func (m *BillingModule) CreateInvoice(ctx context.Context, tenantID, contactName
 		return nil, fmt.Errorf("create invoice: %w", err)
 	}
 
+	observability.RecordInvoiceCreated()
 	return &inv, nil
 }
 

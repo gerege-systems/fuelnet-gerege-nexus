@@ -20,6 +20,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
@@ -49,10 +50,11 @@ const (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	slog.SetDefault(logger)
+	// JSON, as before, but wrapped so that request_id and tenant_id ride along
+	// on every line written while a request is being served. Without that, a
+	// log line in Loki can only be found by its text, and the four lines one
+	// failing request produced are scattered among everyone else's.
+	observability.SetupLogging(slog.LevelInfo)
 	if err := config.ValidateProduction(); err != nil {
 		slog.Error("invalid production configuration", "error", err)
 		os.Exit(1)
@@ -82,6 +84,17 @@ func main() {
 		}()
 	}
 
+	// Panics and unhandled errors, grouped by what broke rather than scattered
+	// through the log. Off without SENTRY_DSN.
+	shutdownErrors, err := observability.SetupErrorTracking("gerege-nexus", os.Getenv("ENVIRONMENT"))
+	if err != nil {
+		slog.Error("failed to setup error tracking", "error", err)
+	} else {
+		defer func() {
+			_ = shutdownErrors(ctx)
+		}()
+	}
+
 	// Connect to shared-schema PostgreSQL database pool
 	poolConfig, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
@@ -99,12 +112,26 @@ func main() {
 	guard := &dbguard.Guard{}
 	guard.Install(poolConfig)
 
+	// A span per query, so a slow request shows which statement it waited on
+	// rather than a gap between two spans. Also dormant without tracing.
+	observability.InstrumentPool(poolConfig)
+
 	db, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		slog.Error("failed to connect to postgres pool", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	// Saturation: how full the pool is, and how often a caller had to wait for
+	// it. This is the half of the golden signals /metrics could not answer, and
+	// it is the first thing to look at when latency rises without traffic
+	// rising with it.
+	observability.RegisterPoolCollector(db)
+
+	// Where audit rows go. Before this the trail was stdout only — unsearchable
+	// and gone with the container.
+	audit.UseDatabase(db)
 
 	databaseReachable := db.Ping(ctx) == nil
 	if !databaseReachable {

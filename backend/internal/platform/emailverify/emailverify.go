@@ -30,6 +30,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -357,6 +358,11 @@ type sendResponse struct {
 // 5xx are worth retrying, and anything unrecognised is treated as upstream
 // rather than as success.
 func (s *Service) requestSend(ctx context.Context, address, returnURL string) (time.Time, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemEmailVerify, "send",
+		func(ctx context.Context) (time.Time, error) { return s.doRequestSend(ctx, address, returnURL) })
+}
+
+func (s *Service) doRequestSend(ctx context.Context, address, returnURL string) (time.Time, error) {
 	payload, err := json.Marshal(map[string]string{
 		"email":        address,
 		"redirect_url": returnURL,
@@ -453,6 +459,11 @@ func (s *Service) Confirm(ctx context.Context, ref string) (*Verification, error
 
 // Health asks the provider whether it is up. Unauthenticated by its own design.
 func (s *Service) Health(ctx context.Context) error {
+	return observability.ObserveExternal(ctx, observability.SystemEmailVerify, "health",
+		func(ctx context.Context) error { return s.health(ctx) })
+}
+
+func (s *Service) health(ctx context.Context) error {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, ProviderURL()+"/health", nil)
 	if err != nil {
 		return err

@@ -28,6 +28,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
@@ -98,6 +99,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			s.recordLoginFailure(r.Context(), userID)
 		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
+		observability.RecordLogin(observability.LoginPassword, false)
 		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
@@ -111,6 +113,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	auth.SetSessionCookie(w, token, expiresAt)
 
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{"email": req.Email})
+	observability.RecordLogin(observability.LoginPassword, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{

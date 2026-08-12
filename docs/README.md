@@ -64,6 +64,11 @@ Spanish) — seven in total.
 | [`GOV_SERVICES_WORKFLOW.md`](GOV_SERVICES_WORKFLOW.md) | EN | Тохируулж болох төрийн үйлчилгээний урсгал, шилжүүлэлт, баталгаажуулалт |
 | [`DOCUMENTS_SIGNING.md`](DOCUMENTS_SIGNING.md) | EN | Цахим баримтын гарын үсэг ба батламжийн урсгал |
 | [`APPSTORE_OPERATIONS.md`](APPSTORE_OPERATIONS.md) | EN | Апп сторын каталог нийтлэх, хувилбар шилжүүлэх ажиллагаа |
+| [`REPORTS.md`](REPORTS.md) | MN | Тайлангийн хөдөлгүүр: шинэ тайлан нэмэх, хамгаалалт, товлосон илгээлт |
+| [`REPORT_SHARING.md`](REPORT_SHARING.md) | MN | Тенант дамнасан тайлан: grant, counterparty хүрээ, хоёр талын audit |
+| [`MONITORING.md`](MONITORING.md) | MN | Ажиглалтын стек: асаах, Grafana, лог хайх, шинэ хэмжүүр нэмэх |
+| [`RUNBOOKS.md`](RUNBOOKS.md) | MN | Дохио бүрд: юу болсон, юу шалгах, яаж засах, хэзээ өргөжүүлэх |
+| [`MONITORING_AND_REPORTING_PROPOSAL.md`](MONITORING_AND_REPORTING_PROPOSAL.md) | MN | Ажиглалт ба тайлангийн давхаргын дизайны санал |
 | [`TRANSLATION_GUIDE.md`](TRANSLATION_GUIDE.md) | MN | Долоон хэлний толь бичиг, орчуулга нэмэх урсгал |
 
 ## Төслийн журам — Project governance

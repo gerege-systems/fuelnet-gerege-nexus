@@ -1,0 +1,83 @@
+# Loki, single-binary, on the filesystem.
+#
+# One server, one process, no object store and no ring to speak of. The
+# microservices deployment Loki is usually shown as exists to scale ingestion
+# across machines; here it would be six containers coordinating over a network
+# that has one hop in it.
+#
+# What Loki stores is the log line, compressed, with an index over the labels
+# only. That is the property that makes it fit beside Postgres on the same disk
+# where Elasticsearch would not: no full-text index is built, so the disk cost
+# is roughly the compressed size of the logs themselves.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  # Loki's own logs, at info. Debug here is a surprising amount of output on a
+  # machine whose disk this config is trying to be careful with.
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 31 days, matching retention_period below. Anything older is deleted by the
+  # compactor.
+  retention_period: 744h
+  # A container that starts logging a stack trace per request must not be able
+  # to fill the disk before anybody notices. Over the limit, Loki refuses the
+  # write and says so in its own metrics — which NexusLokiRejectingLogs sees.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  # Labels are the index. A label whose value comes from the log line itself —
+  # a request id, a tenant, a path — is what turns Loki into an expensive
+  # Elasticsearch: each distinct value is a separate stream. Alloy attaches
+  # container, service and level and nothing else; this is the ceiling that
+  # catches a mistake there.
+  max_label_names_per_series: 15
+  # Lines from a container whose clock has drifted, or from a restarted
+  # container replaying its file, arrive out of order. Accept a window rather
+  # than dropping them.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+
+compactor:
+  working_directory: /loki/compactor
+  # Without this, retention_period above is documentation: nothing deletes.
+  retention_enabled: true
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  retention_delete_delay: 2h
+
+# No alerting from logs. Prometheus is where the alerts are, the rules are
+# already written against metrics, and a second alerting path with its own
+# routing is how two systems end up disagreeing about whether anything is wrong.
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+analytics:
+  reporting_enabled: false

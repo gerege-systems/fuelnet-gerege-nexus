@@ -1,0 +1,72 @@
+# Tempo, single-binary, on the filesystem.
+#
+# The third pillar, and the cheapest of the three to store: Tempo builds no
+# index over span contents at all. A trace is found by its id — which arrives
+# from a log line's trace_id, from an alert, or from Grafana's search over the
+# metrics Tempo generates itself — and the traces nobody looks up cost only
+# disk.
+#
+# 72 hours of retention. A trace is read within minutes or hours of the request
+# it describes, while somebody is investigating; nobody opens a three-week-old
+# trace, and at 10% sampling three weeks of them is a lot of disk to hold for
+# that.
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  log_level: info
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        # HTTP only. The backend's exporter is otlptracehttp, and an open gRPC
+        # port nothing sends to is a listener to keep patched for no reason.
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  # How long a trace's spans are held in memory waiting for the rest of them.
+  # A request that takes twenty seconds — an eID poll — must not have its early
+  # spans flushed before its last one arrives, or the trace comes back in
+  # pieces.
+  trace_idle_period: 30s
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 72h
+    compacted_block_retention: 1h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+    pool:
+      max_workers: 20
+      queue_depth: 2000
+
+# Span metrics and the service graph, generated from the spans themselves and
+# written to Prometheus. This is what makes the traces searchable without an
+# index: Grafana's Tempo search starts from a service and an operation, and
+# those come from here.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://gerege_nexus_prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+
+usage_report:
+  reporting_enabled: false

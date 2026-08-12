@@ -63,7 +63,12 @@ func NewCopilotService(db *pgxpool.Pool) *CopilotService {
 	if voice == "" {
 		voice = "Kore"
 	}
-	return &CopilotService{db: db, chat: gemini.NewClient(base, key, chatModel), tts: gemini.NewClient(base, key, ttsModel), voice: voice}
+	return &CopilotService{
+		db:    db,
+		chat:  observe(gemini.NewClient(base, key, chatModel), "generate"),
+		tts:   observe(gemini.NewClient(base, key, ttsModel), "tts"),
+		voice: voice,
+	}
 }
 
 func (s *CopilotService) Query(ctx context.Context, req CopilotRequest) (*CopilotResponse, error) {

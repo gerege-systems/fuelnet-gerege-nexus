@@ -1,0 +1,21 @@
+{{/*
+  The Telegram message. Three things, in the order somebody woken at night
+  needs them: what broke, on which deployment, and where the runbook is.
+
+  Deliberately not a dump of every label. A message that has to be scrolled is
+  a message that gets glanced at, and the labels are one tap away in
+  Alertmanager's own UI.
+*/}}
+{{ define "telegram.nexus" }}
+{{ if eq .Status "firing" }}🔴 <b>{{ .CommonLabels.severity | toUpper }}</b>{{ else }}✅ <b>ШИЙДЭГДЛЭЭ</b>{{ end }} — {{ .CommonLabels.deployment }}
+
+{{ range .Alerts -}}
+<b>{{ .Annotations.summary }}</b>
+{{ .Annotations.description }}
+{{ if .Annotations.runbook }}Runbook: <code>{{ .Annotations.runbook }}</code>{{ end }}
+{{ if .Labels.system }}Систем: <code>{{ .Labels.system }}</code>{{ end }}
+{{ if .Labels.name }}Контейнер: <code>{{ .Labels.name }}</code>{{ end }}
+Эхэлсэн: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+
+{{ end -}}
+{{ end }}

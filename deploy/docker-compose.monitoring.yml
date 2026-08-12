@@ -1,0 +1,319 @@
+# The monitoring stack for Gerege Nexus.
+#
+# A separate compose file, brought up as a separate project, deliberately: if
+# this whole stack falls over, the platform does not notice. Nothing in
+# docker-compose.prod.yml depends on anything here, no service here is in the
+# platform's request path, and `docker compose -f docker-compose.monitoring.yml
+# down` is a safe thing to do at any hour.
+#
+# It reaches the platform over the platform's own Docker network, joined here as
+# an external network. That is what lets Prometheus scrape
+# gerege_nexus_backend:8080 and postgres_exporter reach gerege_nexus_postgres
+# without either of them going out through the host's published ports — which
+# are bound to loopback for an operator with an SSH tunnel, not for
+# container-to-container traffic.
+#
+# Bring it up:
+#   cd /opt/open-gerege-nexus
+#   docker compose -f deploy/docker-compose.monitoring.yml --env-file .env.monitoring up -d
+#
+# Full instructions, including the one manual step (the monitoring database
+# password), are in docs/MONITORING.md.
+#
+# Required environment: see deploy/.env.monitoring.example. Everything has a
+# default except GRAFANA_ADMIN_PASSWORD, which is required on purpose — a
+# Grafana on admin/admin behind a public nginx is an open dashboard of somebody
+# else's infrastructure.
+
+name: gerege-nexus-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: gerege_nexus_prometheus
+    restart: unless-stopped
+    user: "65534:65534"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 60 days, as the proposal asks. The size cap is the backstop: retention
+      # by time alone lets a sudden increase in series fill the disk, and a
+      # Prometheus that fills the disk takes Postgres down with it.
+      - --storage.tsdb.retention.time=60d
+      - --storage.tsdb.retention.size=20GB
+      - --web.enable-lifecycle
+      # Tempo's metrics generator writes the span metrics and the service graph
+      # here. Without this flag Prometheus refuses the writes and Tempo's search
+      # has nothing to start from.
+      - --web.enable-remote-write-receiver
+      # ${DEPLOYMENT_NAME} in external_labels is expanded by this flag and by
+      # nothing else — Prometheus does not otherwise read the environment.
+      - --enable-feature=expand-external-labels
+    environment:
+      DEPLOYMENT_NAME: ${DEPLOYMENT_NAME:-nexus}
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - gerege_nexus_monitoring_prometheus:/prometheus
+    ports:
+      - "127.0.0.1:9091:9090"
+    networks:
+      - monitoring
+      - platform
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: gerege_nexus_alertmanager
+    restart: unless-stopped
+    user: "65534:65534"
+    # The renderer writes the finished config to /tmp, because /etc/alertmanager
+    # is mounted read-only and the finished config carries an SMTP password.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        /etc/alertmanager/render-config.sh &&
+        exec /bin/alertmanager
+        --config.file=/tmp/alertmanager.yml
+        --storage.path=/alertmanager
+        --web.external-url=${MONITORING_PUBLIC_URL:-http://localhost:9093}/alertmanager
+        --web.route-prefix=/
+    environment:
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER:-}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD:-}
+      ALERT_SMTP_REQUIRE_TLS: ${ALERT_SMTP_REQUIRE_TLS:-true}
+      ALERT_TELEGRAM_TOKEN: ${ALERT_TELEGRAM_TOKEN:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - gerege_nexus_monitoring_alertmanager:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks:
+      - monitoring
+
+  # Traces. Does nothing at all until a backend is started with
+  # OTEL_EXPORTER_OTLP_ENDPOINT pointing at it, which is the deployment's
+  # decision rather than this file's.
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: gerege_nexus_tempo
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["-config.file=/etc/tempo/tempo-config.yml"]
+    volumes:
+      - ./monitoring/tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - gerege_nexus_monitoring_tempo:/var/tempo
+    ports:
+      # 3200 is Tempo's own API, which Grafana queries. 4318 is where the
+      # platform posts spans — on the platform network, so the backend
+      # container can reach it by name.
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4318:4318"
+    networks:
+      - monitoring
+      - platform
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3200/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: gerege_nexus_loki
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - gerege_nexus_monitoring_loki:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      # Loki reports itself not ready for the first fifteen seconds or so while
+      # the ingester joins its own ring. Without the grace period, compose
+      # marks it unhealthy on a cold start and alloy waits for a container that
+      # is fine.
+      start_period: 60s
+
+  # The log collector. It reads the Docker socket read-only: it needs to know
+  # which containers exist and to follow their output, and it needs nothing
+  # else — no ability to start, stop or exec into anything. A socket mounted
+  # read-write here would be root on the host by another name.
+  alloy:
+    image: grafana/alloy:v1.7.1
+    container_name: gerege_nexus_alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      DEPLOYMENT_NAME: ${DEPLOYMENT_NAME:-nexus}
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - gerege_nexus_monitoring_alloy:/var/lib/alloy/data
+    ports:
+      - "127.0.0.1:12345:12345"
+    networks:
+      - monitoring
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: gerege_nexus_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      # Served under /grafana by the nginx snippet, so it has to know its own
+      # root or every link it generates points at the bare domain.
+      GF_SERVER_ROOT_URL: ${MONITORING_PUBLIC_URL:-http://localhost:3000}/grafana
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # Nobody signs up for an operations dashboard.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # The alerting UI reads Prometheus's rules and Alertmanager's state.
+      # Grafana's own alerting engine is off: two systems evaluating two sets
+      # of rules is two answers to "is anything wrong".
+      GF_UNIFIED_ALERTING_ENABLED: "false"
+      GF_ALERTING_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - gerege_nexus_monitoring_grafana:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3009:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  node_exporter:
+    image: prom/node-exporter:v1.9.0
+    container_name: gerege_nexus_node_exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      # Where the TLS expiry cron writes its file. See docs/MONITORING.md —
+      # without that job, NexusTLSExpiryUnknown fires and says so.
+      - --collector.textfile.directory=/host/var/lib/node_exporter
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "127.0.0.1:9100:9100"
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: gerege_nexus_cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      # cAdvisor collects far more than this deployment reads, and each
+      # collector costs CPU on a machine that is also running the platform.
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --disable_metrics=percpu,sched,tcp,udp,advtcp,process,hugetlb,referenced_memory,cpu_topology,resctrl
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    ports:
+      - "127.0.0.1:8085:8080"
+    networks:
+      - monitoring
+
+  # Reads pg_stat_* as the `monitoring` role created by migration 00044, which
+  # holds pg_monitor and nothing else. Not as postgres: an exporter compromised
+  # while running as superuser is the whole database.
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    container_name: gerege_nexus_postgres_exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: >-
+        postgresql://monitoring:${MONITORING_DB_PASSWORD:?MONITORING_DB_PASSWORD is required}@gerege_nexus_postgres:5432/platform_db?sslmode=disable
+      PG_EXPORTER_EXCLUDE_DATABASES: template0,template1
+    ports:
+      - "127.0.0.1:9187:9187"
+    networks:
+      - monitoring
+      - platform
+
+  redis_exporter:
+    image: oliver006/redis_exporter:v1.69.0
+    container_name: gerege_nexus_redis_exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://gerege_nexus_redis:6379
+    ports:
+      - "127.0.0.1:9121:9121"
+    networks:
+      - monitoring
+      - platform
+
+networks:
+  # Between the pieces of this stack. Internal: nothing here needs to reach the
+  # internet except Alertmanager, which does so through the default gateway on
+  # the bridge below rather than through this one.
+  monitoring:
+    driver: bridge
+
+  # The platform's own network, joined rather than created. The name is the
+  # compose project's default network, which is derived from the directory the
+  # platform stack is deployed in — /opt/open-gerege-nexus on the production
+  # host. Override NEXUS_NETWORK if yours differs; `docker network ls` says
+  # which it is.
+  platform:
+    external: true
+    name: ${NEXUS_NETWORK:-open-gerege-nexus_default}
+
+volumes:
+  # Named the way docker-compose.prod.yml names its volumes, and pinned for the
+  # same reason: compose otherwise derives the name from the project directory,
+  # so moving the stack silently brings Prometheus up on an empty data
+  # directory — healthy container, no history, no sign anything was lost.
+  gerege_nexus_monitoring_prometheus:
+    name: gerege_nexus_monitoring_prometheus
+  gerege_nexus_monitoring_tempo:
+    name: gerege_nexus_monitoring_tempo
+  gerege_nexus_monitoring_alertmanager:
+    name: gerege_nexus_monitoring_alertmanager
+  gerege_nexus_monitoring_loki:
+    name: gerege_nexus_monitoring_loki
+  gerege_nexus_monitoring_alloy:
+    name: gerege_nexus_monitoring_alloy
+  gerege_nexus_monitoring_grafana:
+    name: gerege_nexus_monitoring_grafana

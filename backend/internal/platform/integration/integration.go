@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -317,6 +318,10 @@ func (m *Manager) deliver(ctx context.Context, tenantID string, t dispatchTarget
 	attempts := len(deliveryBackoff) + 1
 	for attempt := range attempts {
 		if attempt > 0 {
+			// The name is a constant, not the subscriber's URL: that is a value
+			// a tenant types in, and a Prometheus label taken from one is
+			// unbounded cardinality driven by user input.
+			observability.RecordRetry("integration_delivery")
 			select {
 			case <-time.After(deliveryBackoff[attempt-1]):
 			case <-ctx.Done():

@@ -53,6 +53,7 @@ type Module struct {
 func New(db *pgxpool.Pool, allowNegativeStock bool) *Module {
 	m := &Module{db: db, allowNegativeStock: allowNegativeStock}
 	appregistry.Register(m)
+	registerReports()
 	return m
 }
 

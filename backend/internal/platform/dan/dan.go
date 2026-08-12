@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 )
 
 type DANProfile struct {
@@ -66,6 +67,11 @@ var ErrUnavailable = errors.New("dan.gerege.mn is not available")
 
 // VerifyDANToken verifies an active SSO session token issued by dan.gerege.mn
 func (s *DANService) VerifyDANToken(ctx context.Context, danToken string) (*DANProfile, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemDAN, "verify_token",
+		func(context.Context) (*DANProfile, error) { return s.verifyDANToken(danToken) })
+}
+
+func (s *DANService) verifyDANToken(danToken string) (*DANProfile, error) {
 	if danToken == "" {
 		return nil, errors.New("empty DAN SSO token")
 	}
@@ -97,6 +103,11 @@ func (s *DANService) VerifyDANToken(ctx context.Context, danToken string) (*DANP
 
 // AuthenticateDANCitizen authenticates Mongolian citizen via dan.gerege.mn OTP/PKI gateway
 func (s *DANService) AuthenticateDANCitizen(ctx context.Context, regNumber, otpCode string) (*DANProfile, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemDAN, "authenticate",
+		func(context.Context) (*DANProfile, error) { return s.authenticateDANCitizen(regNumber, otpCode) })
+}
+
+func (s *DANService) authenticateDANCitizen(regNumber, otpCode string) (*DANProfile, error) {
 	cleanReg := strings.ToUpper(strings.TrimSpace(regNumber))
 	if len(cleanReg) < 8 {
 		return nil, errors.New("invalid registration number: minimum 8 characters required")
