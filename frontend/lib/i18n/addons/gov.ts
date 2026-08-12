@@ -100,7 +100,6 @@ export const gov = {
   "gov.field.appointment_mode": { mn: "Уулзалтын хэлбэр", en: "Appointment mode" },
   "gov.state.in_person": { mn: "Биечлэн", en: "In person" },
   "gov.state.online": { mn: "Цахимаар", en: "Online" },
-  "gov.field.meeting_link": { mn: "Холбогдох линк", en: "Joining link" },
   "gov.action.join_meeting": { mn: "Уулзалтад нэгдэх", en: "Join the meeting" },
   // The slot is booked either way. A conferencing outage must not cost the
   // citizen their appointment, so the failure is reported, not thrown.

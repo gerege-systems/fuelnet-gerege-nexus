@@ -11,15 +11,12 @@ export const developer = {
   "developer.view.empty_title": { mn: "Бүртгэлтэй апп алга", en: "No applications yet" },
   "developer.view.empty_body": { mn: "Гуравдагч систем Gerege-ээр дамжуулан нэвтрэхийн тулд эхлээд OAuth2 client бүртгэнэ.", en: "Register an OAuth2 client so a third-party system can sign users in through Gerege." },
 
-  "developer.field.discovery_endpoint": { mn: "OIDC Discovery хаяг", en: "OIDC Discovery Endpoint" },
   "developer.field.redirect_uris": { mn: "Redirect URI-ууд", en: "Redirect URIs" },
   "developer.field.scopes": { mn: "Scope-ууд", en: "Scopes" },
   "developer.field.name": { mn: "Аппын нэр", en: "Application name" },
   "developer.field.client_type": { mn: "Клиентийн төрөл", en: "Client type" },
   "developer.field.grant_types": { mn: "Grant төрлүүд", en: "Grant types" },
   "developer.field.homepage": { mn: "Вэб хаяг", en: "Homepage URL" },
-  "developer.field.client_id": { mn: "Client ID", en: "Client ID" },
-  "developer.field.client_secret": { mn: "Client secret", en: "Client secret" },
   "developer.field.last_used": { mn: "Сүүлд ашигласан", en: "Last used" },
   "developer.field.created": { mn: "Үүсгэсэн", en: "Created" },
 
@@ -31,25 +28,10 @@ export const developer = {
   "developer.action.create": { mn: "OAuth2 client бүртгэх", en: "Register OAuth2 Client" },
   "developer.action.rotate": { mn: "Secret солих", en: "Rotate secret" },
   "developer.action.disable": { mn: "Идэвхгүй болгох", en: "Disable" },
-  "developer.action.enable": { mn: "Идэвхжүүлэх", en: "Enable" },
-  "developer.action.copy": { mn: "Хуулах", en: "Copy" },
-  "developer.action.copied": { mn: "Хуулагдлаа", en: "Copied" },
   "developer.action.done": { mn: "Ойлголоо", en: "Got it" },
 
   "developer.message.loading": { mn: "OAuth2 client аппуудыг ачаалж байна...", en: "Loading OAuth2 client apps..." },
   "developer.message.secret_hidden": { mn: "үүсгэх үед нэг удаа харагдана", en: "shown once, at creation" },
-
-  "developer.view.provider_active": { mn: "SSO үйлчилгээ идэвхтэй", en: "Active SSO Provider" },
-
-  "developer.field.application_name": { mn: "Аппликейшны нэр", en: "Application Name" },
-  // Client ID and Client Secret are the OAuth2 parameter names a developer
-  // copies verbatim, so they stay Latin in every locale — translating the label
-  // away from the thing it names would be a worse screen, not a better one.
-  "developer.field.redirect_uris_hint": { mn: "Redirect URI-ууд (таслалаар тусгаарлана)", en: "Redirect URIs (comma-separated)" },
-
-  "developer.action.register": { mn: "Апп бүртгэх", en: "Register App" },
-
-  "developer.message.create_failed": { mn: "OAuth2 апп үүсгэж чадсангүй", en: "Failed to create OAuth2 app" },
 
   "developer.message.secret_once_title": { mn: "Secret-ийг одоо хуулж аваарай", en: "Copy this secret now" },
   "developer.message.secret_once_body": { mn: "Бид зөвхөн хэшийг нь хадгалдаг тул энэ цонхыг хаасны дараа secret дахин харагдахгүй. Алдвал шинээр солино.", en: "Only a digest is stored, so this cannot be shown again once you close this. If you lose it, rotate for a new one." },
@@ -117,7 +99,6 @@ export const developer = {
   "oauth.consent.will_be_able": { mn: "Энэ апп дараахыг хийх боломжтой болно:", en: "This application will be able to:" },
   "oauth.consent.already_granted": { mn: "Өмнө нь зөвшөөрсөн", en: "Already granted" },
   "oauth.consent.sensitive": { mn: "Эмзэг", en: "Sensitive" },
-  "oauth.consent.signed_in_as": { mn: "Нэвтэрсэн:", en: "Signed in as" },
   "oauth.consent.redirect_note": { mn: "Зөвшөөрвөл таныг энэ хаяг руу буцаана:", en: "If you allow this, you will be returned to:" },
   "oauth.consent.allow": { mn: "Зөвшөөрөх", en: "Allow" },
   "oauth.consent.deny": { mn: "Татгалзах", en: "Deny" },

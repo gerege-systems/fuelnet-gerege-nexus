@@ -17,12 +17,10 @@ export const emailverify = {
   "emailverify.stat.verified": { mn: "Баталгаажсан", en: "Verified" },
   "emailverify.stat.pending": { mn: "Хүлээгдэж буй", en: "Pending" },
   "emailverify.stat.expired": { mn: "Хугацаа дууссан", en: "Expired" },
-  "emailverify.stat.last_24h": { mn: "Сүүлийн 24 цаг", en: "Last 24 hours" },
   "emailverify.stat.verified_pct": { mn: "Баталгаажсан хувь", en: "Verified rate" },
 
   "emailverify.field.source": { mn: "Хүссэн", en: "Requested by" },
   "emailverify.field.purpose": { mn: "Зорилго", en: "Purpose" },
-  "emailverify.field.redirect_url": { mn: "Буцах хаяг", en: "Redirect URL" },
   "emailverify.field.provider": { mn: "Үйлчилгээ", en: "Service" },
   "emailverify.field.return_url": { mn: "Хариу хүлээн авах хаяг", en: "Return address" },
 

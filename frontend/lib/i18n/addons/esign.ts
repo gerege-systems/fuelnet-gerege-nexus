@@ -150,12 +150,6 @@ export const esign = {
   "esign.state.token_present": { mn: "Тохируулсан", en: "Configured" },
   "esign.state.token_missing": { mn: "Тохируулаагүй", en: "Not configured" },
 
-  "esign.session.pending": { mn: "Хүлээгдэж буй", en: "Pending" },
-  "esign.session.completed": { mn: "Баталгаажсан", en: "Completed" },
-  "esign.session.failed": { mn: "Амжилтгүй", en: "Failed" },
-  "esign.session.expired": { mn: "Хугацаа дууссан", en: "Expired" },
-  "esign.session.rejected": { mn: "Татгалзсан", en: "Rejected" },
-
   "esign.batch.draft": { mn: "Ноорог", en: "Draft" },
   "esign.batch.running": { mn: "Явагдаж буй", en: "Running" },
   "esign.batch.completed": { mn: "Дууссан", en: "Completed" },
@@ -185,7 +179,6 @@ export const esign = {
   "esign.action.upload": { mn: "PDF оруулах", en: "Upload a PDF" },
   "esign.action.submit_upload": { mn: "Оруулах", en: "Upload" },
   "esign.action.pick_pdf": { mn: "PDF файл сонгох", en: "Choose a PDF" },
-  "esign.action.sign": { mn: "Гарын үсэг зурах", en: "Sign" },
   "esign.action.sign_eid": { mn: "eID", en: "eID" },
   "esign.action.sign_hsm": { mn: "HSM", en: "HSM" },
   "esign.action.sign_another": { mn: "Шинээр зурах", en: "Sign another" },
@@ -371,8 +364,4 @@ export const esign = {
 
   "esign.message.policy_saved": { mn: "Бодлогыг хадгаллаа.", en: "The policy was saved." },
 
-  "esign.action.export": { mn: "Үүлэн санд хадгалах", en: "Send to cloud storage" },
-  "esign.message.exported": { mn: "{count} хаяг руу хадгаллаа", en: "Filed to {count} destination(s)" },
-  "esign.message.export_failed": { mn: "Үүлэн санд хадгалж чадсангүй", en: "Could not file the document" },
-  "esign.message.no_destination": { mn: "Автоматаар хүлээн авах холбогдсон хаяг алга байна. Тохиргоо → Интеграц хэсгээс нэмнэ үү.", en: "No connected destination is set to receive documents. Add one under Settings → Integrations." },
 } as const;
