@@ -178,3 +178,84 @@ Repo-д git tag байхгүй тул `git describe` нь `31e63f30` маяги�
 
 Буцаах: `deploy-appstore.yml` → `workflow_dispatch` → өмнөх commit sha-г `tag`-аар
 өгнө. Image бүр sha tag-тай тул буцаалт нь шинэ build шаарддаггүй.
+
+---
+
+## 6. Nexus платформ руу нүүлгэх (Ш5–Ш7)
+
+Registry, publisher studio, review queue гурав Nexus модуль болсон. Хуучин
+тусдаа сервисээс энэ рүү шилжих алхмууд.
+
+### 6.1 Юу өөрчлөгдөх вэ
+
+| Байсан | Болсон |
+|---|---|
+| `cmd/appstore` тусдаа сервис | `io.gerege.nexus.appstore_registry` модуль |
+| `developer.gerege.mn` тусдаа Next.js консол | `io.gerege.nexus.publisher_studio` модуль |
+| `APPSTORE_ADMIN_EMAILS` env | `store_review.decide` эрх (роль дээр) |
+| Нэг хүн = нэг publisher | **Publisher = Tenant** |
+| `appstore_db` тусдаа схем | Nexus-ийн схем дэх `store_*` хүснэгтүүд |
+
+`/api/v1/registry/catalog`-ийн **гэрээ огт өөрчлөгдөөгүй**. Талбар дахь
+instance-үүд юу ч мэдрэхгүй.
+
+### 6.2 Шинэ instance босгох
+
+```bash
+# Каталог нь энгийн Nexus каталог — зөвхөн өөр файл.
+APP_CATALOG_PATH=/app/catalog/profiles/appstore/apps.json
+APPSTORE_SIGNING_KEY=<хуучин registry-гийнхтэй ИЖИЛ түлхүүр>
+APPSTORE_SIGNING_KEY_ID=appstore-2026
+```
+
+Түлхүүрийг ижил байлгах нь чухал: instance бүр `APPSTORE_PUBLIC_KEY`-г
+хатуу тогтоосон байдаг тул шинэ түлхүүрээр зурсан каталогийг бүгд хаяна.
+
+### 6.3 Өгөгдөл шилжүүлэх
+
+```bash
+# Эхлээд юу болохыг харна — юу ч бичихгүй (өгөгдмөл).
+go run ./cmd/appstore-import \
+  -from "postgres://…/appstore_db" -to "$DATABASE_URL"
+
+# Тохирвол бичнэ.
+go run ./cmd/appstore-import \
+  -from "postgres://…/appstore_db" -to "$DATABASE_URL" -dry-run=false
+```
+
+Publisher бүр **тенант** болно (slug хэвээр — storefront-ийн URL хөдлөхгүй),
+эзэмшигч нь **хэрэглэгч + админ гишүүнчлэл** авна. Хоёр удаа ажиллуулж
+болно: бүх бичилт нөхцөлтэй, эх өгөгдөлд хүрэхгүй.
+
+Каталогийн snapshot **хуулагдахгүй** — шинэ instance дээр дахин угсарч,
+дахин гарын үсэг зурна. Хуулбарлавал §6.4-ийн тулгалт өөрийгөө өөртэйгөө
+харьцуулах болно.
+
+### 6.4 Cutover — байт тулгалт заавал
+
+```bash
+go run ./cmd/catalog-diff \
+  -old https://appstore.gerege.mn \
+  -new https://appstore-next.gerege.mn \
+  -platform 1.0.0 -channel stable
+```
+
+`identical: … bytes` гэж гарахаас нааш **upstream солихгүй**. Гарын үсэг нь
+`apps` массивын түүхий байтуудыг хамардаг тул нэг байтын зөрүү нь талбар дахь
+бүх instance каталогийг **чимээгүй** хаяхад хүргэнэ: хуучин каталогоо
+үйлчилсээр байх тул хаанаас ч эвдэрсэн юм шиг харагдахгүй.
+
+Тулгалт амжилттай бол nginx upstream-ыг солино. Хуучин stack **2 долоо хоног**
+амьд үлдэнэ — DNS/upstream буцаах нь rollback.
+
+### 6.5 Татан буулгах (Ш7)
+
+Тулгалтаас хойш 2 долоо хоног асуудалгүй өнгөрсний дараа:
+
+1. `appstore-gerege-mn` дахь `cmd/appstore` HTTP давхарга
+2. `developer-gerege-nexus` репо бүхэлдээ
+3. `appstore_db`-ийн нөөц авсны дараа
+
+`testdata/golden_catalog.json` нь **хоёр репод хоёуланд нь үлдэнэ** — хоёр
+хэрэгжүүлэлт нэг документыг гаргаж байгаа нь тулгалтыг утга учиртай болгодог.
+Хуучин сервисийг устгасны дараа л нэг тал нь илүүц болно.
