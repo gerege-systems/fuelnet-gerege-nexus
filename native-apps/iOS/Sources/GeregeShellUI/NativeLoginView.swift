@@ -16,10 +16,12 @@ public struct NativeLoginView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("GEREGE / NEXUS")
-                        .font(.caption.weight(.bold)).tracking(2).foregroundStyle(Color.geregeTeal)
+                        .font(.caption.weight(.bold)).tracking(2)
+                        .foregroundStyle(WalletTheme.Brand.hi)
                     Text("Таны баталгаатай\nажлын орчин")
                         .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.white).padding(.bottom, 10)
+                        .foregroundStyle(WalletTheme.Text.primary)
+                        .padding(.bottom, WalletTheme.Space.sm)
 
                     TextField(loginText("auth.field.email"), text: $email).textContentType(.emailAddress)
                         .keyboardType(.emailAddress).textInputAutocapitalization(.never).loginField()
@@ -28,7 +30,8 @@ public struct NativeLoginView: View {
                         .buttonStyle(GeregePrimaryButton()).disabled(isPending)
 
                     HStack { Rectangle().frame(height: 1); Text("eID Mongolia").font(.caption); Rectangle().frame(height: 1) }
-                        .foregroundStyle(Color.white.opacity(0.18)).padding(.vertical, 10)
+                        .foregroundStyle(WalletTheme.Text.tertiary)
+                        .padding(.vertical, WalletTheme.Space.sm)
 
                     TextField(loginText("auth.eid.reg_number"), text: $nationalID)
                         .textInputAutocapitalization(.characters).autocorrectionDisabled().loginField()
@@ -42,11 +45,11 @@ public struct NativeLoginView: View {
                     if isPending { Button(loginText("auth.action.cancel"), action: auth.cancel).frame(maxWidth: .infinity, alignment: .trailing) }
                 }
                 .frame(maxWidth: geometry.size.width > 700 ? 520 : 420, alignment: .leading)
-                .padding(28).frame(maxWidth: .infinity, minHeight: geometry.size.height)
+                .padding(WalletTheme.Space.xl)
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
             }
         }
-        .background(Color.geregeNavy.ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .background(WalletTheme.Surface.page.ignoresSafeArea())
         .onChange(of: auth.phase) { phase in
             if case .waiting(_, let link?) = phase { openURL(link) }
         }
@@ -69,9 +72,12 @@ public struct NativeLoginView: View {
         case .error(let error): error
         }
         if !message.isEmpty {
-            Text(message).font(.body.monospacedDigit()).foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                .background(Color.geregeTrustStrip, in: RoundedRectangle(cornerRadius: 8))
+            Text(message).font(.body.monospacedDigit())
+                .foregroundStyle(WalletTheme.Text.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(WalletTheme.Space.lg)
+                .background(WalletTheme.Surface.card,
+                            in: RoundedRectangle(cornerRadius: WalletTheme.Radius.sm))
                 .accessibilityLabel(message)
         }
     }
@@ -82,23 +88,36 @@ private func loginText(_ key: String.LocalizationValue) -> String {
 }
 
 private extension View {
-    func loginField() -> some View { self.padding(14).background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.16))) }
+    /// Their input treatment: a card-coloured field inside a hairline outline,
+    /// so a form reads as a set of surfaces rather than as a set of boxes.
+    func loginField() -> some View {
+        self.padding(WalletTheme.Space.md + 2)
+            .background(WalletTheme.Surface.card,
+                        in: RoundedRectangle(cornerRadius: WalletTheme.Radius.sm))
+            .overlay(RoundedRectangle(cornerRadius: WalletTheme.Radius.sm)
+                .stroke(WalletTheme.Surface.border))
+    }
 }
 private struct GeregePrimaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.fontWeight(.semibold).frame(maxWidth: .infinity).padding(14)
-            .background(Color.geregeTeal.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 8)).foregroundStyle(Color.geregeNavy)
+        configuration.label.fontWeight(.semibold)
+            .frame(maxWidth: .infinity)
+            .padding(WalletTheme.Space.md + 2)
+            // Pressed steps to the deep end of the brand family rather than
+            // fading the primary, which on a dark surface reads as disabled.
+            .background(configuration.isPressed ? WalletTheme.Brand.lo : WalletTheme.Brand.primary,
+                        in: RoundedRectangle(cornerRadius: WalletTheme.Radius.sm))
+            .foregroundStyle(WalletTheme.Brand.onBrand)
     }
 }
 private struct GeregeSecondaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.frame(maxWidth: .infinity).padding(13)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.geregeTeal)).foregroundStyle(Color.geregeTeal)
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .padding(WalletTheme.Space.md + 1)
+            .overlay(RoundedRectangle(cornerRadius: WalletTheme.Radius.sm)
+                .stroke(WalletTheme.Brand.hi))
+            .foregroundStyle(WalletTheme.Brand.hi)
     }
-}
-private extension Color {
-    static let geregeNavy = Color(red: 11/255, green: 15/255, blue: 23/255)
-    static let geregeTeal = Color(red: 98/255, green: 217/255, blue: 212/255)
-    static let geregeTrustStrip = Color(red: 23/255, green: 35/255, blue: 52/255)
 }
 #endif
