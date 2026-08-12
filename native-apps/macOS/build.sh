@@ -20,6 +20,7 @@ swiftc \
   -framework LocalAuthentication \
   -framework CoreImage \
   -O \
+  "${SCRIPT_DIR}/DesignSystem.swift" \
   "${SCRIPT_DIR}/NativeIPC.swift" \
   "${SCRIPT_DIR}/NativeAuth.swift" \
   "${SCRIPT_DIR}/NativeLoginViewController.swift" \

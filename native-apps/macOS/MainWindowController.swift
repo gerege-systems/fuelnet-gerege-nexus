@@ -183,9 +183,9 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
 
     private func setupFooter() {
         footer.wantsLayer = true
-        footer.layer?.backgroundColor = NSColor(srgbRed: 16/255, green: 22/255, blue: 32/255, alpha: 1).cgColor
+        footer.layer?.backgroundColor = EID.chrome.cgColor
         footer.isHidden = true
-        footerStatus.textColor = NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+        footerStatus.textColor = EID.chromeAccent
         footerStatus.font = .systemFont(ofSize: 11, weight: .medium)
         let info = NSTextField(labelWithString: "macOS · Desktop   |   Shell v1.4   |   \(URL(string: baseURLString)?.host ?? "—")")
         info.textColor = NSColor.white.withAlphaComponent(0.55); info.font = .systemFont(ofSize: 11)
@@ -198,14 +198,14 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
 
     private func setupRibbon() {
         ribbon.wantsLayer = true
-        ribbon.layer?.backgroundColor = NSColor(srgbRed: 16/255, green: 22/255, blue: 32/255, alpha: 1).cgColor
+        ribbon.layer?.backgroundColor = EID.chrome.cgColor
         ribbon.layer?.borderWidth = 1
         ribbon.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
         ribbon.isHidden = true
 
         let brand = NSTextField(labelWithString: "GEREGE / NEXUS")
         brand.font = .systemFont(ofSize: 12, weight: .bold)
-        brand.textColor = NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+        brand.textColor = EID.chromeAccent
         let reload = ribbonButton("arrow.clockwise", "Дахин ачаалах", #selector(ribbonReload))
         let lock = ribbonButton("lock", "Түгжих", #selector(ribbonLock))
         profileButton.target = self
@@ -243,7 +243,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
     /// төлөвтэй болно. Rail-д зөвхөн бүрхүүлийн эзэмшдэг дэлгэцүүд байна.
     private func setupRail() {
         rail.wantsLayer = true
-        rail.layer?.backgroundColor = NSColor(srgbRed: 13/255, green: 18/255, blue: 27/255, alpha: 1).cgColor
+        rail.layer?.backgroundColor = EID.chrome.cgColor
         rail.isHidden = true
 
         railButtons = [
@@ -309,7 +309,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
         settingsPane?.view.isHidden = pane != .settings
         for button in railButtons {
             let selected = button.tag == pane.rawValue
-            button.contentTintColor = selected ? NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+            button.contentTintColor = selected ? EID.chromeAccent
                                                : NSColor.white.withAlphaComponent(0.72)
         }
     }
@@ -456,7 +456,7 @@ public class MainWindowController: NSWindowController, WKNavigationDelegate, WKU
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         footerStatus.stringValue = "●  Холбогдсон · \(webView.url?.host ?? "Nexus")"
-        footerStatus.textColor = NSColor(srgbRed: 98/255, green: 217/255, blue: 212/255, alpha: 1)
+        footerStatus.textColor = EID.chromeAccent
         print("[MainWindowController] Page loaded successfully: \(webView.url?.absoluteString ?? "")")
     }
 
