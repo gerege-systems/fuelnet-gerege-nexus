@@ -17,7 +17,25 @@ export const auth = {
   "auth.view.point_qr": { mn: "QR болон mobile App2App", en: "QR and mobile App2App" },
   "auth.view.point_rbac": { mn: "Tenant RBAC ба audit хамгаалалт", en: "Tenant RBAC and audit protection" },
 
+  // Нэгдсэн нэвтрэлтийн карт. Толгой мөр нь "хэн асууж байна"-г хэлнэ:
+  // authorization хүсэлтээс ирсэн бол тухайн аппын нэр, эс бөгөөс платформ өөрөө.
+  "auth.view.platform_name": { mn: "Gerege Nexus", en: "Gerege Nexus" },
+  "auth.signin.asker_note": {
+    mn: "Gerege Nexus — нэгдсэн нэвтрэлтээр нэвтрэх гэж байна",
+    en: "Gerege Nexus — signing you in through the unified login",
+  },
+  "auth.signin.title": { mn: "Нэвтрэх", en: "Sign in" },
+  "auth.signin.lede": { mn: "eID Mongolia App-аар нэвтрэх", en: "Sign in with the eID Mongolia app" },
+  "auth.signin.or": { mn: "эсвэл", en: "or" },
+  "auth.signin.google": { mn: "Google-ээр нэвтрэх", en: "Sign in with Google" },
+  "auth.signin.google_soon": { mn: "Google нэвтрэлт удахгүй", en: "Google sign-in is coming soon" },
+  "auth.signin.help": { mn: "Тусламж хэрэгтэй юу?", en: "Need help?" },
+
   "auth.eid.title": { mn: "eID Mongolia", en: "eID Mongolia" },
+  "auth.eid.instruction": {
+    mn: "РД эсвэл иргэний бүртгэлийн дугаараа оруулна уу. Утсан дээрх eID Mongolia App-д мэдэгдэл ирнэ.",
+    en: "Enter your registration or civil ID number. A notification arrives in the eID Mongolia app on your phone.",
+  },
   "auth.eid.subtitle": { mn: "Үндэсний цахим үнэмлэхээр баталгаажна", en: "Verified by the national digital ID" },
   "auth.eid.tab_id": { mn: "Регистрийн дугаар", en: "Registration number" },
   "auth.eid.tab_qr": { mn: "QR код", en: "QR code" },

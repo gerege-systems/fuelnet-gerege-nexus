@@ -343,7 +343,101 @@ html[data-theme="dark"] .divide-slate-100 > * { border-color: var(--gerege-borde
 .eid-on-dark .eid-retry,.eid-on-dark .eid-cancel{border:1px solid #1e293b;background:#090d16;color:#cbd5e1;padding:11px;border-radius:10px;cursor:pointer}
 .eid-on-dark .eid-cancel:hover{background:#1e293b;color:#fff}
 .eid-on-dark .eid-login footer{border-top:1px solid #1e293b;color:#64748b;font-size:11px}
-.eid-page{position:relative;background:var(--gp-navy);color:#fff;overflow:hidden}.eid-page>header{position:relative;z-index:2;height:72px;max-width:1180px;margin:auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between}.eid-page__content{position:relative;z-index:2;max-width:1080px;margin:auto;padding:54px 24px 90px;display:grid;grid-template-columns:1fr 430px;gap:90px;align-items:center}.eid-page__intro h1{font-size:58px}.eid-page__intro>p{color:var(--gp-on-navy-70);line-height:1.7;font-size:17px}.eid-page__intro ul{padding:0;list-style:none;color:var(--gp-on-navy-70);display:grid;gap:10px;margin-top:28px}.eid-page__intro li:before{content:"✓";color:var(--gp-gold);font-weight:900;margin-right:10px}.admin-disclosure{width:100%;margin-top:14px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:var(--gp-on-navy);border-radius:10px;padding:11px;display:flex;align-items:center;gap:8px;justify-content:center;font-size:12px}.admin-disclosure svg{width:15px}.admin-disclosure svg:last-child{margin-left:auto;transition:.2s}.admin-login{display:grid;gap:9px;padding:14px;background:#fff;border-radius:10px;margin-top:8px}.admin-login>p{color:#b42318;font-size:12px}.admin-login label{display:flex;align-items:center;gap:8px;border:1px solid #d7e0ea;border-radius:8px;padding:0 10px;color:#8793a4}.admin-login input{border:0;height:40px;flex:1;outline:0}.admin-login button{height:42px;border:0;border-radius:8px;background:#122a50;color:#fff;font-weight:700}.admin-login__pending{color:var(--gp-on-navy-70);font-size:13px;text-align:center;padding:22px 0}
+.eid-page{position:relative;background:var(--gp-navy);color:#fff;overflow:hidden}.eid-page>header{position:relative;z-index:2;height:72px;max-width:1180px;margin:auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between}.eid-page__content{position:relative;z-index:2;max-width:1080px;margin:auto;padding:54px 24px 90px;display:grid;grid-template-columns:1fr 430px;gap:90px;align-items:center}.eid-page__intro h1{font-size:58px}.eid-page__intro>p{color:var(--gp-on-navy-70);line-height:1.7;font-size:17px}.eid-page__intro ul{padding:0;list-style:none;color:var(--gp-on-navy-70);display:grid;gap:10px;margin-top:28px}.eid-page__intro li:before{content:"✓";color:var(--gp-gold);font-weight:900;margin-right:10px}.admin-disclosure{width:100%;margin-top:14px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:var(--gp-on-navy);border-radius:10px;padding:11px;display:flex;align-items:center;gap:8px;justify-content:center;font-size:12px}.admin-disclosure svg{width:15px}.admin-disclosure svg:last-child{margin-left:auto;transition:.2s}.admin-login{display:grid;gap:9px;padding:14px;background:#fff;border-radius:10px;margin-top:8px}.admin-login>p{color:#b42318;font-size:12px}.admin-login label{display:flex;align-items:center;gap:8px;border:1px solid #d7e0ea;border-radius:8px;padding:0 10px;color:#8793a4}.admin-login input{border:0;height:40px;flex:1;outline:0}.admin-login button{height:42px;border:0;border-radius:8px;background:#122a50;color:#fff;font-weight:700}/* ─── Нэвтрэх дэлгэц ────────────────────────────────────────────────────────
+   Дизайныг government-line/sso-dgov-mn төслөөс авсан: токен, хэмжээс, радиус,
+   градиент бүгд тэндхийн утга. Ангийн нэрсийг `signin-` угтвартай болгосон нь
+   ганц шалтгаантай — `.btn`, `.input`, `.field` гэх нийтлэг нэрс энэ файлын
+   бусад хэсэгтэй мөргөлдөх эрсдэлтэй.
+
+   Токенууд `.signin-shell` дотор амьдардаг: энэ бол цайвар дэлгэц, платформын
+   бусад хэсэг нь `--gp-*` navy палитраа хэвээр барина. */
+.signin-shell{
+  --sg-bg:#f9fafc;--sg-surface:#fff;--sg-surface-2:#f1f3f7;
+  --sg-fg:#11161e;--sg-muted:#5e646c;--sg-faint:#9b9fa5;
+  --sg-border:#e2e5e9;--sg-border-strong:#c0c4cb;
+  --sg-blue:#0065da;--sg-blue-hover:#0056c6;--sg-blue-soft:#e4f0ff;--sg-blue-text:#005ccd;
+  --sg-danger:#cc272e;--sg-danger-soft:#ffecea;
+  background:var(--sg-bg);color:var(--sg-fg);min-height:100vh;display:flex;flex-direction:column
+}
+.signin-shell__nav{border-bottom:1px solid var(--sg-border);display:flex;align-items:center;justify-content:space-between;padding:18px 32px}
+.signin-shell__nav .gp-brand{color:var(--sg-fg)}
+.signin-shell__nav .gp-brand img{width:26px;height:26px;border-radius:6px}
+.signin-shell__nav .gp-brand span{font-size:15px;font-weight:700}
+.signin-shell__body{flex:1;display:grid;place-items:center;padding:48px 24px}
+.signin-card{background:var(--sg-surface);border:1px solid var(--sg-border);border-radius:14px;width:100%;max-width:520px;padding:48px;display:flex;flex-direction:column;gap:24px}
+
+/* Хэн асууж байгаа нь — картын оройд. Энэ мөрийг сервер тодорхойлно
+   (/oauth2/client-info), query-гээс биш: query-д бичигдсэн нэр гэдэг нь хэн ч
+   бичиж болох нэр. */
+.signin-card__asker{display:flex;flex-direction:column;gap:4px}
+.signin-card__asker strong{font-size:17px;font-weight:700;line-height:1.35}
+.signin-card__asker span{color:var(--sg-muted);font-size:13px;line-height:1.5}
+.signin-card__rule{border:0;border-top:1px solid var(--sg-border);margin:0}
+.signin-card__title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0}
+.signin-card__lede{color:var(--sg-muted);font-size:15px;line-height:1.6;margin:6px 0 0}
+
+.signin-seg{background:var(--sg-surface-2);border:1px solid var(--sg-border);border-radius:7px;padding:2px;gap:2px;display:flex}
+.signin-seg button{flex:1;min-height:44px;border:0;border-radius:5px;background:0 0;color:var(--sg-muted);font-size:14px;font-weight:500;cursor:pointer;transition:background .12s,color .12s,box-shadow .12s}
+.signin-seg button:hover{color:var(--sg-fg)}
+.signin-seg button.is-active{background:var(--sg-surface);color:var(--sg-fg);box-shadow:0 1px 2px #11161f14}
+.signin-seg button:focus-visible{outline:2px solid var(--sg-blue);outline-offset:1px}
+
+.signin-instruction{text-align:center;color:var(--sg-blue-text);font-size:13.5px;line-height:1.55;margin:0}
+.signin-field{display:flex;flex-direction:column;gap:6px}
+.signin-field label{color:var(--sg-fg);font-size:13px;font-weight:500}
+.signin-field input{width:100%;background:var(--sg-surface);border:1px solid var(--sg-border);border-radius:8px;color:var(--sg-fg);font-size:17px;text-align:center;letter-spacing:2px;padding:14px 12px;transition:border-color .12s,box-shadow .12s}
+.signin-field input::placeholder{color:var(--sg-faint)}
+.signin-field input:hover{border-color:var(--sg-border-strong)}
+.signin-field input:focus{border-color:var(--sg-blue);box-shadow:0 0 0 3px var(--sg-blue-soft);outline:none}
+
+.signin-btn{width:100%;min-height:44px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 22px;font-size:15px;font-weight:600;cursor:pointer;transition:background .12s,border-color .12s,color .12s,filter .12s}
+.signin-btn:disabled{opacity:.55;cursor:not-allowed}
+.signin-btn--eid{background:linear-gradient(135deg,var(--sg-blue),#8b7ff0);color:#fff}
+.signin-btn--eid:hover:not(:disabled){filter:brightness(1.05)}
+.signin-btn--eid:active:not(:disabled){filter:brightness(.97)}
+.signin-btn--google{background:var(--sg-surface);color:var(--sg-fg);border-color:var(--sg-border)}
+.signin-btn--google:hover:not(:disabled){background:var(--sg-surface-2)}
+.signin-btn--google svg{width:18px;height:18px}
+.signin-btn--ghost{background:0 0;color:var(--sg-blue-text);font-weight:500;min-height:38px;padding:8px 12px}
+.signin-btn--ghost:hover{background:var(--sg-blue-soft)}
+
+.signin-or{display:flex;align-items:center;gap:10px;color:var(--sg-muted);font-size:12px;margin:6px 0}
+.signin-or:before,.signin-or:after{content:"";flex:1;border-top:1px solid var(--sg-border)}
+
+.signin-footer{text-align:center;margin-top:4px}
+.signin-footer hr{border:0;border-top:1px solid var(--sg-border);margin:4px 0 16px}
+.signin-footer__register{display:block;color:var(--sg-fg);font-size:14.5px;font-weight:700;text-decoration:none}
+.signin-footer__register:hover{color:var(--sg-blue-text)}
+.signin-footer__help{display:inline-flex;align-items:center;gap:6px;margin-top:12px;color:var(--sg-muted);font-size:13px;text-decoration:none}
+.signin-footer__help:hover{color:var(--sg-fg)}
+.signin-alert{border-radius:8px;padding:10px 12px;font-size:13px;background:var(--sg-danger-soft);color:var(--sg-danger)}
+.signin-note{color:var(--sg-muted);font-size:12.5px;text-align:center;margin:0}
+
+/* eID картыг энэ дизайны дотор буулгах. EIDLogin өөрөө навигацийн логикоо
+   барина — энд зөвхөн харагдац солигдоно. */
+.signin-card .eid-login{background:0 0;border:0;padding:0;box-shadow:none;gap:16px;display:flex;flex-direction:column}
+.signin-card .eid-login__head,.signin-card .eid-login>footer{display:none}
+.signin-card .eid-tabs{background:var(--sg-surface-2);border:1px solid var(--sg-border);border-radius:7px;padding:2px;gap:2px;display:flex}
+.signin-card .eid-tabs button{flex:1;min-height:44px;border:0;border-radius:5px;background:0 0;color:var(--sg-muted);font-size:14px;font-weight:500}
+.signin-card .eid-tabs button.is-active{background:var(--sg-surface);color:var(--sg-fg);box-shadow:0 1px 2px #11161f14}
+.signin-card .eid-login form{display:flex;flex-direction:column;gap:6px}
+.signin-card .eid-login form label{color:var(--sg-fg);font-size:13px;font-weight:500}
+.signin-card .eid-login form input{width:100%;background:var(--sg-surface);border:1px solid var(--sg-border);border-radius:8px;color:var(--sg-fg);font-size:17px;text-align:center;letter-spacing:2px;padding:14px 12px}
+.signin-card .eid-login form input::placeholder{color:var(--sg-faint)}
+.signin-card .eid-login form input:focus{border-color:var(--sg-blue);box-shadow:0 0 0 3px var(--sg-blue-soft);outline:none}
+.signin-card .eid-primary{margin-top:10px;width:100%;min-height:44px;border:0;border-radius:8px;background:linear-gradient(135deg,var(--sg-blue),#8b7ff0);color:#fff;font-size:15px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.signin-card .eid-primary:hover{filter:brightness(1.05)}
+.signin-card .eid-wait,.signin-card .eid-status{color:var(--sg-fg)}
+.signin-card .eid-wait small{color:var(--sg-muted)}
+.signin-card .eid-qr{background:#fff;border:1px solid var(--sg-border);border-radius:10px}
+
+@media(max-width:640px){
+  .signin-card{padding:32px 24px}
+  .signin-shell__nav{padding:14px 20px}
+  .signin-card__title{font-size:26px}
+}
+
+.admin-login__pending{color:var(--sg-muted,#5e646c);font-size:13px;text-align:center;padding:22px 0}
 /* Провайдераар нэвтрэх карт: eID картын байрыг эзэлдэг тул түүнтэй ижил
    өргөн, ижил өнцөгтэй — нэг дэлгэц дээр хоёул гарч ирж болно. */
 .sso-card{background:#fff;color:#0f1b2d;border-radius:12px;padding:26px;display:grid;justify-items:center;text-align:center;gap:10px}

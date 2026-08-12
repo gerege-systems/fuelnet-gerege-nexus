@@ -74,6 +74,12 @@ var publicRoutes = []string{
 	// render — the start endpoint mints the state it later requires, and the
 	// callback is answerable only to a browser holding the cookie that start
 	// set. See sso_client_handlers.go.
+	// The display name of the client behind an authorization request. Read by
+	// the sign-in screen before anybody is signed in, which is the whole point;
+	// it discloses a registered name to somebody who already holds the
+	// client_id, which travels in every authorization URL and is not a secret.
+	"/api/v1/oauth2/client-info",
+
 	"/api/v1/auth/sso/config",
 	"/api/v1/auth/sso/start",
 	"/api/v1/auth/sso/callback",
