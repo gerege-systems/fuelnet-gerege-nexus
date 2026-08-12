@@ -227,7 +227,13 @@ export default function Layout({children}:{children:React.ReactNode}){
   //
   // push биш replace: push үлдээвэл Back дарахад дөнгөж сая гарсан хамгаалалттай
   // хуудас руу буцаж, тэндээс 401 аваад яг тэр нэвтрэх дэлгэц рүү шидэгдэнэ.
-  async function logout(){try{await api.logout()}catch{}resetAccess();forgetTenants();router.replace("/")}
+  //
+  // Холбоосон суулгац дээр гарах нь энд дуусдаггүй: провайдер өөрийн session-ээ
+  // хэвээр барьж байгаа тул "гарлаа" гээд "нэвтрэх" дарахад шууд буцаж ороход
+  // хүн гарсан гэж үзэхгүй. Тиймээс сервер end_session_url буцаавал хөтчийг
+  // тийш нь илгээнэ — провайдер өөрийнхөө session-ийг хааж, бүртгэлтэй
+  // post-logout хаягаар нь энэ суулгац руу буцаана.
+  async function logout(){let endSession="";try{const res=await api.logout();endSession=res.end_session_url||""}catch{}resetAccess();forgetTenants();if(endSession)window.location.assign(endSession);else router.replace("/")}
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",external:false,active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},

@@ -256,7 +256,20 @@ export const api = {
       body: JSON.stringify({ dan_token: danToken, reg_number: regNumber, otp_code: otpCode }),
     }),
 
-  logout: () => fetcher<{ status: string }>("/auth/logout", { method: "POST" }),
+  // end_session_url is set only on a deployment that signs people in through
+  // an SSO provider. The session here is already gone by the time it is
+  // returned; what is left is to send the browser there so the provider ends
+  // its own, and returns the person to this deployment afterwards.
+  logout: () => fetcher<{ status: string; end_session_url?: string }>("/auth/logout", { method: "POST" }),
+
+  // How this deployment signs people in. `enabled` false is the ordinary case:
+  // the login screen shows its own eID and password forms. `enabled` true means
+  // identity belongs to `provider_name`, and the screen's job is to hand the
+  // browser to `start_url` rather than to ask for anything.
+  ssoConfig: () =>
+    fetcher<{ enabled: boolean; provider_name?: string; start_url?: string; local_login: boolean }>(
+      "/auth/sso/config",
+    ),
 
   // permissions carries the effective grant of every role the member holds; it
   // is empty for administrators, who bypass the check.
@@ -1095,6 +1108,12 @@ export type OAuth2ClientDraft = {
   client_uri?: string;
   client_type?: "confidential" | "public";
   redirect_uris: string[];
+  /**
+   * Where the platform may return somebody after this application signs them
+   * out of it, matched exactly like redirect_uris. Optional: an application
+   * that never ends a session here needs none.
+   */
+  post_logout_redirect_uris?: string[];
   grant_types: string[];
   scopes: string[];
   disabled?: boolean;
@@ -1107,6 +1126,7 @@ export type OAuth2Client = {
   client_uri?: string;
   client_type: "confidential" | "public";
   redirect_uris: string[];
+  post_logout_redirect_uris: string[];
   grant_types: string[];
   scopes: string[];
   disabled: boolean;

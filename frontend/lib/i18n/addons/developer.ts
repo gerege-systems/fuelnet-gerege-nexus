@@ -12,6 +12,11 @@ export const developer = {
   "developer.view.empty_body": { mn: "Гуравдагч систем Gerege-ээр дамжуулан нэвтрэхийн тулд эхлээд OAuth2 client бүртгэнэ.", en: "Register an OAuth2 client so a third-party system can sign users in through Gerege." },
 
   "developer.field.redirect_uris": { mn: "Redirect URI-ууд", en: "Redirect URIs" },
+  "developer.field.post_logout_redirect_uris": { mn: "Гарсны дараах хаягууд", en: "Post-logout redirect URIs" },
+  "developer.hint.post_logout_redirect_uris": {
+    mn: "мөр бүрт нэг · энэ апп хэрэглэгчийг гаргасны дараа буцаах хаяг",
+    en: "one per line · where this app may return somebody after signing them out here",
+  },
   "developer.field.scopes": { mn: "Scope-ууд", en: "Scopes" },
   "developer.field.name": { mn: "Аппын нэр", en: "Application name" },
   "developer.field.client_type": { mn: "Клиентийн төрөл", en: "Client type" },

@@ -60,6 +60,8 @@ const PAGES = [
   {src: "docs/ARCHITECTURE_SPECIFICATION.md", slug: "architecture", title: "Архитектурын тодорхойлолт", group: "Архитектур"},
   {src: "docs/ARCHITECTURE_SPECIFICATION_EN.md", slug: "architecture-en", title: "Architecture specification (EN)", group: "Архитектур"},
 
+  {src: "docs/SSO_FEDERATION.md", slug: "sso-federation", title: "SSO холбоос", group: "Архитектур"},
+
   {src: "docs/MODULE_AUTHORING_GUIDE.md", slug: "module-authoring", title: "Модуль хөгжүүлэх заавар", group: "Хөгжүүлэлт"},
   {src: "docs/TRANSLATION_GUIDE.md", slug: "translation", title: "Орчуулгын гарын авлага", group: "Хөгжүүлэлт"},
   {src: "docs/APPSTORE_OPERATIONS.md", slug: "appstore-operations", title: "Апп сторын ажиллагаа", group: "Хөгжүүлэлт"},

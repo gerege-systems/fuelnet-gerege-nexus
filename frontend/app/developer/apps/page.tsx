@@ -24,6 +24,7 @@ const emptyDraft: OAuth2ClientDraft = {
   client_uri: "",
   client_type: "confidential",
   redirect_uris: [],
+  post_logout_redirect_uris: [],
   grant_types: ["authorization_code", "refresh_token"],
   scopes: ["openid", "profile", "email"],
 };
@@ -199,6 +200,7 @@ function toDraft(app: OAuth2Client): OAuth2ClientDraft {
     client_uri: app.client_uri || "",
     client_type: app.client_type,
     redirect_uris: app.redirect_uris,
+    post_logout_redirect_uris: app.post_logout_redirect_uris || [],
     grant_types: app.grant_types,
     scopes: app.scopes,
     disabled: app.disabled,
@@ -301,6 +303,16 @@ function AppCard({ app, scopes, copied, onCopy, onEdit, onRotate, onDelete, canM
         ))}
       </Field>
 
+      {/* Only shown once there is one: an application that never ends a session
+          here has no reason to carry an empty row about it. */}
+      {(app.post_logout_redirect_uris || []).length > 0 && (
+        <Field label={t("developer.field.post_logout_redirect_uris")}>
+          {app.post_logout_redirect_uris.map((uri) => (
+            <Chip key={uri} mono>{uri}</Chip>
+          ))}
+        </Field>
+      )}
+
       <Field label={t("developer.field.scopes")}>
         {app.scopes.map((scope) => (
           <Chip key={scope} mono tone={sensitive.has(scope) ? "amber" : "blue"}>{scope}</Chip>
@@ -360,6 +372,7 @@ function AppForm({ initial, isNew, scopes, grantTypes, describe, onCancel, onSav
   const { t } = useI18n();
   const [draft, setDraft] = useState(initial);
   const [uris, setUris] = useState(initial.redirect_uris.join("\n"));
+  const [logoutUris, setLogoutUris] = useState((initial.post_logout_redirect_uris || []).join("\n"));
 
   function toggle(field: "scopes" | "grant_types", value: string) {
     setDraft((d) => {
@@ -370,7 +383,11 @@ function AppForm({ initial, isNew, scopes, grantTypes, describe, onCancel, onSav
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    onSave({ ...draft, redirect_uris: uris.split("\n").map((s) => s.trim()).filter(Boolean) });
+    onSave({
+      ...draft,
+      redirect_uris: uris.split("\n").map((s) => s.trim()).filter(Boolean),
+      post_logout_redirect_uris: logoutUris.split("\n").map((s) => s.trim()).filter(Boolean),
+    });
   }
 
   return (
@@ -441,6 +458,22 @@ function AppForm({ initial, isNew, scopes, grantTypes, describe, onCancel, onSav
           <span className="text-[11px] text-slate-400">
             {/* Exact matching is what stops a code being delivered somewhere else. */}
             one per line · https only, except on localhost
+          </span>
+        </label>
+
+        <label className="block">
+          <span className="text-xs font-semibold text-slate-700">{t("developer.field.post_logout_redirect_uris")}</span>
+          <textarea
+            value={logoutUris}
+            onChange={(e) => setLogoutUris(e.target.value)}
+            rows={2}
+            placeholder={"https://app.example.mn/"}
+            className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+          />
+          <span className="text-[11px] text-slate-400">
+            {/* Matched exactly too: an unchecked return address would make the
+                logout endpoint an open redirector. */}
+            {t("developer.hint.post_logout_redirect_uris")}
           </span>
         </label>
 
