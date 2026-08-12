@@ -1,0 +1,153 @@
+name: Deploy the App Store instance
+
+# The App Store as a Nexus instance, brought up beside the standalone registry
+# it replaces — see docs/APPSTORE_PHASE2_PLAN.md §3 and
+# docs/APPSTORE_OPERATIONS.md §6.
+#
+# Manual only. This is a cutover step, not a release: it stands up a second
+# stack on the registry's host, and firing it on every push to main would mean
+# a migration happening because somebody merged a typo fix.
+#
+# It changes nothing about the running registry. Its own ports, its own
+# database, its own containers. The switch is a separate act, made only after
+# catalog-diff reports the two produce byte-identical catalogues.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Platform image tag to run (default: the current main)"
+        required: false
+      import_from:
+        description: "Standalone registry DSN to import from (blank: skip the import)"
+        required: false
+      apply:
+        description: "Apply the import (unchecked: dry run, writes nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: appstore-instance
+  cancel-in-progress: false
+
+jobs:
+  rollout:
+    name: Roll out beside the registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to run without somewhere to run
+        run: |
+          if [ -z "${{ secrets.APPSTORE_DEPLOY_HOST }}" ]; then
+            echo "::error::APPSTORE_DEPLOY_HOST is not set"; exit 1
+          fi
+          if [ -z "${{ secrets.APPSTORE_SIGNING_KEY }}" ]; then
+            echo "::error::APPSTORE_SIGNING_KEY is not set — this instance would serve no catalogue"
+            exit 1
+          fi
+
+      - name: Copy the stack definition
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.APPSTORE_DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER || 'root' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: deploy/docker-compose.appstore.yml
+          target: /opt/appstore-nexus
+          strip_components: 1
+
+      - name: Bring it up
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+          REPO_LOWER: gerege-systems/open-gerege-nexus
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPSTORE_NEXUS_POSTGRES_PASSWORD: ${{ secrets.APPSTORE_NEXUS_POSTGRES_PASSWORD }}
+          APPSTORE_SIGNING_KEY: ${{ secrets.APPSTORE_SIGNING_KEY }}
+          PUBLIC_ORIGIN: ${{ vars.APPSTORE_NEXT_ORIGIN || 'https://appstore-next.gerege.mn' }}
+          IMPORT_FROM: ${{ inputs.import_from }}
+          IMPORT_APPLY: ${{ inputs.apply }}
+        with:
+          host: ${{ secrets.APPSTORE_DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER || 'root' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 20m
+          envs: IMAGE_TAG,REPO_LOWER,REGISTRY_USER,REGISTRY_TOKEN,APPSTORE_NEXUS_POSTGRES_PASSWORD,APPSTORE_SIGNING_KEY,PUBLIC_ORIGIN,IMPORT_FROM,IMPORT_APPLY
+          script: |
+            set -euo pipefail
+            cd /opt/appstore-nexus
+
+            umask 077
+            cat > .env <<EOF
+            IMAGE_BACKEND=ghcr.io/${REPO_LOWER}/backend
+            IMAGE_TAG=${IMAGE_TAG}
+            APPSTORE_NEXUS_POSTGRES_PASSWORD=${APPSTORE_NEXUS_POSTGRES_PASSWORD}
+            APPSTORE_SIGNING_KEY=${APPSTORE_SIGNING_KEY}
+            PUBLIC_ORIGIN=${PUBLIC_ORIGIN}
+            EOF
+
+            echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+            docker compose -f docker-compose.appstore.yml pull
+
+            # Nothing is replaced until the image is on the host. This stack is
+            # new, so there is nothing to lose yet — but the rule is the same
+            # one the platform rollout learned the hard way.
+            if ! docker image inspect "ghcr.io/${REPO_LOWER}/backend:${IMAGE_TAG}" >/dev/null 2>&1; then
+              echo "::error::the image is not on the host after the pull"; exit 1
+            fi
+
+            docker compose -f docker-compose.appstore.yml up -d --remove-orphans
+
+            # Wait for it to answer before claiming anything about it.
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8087/health >/dev/null 2>&1; then break; fi
+              sleep 5
+            done
+            curl -fsS http://127.0.0.1:8087/health >/dev/null || {
+              echo "::error::the new instance never became healthy"; exit 1; }
+            echo "the App Store instance is up on 127.0.0.1:8087"
+
+            # It must refuse nothing: with a signing key it publishes a
+            # catalogue, and a 503 here means the key did not reach it.
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+                     'http://127.0.0.1:8087/api/v1/registry/catalog?platform=1.0.0')
+            if [ "$code" = "503" ]; then
+              echo "::error::the instance is up but publishes no catalogue — the signing key is missing"
+              exit 1
+            fi
+            echo "it serves a catalogue (answered $code)"
+
+            if [ -n "${IMPORT_FROM}" ]; then
+              flag="-dry-run=true"
+              [ "${IMPORT_APPLY}" = "true" ] && flag="-dry-run=false"
+              echo "--- appstore-import ${flag} ---"
+              docker compose -f docker-compose.appstore.yml exec -T backend \
+                /app/appstore-import -from "${IMPORT_FROM}" \
+                -to "postgres://postgres:${APPSTORE_NEXUS_POSTGRES_PASSWORD}@postgres:5432/platform_db?sslmode=disable" \
+                ${flag}
+            fi
+
+      - name: What happens next
+        run: |
+          {
+            echo "### The App Store instance is running beside the registry"
+            echo ""
+            echo "It changed nothing about the service now serving appstore.gerege.mn."
+            echo ""
+            echo "Before any upstream moves, the two must produce byte-identical"
+            echo "catalogues. On the host:"
+            echo ""
+            echo '```'
+            echo "docker compose -f docker-compose.appstore.yml exec backend \\"
+            echo "  /app/catalog-diff -old http://127.0.0.1:8085 -new http://127.0.0.1:8087"
+            echo '```'
+            echo ""
+            echo "A mismatch means the cutover does not happen — see"
+            echo "docs/APPSTORE_OPERATIONS.md §6.4."
+          } >> "$GITHUB_STEP_SUMMARY"

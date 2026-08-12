@@ -91,6 +91,47 @@ export interface StoreOverviewApp {
   release_summary?: string;
 }
 
+/** An organisation's publishing identity. One per tenant. */
+export interface Publisher {
+  id: string;
+  slug: string;
+  name: string;
+  contact_email: string;
+  verified: boolean;
+  verified_at?: string;
+  created_at: string;
+}
+
+/** An app as the registry holds it — what is *offered*, not what is installed. */
+export interface StoreApp {
+  id: string;
+  slug: string;
+  type: "module" | "external";
+  name: string;
+  description: string;
+  category: string;
+  visibility: string;
+  publisher_name?: string;
+  latest_version?: string;
+  license?: string;
+  repository?: string;
+}
+
+/** One submitted or published release. */
+export interface StoreVersion {
+  id: string;
+  app_id: string;
+  version: string;
+  channel: string;
+  min_platform: string;
+  status: "draft" | "in_review" | "published" | "rejected" | "yanked";
+  submitted_by?: string;
+  review_note?: string;
+  published_at?: string;
+  created_at: string;
+  manifest?: { release_notes?: ManifestReleaseNotes };
+}
+
 /** A manifest's release notes, as they arrive inside a catalogue entry. */
 export interface ManifestReleaseNotes {
   kind?: ReleaseKind;
@@ -352,6 +393,38 @@ export const api = {
       apps: StoreOverviewApp[];
       summary: { catalog: number; installed: number; updates: number; held: number; drifted: number };
     }>("/admin/store/overview"),
+
+  // --- App Store: the three module surfaces ---------------------------------
+  //
+  // Only reachable on the instance that *is* the store; every other deployment
+  // has these apps uninstalled and the routes gated off.
+  getPublisherProfile: () => fetcher<Publisher>("/publisher"),
+  savePublisherProfile: (data: { slug: string; name: string; contact_email: string }) =>
+    fetcher<Publisher>("/publisher", { method: "PUT", body: JSON.stringify(data) }),
+  getPublisherApps: () => fetcher<StoreApp[]>("/publisher/apps"),
+  getPublisherVersions: (slug: string) =>
+    fetcher<StoreVersion[]>(`/publisher/apps/${slug}/versions`),
+  submitVersion: (slug: string, manifest: unknown, channel = "stable") =>
+    fetcher<StoreVersion>(`/publisher/apps/${slug}/versions`, {
+      method: "POST",
+      body: JSON.stringify({ channel, manifest }),
+    }),
+
+  getReviewQueue: () => fetcher<StoreVersion[]>("/store-review/queue"),
+  decideVersion: (id: string, action: "publish" | "reject" | "yank", note = "") =>
+    fetcher<{ status: string }>(`/store-review/versions/${id}`, {
+      method: "POST",
+      body: JSON.stringify({ action, note }),
+    }),
+  getReviewPublishers: () => fetcher<Publisher[]>("/store-review/publishers"),
+  verifyPublisher: (id: string, verified: boolean) =>
+    fetcher<{ verified: boolean }>(
+      `/store-review/publishers/${id}/verify?verified=${verified}`, { method: "POST" }),
+
+  getRegistryState: () =>
+    fetcher<{ revision: number; key_id: string; public_key: string }>("/appstore/registry/state"),
+  rebuildCatalogue: () =>
+    fetcher<{ discarded: number }>("/appstore/registry/rebuild", { method: "POST" }),
 
   // Whether an app follows the catalogue on its own. Turning it on also clears
   // a hold, which is why this refreshes the menus like the other store
