@@ -216,7 +216,18 @@ export default function Layout({children}:{children:React.ReactNode}){
   // resetAccess before navigating: /login is a client-side route, so the cached
   // identity would otherwise still be the signed-out user's when the next
   // person signs in at this tab.
-  async function logout(){try{await api.logout()}catch{}resetAccess();forgetTenants();router.push("/login")}
+  // Гарсан хүнийг нүүр хуудас угтана, нэвтрэх дэлгэц биш. Нэвтрэх дэлгэц бол
+  // тэр хүний дөнгөж сая орхисон зүйл рүү буцах хаалга — гарлаа гэж хэлсэн
+  // хүнд түүнийг шууд харуулах нь "үнэхээр гарах уу?" гэж дахин асуусантай
+  // адил. Нүүр хуудас өөрөө eID нэвтрэлт болон толгойн "Нэвтрэх" холбоос
+  // хоёуланг агуулдаг тул буцаж орох зам хаагдахгүй.
+  //
+  // Төхөөрөмжийн domain шугам дээр `/` нь тухайн шугамын нүүр рүү шилждэг
+  // (proxy.ts), тиймээс энэ нэг зам хоёр орчинд зөв утгатай.
+  //
+  // push биш replace: push үлдээвэл Back дарахад дөнгөж сая гарсан хамгаалалттай
+  // хуудас руу буцаж, тэндээс 401 аваад яг тэр нэвтрэх дэлгэц рүү шидэгдэнэ.
+  async function logout(){try{await api.logout()}catch{}resetAccess();forgetTenants();router.replace("/")}
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",external:false,active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},
