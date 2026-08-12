@@ -28,6 +28,11 @@ final class SettingsPaneViewController: NSViewController {
 
     private var settings = NativeSettings.load()
     private let detail = NSStackView()
+    /// The card the current section's rows are being added to. Their settings
+    /// screens are a stack of cards on a surface rather than a bare column of
+    /// controls, so `row` and friends fill this instead of `detail` directly.
+    private var cardContent = NSStackView()
+    private let surface = ThemeAwareSurface()
     private let status = NSTextField(labelWithString: "")
     private var enrollmentCode = ""
     private let deviceClient = MacDeviceEnrollmentClient()
@@ -65,15 +70,37 @@ final class SettingsPaneViewController: NSViewController {
         let document = NSView(); document.addSubview(detail); detail.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([detail.leadingAnchor.constraint(equalTo: document.leadingAnchor), detail.trailingAnchor.constraint(equalTo: document.trailingAnchor), detail.topAnchor.constraint(equalTo: document.topAnchor), detail.bottomAnchor.constraint(equalTo: document.bottomAnchor), detail.widthAnchor.constraint(greaterThanOrEqualToConstant: 540)])
         scroll.documentView = document
-        split.addArrangedSubview(sidebar); split.addArrangedSubview(scroll); sidebar.widthAnchor.constraint(equalToConstant: 216).isActive = true
+        // The surface their settings sit on. The scroll view draws nothing, so
+        // this is what shows through behind the cards.
+        surface.addSubview(scroll)
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: surface.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: surface.bottomAnchor),
+        ])
+        split.addArrangedSubview(sidebar); split.addArrangedSubview(surface); sidebar.widthAnchor.constraint(equalToConstant: 216).isActive = true
         content.addSubview(split)
     }
 
     @objc private func selectSection(_ sender: NSButton) { if let section = Section(rawValue: sender.tag) { show(section) } }
     private func show(_ section: Section) {
         detail.arrangedSubviews.forEach { detail.removeArrangedSubview($0); $0.removeFromSuperview() }
-        let heading = NSTextField(labelWithString: section.title); heading.font = .systemFont(ofSize: 26, weight: .semibold)
+        let heading = NSTextField(labelWithString: section.title)
+        heading.font = EIDFont.pageTitle
+        heading.textColor = EID.textPrimary
         detail.addArrangedSubview(heading)
+
+        // One card per section, filled by the row helpers below.
+        cardContent = NSStackView()
+        cardContent.orientation = .vertical
+        cardContent.alignment = .leading
+        cardContent.spacing = 14
+        let card = EIDCard(content: cardContent)
+        card.translatesAutoresizingMaskIntoConstraints = false
+        detail.addArrangedSubview(card)
+        card.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
         switch section {
         case .general:
             addToggle("Нэвтрэхэд автоматаар ажиллуулах", value: settings.launchAtLogin, action: #selector(toggleLaunch(_:)))
@@ -114,20 +141,24 @@ final class SettingsPaneViewController: NSViewController {
             addReadOnly("Shell contract", "1.3"); addReadOnly("macOS", ProcessInfo.processInfo.operatingSystemVersionString)
             addReadOnly("WebKit", "WKWebView"); addAction("Лог export хийх…", action: #selector(exportLogs))
         }
-        status.stringValue = ""; status.textColor = .secondaryLabelColor; detail.addArrangedSubview(status)
+        status.stringValue = ""; status.textColor = EID.muted; status.font = EIDFont.label
+        detail.addArrangedSubview(status)
     }
 
     private func row(_ label: String, control: NSView) {
-        let title = NSTextField(labelWithString: label); title.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        let title = NSTextField(labelWithString: label)
+        title.font = EIDFont.body
+        title.textColor = EID.textPrimary
+        title.widthAnchor.constraint(equalToConstant: 220).isActive = true
         let row = NSStackView(views: [title, control]); row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
-        detail.addArrangedSubview(row)
+        cardContent.addArrangedSubview(row)
     }
     private func addField(_ label: String, value: String, action: Selector) { let field = NSTextField(string: value); field.target = self; field.action = action; field.widthAnchor.constraint(equalToConstant: 280).isActive = true; row(label, control: field) }
     private func addNumber(_ label: String, value: Int, action: Selector) { addField(label, value: String(value), action: action) }
     private func addPopup(_ label: String, items: [String], selected: String, action: Selector) { let popup = NSPopUpButton(); popup.addItems(withTitles: items); popup.selectItem(withTitle: selected); popup.target = self; popup.action = action; popup.widthAnchor.constraint(equalToConstant: 180).isActive = true; row(label, control: popup) }
     private func addToggle(_ label: String, value: Bool, action: Selector) { let toggle = NSSwitch(); toggle.state = value ? .on : .off; toggle.target = self; toggle.action = action; row(label, control: toggle) }
-    private func addAction(_ title: String, action: Selector) { let button = NSButton(title: title, target: self, action: action); button.bezelStyle = .rounded; detail.addArrangedSubview(button) }
-    private func addReadOnly(_ label: String, _ value: String) { let text = NSTextField(labelWithString: value); text.textColor = .secondaryLabelColor; row(label, control: text) }
+    private func addAction(_ title: String, action: Selector) { let button = NSButton(title: title, target: self, action: action); button.bezelStyle = .rounded; cardContent.addArrangedSubview(button) }
+    private func addReadOnly(_ label: String, _ value: String) { let text = NSTextField(labelWithString: value); text.textColor = EID.muted; text.font = EIDFont.body; row(label, control: text) }
     private func persist(_ message: String = "Хадгаллаа") { settings.save(); status.stringValue = message }
 
     @objc private func toggleLaunch(_ s: NSSwitch) { settings.launchAtLogin = s.state == .on; persist() }
