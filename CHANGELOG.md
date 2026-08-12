@@ -15,6 +15,246 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — A lockout that never let go, and three silent truncations
+
+- **A lapsed login lockout re-locked the account on the next single failure.**
+  Five bad passwords lock an account for fifteen minutes, but the counter that
+  decides that was only ever reset by a successful sign-in. Once it had reached
+  five it stayed there, so after the window passed the next mistyped password
+  met the threshold on its own and locked the account for another full fifteen
+  minutes — indefinitely. Two consequences: nobody who had been locked out once
+  could afford to typo again, and anybody who knew an address could hold it shut
+  with one request every quarter of an hour. The count now restarts when the
+  lock it produced has expired, and the lapsed lock is cleared by the same
+  statement rather than left asserting a lockout that is over. Reaching five
+  again still locks, so this is a restart and not a way out. The statement moved
+  to a named constant behind `recordLoginFailure`; all of the behaviour is in
+  the SQL, so the three tests that come with it need a real schema
+  (`AUTH_TEST_DATABASE_URL`), and CI fails if they skip.
+- **A tenant's menu could lose apps it had installed.**
+  `GetEnabledAppIDsForTenant` discarded the per-row scan error and never checked
+  the stream error, so a read that broke partway reached the caller as a short
+  list with a nil error — and a broken stream leaves `rows.Next()` returning
+  false exactly as a clean end does. That list is what the menu is built from,
+  so the apps that fell off it read as ones the organisation had never
+  installed. Its neighbour `GetInstallationsForTenant` already did this
+  correctly.
+- **The AI copilot could state a truncated search as fact.** Its product and
+  knowledge tools dropped the same two errors, and there the truncation becomes
+  a sentence: the model presents whatever it is handed, so half a result set is
+  "you do not stock that" rather than an error the person can retry.
+
+### Removed — Code that had stopped being reachable
+
+- `oauthError.Error` made the type satisfy `error`, but it is a carrier — the
+  code and description are rendered into an RFC 6749 §5.2 body and it is never
+  wrapped or unwrapped — so the method was unreachable.
+- `issueTokenSet` kept the token `SaveToken` hands back only to discard it with
+  `_ = stored`; `SaveToken` returns the same pointer it was given.
+- The integrations screen still rendered an error paragraph from a state nothing
+  had set since the page moved to the banner, and the warehouses screen imported
+  `useMemo` without using it.
+
+### Changed — The platform's apps stop calling themselves examples
+
+`io.example.*` was placeholder vocabulary from the first week — the reverse
+domain of nobody, borrowed the way `example.com` is borrowed — and it had been
+the primary key of every app in the store ever since. These are Gerege Nexus's
+own apps and they now say so: **`io.gerege.nexus.*`**.
+
+- A rename of a primary key is a data migration, not a search and replace.
+  `00035` moves `apps`, `app_installations`, `app_versions` and
+  `app_dependencies`, and rewrites the id inside each stored manifest — the copy
+  an upgrade compares against to decide whether a new version asks for more than
+  the installed one. Both foreign keys are `ON UPDATE NO ACTION`, so they come
+  off and go back on around the update.
+- The registry carries the matching migration and is deployed first. Between the
+  two deployments an instance can sync a catalogue that already carries the new
+  ids and file them as apps it has never seen; `00035` folds those back into the
+  rows that hold the tenant's history — including an installation somebody made
+  in that window — rather than colliding with them and failing the deployment.
+- The migrations before `00035` are left as they were. They already ran
+  everywhere, and a fresh database is expected to seed the old ids and then
+  arrive here, which is what makes the migration equally true of a database
+  created yesterday and one created next year. The entries above this one keep
+  the ids they shipped with, for the same reason this file keeps the old
+  repository name.
+- `mn.example.hrms` in the test fixtures stays as it is: it stands in for
+  somebody else's app, and there `example` is the point.
+
+### Added — An organisation to be about
+
+The module Odoo calls `base`, as a core app: the organisation itself, the
+people in it, and how it is arranged. The platform had tenants, users and
+memberships carrying only what signing somebody in needs — a slug, a name, an
+email. A document that has to print a registration number, an approval that has
+to name a department, a deadline counted in some timezone: none of those had
+anywhere to come from, so each app either invented its own or went without.
+
+- **Three screens** — `/organisation` (legal identity, address, contact, and the
+  defaults everything else inherits: timezone, locale, currency),
+  `/organisation/people` (the directory, with job title, department and roles),
+  `/organisation/departments` (the structure as a tree, with a manager per unit).
+- **The split follows Odoo's**, because the distinctions it draws are real:
+  `res.company` → tenants + tenant_profiles, `res.users` → users, `hr.employee`
+  → memberships, `hr.department` → departments. A language preference belongs to
+  a person and follows them between organisations; a job title does not — the
+  same person can be a director in one tenant and a clerk in another.
+- **What the schema refuses rather than checks.** A department whose parent or
+  manager belongs to another organisation is unrepresentable, not merely
+  rejected: the foreign keys are composite over `(id, tenant_id)`. A tenant
+  without a profile is impossible — a trigger creates one with the tenant, so no
+  reader needs the null check. Both new tables carry the same forced RLS policy
+  as everything else; migration 00029 wrote those once, over the tables that
+  existed then, and a table added later has to say so itself.
+- **What the handlers refuse**: deactivating yourself, and deactivating the last
+  administrator. Both are support tickets otherwise. Nobody is deleted — a
+  membership is referenced by everything the person did here, so people and
+  departments are deactivated and archived instead.
+- **Editing is partial by design.** The form sends the fields it touched and the
+  server merges field by field, so correcting a phone number cannot blank a
+  registration number.
+- **Being core means two things the store now honours**: every tenant has it
+  whether or not anybody installed it, and nobody can disable it. Settings →
+  Apps says so where the Disable button would be, rather than offering one whose
+  only outcome is a refusal.
+- **A module with no blueprint no longer goes unlisted.** The sidebar was built
+  only for apps named in `menu/blueprints.go` — the list of screens still to be
+  built — so an app that had built everything it meant to build contributed
+  nothing, including the menus it registers itself. Core walked into exactly
+  that: three working screens and nothing pointing at them.
+- The registry imports the bundled catalogue on every boot rather than only when
+  it is empty. Otherwise a platform app added later reaches nobody: the registry
+  is long past empty, the import is skipped, and every instance polls a
+  catalogue without it.
+
+### Added — The App Store moved to appstore.gerege.mn
+
+The catalogue now comes from a registry of its own, and the apps in it can
+be published by people who do not work here.
+
+- **A registry service** (`backend/cmd/appstore`) serving a signed catalogue
+  every instance pulls: Ed25519 over the raw bytes of the apps array, an ETag
+  so an unchanged catalogue costs a 304, and the document built once per
+  revision and stored as the bytes that were signed — rebuilding per request
+  would hold only for as long as Go's encoder is byte-stable, and the failure
+  when it is not is silent everywhere at once. It shares the platform's
+  `appcatalog` types with the client that reads it, and a test signs a
+  catalogue the way the endpoint does and feeds it to that client.
+- **A storefront** (`appstore.gerege.mn`) that needs no account: server-rendered,
+  seven languages as path segments, real 404s, and no install button — installing
+  happens inside an organisation's own Nexus, so every page says that instead.
+- **A publishing console** (`developer.gerege.mn`) where a publisher registers,
+  submits a manifest and watches it through review. The authorization code is
+  exchanged server-side and the identity token lives in an httpOnly cookie, so
+  no token reaches page JavaScript and the platform needs no new CORS origin.
+- **Installations follow the catalogue on their own**, unless the new version
+  asks for more than the installed one — a widened permission, a widened OAuth
+  scope, or a launch URL that has moved to another host. Those are held at the
+  version they are on, with what they added recorded, and offered to the
+  tenant's administrator as a decision rather than a button.
+- `catalog-sign` generates the signing pair and signs a catalogue offline, for
+  an air-gapped operator or for testing a client with no registry running.
+- The OIDC endpoints at the root of nexus.gerege.mn are routed to the API. Only
+  `/oauth2/token` ever was, which was enough for the platform's own screens and
+  for nothing outside it.
+
+### Added — Preparing the App Store to live at appstore.gerege.mn
+
+The catalogue is on its way out of this repository and into a registry of its
+own (`docs/APPSTORE_SEPARATION_PLAN.md`). Everything here works today in file
+mode, which stays the default and the whole story for a self-hosted deployment;
+the registry is opt-in and this platform never depends on it.
+
+- **An installation's version now moves.** `InstallApp`'s reinstall branch
+  updated status and enabled and left `installed_version` alone, so a tenant sat
+  on 1.0.0 for ever while the catalogue carried the app forward — nothing could
+  tell a current installation from a stale one. A version that actually changes
+  is recorded as `'upgraded'` with the version it came from, and `SyncCatalog`
+  finally writes `app_versions`, the table migration 00002 created and nobody
+  ever filled.
+- **Three records of a version are held to each other**: the compiled module,
+  the catalogue entry and the manifest. They had drifted — esign shipped 2.0.0
+  as a module and 1.0.0 in the catalogue, and the developer portal did the same.
+  Both are corrected and the drift is now a startup error. `PlatformVersion`
+  became a var a release build can stamp with `-ldflags`, and `/health` reports
+  it.
+- **A tenant can update an app it has already installed.**
+  `POST /api/v1/store/apps/{slug}/upgrade` (admin) re-resolves dependencies,
+  moves the version, records the event and refuses with 409 when there is
+  nothing to move to. The store answers with `installed_version`,
+  `latest_version` and `update_available`, compared as semver rather than as
+  text, and the card carries an Update button beside enable/disable. Migration
+  00033 adds `auto_update` and `pinned_version`.
+- **The catalogue can come from a registry** (`APP_CATALOG_URL`): fetched with
+  an ETag, verified against `APPSTORE_PUBLIC_KEY` before a single field of it is
+  read, cached to disk, and behind all of it the bundled file. Boot never fails
+  because of the registry — an unreachable or lying one costs an instance its
+  updates and a line in the log. `CATALOG_SYNC_INTERVAL` drives a background
+  refresh; `POST /api/v1/admin/store/sync` runs one on demand.
+- **An app can be a platform that runs somewhere else** (`"type": "external"`).
+  No Go module is required or looked for, permissions come from the manifest,
+  and its menu entry opens in a new tab rather than pretending to be a route
+  here. Its OAuth2 client is gated by installation: a user whose tenant has not
+  installed the app is refused at `/oauth2/auth` with `access_denied`, and
+  tokens carry `tenant_slug` beside `tenant_id` so the third party knows which
+  organisation it has been handed.
+
+### Added — Switching between the organisations you belong to
+
+- **The membership table always allowed several; the runtime allowed one.**
+  Which tenant a session acted for was decided at login by whichever membership
+  was oldest (`internal/platform/auth_handlers.go`), and nothing could change it
+  afterwards — signing out and back in landed the same person in the same
+  tenant, deliberately, so somebody working for two organisations could reach
+  only the first. `GET /api/v1/auth/tenants` lists the ones they may act for and
+  `POST /api/v1/auth/switch-tenant` moves the session to one of them.
+- **The token is rotated, not the row updated.** A session token is the
+  authority to act inside one tenant, and the tenant is what changes; the new
+  session inherits the old one's expiry, so moving between two organisations
+  cannot be used to keep a session alive without signing in again. The
+  membership check lives in the store, where no route can reach the insert
+  without it, and a tenant the caller is not in answers 403 rather than 404 —
+  whether it exists is not their business.
+- **Both queries deliberately leave the tenant behind** (`tenant.Without`):
+  `memberships` carries a `tenant_id` and is under the row-level policy, so a
+  request bound to the current tenant would answer "which tenants may you act
+  for" with the one the caller is already in.
+- **The brand mark is the control**, and the account menu carries the same list
+  — the mobile shell hides the header brand below 900px, and a phone is exactly
+  where somebody moves between two organisations. Both render one component
+  over one cached answer, so the two cannot drift and opening the second does
+  not re-ask the server. The mark used to link to `/apps`, which the Platform
+  tile beneath it in the rail still does. Choosing another organisation reloads
+  the shell rather than patching state: the menus, the permissions and every
+  list on screen belonged to the tenant just left.
+- **The demo seed now has two organisations** (`cmd/api/seed.go`): Demo
+  Corporation, with contacts, products, inventory and documents, and Demo Trade
+  LLC, with contacts and billing. One tenant exercises nothing — the switcher,
+  the row-level isolation and the per-tenant permission set all behave
+  identically on a single-tenant deployment and identically wrongly if they are
+  broken. The seeder runs after the platform server is built rather than before
+  it, because an installation row references the `apps` table that the catalogue
+  sync fills, and it installs through the installer so a demo tenant cannot
+  claim an app whose Go module is not in the binary.
+
+### Removed — The Swift macOS client (`desktop-mac/`)
+
+- The bundle was a WKWebView pointed at the web client, plus a menu bar, Touch
+  ID and a preferences window for the two server URLs. It was built by a shell
+  script outside CI, so nothing compiled it on a pull request and nothing
+  caught a Swift file that no longer built until somebody ran `make build-mac`
+  by hand. `make build` ran it, which meant a build of this repository failed
+  on any machine without Xcode.
+- What it offered over the browser, the browser now offers: the web client is
+  installable as a PWA and gets its own dock icon and window from
+  `/manifest.webmanifest`, with no download and no store. The README section
+  that documented `make build-mac` / `make run-mac` says that instead.
+- The API keeps the path a native client would use — bearer tokens, no ambient
+  cookie — so this is a client leaving, not the platform closing a door. Anyone
+  wanting a native macOS app can build one against the same API in its own
+  repository, where it can have a real build and a real signing identity.
+
 ### Removed — the Swift macOS shell, in favour of one shell for all platforms
 
 - **`desktop-mac/` is gone.** It was the reference implementation of the bridge
@@ -215,7 +455,6 @@ green throughout.
   `gerege://` deep links continue to work, and deep links and menu items now move
   the work area through the router instead of reloading it, which no longer
   discards a half-filled form.
-
 ### Added — Email verification as a platform capability
 
 - **One flow instead of one per app**

@@ -1,0 +1,17 @@
+{
+  "app_id": "io.gerege.nexus.contacts",
+  "entries": [
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-05",
+      "kind": "feature",
+      "summary": {
+        "mn": "Харилцагч, худалдан авагч, нийлүүлэгчийн нэгдсэн бүртгэл.",
+        "en": "One register of contacts, customers and vendors."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}

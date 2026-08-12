@@ -1,0 +1,36 @@
+{
+  "app_id": "io.gerege.nexus.esign",
+  "entries": [
+    {
+      "version": "2.0.0",
+      "released_at": "2026-08-07",
+      "kind": "feature",
+      "summary": {
+        "mn": "eID Mongolia-ийн баталгаажсан алсын гарын үсгээр PDF зурдаг болов.",
+        "en": "PDF signing with eID Mongolia's qualified remote signature."
+      },
+      "details": {
+        "mn": "Хувийн түлхүүр иргэний утсанд үлдэнэ — платформ зөвхөн PDF-ийн хэшийг илгээж, PIN2-оор зөвшөөрүүлж, PAdES гарын үсэгтэй баримтыг буцааж авна. Гэрчилгээний түвшин QUALIFIED-аар тогтмол: ADVANCED зөвшөөрөх нь баримт бүрийг чимээгүй сулруулна.",
+        "en": "The private key stays on the citizen's phone: the platform sends only the PDF digest, the citizen approves with PIN2, and the PAdES-signed document comes back. The certificate level is fixed at QUALIFIED — accepting ADVANCED would silently downgrade every document."
+      },
+      "authors": [
+        "craftzbay"
+      ],
+      "refs": [
+        "#28"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-06",
+      "kind": "feature",
+      "summary": {
+        "mn": "Gerege eSign HSM-ээр тоон гарын үсэг зурах анхны хувилбар.",
+        "en": "First release: digital signing through the Gerege eSign HSM."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}

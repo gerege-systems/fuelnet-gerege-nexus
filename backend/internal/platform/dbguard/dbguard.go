@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -39,13 +40,26 @@ import (
 // It is created by migration 00029 and owns nothing.
 const AppRole = "gerege_nexus_app"
 
-// bindStatement sets both variables in one round trip.
+// bindStatement sets all three variables in one round trip.
 //
 // `role` is an ordinary GUC, so set_config assigns it exactly as SET ROLE would
 // and the whole binding costs one message rather than two. Both values are
 // parameters: the tenant id arrives from a session row, and building this
 // string by concatenation would put a SET ROLE one quote away from user data.
-const bindStatement = `SELECT set_config('role', $1, false), set_config('app.current_tenant', $2, false)`
+const bindStatement = `SELECT set_config('role', $1, false), ` +
+	`set_config('app.current_tenant', $2, false), set_config('app.allowed_tenants', $3, false)`
+
+// allowedLiteral renders the read set as PostgreSQL's array literal, which is
+// what the policy casts. Empty stays empty rather than becoming '{}': the
+// policy reads that as "no organisations at all", where an unset value means
+// "fall back to the one being acted in" — which is every session that has not
+// asked for more.
+func allowedLiteral(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return "{" + strings.Join(ids, ",") + "}"
+}
 
 // Guard installs the binding and reports whether it is live.
 //
@@ -69,11 +83,14 @@ func (g *Guard) Install(cfg *pgxpool.Config) {
 		if !g.enabled.Load() {
 			return true, nil
 		}
-		role, tenantID := "none", ""
+		role, tenantID, allowed := "none", "", ""
 		if id, err := tenant.FromContext(ctx); err == nil && id != "" {
 			role, tenantID = AppRole, id
+			// Only ever widened by the session, and only past the same
+			// membership check that produced the acting tenant.
+			allowed = allowedLiteral(tenant.Allowed(ctx))
 		}
-		if _, err := conn.Exec(ctx, bindStatement, role, tenantID); err != nil {
+		if _, err := conn.Exec(ctx, bindStatement, role, tenantID, allowed); err != nil {
 			// False destroys the connection rather than handing over one whose
 			// tenant binding is whatever the previous request left behind — the
 			// failure this package exists to prevent. The error travels with it
@@ -129,11 +146,11 @@ func (g *Guard) Probe(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("dbguard: could not take a connection to verify the role: %w", err)
 	}
 	defer conn.Release()
-	if _, err := conn.Exec(ctx, bindStatement, AppRole, ""); err != nil {
+	if _, err := conn.Exec(ctx, bindStatement, AppRole, "", ""); err != nil {
 		return fmt.Errorf("dbguard: cannot assume %s (grant it to the login role in DATABASE_URL): %w",
 			AppRole, err)
 	}
-	if _, err := conn.Exec(ctx, bindStatement, "none", ""); err != nil {
+	if _, err := conn.Exec(ctx, bindStatement, "none", "", ""); err != nil {
 		return fmt.Errorf("dbguard: cannot return to the login role: %w", err)
 	}
 

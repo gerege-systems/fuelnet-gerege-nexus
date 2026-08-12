@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package documents implements Digital Documents & E-Signatures Go module (io.example.documents).
+ * Package documents implements Digital Documents & E-Signatures Go module (io.gerege.nexus.documents).
  */
 
 package documents
@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -154,7 +155,7 @@ type DocumentsModule struct {
 }
 
 // New builds the module and registers it in the compile-time app registry so
-// the app store can resolve and install io.example.documents. The module owns
+// the app store can resolve and install io.gerege.nexus.documents. The module owns
 // its own E-ID and DAN clients so signing stays self-contained; both read their
 // configuration from the environment and default to mock mode.
 // Starting an E-ID signature pushes a notification to a real person's phone, so it is
@@ -191,7 +192,7 @@ func New(db *pgxpool.Pool) *DocumentsModule {
 	return m
 }
 
-func (m *DocumentsModule) ID() string      { return "io.example.documents" }
+func (m *DocumentsModule) ID() string      { return "io.gerege.nexus.documents" }
 func (m *DocumentsModule) Name() string    { return "Digital Documents & Signatures" }
 func (m *DocumentsModule) Version() string { return "1.0.0" }
 
@@ -306,9 +307,18 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	query := r.URL.Query()
+	// A number that is not a number is refused rather than read as "no preference".
+	// Swallowing it answered ?limit=abc with the default page and called it the whole
+	// answer, which is the same silence after_at is careful not to keep.
+	limit, ok := intParam(w, query, "limit")
+	if !ok {
+		return
+	}
+	offset, ok := intParam(w, query, "offset")
+	if !ok {
+		return
+	}
 	filter := DocumentFilter{
 		Status:  query.Get("status"),
 		DocType: query.Get("doc_type"),
@@ -342,6 +352,22 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	httpx.JSON(w, http.StatusOK, page)
+}
+
+// intParam reads a whole-number query parameter, answering 400 when one was sent and
+// is not a number. An absent or empty parameter is no answer at all and reads as zero,
+// which every caller of this treats as "use the default".
+func intParam(w http.ResponseWriter, query url.Values, name string) (int, bool) {
+	raw := strings.TrimSpace(query.Get(name))
+	if raw == "" {
+		return 0, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, fmt.Sprintf("%s must be a whole number", name))
+		return 0, false
+	}
+	return value, true
 }
 
 func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -640,8 +666,20 @@ func (m *DocumentsModule) alreadySigned(ctx context.Context, q querier, tenantID
 // checkSigner holds the signature to whoever the document's next step names, and
 // holds back anyone a later step names. The check runs against the identity a
 // provider vouched for, never against what the caller typed.
-func checkSigner(pos *approvalPosition, docType, regNumber string) error {
+//
+// requireNamed is the tenant's policy for this type. It used to be read and dropped:
+// preflightSignature loaded the policy and consulted only allows(), so a screen saying
+// "only a signer the chain names" governed nothing at signing time. It bites on the two
+// shapes a document can carry that name nobody — no chain at all, and an open step —
+// both of which are ordinary on a document whose chain was snapshotted before the
+// tenant configured one. SaveSignaturePolicy refuses to turn the policy on while such
+// documents are waiting, so this is the second half of one rule rather than a trap.
+func checkSigner(pos *approvalPosition, docType, regNumber string, requireNamed bool) error {
 	if pos == nil || pos.Next == nil {
+		if requireNamed {
+			return fmt.Errorf("%w: this %s document carries no approval chain, so it names nobody — and this tenant's policy accepts only a signer its chain names",
+				ErrSignatureRejected, docType)
+		}
 		return nil // no chain: one open signature approves
 	}
 
@@ -651,6 +689,11 @@ func checkSigner(pos *approvalPosition, docType, regNumber string) error {
 		}
 		return fmt.Errorf("%w: step %d of the %s chain (%s) is reserved for %s, not %s",
 			ErrSignatureRejected, pos.Next.Order, docType, pos.Next.Name, named, regNumber)
+	}
+
+	if requireNamed {
+		return fmt.Errorf("%w: step %d of the %s chain (%s) names nobody, and this tenant's policy accepts only a signer its chain names",
+			ErrSignatureRejected, pos.Next.Order, docType, pos.Next.Name)
 	}
 
 	// The step is open — but not to somebody the chain still needs further along.
@@ -709,7 +752,7 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 
-	if err := checkSigner(pre.Position, pre.DocType, signature.RegNumber); err != nil {
+	if err := checkSigner(pre.Position, pre.DocType, signature.RegNumber, pre.Policy.RequireNamedSigner); err != nil {
 		return nil, err
 	}
 	signed, err := m.alreadySigned(ctx, m.db, tenantID, docID, signature.RegNumber)
@@ -730,9 +773,20 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 // back, and it closes at the first signature: from then on the title is what somebody
 // read and approved.
 //
-// The guard is in the statement, not around it. Reading "has anybody signed?" and then
-// updating would leave room for a signature to land in between, which is exactly the
-// case that must not be renameable.
+// The document's row is LOCKED first, and the rest of the decision is made while it is
+// held. Every path that records a signature takes that same lock before it writes one
+// (see recordSignature), so holding it here is what actually stops a signature landing
+// mid-rename.
+//
+// Putting the guard inside the UPDATE instead — `AND NOT EXISTS (SELECT 1 FROM
+// document_signatures …)` — looked equivalent and was not. Under READ COMMITTED an
+// UPDATE that blocks on a row lock re-checks its qualification against the NEW version
+// of the row it is updating, but subqueries over OTHER tables are still evaluated on the
+// statement's original snapshot — which predates the signature. Measured on Postgres 16:
+// with a signing transaction holding the lock, that UPDATE renamed a document the
+// transaction had just signed. It only appeared to work because a single-step chain also
+// moves the document to APPROVED, and the status half of the guard caught it; on a chain
+// of more than one step the document stays PENDING_APPROVAL and nothing caught it at all.
 func (m *DocumentsModule) RenameDocument(ctx context.Context, tenantID, docID, title string) (*Document, error) {
 	if uuid.Validate(docID) != nil {
 		return nil, ErrTitleFrozen
@@ -749,22 +803,47 @@ func (m *DocumentsModule) RenameDocument(ctx context.Context, tenantID, docID, t
 		return nil, fmt.Errorf("%w: the title cannot be stored — %s", ErrInvalidDocument, fault)
 	}
 
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin rename document: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var was string
-	err := m.db.QueryRow(ctx,
-		`UPDATE document_records d
-		    SET title = $1
-		  WHERE d.id = $2 AND d.tenant_id = $3
-		    AND d.status IN ($4, $5)
-		    AND NOT EXISTS (SELECT 1 FROM document_signatures s WHERE s.document_id = d.id)
-		 RETURNING (SELECT title FROM document_records o WHERE o.id = d.id)`,
-		title, docID, tenantID, StatusDraft, StatusPending).Scan(&was)
+	err = tx.QueryRow(ctx,
+		`SELECT title FROM document_records
+		  WHERE id = $1 AND tenant_id = $2 AND status IN ($3, $4) FOR UPDATE`,
+		docID, tenantID, StatusDraft, StatusPending).Scan(&was)
 	if isNoRows(err) {
-		// Signed, decided, or not this tenant's. All three are "you cannot rename this",
-		// and telling them apart would say whether a document exists.
+		// Decided, or not this tenant's. Both are "you cannot rename this", and telling
+		// them apart would say whether a document exists.
 		return nil, ErrTitleFrozen
 	}
 	if err != nil {
+		return nil, fmt.Errorf("lock document for rename: %w", err)
+	}
+
+	// Asked as its own statement, after the lock. In READ COMMITTED each statement takes
+	// a fresh snapshot, so this one sees every signature committed up to now — including
+	// one committed by the very transaction this lock just waited on.
+	var signed bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM document_signatures WHERE document_id = $1)`,
+		docID).Scan(&signed); err != nil {
+		return nil, fmt.Errorf("check whether the document has been signed: %w", err)
+	}
+	if signed {
+		return nil, ErrTitleFrozen
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE document_records SET title = $1 WHERE id = $2 AND tenant_id = $3`,
+		title, docID, tenantID); err != nil {
 		return nil, fmt.Errorf("rename document: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit rename document: %w", err)
 	}
 
 	// Both titles, because a dispute asks what it used to say.
@@ -818,8 +897,18 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 		return nil, err
 	}
 	// The authority check that counts is this one: the preflight's was for a good
-	// error message before a citizen was troubled, this one is under the lock.
-	if err := checkSigner(position, docType, signature.RegNumber); err != nil {
+	// error message before a citizen was troubled, this one is under the lock. So it
+	// has to be the WHOLE decision — the policy included, read here rather than carried
+	// from the preflight, because minutes of a citizen's ceremony may have passed since.
+	policy, err := m.signaturePolicyTx(ctx, tx, tenantID, docType)
+	if err != nil {
+		return nil, err
+	}
+	if !policy.allows(method) {
+		return nil, fmt.Errorf("%w: %s documents may not be signed through %s under this tenant's policy",
+			ErrSignatureRejected, docType, method)
+	}
+	if err := checkSigner(position, docType, signature.RegNumber, policy.RequireNamedSigner); err != nil {
 		return nil, err
 	}
 

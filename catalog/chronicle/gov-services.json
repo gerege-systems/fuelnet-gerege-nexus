@@ -1,0 +1,33 @@
+{
+  "app_id": "io.gerege.nexus.gov_services",
+  "entries": [
+    {
+      "version": "1.1.0",
+      "released_at": "2026-08-05",
+      "kind": "feature",
+      "summary": {
+        "mn": "Тенант бүр өөрийн үйлчилгээний ажлын урсгалыг тохируулдаг боллоо.",
+        "en": "Each tenant now configures its own service workflow."
+      },
+      "details": {
+        "mn": "Урсгалын алхам, нэгж, хугацааг тенант тус бүрдээ тодорхойлно. Хэвлэсэн хувилбар өөрчлөгдөхгүй байх, мөр зэрэг засварлахаас хамгаалах дүрмүүд SQL түвшинд хэрэгжсэн.",
+        "en": "Steps, units and deadlines are defined per tenant. Published-version immutability and optimistic concurrency are enforced in SQL rather than in Go."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-05",
+      "kind": "feature",
+      "summary": {
+        "mn": "Төрийн үйлчилгээний хүсэлт, даалгавар, хуваарилалтын үндсэн урсгал.",
+        "en": "Government service requests, tasks and routing."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}

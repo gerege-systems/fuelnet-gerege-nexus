@@ -101,7 +101,7 @@ export default function BillingPage() {
 
       {/* Modal */}
       {showModal && (
-        <Modal>
+        <Modal label={t("billing.view.create_title")}>
           <h2 className="text-xl font-bold text-slate-900 mb-4">{t("billing.view.create_title")}</h2>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>

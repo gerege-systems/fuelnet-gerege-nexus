@@ -101,6 +101,21 @@
   }
   .gerege-nav-icon { color: #98a2b3; }
   .gerege-nav-link-active .gerege-nav-icon { color: var(--gerege-blue); }
+  /* The open/closed halves of a menu group.
+
+     A 1fr -> 0fr grid row rather than an animated height, because the links
+     inside are a list of unknown length and a height transition needs a number
+     to travel to. The row does the measuring; min-height:0 is what lets the
+     child shrink below its content, and overflow:hidden is what makes the
+     links disappear behind the fold rather than spill over the group below.
+     Transitions are already neutralised under prefers-reduced-motion. */
+  .gerege-menu-group-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.22s ease;
+  }
+  .gerege-menu-group-body[data-collapsed="true"] { grid-template-rows: 0fr; }
+  .gerege-menu-group-body > div { min-height: 0; overflow: hidden; }
   .gerege-parent-menu { border: 0; background: transparent; }
   .gerege-submenu { border-left: 1px solid var(--gerege-border); }
   .gerege-submenu .gerege-nav-link-active { box-shadow: none; position: relative; }
@@ -335,6 +350,10 @@ html[data-theme="dark"] .divide-slate-100 > * { border-color: var(--gerege-borde
 /* Mobile shell follows open-gerege-mn: app switching moves to a fixed bottom
    tab bar and the active app's menu becomes an off-canvas drawer. */
 :root { --gerege-mobile-tabs-h: 64px; }
+/* Wide enough for the menu button alone, and free to grow when the fold-all
+   button joins it — the cell used to be a fixed 4rem, which cropped the second
+   button rather than making room for it. */
+.gerege-menu-toggle { min-width: 4rem; padding-inline: 0.25rem; }
 .gerege-header-context { width: 0; padding-inline: 0; }
 .gerege-header-context.is-open { width: 14rem; padding-inline: 1rem; border-right: 1px solid var(--gerege-chrome-border); }
 .gerege-sidebar { position: static; width: 4rem; transition: width 0.24s ease; }
@@ -346,7 +365,7 @@ html[data-theme="dark"] .divide-slate-100 > * { border-color: var(--gerege-borde
 @media (max-width: 900px) {
   .gerege-topbar { padding-inline: 0.25rem; }
   .gerege-header-brand { display: none; }
-  .gerege-menu-toggle { order: 1; width: 3.5rem; }
+  .gerege-menu-toggle { order: 1; min-width: 3.5rem; padding-inline: 0; }
   .gerege-header-context,
   .gerege-header-context.is-open {
     order: 2; flex: 1 1 auto; width: auto; padding-inline: 0.25rem;
@@ -420,11 +439,45 @@ html[data-theme="dark"] .divide-slate-100 > * { border-color: var(--gerege-borde
   .gerege-mobile-more-app strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
   .gerege-mobile-more-app.is-active { border-color: var(--gerege-blue); background: var(--gerege-blue-soft); color: var(--gerege-blue); }
   .gerege-mobile-more-app.is-active > span { color: var(--gerege-blue); }
-  .gerege-copilot-trigger { bottom: calc(var(--gerege-mobile-tabs-h) + env(safe-area-inset-bottom, 0px) + 0.75rem); }
-  .gerege-copilot-panel {
-    right: 0.75rem; bottom: calc(var(--gerege-mobile-tabs-h) + env(safe-area-inset-bottom, 0px) + 4.75rem);
-    width: calc(100vw - 1.5rem); max-width: none; height: min(600px, calc(100dvh - 10rem));
+  /* On a phone the drawer is the screen, and it stops above the tab bar rather
+     than under it. */
+  .gerege-copilot-drawer {
+    width: 100vw;
+    bottom: calc(var(--gerege-mobile-tabs-h) + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* The copilot drawer.
+ *
+ * It comes in from the side the trigger sits on — inline-end, which is the
+ * right in Mongolian and English and the left in Arabic, where the whole shell
+ * flips. A physical `right` would have it fly in from the far side of the
+ * screen from the button that opened it.
+ *
+ * It sits under the header rather than over it, so the control that opened it
+ * stays visible and can close it again, and it deliberately does not cover the
+ * page: this is a copilot, and the work it is asked about has to stay readable
+ * behind it.
+ */
+.gerege-copilot-drawer {
+  position: fixed;
+  top: 4rem;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 420px;
+  max-width: 100vw;
+  z-index: 45;
+  overflow: hidden;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0.25s;
+}
+[dir="rtl"] .gerege-copilot-drawer { transform: translateX(-100%); }
+.gerege-copilot-drawer.is-open { transform: translateX(0); visibility: visible; }
+
+/* Somebody who has asked not to be moved about is not moved about. */
+@media (prefers-reduced-motion: reduce) {
+  .gerege-copilot-drawer { transition: visibility 0s; }
 }
 
 /* Native Shell workarea sidebar rules — must come AFTER @media (max-width: 900px) */

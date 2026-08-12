@@ -99,7 +99,7 @@ func TestAReturnIsGoodExactlyOnce(t *testing.T) {
 		Email:       "User@Example.com",
 		RedirectURL: "https://theirapp.com/verified",
 		Purpose:     "signup",
-		Source:      "io.example.contacts",
+		Source:      "io.gerege.nexus.contacts",
 	})
 	if err != nil {
 		t.Fatalf("send: %v", err)

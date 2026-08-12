@@ -15,9 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
@@ -25,6 +23,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
@@ -48,11 +47,27 @@ import (
 )
 
 // PlatformVersion is the semver the app-store manifests are validated against.
-const PlatformVersion = "1.0.0"
+//
+// It is a var rather than a const so a release build can stamp the version it
+// actually is:
+//
+//	go build -ldflags "-X github.com/gerege-systems/open-gerege-nexus/backend/internal/platform.PlatformVersion=1.2.0"
+//
+// A manifest names the platform it needs (`"platform": ">=1.1.0"`), and a store
+// that separates from this binary has to be told which platform is asking. A
+// constant would have every deployment claim 1.0.0 for ever, so every app would
+// look compatible with every instance. The default stays 1.0.0, which is what an
+// unstamped build has always reported; whatever is injected must be valid
+// semver, because manifest validation parses it.
+var PlatformVersion = "1.0.0"
 
 type Server struct {
-	db            *pgxpool.Pool
-	installer     *appinstaller.AppInstaller
+	db        *pgxpool.Pool
+	installer *appinstaller.AppInstaller
+	// catalogSource is where the catalogue came from and where a refresh goes.
+	// In file mode it is the bundled file and nothing else; with a registry
+	// configured it is that registry, its disk cache and the file behind them.
+	catalogSource *appcatalog.Provider
 	router        *chi.Mux
 	sessions      *auth.SessionStore
 	loginLimiter  *security.IPRateLimiter
@@ -81,6 +96,15 @@ type Server struct {
 	sharedVerify   *security.SharedLimiter
 	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
+
+	// The last thing the catalogue sync did. An administrator pressing "check
+	// for updates" gets an answer; the hourly one leaves only a log line, and a
+	// registry that has been failing for a week is exactly the thing nobody
+	// notices. See handleCatalogStatus.
+	syncMu      sync.RWMutex
+	lastSyncAt  time.Time
+	lastSyncOK  bool
+	lastSyncErr string
 }
 
 // appGateTTL bounds how long the gate keeps believing an app is installed after
@@ -105,57 +129,6 @@ func (s *Server) forgetGrants(tenantID string) {
 // NewServer builds the platform. bus may be a local-only one; nothing here
 // requires Redis to be present.
 func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, error) {
-	// #nosec G304 -- APP_CATALOG_PATH is deployment configuration read once at
-	// startup. No request reaches this.
-	catalogData, err := os.ReadFile(catalogPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var rawCatalog []appcatalog.CatalogApp
-	if err := json.Unmarshal(catalogData, &rawCatalog); err != nil {
-		return nil, err
-	}
-
-	// Populate full manifests.
-	//
-	// A manifest that failed to load used to be replaced by a silent stub with
-	// no dependencies, permissions or menus. Three shipped manifests were in
-	// fact malformed (object instead of array for "dependencies", plain
-	// strings instead of objects for "permissions") and nobody noticed: the
-	// apps installed with an empty dependency graph and never contributed a
-	// menu entry. Catalog integrity is now a startup error.
-	catalogDir := filepath.Dir(catalogPath)
-	catalog := make([]appcatalog.CatalogApp, 0, len(rawCatalog))
-	for _, app := range rawCatalog {
-		if !security.IsValidSlug(app.Slug) {
-			return nil, fmt.Errorf("catalog app %q has an invalid slug %q", app.ID, app.Slug)
-		}
-		manifestPath := filepath.Join(catalogDir, "manifests", app.Slug+".json")
-		manifest, err := appcatalog.LoadManifestFile(manifestPath, PlatformVersion)
-		if err != nil {
-			return nil, fmt.Errorf("load manifest for %s: %w", app.ID, err)
-		}
-		if manifest.ID != app.ID {
-			return nil, fmt.Errorf("manifest %s declares id %q but the catalog entry is %q",
-				manifestPath, manifest.ID, app.ID)
-		}
-		app.Manifest = manifest
-		catalog = append(catalog, app)
-	}
-
-	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
-
-	// Keep the apps table in step with the catalog file. A missing row makes
-	// installation fail on the app_installations foreign key, so this is a
-	// startup concern, not a seeding concern. A cold database must not stop the
-	// process from booting — /ready reports that separately.
-	syncCtx, cancelSync := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelSync()
-	if err := installer.SyncCatalog(syncCtx); err != nil {
-		slog.Error("failed to sync app catalog into database", "error", err)
-	}
-
 	// Instantiate compile-time Go modules once. Each constructor registers the
 	// module in the global app registry; calling them twice (here and again in
 	// registerAppModuleRoutes) built two instances per app.
@@ -172,14 +145,46 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	ssoProvider := ssoprovider.NewSSOProvider(db)
 	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
+	// Modules first, catalogue second: the catalogue is held against the module
+	// registry as it is loaded, and Bootstrap is what fills that registry.
+	catalogConfig := appcatalog.ConfigFromEnv(catalogPath, PlatformVersion)
+	catalogConfig.Verify = verifyCatalogVersions
+	catalogSource := appcatalog.NewProvider(catalogConfig)
+
+	loadCtx, cancelLoad := context.WithTimeout(context.Background(), catalogLoadTimeout)
+	defer cancelLoad()
+	catalog, err := catalogSource.Load(loadCtx)
+	if err != nil {
+		return nil, err
+	}
+	if catalogSource.Remote() {
+		// Configured, not necessarily reached: Load says in its own log line
+		// which source actually answered, and boot carries on either way.
+		slog.Info("app catalog registry is configured",
+			"apps", len(catalog), "sync_interval", catalogSource.SyncInterval().String())
+	}
+
+	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
+
+	// Keep the apps table in step with the catalog file. A missing row makes
+	// installation fail on the app_installations foreign key, so this is a
+	// startup concern, not a seeding concern. A cold database must not stop the
+	// process from booting — /ready reports that separately.
+	syncCtx, cancelSync := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelSync()
+	if err := installer.SyncCatalog(syncCtx); err != nil {
+		slog.Error("failed to sync app catalog into database", "error", err)
+	}
+
 	s := &Server{
-		db:           db,
-		installer:    installer,
-		router:       chi.NewRouter(),
-		sessions:     auth.NewSessionStore(db, auth.DefaultSessionTTL),
-		loginLimiter: newLoginLimiter(),
-		pollLimiter:  newPollLimiter(),
-		aiLimiter:    security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
+		db:            db,
+		installer:     installer,
+		catalogSource: catalogSource,
+		router:        chi.NewRouter(),
+		sessions:      auth.NewSessionStore(db, auth.DefaultSessionTTL),
+		loginLimiter:  newLoginLimiter(),
+		pollLimiter:   newPollLimiter(),
+		aiLimiter:     security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
@@ -199,6 +204,26 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		eidMN:          eidMN,
 	}
 
+	// The authorization endpoint has to know who is signing in, which is the
+	// platform session rather than anything OAuth owns.
+	ssoProvider.AttachSessions(s.sessions)
+
+	// And whether the organisation they are signing in for has installed the
+	// app behind the client. For an external app that is the only gate there
+	// is: nothing of it runs here for appGateMiddleware to stand in front of.
+	ssoProvider.AttachInstallGate(s.newExternalAppGate())
+
+	// Clients live in Postgres now, so the built-in one is registered once
+	// rather than rebuilt into a map on every boot. A cold database must not
+	// stop the process from starting: /ready reports that separately.
+	ssoCtx, cancelSSO := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelSSO()
+	ssoProvider.EnsureDefaultClient(ssoCtx)
+
+	// Spent codes and dead tokens are reclaimed on a timer. The in-memory
+	// token map this replaced had no eviction at all — it only ever grew.
+	ssoProvider.StartJanitor(context.Background(), 15*time.Minute)
+
 	// The bus has to know the caches before a message can arrive for one, and a
 	// message can arrive as soon as the subscriber connects.
 	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
@@ -214,6 +239,62 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 
 	s.setupRoutes()
 	return s, nil
+}
+
+// catalogLoadTimeout bounds the catalogue fetch that boot waits on. A registry
+// that is merely slow must not hold a deployment open; the fallbacks are there
+// precisely so this can give up.
+const catalogLoadTimeout = 20 * time.Second
+
+// verifyCatalogVersions holds a catalogue against the modules compiled into this
+// binary.
+//
+// The two drifted apart unnoticed — esign shipped 2.0.0 as a module and 1.0.0 in
+// the catalogue, and the developer portal did the same — because nothing ever
+// compared them. Once a registry outside this repository publishes versions, a
+// number the store advertises but the binary does not have is an upgrade that
+// silently does nothing.
+//
+// It runs against every candidate catalogue, so what it means depends on where
+// the catalogue came from: the bundled file failing it is a startup error, the
+// same way its manifests failing validation is, while a registry answer failing
+// it is discarded in favour of the cache or the file. The catalogue/manifest
+// half of the comparison lives in appcatalog.ValidateCatalog, which every source
+// goes through.
+//
+// An app with no compiled module is not an error. External apps have none by
+// definition.
+func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
+	present := make(map[string]bool, len(catalog))
+	for _, app := range catalog {
+		present[app.ID] = true
+		mod, ok := appregistry.Get(app.ID)
+		if !ok {
+			continue
+		}
+		if mod.Version() != app.Version {
+			return fmt.Errorf("module %s is compiled at version %q but the catalog declares %q",
+				app.ID, mod.Version(), app.Version)
+		}
+	}
+
+	// A catalogue without the platform's own apps is not a catalogue this build
+	// should run on — it is one that predates it. The version check above
+	// cannot see that: it skips ids with no compiled module, and after a rename
+	// every renamed app looks exactly like a third party's, so an entire stale
+	// catalogue passes without a word.
+	//
+	// That is not hypothetical. A cache written before the ids were renamed was
+	// accepted whole, the core app was absent from it, no tenant got the
+	// screens, and every app in the store offered an install that failed on a
+	// foreign key. The bundled file always matches the binary, so refusing here
+	// is what reaches it.
+	for _, appID := range appinstaller.CoreApps {
+		if !present[appID] {
+			return fmt.Errorf("catalog does not carry the platform's own app %s", appID)
+		}
+	}
+	return nil
 }
 
 // StartBackgroundJobs launches the periodic work app modules need. It is
@@ -234,10 +315,150 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	// verification trail is an audit record with a retention window, not a
 	// mailing list.
 	s.emailVerify.StartHousekeeping(ctx)
+	// Only with a registry configured; in file mode the catalogue changes when
+	// the release does and there is nothing to poll.
+	s.startCatalogSync(ctx)
+
+	// The publishing console's OAuth2 client, when a deployment has one.
+	//
+	// Here rather than in NewServer because it needs its owning tenant to
+	// exist, and on a cold database that tenant is created by the seeder — which
+	// runs after the server is built and before this. Registering it from
+	// configuration at all is the same argument as for the built-in client: a
+	// client a console cannot work without should not depend on somebody
+	// remembering to create it, and a redirect URI typed into a form is a
+	// redirect URI that can be typed wrongly.
+	ensureCtx, cancelEnsure := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelEnsure()
+	s.ssoProvider.EnsureConsoleClient(ensureCtx)
+
+	// And the catalogue in hand is applied once at startup, in either mode. A
+	// release that carries a new module version is a catalogue change as much
+	// as a publication is, and a file-mode instance only ever sees one at a
+	// deploy — where nothing else would notice it.
+	sweepCtx, cancelSweep := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancelSweep()
+	s.applyCatalogToInstallations(sweepCtx)
+}
+
+// startCatalogSync keeps this instance's catalogue in step with the registry.
+//
+// It is a poll rather than a push because an instance may be behind anything —
+// a firewall, a home connection, an air gap that was opened for an hour — and
+// the registry knowing how to reach every one of them is a coupling this
+// architecture spent its effort avoiding. A failed round is a warning: the
+// catalogue in hand keeps serving, and installed apps do not depend on this at
+// all.
+func (s *Server) startCatalogSync(ctx context.Context) {
+	if !s.catalogSource.Remote() {
+		return
+	}
+	interval := s.catalogSource.SyncInterval()
+	async.Go("catalog-sync", func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				syncCtx, cancel := context.WithTimeout(ctx, catalogLoadTimeout)
+				changed, err := s.syncCatalogFromRegistry(syncCtx)
+				cancel()
+				switch {
+				case err != nil:
+					slog.Warn("catalog: registry sync failed; keeping the catalogue in hand", "error", err)
+				case changed:
+					slog.Info("catalog: updated from the registry", "apps", len(s.installer.GetCatalog()))
+				}
+			}
+		}
+	})
+}
+
+// recordSync remembers how the last attempt went.
+func (s *Server) recordSync(err error) {
+	s.syncMu.Lock()
+	s.lastSyncAt, s.lastSyncOK = time.Now(), err == nil
+	s.lastSyncErr = ""
+	if err != nil {
+		s.lastSyncErr = err.Error()
+	}
+	s.syncMu.Unlock()
+}
+
+// syncCatalogFromRegistry fetches, accepts and publishes a new catalogue.
+//
+// The order matters: the apps table has to carry a row before an installation
+// can reference it, and every replica's app gate has to stop answering from a
+// catalogue that no longer exists. The gate is dropped for every tenant rather
+// than one, because a catalogue change is not a tenant's act.
+func (s *Server) syncCatalogFromRegistry(ctx context.Context) (changed bool, err error) {
+	defer func() { s.recordSync(err) }()
+
+	catalog, changed, err := s.catalogSource.Refresh(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if changed {
+		s.installer.SetCatalog(catalog)
+		if err := s.installer.SyncCatalog(ctx); err != nil {
+			return true, fmt.Errorf("sync the new catalogue into the database: %w", err)
+		}
+		s.bus.Invalidate(appGateCacheName, "")
+	}
+
+	// After every sync, not only after a change.
+	//
+	// A catalogue that has not moved can still be ahead of an installation —
+	// one made before the version was published, or one whose upgrade failed
+	// the first time — and an instance that only ever swept on change would
+	// leave those behind for ever, with an update the store offers and nothing
+	// takes. The sweep is a no-op where there is nothing to do.
+	s.applyCatalogToInstallations(ctx)
+	return changed, nil
+}
+
+// applyCatalogToInstallations carries tenants forward to the catalogue in hand.
+//
+// Its failures are logged rather than returned: this runs on a timer and at
+// startup, where there is nobody to hand an error to, and an installation left
+// where it is is the safe outcome — the store still offers the update.
+func (s *Server) applyCatalogToInstallations(ctx context.Context) {
+	// The platform's own apps first: a tenant without them has no organisation
+	// screen, and no way to install one — the store is behind the app that is
+	// missing.
+	if err := s.installer.EnsureCoreApps(ctx); err != nil {
+		slog.Error("catalog: could not install the core apps", "error", err)
+	}
+
+	swept, err := s.installer.AutoUpdate(ctx)
+	if err != nil {
+		slog.Error("catalog: could not apply the catalogue to installations", "error", err)
+		return
+	}
+	if len(swept.Upgraded) == 0 && len(swept.Held) == 0 {
+		return
+	}
+	slog.Info("catalog: installations followed the catalogue",
+		"upgraded", len(swept.Upgraded), "held_for_approval", len(swept.Held))
+	// Their menus and gates were decided by the version that just moved.
+	s.bus.Invalidate(appGateCacheName, "")
 }
 
 func (s *Server) Router() *chi.Mux {
 	return s.router
+}
+
+// InstallAppForTenant installs a catalogue app without a request behind it.
+//
+// It exists for the demo seeder, which needs the same dependency resolution and
+// compiled-module check the store endpoint performs — writing app_installations
+// rows directly would let a demo tenant claim an app whose Go module is not in
+// the binary, and the shell would then render a menu leading nowhere.
+func (s *Server) InstallAppForTenant(ctx context.Context, tenantID, appSlug, userID string) error {
+	return s.installer.InstallApp(ctx, tenantID, appSlug, userID)
 }
 
 func (s *Server) setupRoutes() {
@@ -259,7 +480,10 @@ func (s *Server) setupRoutes() {
 	// Infrastructure
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		// The platform version is part of the health answer because it is what
+		// an app store has to know about this instance: which manifests apply
+		// to it, and whether an operator's rollout actually landed.
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "platform_version": PlatformVersion})
 	})
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.Ping(r.Context()); err != nil {
@@ -273,16 +497,22 @@ func (s *Server) setupRoutes() {
 	// Prometheus Metrics Endpoint
 	r.Handle("/metrics", observability.MetricsHandler())
 
-	// Opaque SSO tokens are not accepted by the platform API yet. Do not
-	// advertise or mint them accidentally; an operator must explicitly expose
-	// the provider for external resource servers that use introspection.
-	if ssoEndpointsEnabled() {
-		r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
-		r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
-		r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
-		r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospectEndpoint)
-		r.Post("/oauth2/revoke", s.ssoProvider.HandleRevokeEndpoint)
-	}
+	// OpenID Connect Provider & OAuth2 Authorization Server.
+	//
+	// These sit at the root rather than under /api/, which is where the
+	// specification puts them and what SSO_ISSUER advertises — the reverse
+	// proxy has to route them to this service explicitly.
+	r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
+	r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
+	// The authorization endpoint is a browser destination: it reads the
+	// session cookie itself and answers with redirects, so it must not sit
+	// behind the API's bearer-token middleware.
+	r.Get("/oauth2/auth", s.ssoProvider.HandleAuthorize)
+	r.Post("/oauth2/token", s.ssoProvider.HandleTokenEndpoint)
+	r.Post("/oauth2/introspect", s.ssoProvider.HandleIntrospect)
+	r.Post("/oauth2/revoke", s.ssoProvider.HandleRevoke)
+	r.Get("/oauth2/userinfo", s.ssoProvider.HandleUserInfo)
+	r.Post("/oauth2/userinfo", s.ssoProvider.HandleUserInfo)
 
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
@@ -330,12 +560,25 @@ func (s *Server) setupRoutes() {
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.
 			pr.Post("/auth/logout-all", s.handleLogoutEverywhere)
+			// Which organisations this person may act for, and moving the
+			// session to one of them. Both cross tenants by definition, so
+			// they run on the platform path — see handleTenants.
+			pr.Get("/auth/tenants", s.handleTenants)
+			pr.Post("/auth/tenants/active", s.handleSetActiveTenants)
+			pr.Post("/auth/switch-tenant", s.handleSwitchTenant)
 			pr.Get("/menus", s.handleMenus)
 			pr.With(s.requireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
 			pr.With(s.requireAdmin).Get("/admin/devices", s.handleListDevices)
 			pr.With(s.requireAdmin).Put("/admin/devices/staff-pin", s.handleSetStaffPIN)
 			pr.With(s.requireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
 			pr.Post("/push-tokens", s.handleRegisterPushToken)
+
+			// Consent screen. The browser endpoint at /oauth2/auth redirects
+			// here; these two describe the pending grant and record the
+			// answer. Both re-validate the request against the database, so
+			// the frontend is a renderer rather than a source of truth.
+			pr.Get("/oauth2/consent", s.ssoProvider.HandleConsentPrompt)
+			pr.Post("/oauth2/consent", s.ssoProvider.HandleConsentDecision)
 
 			// Tenant access control. Mutations are deliberately admin-only;
 			// authorization configuration can otherwise be used to self-elevate.
@@ -398,10 +641,33 @@ func (s *Server) setupRoutes() {
 			pr.Get("/store/apps", s.handleListStoreApps)
 			pr.Get("/store/apps/{slug}", s.handleGetStoreApp)
 			pr.Get("/installed-apps", s.handleListInstalledApps)
+			// What changed in an app, and what this organisation did about it.
+			// A member-level read on purpose: "why did this move" is asked by
+			// the people using the app, and the answer names nobody outside
+			// their own tenant.
+			pr.Get("/store/apps/{slug}/history", s.handleAppHistory)
 
 			pr.Group(func(ar chi.Router) {
 				ar.Use(s.requireAdmin)
 				ar.Post("/store/apps/{slug}/install", s.handleInstallApp)
+				ar.Post("/store/apps/{slug}/upgrade", s.handleUpgradeApp)
+				// Whether an app follows the catalogue on its own. Reading it
+				// is part of the installed-apps list; deciding it is
+				// administrative, like every other store mutation.
+				ar.Post("/store/apps/{slug}/auto-update", s.handleSetAutoUpdate)
+				// Asking the registry for a new catalogue on demand. Admin-only
+				// like the rest: it reaches out of this deployment and changes
+				// what every tenant on it is offered.
+				ar.Post("/admin/store/sync", s.handleSyncCatalog)
+				// Where the catalogue comes from and how the last refresh
+				// went. A read, but an administrative one: it names the
+				// registry and reports its failures.
+				ar.Get("/admin/store/status", s.handleCatalogStatus)
+				// The whole store in one view: which versions the binary, the
+				// catalogue and this tenant each hold, and where they disagree.
+				// It is what makes a stale catalogue visible — from every other
+				// screen a week-old one looks exactly like a current one.
+				ar.Get("/admin/store/overview", s.handleStoreOverview)
 				ar.Post("/store/apps/{slug}/enable", s.handleEnableApp)
 				ar.Post("/store/apps/{slug}/disable", s.handleDisableApp)
 			})
@@ -410,15 +676,6 @@ func (s *Server) setupRoutes() {
 
 	// Register compile-time Business App Routes with Tenant & App Gate protection
 	s.registerAppModuleRoutes()
-}
-
-func ssoEndpointsEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("EXPOSE_SSO_ENDPOINTS"))) {
-	case "1", "true", "yes":
-		return true
-	default:
-		return false
-	}
 }
 
 // registerAppModuleRoutes mounts every compile-time business module behind the

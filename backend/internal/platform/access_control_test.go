@@ -18,13 +18,13 @@ func TestRoleCodeValidation(t *testing.T) {
 }
 
 func TestAppRequestPermission(t *testing.T) {
-	if got := appRequestPermission("io.example.contacts", "GET", "/contacts"); got != "contacts.read" {
+	if got := appRequestPermission("io.gerege.nexus.contacts", "GET", "/contacts"); got != "contacts.read" {
 		t.Fatalf("got %q", got)
 	}
-	if got := appRequestPermission("io.example.contacts", "POST", "/contacts"); got != "contacts.manage" {
+	if got := appRequestPermission("io.gerege.nexus.contacts", "POST", "/contacts"); got != "contacts.manage" {
 		t.Fatalf("got %q", got)
 	}
-	if got := appRequestPermission("io.example.gov_services", "POST", "/gov/requests"); got != "" {
+	if got := appRequestPermission("io.gerege.nexus.gov_services", "POST", "/gov/requests"); got != "" {
 		t.Fatalf("government workflow must keep action-level checks, got %q", got)
 	}
 }
@@ -45,7 +45,7 @@ func TestValidEIDCallback(t *testing.T) {
 func TestSigningDocumentsNeedsItsOwnPermission(t *testing.T) {
 	// Documents and the government workflow perform explicit permission checks
 	// at route registration/handler level. URL text no longer decides authority.
-	for _, appID := range []string{"io.example.documents", "io.example.gov_services", "io.example.esign"} {
+	for _, appID := range []string{"io.gerege.nexus.documents", "io.gerege.nexus.gov_services", "io.gerege.nexus.esign"} {
 		if got := appRequestPermission(appID, "POST", "/anything/sign/reject"); got != "" {
 			t.Errorf("%s: got central permission %q", appID, got)
 		}

@@ -1,5 +1,5 @@
 /**
- * Typed client for the PDF e-signature app (io.example.esign). Every DTO here
+ * Typed client for the PDF e-signature app (io.gerege.nexus.esign). Every DTO here
  * mirrors the Go structs in backend/internal/apps/esign; nothing on these
  * screens uses `any`.
  *

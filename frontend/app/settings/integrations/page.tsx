@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Integration, IntegrationProvider, api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Banner, LoadingBlock, Modal, fieldClass } from "@/components/ui";
+import { AdminOnly, useAccess } from "@/lib/permissions";
 import {
   Activity, AlertTriangle, CheckCircle2, Cloud, Globe, HardDrive, Link2, Plus,
   RefreshCw, Share2, ShieldAlert, Trash2, Unlink, Video,
@@ -64,6 +65,7 @@ export default function IntegrationsPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [encryptionReady, setEncryptionReady] = useState(true);
   const [loading, setLoading] = useState(true);
+  const { loading: checking, isAdmin } = useAccess();
   const [showModal, setShowModal] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -85,6 +87,8 @@ export default function IntegrationsPage() {
       setProviders(catalog.providers || []);
       setEncryptionReady(catalog.encryption_configured);
     } catch (err) {
+      // Reported rather than swallowed: an empty list reads as "you have no
+      // integrations" to a member who simply is not allowed to see them.
       report(err, t("integrations.message.load_failed"));
     } finally {
       setLoading(false);
@@ -176,6 +180,20 @@ export default function IntegrationsPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // The endpoints behind this screen are administrator-only, so a member
+  // without those rights is told as much rather than shown an empty list.
+  if (!checking && !isAdmin) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center space-x-2">
+          <Share2 className="w-7 h-7 text-indigo-600" />
+          <span>{t("integrations.view.title")}</span>
+        </h1>
+        <AdminOnly />
+      </div>
+    );
   }
 
   return (
@@ -329,7 +347,7 @@ export default function IntegrationsPage() {
       )}
 
       {showModal && (
-        <Modal className="max-h-[90vh] overflow-y-auto">
+        <Modal className="max-h-[90vh] overflow-y-auto" label={t("integrations.view.create_title")}>
           <h2 className="text-xl font-bold text-slate-900 mb-4">{t("integrations.view.create_title")}</h2>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>

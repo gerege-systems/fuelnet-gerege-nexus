@@ -10,15 +10,13 @@
 package platform
 
 import (
-	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
-	"github.com/jackc/pgx/v5"
 )
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -37,6 +35,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 		ctx := auth.WithUserContext(r.Context(), claims)
 		ctx = tenant.WithTenantID(ctx, claims.TenantID)
+		// The organisations this session reads across, straight from the
+		// session row. dbguard turns it into the policy's array; almost every
+		// session carries none and behaves exactly as it always has.
+		ctx = tenant.WithAllowed(ctx, claims.AllowedTenantIDs)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -67,23 +69,15 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 				return
 			}
 
-			// Whether a tenant has this app is asked on the way into every
-			// request the app serves, and answered from a row that changes when
-			// an administrator presses Install — a few times in the life of a
-			// deployment. The negative answer is cached too: a client polling an
-			// app the tenant does not have should not cost a query each time.
-			cacheKey := memo.Key(tenantID, appID)
-			enabled, cached := s.appGate.Get(cacheKey)
-			if !cached {
-				err := s.db.QueryRow(r.Context(),
-					`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-					tenantID, appID).Scan(&enabled)
-				// Only a definite answer is kept. A database that is down would
-				// otherwise pin "not installed" onto the tenant for the length of
-				// the entry, and the app would stay missing after it came back.
-				if err == nil || errors.Is(err, pgx.ErrNoRows) {
-					s.appGate.Put(cacheKey, err == nil && enabled)
-				}
+			// Whether a tenant has this app — see appInstalled, which the
+			// authorization endpoint asks the same question of on behalf of
+			// apps that run outside this binary. A database that cannot answer
+			// refuses here rather than admitting: this is the check that keeps
+			// one tenant out of another tenant's application.
+			enabled, err := s.appInstalled(r.Context(), tenantID, appID)
+			if err != nil {
+				slog.Error("could not check the app installation", "error", err,
+					"app_id", appID, "tenant_id", tenantID)
 			}
 
 			if !enabled {
@@ -105,9 +99,9 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 
 func appRequestPermission(appID, method, path string) string {
 	prefixes := map[string]string{
-		"io.example.contacts": "contacts", "io.example.products": "products",
-		"io.example.inventory": "inventory", "io.example.billing": "billing",
-		"io.example.developer_portal": "developer",
+		"io.gerege.nexus.contacts": "contacts", "io.gerege.nexus.products": "products",
+		"io.gerege.nexus.inventory": "inventory", "io.gerege.nexus.billing": "billing",
+		"io.gerege.nexus.developer_portal": "developer",
 	}
 	prefix := prefixes[appID]
 	if prefix == "" {
