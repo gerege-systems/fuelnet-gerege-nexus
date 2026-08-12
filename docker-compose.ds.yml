@@ -25,7 +25,12 @@ services:
       - "127.0.0.1:8096:8080"
     environment:
       PUBLIC_ORIGIN: https://ds.nexus.gerege.mn
-      ALLOWED_ORIGINS: https://ds.nexus.gerege.mn
+      # The DS line plus one origin per device line. The native clients live in
+      # this repository and their work area is served by this stack, so these
+      # are the origins their webviews call from — the base file's list is
+      # replaced wholesale by this key, so leaving them out here means every
+      # cookie-authenticated write from a native client answers 403.
+      ALLOWED_ORIGINS: https://ds.nexus.gerege.mn,${DEVICE_LINE_ORIGINS:-https://mac.nexus.gerege.mn,https://win.nexus.gerege.mn,https://ios.nexus.gerege.mn,https://android.nexus.gerege.mn,https://kiosk.nexus.gerege.mn,https://pos.nexus.gerege.mn}
       SSO_ISSUER: https://ds.nexus.gerege.mn
       EID_RP_NAME: Gerege Nexus DS
       EID_DISPLAY_TEXT: Gerege Nexus DS-д нэвтрэх
