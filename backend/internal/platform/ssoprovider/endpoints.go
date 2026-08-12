@@ -416,7 +416,16 @@ func (s *SSOProvider) HandleTokenEndpoint(w http.ResponseWriter, r *http.Request
 // refuses a secretless confidential one.
 func (s *SSOProvider) authenticateClient(r *http.Request) (*Client, error) {
 	clientID, clientSecret, hasBasic := r.BasicAuth()
-	if !hasBasic {
+	if hasBasic {
+		// RFC 6749 §2.3.1 has the client form-urlencode both halves before
+		// base64ing them, so a conformant client's secret arrives escaped and
+		// has to be unescaped to match what was registered. A value that does
+		// not decode is used as it stands: that is a client which skipped the
+		// encoding, and refusing it here would be refusing the credential over
+		// a disagreement about transport rather than about the secret.
+		clientID = unescapeCredential(clientID)
+		clientSecret = unescapeCredential(clientSecret)
+	} else {
 		clientID = r.PostFormValue("client_id")
 		clientSecret = r.PostFormValue("client_secret")
 	}
@@ -438,6 +447,14 @@ func (s *SSOProvider) authenticateClient(r *http.Request) (*Client, error) {
 		return client, nil
 	}
 	return s.store.VerifyClientSecret(r.Context(), clientID, clientSecret)
+}
+
+func unescapeCredential(value string) string {
+	decoded, err := url.QueryUnescape(value)
+	if err != nil {
+		return value
+	}
+	return decoded
 }
 
 func (s *SSOProvider) grantAuthorizationCode(w http.ResponseWriter, r *http.Request) {

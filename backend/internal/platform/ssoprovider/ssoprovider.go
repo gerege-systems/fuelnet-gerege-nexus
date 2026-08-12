@@ -105,6 +105,10 @@ type SSOProvider struct {
 	// because the session store and the provider are both built by the Server.
 	sessions SessionResolver
 
+	// endSessions ends that session when a relying party sends the browser to
+	// the logout endpoint. See AttachSessionEnder.
+	endSessions SessionEnder
+
 	// installs answers whether the signing-in user's tenant has installed the
 	// app a client belongs to. Nil means nothing is gated. See InstallGate.
 	installs InstallGate
@@ -201,7 +205,11 @@ func (s *SSOProvider) EnsureDefaultClient(ctx context.Context) {
 		ClientName:   "Gerege Developer Portal",
 		ClientType:   clientTypeConfidential,
 		RedirectURIs: []string{s.issuer + "/oauth/callback"},
-		GrantTypes:   SupportedGrantTypes,
+		// Where a sign-out started by this client returns the person. Without a
+		// registered address the logout endpoint refuses to forward them, which
+		// for the platform's own client would mean its own logout dead-ends.
+		PostLogoutRedirectURIs: []string{s.issuer + "/"},
+		GrantTypes:             SupportedGrantTypes,
 		// offline_access belongs here because the grant list above includes
 		// refresh_token, and offline_access is the only scope that produces a
 		// refresh token — registering one without the other left the client
@@ -252,14 +260,18 @@ func (s *SSOProvider) EnsureConsoleClient(ctx context.Context) {
 	}
 
 	redirect := origin + "/auth/callback"
+	postLogout := origin + "/"
 	if existing, err := s.store.GetClient(ctx, clientID); err == nil {
 		// The origin can move — a deployment renames a host, a staging console
 		// appears — and the redirect URI has to follow it or every sign-in
-		// fails with a mismatch nobody can fix from the console itself.
-		if !slices.Contains(existing.RedirectURIs, redirect) {
+		// fails with a mismatch nobody can fix from the console itself. The
+		// post-logout address moves with it for the same reason.
+		if !slices.Contains(existing.RedirectURIs, redirect) ||
+			!slices.Contains(existing.PostLogoutRedirectURIs, postLogout) {
 			updated := *existing
 			updated.ClientURI = origin
 			updated.RedirectURIs = []string{redirect}
+			updated.PostLogoutRedirectURIs = []string{postLogout}
 			if _, err := s.store.UpdateClient(ctx, existing.TenantID, &updated); err != nil {
 				slog.Error("could not point the developer console client at its origin",
 					"error", err, "redirect_uri", redirect)
@@ -271,12 +283,13 @@ func (s *SSOProvider) EnsureConsoleClient(ctx context.Context) {
 	}
 
 	if _, err := s.store.CreateClient(ctx, &Client{
-		TenantID:     tenantID,
-		ClientID:     clientID,
-		ClientName:   "Gerege Developer Console",
-		ClientURI:    origin,
-		ClientType:   clientTypePublic,
-		RedirectURIs: []string{redirect},
+		TenantID:               tenantID,
+		ClientID:               clientID,
+		ClientName:             "Gerege Developer Console",
+		ClientURI:              origin,
+		ClientType:             clientTypePublic,
+		RedirectURIs:           []string{redirect},
+		PostLogoutRedirectURIs: []string{postLogout},
 		// No refresh_token: the console holds an identity for an hour and asks
 		// the person to sign in again, which for something opened a few times a
 		// week is a better trade than storing a long-lived credential.

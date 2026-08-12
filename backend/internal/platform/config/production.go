@@ -25,6 +25,29 @@ func ValidateProduction() error {
 	if origin.Path != "" && origin.Path != "/" {
 		return fmt.Errorf("PUBLIC_ORIGIN must not contain a path")
 	}
+	return validateSSOClient()
+}
+
+// validateSSOClient rejects a half-written relying-party configuration.
+//
+// The full check lives with the package that acts on it (ssoclient.Config's own
+// Validate, which every deployment runs at startup). What is here is the part
+// that is only a mistake *in production*: a plain-HTTP provider is allowed on
+// the loopback interface so a developer can run two instances against each
+// other, and that same allowance in production would be an identity handed
+// across an unprotected hop.
+func validateSSOClient() error {
+	issuer := strings.TrimSpace(os.Getenv("SSO_CLIENT_ISSUER"))
+	if issuer == "" {
+		return nil
+	}
+	parsed, err := url.Parse(issuer)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("SSO_CLIENT_ISSUER must be an absolute HTTPS origin in production")
+	}
+	if strings.TrimSpace(os.Getenv("SSO_CLIENT_ID")) == "" {
+		return fmt.Errorf("SSO_CLIENT_ID is required when SSO_CLIENT_ISSUER is set")
+	}
 	return nil
 }
 

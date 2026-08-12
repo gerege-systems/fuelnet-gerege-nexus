@@ -57,4 +57,33 @@ export const auth = {
     en: "Could not reach the eID Mongolia service",
   },
   "auth.message.error_password": { mn: "Нэвтрэх боломжгүй байна", en: "Could not sign in" },
+
+  // Энэ суулгац өөрөө биш, өөр SSO провайдер таньдаг үе. {provider} нь тухайн
+  // провайдерийн нэр — орчуулгын мөрөнд үлдээж, дэлгэц дээр орлуулна.
+  "auth.sso.checking": { mn: "Нэвтрэх аргыг тодруулж байна…", en: "Working out how to sign you in…" },
+  "auth.sso.redirecting": { mn: "{provider} рүү шилжиж байна…", en: "Taking you to {provider}…" },
+  "auth.sso.lede": {
+    mn: "Энэ суулгац хэн болохыг тань {provider} дээр баталгаажуулна. Тэнд нэвтэрсэн бол дахин асуухгүй.",
+    en: "This deployment confirms who you are at {provider}. If you are already signed in there, you will not be asked again.",
+  },
+  "auth.sso.card_title": { mn: "{provider}-ээр нэвтэрнэ", en: "Sign in through {provider}" },
+  "auth.sso.card_body": {
+    mn: "Нууц үг энд оруулахгүй. {provider} таныг баталгаажуулаад буцаана.",
+    en: "No password is entered here. {provider} confirms you and sends you back.",
+  },
+  "auth.sso.sign_in": { mn: "{provider}-ээр үргэлжлүүлэх", en: "Continue with {provider}" },
+  "auth.sso.error_generic": { mn: "Нэвтрэлт дуусгаж чадсангүй. Дахин оролдоно уу.", en: "The sign-in could not be completed. Please try again." },
+  "auth.sso.error_stale": {
+    mn: "Нэвтрэх хүсэлтийн хугацаа дууссан байна. Дахин эхлүүлнэ үү.",
+    en: "That sign-in attempt has expired. Please start again.",
+  },
+  "auth.sso.error_unreachable": {
+    mn: "Нэвтрэлтийн провайдертай холбогдож чадсангүй.",
+    en: "The sign-in provider could not be reached.",
+  },
+  "auth.sso.error_denied": { mn: "Нэвтрэх хүсэлт зөвшөөрөгдсөнгүй.", en: "The sign-in request was not approved." },
+  "auth.sso.error_no_account": {
+    mn: "Таныг баталгаажууллаа, гэхдээ энэ систем дээр танд бүртгэл алга. Байгууллагынхаа админд хандана уу.",
+    en: "You are verified, but this deployment has no account for you. Ask your administrator.",
+  },
 } as const;

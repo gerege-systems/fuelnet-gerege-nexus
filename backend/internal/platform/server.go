@@ -38,6 +38,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -79,12 +80,16 @@ type Server struct {
 	// module needs it, the accessor to add is one line — it is unexported now
 	// only because no module has asked yet, and an exported accessor nobody
 	// called read as a dependency the modules already had.
-	emailVerify    *emailverify.Service
-	copilotSvc     *ai.CopilotService
-	forecaster     *ai.Forecaster
-	eidSvc         *eid.EIDService
-	danSvc         *dan.DANService
-	ssoProvider    *ssoprovider.SSOProvider
+	emailVerify *emailverify.Service
+	copilotSvc  *ai.CopilotService
+	forecaster  *ai.Forecaster
+	eidSvc      *eid.EIDService
+	danSvc      *dan.DANService
+	ssoProvider *ssoprovider.SSOProvider
+	// ssoClient is the other half: the provider this deployment signs its own
+	// people in through, when it has one. Nil means it authenticates them
+	// itself, which is every deployment that has not set SSO_CLIENT_ISSUER.
+	ssoClient      *ssoclient.Client
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
@@ -145,6 +150,25 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	ssoProvider := ssoprovider.NewSSOProvider(db)
 	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider)
 
+	// The relying-party half. A deployment that names a provider but cannot
+	// reach it is a deployment nobody can sign in to, so a configuration that
+	// cannot work is a startup failure rather than a surprise at the first
+	// sign-in — but the provider being *reachable* is not checked here, because
+	// that is a running condition and not a configuration one.
+	ssoClientConfig := ssoclient.ConfigFromEnv()
+	if err := ssoClientConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("SSO client configuration: %w", err)
+	}
+	var federatedSignIn *ssoclient.Client
+	if ssoClientConfig.Enabled() {
+		federatedSignIn = ssoclient.New(ssoClientConfig)
+		slog.Info("this deployment signs people in through an SSO provider",
+			"issuer", ssoClientConfig.Issuer,
+			"client_id", ssoClientConfig.ClientID,
+			"redirect_uri", ssoClientConfig.RedirectURI,
+			"local_login", ssoClientConfig.LocalLogin)
+	}
+
 	// Modules first, catalogue second: the catalogue is held against the module
 	// registry as it is loaded, and Bootstrap is what fills that registry.
 	catalogConfig := appcatalog.ConfigFromEnv(catalogPath, PlatformVersion)
@@ -195,6 +219,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		eidSvc:         eid.NewEIDService(),
 		danSvc:         dan.NewDANService(),
 		ssoProvider:    ssoProvider,
+		ssoClient:      federatedSignIn,
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
@@ -207,6 +232,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.
 	ssoProvider.AttachSessions(s.sessions)
+
+	// And how to end one, for a relying party that sends somebody here to sign
+	// out. Without this the logout endpoint could only clear the cookie in
+	// front of it and would leave the session it names alive.
+	ssoProvider.AttachSessionEnder(s.sessions)
 
 	// And whether the organisation they are signing in for has installed the
 	// app behind the client. For an external app that is the only gate there
@@ -513,20 +543,49 @@ func (s *Server) setupRoutes() {
 	r.Post("/oauth2/revoke", s.ssoProvider.HandleRevoke)
 	r.Get("/oauth2/userinfo", s.ssoProvider.HandleUserInfo)
 	r.Post("/oauth2/userinfo", s.ssoProvider.HandleUserInfo)
+	// RP-initiated logout, which the discovery document has advertised since it
+	// was written. Like the authorization endpoint it is a browser destination:
+	// it reads the session cookie and answers with a redirect.
+	r.Get("/oauth2/logout", s.ssoProvider.HandleEndSession)
+	r.Post("/oauth2/logout", s.ssoProvider.HandleEndSession)
 
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
 		// Auth with rate limiting
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.handleLogin)
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.handleEIDLogin)
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.handleEIDStart)
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.handleEIDStartByNationalID)
+		// Every path by which this deployment establishes an identity of its
+		// own. On a deployment that federates, requireLocalLogin closes all of
+		// them and says where sign-in actually happens — see
+		// sso_client_handlers.go for why that is all or nothing.
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.requireLocalLogin(s.handleLogin))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.requireLocalLogin(s.handleEIDLogin))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.requireLocalLogin(s.handleEIDStart))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.requireLocalLogin(s.handleEIDStartByNationalID))
 		// Not the login limiter: a citizen polls for as long as it takes them to
 		// reach their phone, and sharing that budget with sign-in attempts made
 		// a busy office throttle itself out of signing in at all.
-		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.handleEIDPoll)
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.handleDANLogin)
+		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.requireLocalLogin(s.handleEIDPoll))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.requireLocalLogin(s.handleDANLogin))
 		api.Post("/auth/logout", s.handleLogout)
+
+		// Signing in through the provider this deployment is a client of.
+		//
+		// All three are unauthenticated, and each carries its own authority:
+		// the config endpoint says nothing secret, the start endpoint mints the
+		// state it later requires, and the callback is answerable only to a
+		// browser holding the cookie that start set. They are registered
+		// whether or not client mode is on — the handlers answer 404 when it is
+		// off, which is a truthful answer that does not depend on the routing
+		// table having been built differently.
+		//
+		// Deliberately not on the login budget. None of them checks a
+		// credential — the guessing this deployment has to ration happens at
+		// the provider, and starting a sign-in here costs a cookie and a
+		// redirect. Sharing the sign-in budget would have meant an office
+		// behind one address running itself out of sign-ins by clicking a
+		// button that only ever redirects.
+		api.Get("/auth/sso/config", s.handleSSOConfig)
+		api.Get("/auth/sso/start", s.handleSSOStart)
+		api.Get("/auth/sso/callback", s.handleSSOCallback)
 		// Device enrollment is the bootstrap: the one-time code is its authority,
 		// so the device cannot already be behind session/device middleware.
 		api.Post("/devices/enroll", s.handleEnrollDevice)
@@ -541,8 +600,8 @@ func (s *Server) setupRoutes() {
 		// The OAuth redirect a connected provider sends the browser back to.
 		// Unauthenticated on purpose — see handleIntegrationOAuthCallback: the
 		// single-use state row is what carries the authority here, because a
-		// cross-site redirect from Google cannot be relied on to still present
-		// a SameSite=Strict session cookie.
+		// cross-site redirect from Google cannot be relied on to present a
+		// session cookie at all.
 		api.Get("/integrations/oauth/callback", s.handleIntegrationOAuthCallback)
 
 		// Where the verification service returns somebody who has just proved

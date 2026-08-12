@@ -474,6 +474,23 @@ func TokenFromRequest(r *http.Request) string {
 }
 
 // SetSessionCookie writes the session cookie with hardened attributes.
+//
+// SameSite is Lax rather than Strict, and that is what makes single sign-on
+// single. A relying party signing somebody in sends the browser to
+// /oauth2/auth, which is a top-level navigation arriving from another site; a
+// Strict cookie is not sent on one, so the authorization endpoint saw no
+// session, decided nobody was signed in, and showed a login screen to a person
+// who had signed in a minute earlier. The same is true in the other direction,
+// for a deployment that federates: every return from its provider looked like a
+// first visit.
+//
+// It costs nothing in CSRF terms, because the cookie was never the defence.
+// Lax adds exactly one thing over Strict — the cookie rides along on a
+// cross-site *top-level GET navigation* — and every state-changing request on
+// this platform goes through security.CSRFMiddleware, which requires positive
+// evidence that a page of ours made it (an allowlisted Origin, or
+// Sec-Fetch-Site saying same-origin or none). A cross-site POST is refused
+// there whatever the cookie policy says.
 func SetSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
@@ -482,11 +499,13 @@ func SetSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) 
 		Expires:  expiresAt,
 		HttpOnly: true,
 		Secure:   IsProduction(),
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-// ClearSessionCookie expires the session cookie on the client.
+// ClearSessionCookie expires the session cookie on the client. Its attributes
+// have to match the ones it was set with, or the browser treats it as a
+// different cookie and leaves the original in place.
 func ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
@@ -495,7 +514,7 @@ func ClearSessionCookie(w http.ResponseWriter) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   IsProduction(),
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 

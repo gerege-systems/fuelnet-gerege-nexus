@@ -52,6 +52,11 @@ var publicRoutes = []string{
 	"/oauth2/introspect",
 	"/oauth2/revoke",
 	"/oauth2/userinfo",
+	// RP-initiated logout. It reads the session cookie itself and ends the
+	// session it names; requiring one would mean a relying party could not send
+	// somebody here to sign out unless they still had a live session, which is
+	// the one case where it does not matter.
+	"/oauth2/logout",
 
 	// Signing in, and the identity flows that precede a session by definition.
 	"/api/v1/auth/login",
@@ -61,6 +66,17 @@ var publicRoutes = []string{
 	"/api/v1/auth/eid/start-id",
 	"/api/v1/auth/eid/poll",
 	"/api/v1/auth/dan/login",
+
+	// Signing in through the provider this deployment is a client of, when it
+	// is one. Each carries its own authority rather than a session: the config
+	// endpoint says nothing secret — whether sign-in is federated is visible
+	// from the redirect anyway, and the login screen has to know before it can
+	// render — the start endpoint mints the state it later requires, and the
+	// callback is answerable only to a browser holding the cookie that start
+	// set. See sso_client_handlers.go.
+	"/api/v1/auth/sso/config",
+	"/api/v1/auth/sso/start",
+	"/api/v1/auth/sso/callback",
 
 	// The App Store registry, when this instance is the one publishing a
 	// catalogue. Public because a catalogue is read by an instance that holds

@@ -29,17 +29,23 @@ var ErrNotFound = errors.New("not found")
 
 // Client is a registered OAuth2 relying party.
 type Client struct {
-	ID              string     `json:"id"`
-	TenantID        string     `json:"tenant_id"`
-	ClientID        string     `json:"client_id"`
-	ClientName      string     `json:"client_name"`
-	ClientURI       string     `json:"client_uri,omitempty"`
-	LogoURI         string     `json:"logo_uri,omitempty"`
-	ClientType      string     `json:"client_type"`
-	RedirectURIs    []string   `json:"redirect_uris"`
-	GrantTypes      []string   `json:"grant_types"`
-	Scopes          []string   `json:"scopes"`
-	Disabled        bool       `json:"disabled"`
+	ID           string   `json:"id"`
+	TenantID     string   `json:"tenant_id"`
+	ClientID     string   `json:"client_id"`
+	ClientName   string   `json:"client_name"`
+	ClientURI    string   `json:"client_uri,omitempty"`
+	LogoURI      string   `json:"logo_uri,omitempty"`
+	ClientType   string   `json:"client_type"`
+	RedirectURIs []string `json:"redirect_uris"`
+	GrantTypes   []string `json:"grant_types"`
+	Scopes       []string `json:"scopes"`
+	Disabled     bool     `json:"disabled"`
+	// PostLogoutRedirectURIs is where this client may send somebody after
+	// signing them out here. It is matched exactly, like RedirectURIs, and for
+	// the same reason: an unchecked return address turns the logout endpoint
+	// into an open redirector.
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	SecretRotatedAt *time.Time `json:"secret_rotated_at,omitempty"`
@@ -117,13 +123,13 @@ func hashSecret(value string) string {
 }
 
 const clientColumns = `id, tenant_id, client_id, client_name, client_uri, logo_uri,
-	client_type, redirect_uris, grant_types, scopes, disabled,
+	client_type, redirect_uris, grant_types, scopes, post_logout_redirect_uris, disabled,
 	created_at, updated_at, secret_rotated_at, last_used_at`
 
 func scanClient(row pgx.Row) (*Client, error) {
 	var c Client
 	err := row.Scan(&c.ID, &c.TenantID, &c.ClientID, &c.ClientName, &c.ClientURI, &c.LogoURI,
-		&c.ClientType, &c.RedirectURIs, &c.GrantTypes, &c.Scopes, &c.Disabled,
+		&c.ClientType, &c.RedirectURIs, &c.GrantTypes, &c.Scopes, &c.PostLogoutRedirectURIs, &c.Disabled,
 		&c.CreatedAt, &c.UpdatedAt, &c.SecretRotatedAt, &c.LastUsedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -146,11 +152,12 @@ func (s *Store) CreateClient(ctx context.Context, c *Client, secretHash, created
 	row := s.db.QueryRow(ctx, `
 		INSERT INTO oauth2_clients
 			(tenant_id, client_id, client_secret_hash, client_name, client_uri, logo_uri,
-			 client_type, redirect_uris, grant_types, scopes, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			 client_type, redirect_uris, grant_types, scopes, post_logout_redirect_uris, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		RETURNING `+clientColumns,
 		c.TenantID, c.ClientID, hash, c.ClientName, c.ClientURI, c.LogoURI,
-		c.ClientType, c.RedirectURIs, c.GrantTypes, c.Scopes, creator)
+		c.ClientType, list(c.RedirectURIs), list(c.GrantTypes), list(c.Scopes),
+		list(c.PostLogoutRedirectURIs), creator)
 	return scanClient(row)
 }
 
@@ -197,11 +204,26 @@ func (s *Store) UpdateClient(ctx context.Context, tenantID string, c *Client) (*
 		UPDATE oauth2_clients
 		   SET client_name = $3, client_uri = $4, logo_uri = $5,
 		       redirect_uris = $6, grant_types = $7, scopes = $8,
-		       disabled = $9, updated_at = NOW()
+		       post_logout_redirect_uris = $9, disabled = $10, updated_at = NOW()
 		 WHERE tenant_id = $1 AND client_id = $2
 		RETURNING `+clientColumns,
 		tenantID, c.ClientID, c.ClientName, c.ClientURI, c.LogoURI,
-		c.RedirectURIs, c.GrantTypes, c.Scopes, c.Disabled))
+		list(c.RedirectURIs), list(c.GrantTypes), list(c.Scopes),
+		list(c.PostLogoutRedirectURIs), c.Disabled))
+}
+
+// list turns a nil slice into an empty one.
+//
+// A nil Go slice is sent as SQL NULL, and every array column here is NOT NULL
+// with an empty-array default — so a client registered without post-logout
+// addresses, which is most of them, failed the insert outright. The default
+// only applies when the column is left out of the statement, and these are
+// listed explicitly.
+func list(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }
 
 // RotateClientSecret replaces the stored digest and stamps the rotation.
@@ -527,6 +549,38 @@ func (s *Store) PublicKeys(ctx context.Context) ([]map[string]any, error) {
 		}
 		if pub, ok := parsed.(*rsa.PublicKey); ok {
 			keys = append(keys, publicJWK(kid, pub))
+		}
+	}
+	return keys, rows.Err()
+}
+
+// VerificationKeys returns the public halves by kid, for the one place this
+// provider reads a token it signed itself: the id_token_hint on a logout
+// request. Retired keys are included — an id_token minted before a rotation is
+// still a truthful hint about who is signing out.
+func (s *Store) VerificationKeys(ctx context.Context) (map[string]*rsa.PublicKey, error) {
+	rows, err := s.db.Query(ctx, `SELECT kid, public_key_pem FROM oauth2_signing_keys`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	keys := make(map[string]*rsa.PublicKey, 2)
+	for rows.Next() {
+		var kid, publicPEM string
+		if err := rows.Scan(&kid, &publicPEM); err != nil {
+			return nil, err
+		}
+		block, _ := pem.Decode([]byte(publicPEM))
+		if block == nil {
+			continue
+		}
+		parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			continue
+		}
+		if pub, ok := parsed.(*rsa.PublicKey); ok {
+			keys[kid] = pub
 		}
 	}
 	return keys, rows.Err()

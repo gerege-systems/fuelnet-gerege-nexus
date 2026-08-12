@@ -29,6 +29,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -170,9 +171,29 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// On a deployment that federates, ending the session here is half the job.
+	// The provider still holds one, and a person who pressed "sign out" and can
+	// be signed straight back in by clicking "sign in" has not signed out in
+	// any sense they would recognise. So the answer carries where to go to
+	// finish it, and the browser is sent there; the provider ends its own
+	// session and returns them to this deployment's post-logout address.
+	//
+	// Read before the cookie is cleared, and cleared after: the hint is spent
+	// here and is of no use to the next session.
+	endSession := ""
+	if s.ssoClientEnabled() {
+		endSession = s.ssoClient.EndSessionURL(r.Context(), ssoclient.IDTokenFromRequest(r))
+		ssoclient.ClearIDTokenCookie(w)
+	}
+
 	auth.ClearSessionCookie(w)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "logged_out"})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status": "logged_out",
+		// Empty unless this deployment federates and its provider offers
+		// RP-initiated logout. A client that finds it empty is already done.
+		"end_session_url": endSession,
+	})
 }
 
 // handleTenants answers which tenants the caller may act for.

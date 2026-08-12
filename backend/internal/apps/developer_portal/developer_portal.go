@@ -132,9 +132,13 @@ type appRequest struct {
 	LogoURI      string   `json:"logo_uri"`
 	ClientType   string   `json:"client_type"`
 	RedirectURIs []string `json:"redirect_uris"`
-	GrantTypes   []string `json:"grant_types"`
-	Scopes       []string `json:"scopes"`
-	Disabled     bool     `json:"disabled"`
+	// Where the platform may return somebody after this application signs them
+	// out of it. Optional: an application that never ends a session here needs
+	// none, and one that does gets its return address matched exactly.
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	GrantTypes             []string `json:"grant_types"`
+	Scopes                 []string `json:"scopes"`
+	Disabled               bool     `json:"disabled"`
 }
 
 func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
@@ -157,15 +161,16 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	}
 
 	client := &ssoprovider.Client{
-		TenantID:     tenantID,
-		ClientID:     "app_" + strings.ToLower(slugify(req.ClientName)) + "_" + ssoprovider.NewIdentifier(8),
-		ClientName:   normalised.ClientName,
-		ClientURI:    normalised.ClientURI,
-		LogoURI:      normalised.LogoURI,
-		ClientType:   normalised.ClientType,
-		RedirectURIs: normalised.RedirectURIs,
-		GrantTypes:   normalised.GrantTypes,
-		Scopes:       normalised.Scopes,
+		TenantID:               tenantID,
+		ClientID:               "app_" + strings.ToLower(slugify(req.ClientName)) + "_" + ssoprovider.NewIdentifier(8),
+		ClientName:             normalised.ClientName,
+		ClientURI:              normalised.ClientURI,
+		LogoURI:                normalised.LogoURI,
+		ClientType:             normalised.ClientType,
+		RedirectURIs:           normalised.RedirectURIs,
+		PostLogoutRedirectURIs: normalised.PostLogoutRedirectURIs,
+		GrantTypes:             normalised.GrantTypes,
+		Scopes:                 normalised.Scopes,
 	}
 
 	// A public client is issued no secret at all: PKCE stands in for it,
@@ -226,6 +231,7 @@ func (m *DeveloperPortalModule) handleUpdateApp(w http.ResponseWriter, r *http.R
 	existing.ClientURI = normalised.ClientURI
 	existing.LogoURI = normalised.LogoURI
 	existing.RedirectURIs = normalised.RedirectURIs
+	existing.PostLogoutRedirectURIs = normalised.PostLogoutRedirectURIs
 	existing.GrantTypes = normalised.GrantTypes
 	existing.Scopes = normalised.Scopes
 	existing.Disabled = req.Disabled
@@ -458,6 +464,16 @@ func normalise(req *appRequest) (*appRequest, error) {
 		return nil, errors.New("authorization_code requires at least one redirect_uri")
 	}
 	for _, raw := range out.RedirectURIs {
+		if err := validateRedirectURI(raw, out.ClientType); err != nil {
+			return nil, err
+		}
+	}
+	// The same rules: a post-logout address is matched exactly by the logout
+	// endpoint, so a wildcard or a fragment registered here would be a target
+	// that can never match, and a plain-HTTP one off the loopback would be a
+	// person handed back over an unprotected hop.
+	out.PostLogoutRedirectURIs = dedupe(req.PostLogoutRedirectURIs)
+	for _, raw := range out.PostLogoutRedirectURIs {
 		if err := validateRedirectURI(raw, out.ClientType); err != nil {
 			return nil, err
 		}

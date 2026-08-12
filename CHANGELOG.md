@@ -15,6 +15,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A deployment can now be an SSO client, not only a provider
+
+The platform has always been an OpenID Connect provider: it could hand
+identities out and never take one in, so a group running several deployments had
+one sign-in per deployment and no way to make one of them the source of truth.
+This is the other half. Setting `SSO_CLIENT_ISSUER` makes a deployment a relying
+party of the provider named there — including of another Gerege Nexus — and the
+two halves are independent: an instance can be a provider, a client, or both,
+which is what a regional deployment federating upward while still issuing
+identities to its own installed apps needs. Full guide in
+[`docs/SSO_FEDERATION.md`](docs/SSO_FEDERATION.md).
+
+- **`ssoclient`, the relying-party protocol.** Discovery with the issuer check
+  that makes every advertised endpoint trustworthy, a JWKS cache that refetches
+  on an unknown `kid`, authorization with mandatory PKCE, the code exchange, and
+  `id_token` verification that is deliberately narrow: RS256 only — `none` and
+  the HMAC family are what alg confusion is made of — with `iss`, `aud`, `azp`,
+  `exp`, `iat` and `nonce` all checked before a claim is believed. The pending
+  sign-in lives in a short-lived HttpOnly cookie rather than a table, because a
+  row would be written for every click of a sign-in button including every
+  crawler's.
+- **Client mode closes the local front door.** With a provider named, this
+  deployment's password, eID and DAN sign-in endpoints stop answering and say
+  where sign-in actually happens; the login screen becomes a hand-off. A
+  deployment that federates its identity and also keeps its own password login
+  has not federated anything — it has two front doors and one of them is
+  unmanaged. `SSO_CLIENT_LOCAL_LOGIN=true` keeps them, as the documented way
+  back in when the provider is the thing that is broken.
+- **Signing out signs you out at the provider.** `/auth/logout` now answers with
+  an `end_session_url` on a federated deployment, and the browser follows it: the
+  provider ends its own session and returns the person to this deployment's
+  registered post-logout address. Without that step, "sign out" followed by
+  "sign in" walks straight back into the still-live session upstream.
+- **Accounts are keyed on `(issuer, subject)`, never on the email address.** An
+  address is a label a provider can change, and treating one as an identity means
+  whoever is given a departed colleague's address inherits their account. A local
+  account with a matching *verified* address is adopted on first federated
+  sign-in, which is what makes federating a running deployment possible;
+  `SSO_CLIENT_TENANT` decides whether a stranger the provider vouches for is
+  provisioned at all, and unset means refused.
+
+### Added — RP-initiated logout at the provider (`/oauth2/logout`)
+
+The discovery document has advertised `end_session_endpoint` since it was
+written, and nothing served it: a relying party that ended its own session and
+sent the person here — which is what a conformant client does — landed on a 404
+while staying signed in. That is worse than not advertising it, because the next
+click on "sign in" looks like the logout was ignored.
+
+- `post_logout_redirect_uris` is a new column on `oauth2_clients` (migration
+  00041), editable from the developer portal and matched exactly. It is not
+  `redirect_uris` reused: a sign-in callback is a machine-read path that receives
+  a code, a post-logout address is a page a person looks at, and one list would
+  widen both whenever either was extended. An unregistered return address is
+  refused rather than followed — a logout URL is one a client hands out freely,
+  so following one unchecked would make the provider an open redirector.
+- The client is resolved from `client_id` or from a verified `id_token_hint`. An
+  unverifiable hint is ignored rather than refused: by the time it is read the
+  person is already signed out, and failing there would strand them.
+
+### Fixed — Two defects the new tests turned up
+
+- **A client registered with no post-logout addresses failed to insert.** A nil
+  Go slice is sent as SQL `NULL`, and every array column on `oauth2_clients` is
+  `NOT NULL` with an empty-array default — a default that only applies when the
+  column is left out of the statement, and these are listed explicitly. Every
+  array is now normalised at the store boundary.
+- **HTTP Basic client credentials were not URL-decoded.** RFC 6749 §2.3.1 has a
+  client form-urlencode both halves before base64ing them, so a conformant
+  client's secret arrived escaped and was compared, still escaped, against what
+  was registered. It never bit in practice because the secrets this provider
+  mints are hex, but it would have bitten the first integrator who chose their
+  own. A value that does not decode is used as it stands, so a client that
+  skipped the encoding is not refused over a disagreement about transport.
+
+### Changed — The session cookie is `SameSite=Lax`
+
+Without this, single sign-on is not single. A relying party signing somebody in
+sends the browser to `/oauth2/auth`, which is a top-level navigation arriving
+from another site, and a `Strict` cookie is not sent on one — so the
+authorization endpoint saw no session and showed a login screen to somebody who
+had signed in a minute earlier. It costs nothing in CSRF terms, because the
+cookie was never the defence: `Lax` adds exactly one thing over `Strict`, a
+cross-site top-level *GET*, and every state-changing request goes through
+`security.CSRFMiddleware`, which demands positive evidence that a page of ours
+made it.
+
 ### Fixed — A lockout that never let go, and three silent truncations
 
 - **A lapsed login lockout re-locked the account on the next single failure.**

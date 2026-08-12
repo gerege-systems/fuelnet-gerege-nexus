@@ -124,6 +124,12 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 - **Платформын өөрийн OAuth2 / OIDC provider**
   (`/.well-known/openid-configuration`) — гуравдагч системд client credentials
   урсгалаар токен олгоно.
+- **Мөн өөр провайдерийн SSO клиент болж чадна** (`SSO_CLIENT_ISSUER`) — өөр
+  Gerege Nexus суулгац ч байж болно. Хоёр хагас нь бие биеэсээ хамааралгүй:
+  аймгийн суулгац улсын нэгдсэн рүү дээшээ холбогдоод, өөрөө өөр дээрээ суусан
+  аппуудад identity өгсөөр байна. Клиент болсон үед эндэх нэвтрэлт хаагдаж,
+  гарах үед провайдер дээрээс гарч буцаж ирнэ —
+  [`docs/SSO_FEDERATION.md`](docs/SSO_FEDERATION.md).
 - **И-мэйл баталгаажуулалт** (`platform/emailverify`) — хаяг эзэмшлийг батлах
   нэгдсэн урсгал, платформын бүх апп модуль Go дуудлагаар ашиглана. Захидлыг
   хостинг үйлчилгээ (`enigma.mn`) илгээх тул платформ SMTP нууц үг, илгээгчийн
@@ -325,6 +331,8 @@ npm run dev
 | `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
 | `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх |
 | `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
+| `SSO_CLIENT_ISSUER` / `SSO_CLIENT_ID` | — | Тохируулбал энэ суулгац нэрлэсэн провайдерийн клиент болно: эндэх нэвтрэлт хаагдаж, гарах нь провайдер дээр дуусна |
+| `SSO_CLIENT_TENANT` | — | Провайдерийн баталгаажуулсан ч энд бүртгэлгүй хүнийг үүсгэх байгууллага. Хоосон бол үүсгэхгүй |
 | `GEMINI_API_KEY` | — | AI chat, voice, TTS, орчуулгыг идэвхжүүлэх түлхүүр |
 | `GEMINI_MODEL` / `GEMINI_TTS_MODEL` | Gemini 2.5 Flash загварууд | Chat ба дууны model сонголт |
 | `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |
@@ -353,6 +361,10 @@ npm run dev
 | `GET` | `/api/v1/verify/landed` | Баталгаажуулсан хэрэглэгчийг хүлээн авах — нэг л удаа ажиллана |
 | `GET` | `/api/v1/admin/email-verification/overview` | Баталгаажуулалтын тойм ба үйлчилгээний төлөв (админ) |
 | `POST` | `/oauth2/token` | OAuth2 client credentials токен |
+| `GET` | `/oauth2/logout` | RP-initiated logout — session хааж, бүртгэлтэй хаяг руу буцаана |
+| `GET` | `/api/v1/auth/sso/config` | Энэ суулгац хэрхэн нэвтрүүлдэг — нэвтрэх дэлгэц уншина |
+| `GET` | `/api/v1/auth/sso/start` | Провайдер дээр нэвтрэлт эхлүүлнэ (PKCE, state, nonce) |
+| `GET` | `/api/v1/auth/sso/callback` | Провайдерээс буцаж ирэх цэг |
 
 Нэвтрэлтийн токен нь HttpOnly cookie эсвэл `Authorization: Bearer <token>`
 толгойгоор дамжина.

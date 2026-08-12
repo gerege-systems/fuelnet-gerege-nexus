@@ -98,6 +98,17 @@ services:
       TRUST_PROXY_HEADERS: "true"
       SSO_ISSUER: ${PUBLIC_ORIGIN:-https://nexus.gerege.mn}
       SSO_DEFAULT_CLIENT_SECRET: ${SSO_DEFAULT_CLIENT_SECRET:?SSO_DEFAULT_CLIENT_SECRET is required in production}
+      # Signing this deployment's own people in at another provider. Empty is
+      # the normal case — this instance issues its own identities. Setting the
+      # issuer closes the local sign-in paths and hands the login screen over;
+      # see docs/SSO_FEDERATION.md.
+      SSO_CLIENT_ISSUER: ${SSO_CLIENT_ISSUER:-}
+      SSO_CLIENT_ID: ${SSO_CLIENT_ID:-}
+      SSO_CLIENT_SECRET: ${SSO_CLIENT_SECRET:-}
+      SSO_CLIENT_PROVIDER_NAME: ${SSO_CLIENT_PROVIDER_NAME:-}
+      SSO_CLIENT_SCOPES: ${SSO_CLIENT_SCOPES:-}
+      SSO_CLIENT_TENANT: ${SSO_CLIENT_TENANT:-}
+      SSO_CLIENT_LOCAL_LOGIN: ${SSO_CLIENT_LOCAL_LOGIN:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL:-gemini-2.5-flash-preview-tts}
