@@ -1,0 +1,95 @@
+[
+  {
+    "id": "io.gerege.nexus.core",
+    "slug": "core",
+    "name": "Organisation & People",
+    "description": "The organisation itself: its legal identity, its departments, and the people who work in it.",
+    "icon_url": "/icons/core.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Байгууллага ба ажилтнууд",
+        "description": "Байгууллагын хуулийн мэдээлэл, хэлтэс нэгж, ажилтнуудын бүртгэл.",
+        "category": "Платформ"
+      },
+      "ar": {
+        "name": "المؤسسة والأشخاص",
+        "description": "الهوية القانونية للمؤسسة وأقسامها والعاملون فيها.",
+        "category": "المنصة"
+      },
+      "zh": {
+        "name": "组织与人员",
+        "description": "组织的法律信息、部门结构与人员名录。",
+        "category": "平台"
+      },
+      "fr": {
+        "name": "Organisation et personnes",
+        "description": "L'identité légale de l'organisation, ses départements et ses collaborateurs.",
+        "category": "Plateforme"
+      },
+      "ru": {
+        "name": "Организация и сотрудники",
+        "description": "Юридические данные организации, её подразделения и сотрудники.",
+        "category": "Платформа"
+      },
+      "es": {
+        "name": "Organización y personas",
+        "description": "La identidad legal de la organización, sus departamentos y sus personas.",
+        "category": "Plataforma"
+      }
+    }
+  },
+  {
+    "id": "io.gerege.nexus.appstore_registry",
+    "slug": "appstore-registry",
+    "name": "App Store Registry",
+    "description": "The signed catalogue every Gerege Nexus instance reads.",
+    "icon_url": "/icons/appstore-registry.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Аппын бүртгэл",
+        "description": "Gerege Nexus сүлжээний бүх инстанс уншдаг, гарын үсэгтэй каталог.",
+        "category": "Платформ"
+      }
+    }
+  },
+  {
+    "id": "io.gerege.nexus.publisher_studio",
+    "slug": "publisher-studio",
+    "name": "Publisher Studio",
+    "description": "Register apps and submit versions for review.",
+    "icon_url": "/icons/publisher-studio.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Нийтлэгчийн студи",
+        "description": "Апп бүртгэж, хувилбарыг хяналтад илгээнэ.",
+        "category": "Платформ"
+      }
+    }
+  },
+  {
+    "id": "io.gerege.nexus.store_review",
+    "slug": "store-review",
+    "name": "Store Review",
+    "description": "The queue a submitted version waits in, and the decision that ends the wait.",
+    "icon_url": "/icons/store-review.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Хяналтын дараалал",
+        "description": "Илгээсэн хувилбар хүлээх дараалал ба шийдвэр.",
+        "category": "Платформ"
+      }
+    }
+  }
+]

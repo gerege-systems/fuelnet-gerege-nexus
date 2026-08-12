@@ -57,17 +57,25 @@ func NewStore(db *pgxpool.Pool) *Store { return &Store{db: db} }
 func (s *Store) DB() *pgxpool.Pool { return s.db }
 
 // Publisher is an organisation that publishes apps.
+// Publisher is a tenant's publishing identity.
+//
+// It used to carry the owner as four columns — a subject claim, an e-mail and
+// a tenant recorded as loose text — because the registry ran outside the
+// platform and could only describe who was acting. Here the organisation is a
+// tenant, so the row points at one and everything else about who may act
+// follows from that tenant's own memberships and roles.
 type Publisher struct {
-	ID              string    `json:"id"`
-	Slug            string    `json:"slug"`
-	Name            string    `json:"name"`
-	ContactEmail    string    `json:"contact_email"`
-	Verified        bool      `json:"verified"`
-	OwnerSub        string    `json:"-"`
-	OwnerEmail      string    `json:"owner_email"`
-	OwnerTenantID   string    `json:"-"`
-	OwnerTenantSlug string    `json:"owner_tenant_slug"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID string `json:"id"`
+	// TenantID is not served. It identifies an organisation inside this
+	// deployment, and a storefront naming it would be publishing an internal
+	// identifier to strangers; the slug is the public handle.
+	TenantID     string     `json:"-"`
+	Slug         string     `json:"slug"`
+	Name         string     `json:"name"`
+	ContactEmail string     `json:"contact_email"`
+	Verified     bool       `json:"verified"`
+	VerifiedAt   *time.Time `json:"verified_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // App is a catalogue entry, without its versions.
@@ -176,8 +184,13 @@ func bumpRevision(ctx context.Context, tx pgx.Tx) error {
 // --- store_publishers -------------------------------------------------------------
 
 // PublisherByOwner returns the publisher a signed-in developer acts for.
-func (s *Store) PublisherByOwner(ctx context.Context, sub string) (*Publisher, error) {
-	return s.scanPublisher(s.db.QueryRow(ctx, publisherColumns+` WHERE owner_sub = $1`, sub))
+// PublisherByTenant resolves the publishing profile an organisation acts under.
+//
+// One tenant, one publisher: the unique constraint says so, and it is what
+// makes "may this caller submit for this app" a question about membership
+// rather than about a separate account somebody has to remember.
+func (s *Store) PublisherByTenant(ctx context.Context, tenantID string) (*Publisher, error) {
+	return s.scanPublisher(s.db.QueryRow(ctx, publisherColumns+` WHERE tenant_id = $1`, tenantID))
 }
 
 // PublisherBySlug resolves a publisher by its handle. The CI path uses it: the
@@ -191,13 +204,13 @@ func (s *Store) PublisherByID(ctx context.Context, id string) (*Publisher, error
 	return s.scanPublisher(s.db.QueryRow(ctx, publisherColumns+` WHERE id = $1`, id))
 }
 
-const publisherColumns = `SELECT id::text, slug, name, contact_email, verified, owner_sub,
-	owner_email, owner_tenant_id, owner_tenant_slug, created_at FROM store_publishers`
+const publisherColumns = `SELECT id::text, tenant_id::text, slug, name, contact_email,
+	verified, verified_at, created_at FROM store_publishers`
 
 func (s *Store) scanPublisher(row pgx.Row) (*Publisher, error) {
 	var p Publisher
-	err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.ContactEmail, &p.Verified, &p.OwnerSub,
-		&p.OwnerEmail, &p.OwnerTenantID, &p.OwnerTenantSlug, &p.CreatedAt)
+	err := row.Scan(&p.ID, &p.TenantID, &p.Slug, &p.Name, &p.ContactEmail,
+		&p.Verified, &p.VerifiedAt, &p.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -207,16 +220,24 @@ func (s *Store) scanPublisher(row pgx.Row) (*Publisher, error) {
 	return &p, nil
 }
 
-// CreatePublisher registers a developer's organisation.
-func (s *Store) CreatePublisher(ctx context.Context, p *Publisher) (*Publisher, error) {
+// UpsertPublisher records or edits the profile a tenant publishes under.
+//
+// Verification is not touched here. It is somebody else's decision about this
+// organisation, and a publisher that could edit its own verified flag would be
+// a badge worth nothing.
+func (s *Store) UpsertPublisher(ctx context.Context, p *Publisher) (*Publisher, error) {
 	var id string
 	err := s.db.QueryRow(ctx,
-		`INSERT INTO store_publishers (slug, name, contact_email, owner_sub, owner_email,
-		                         owner_tenant_id, owner_tenant_slug)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id::text`,
-		p.Slug, p.Name, p.ContactEmail, p.OwnerSub, p.OwnerEmail,
-		p.OwnerTenantID, p.OwnerTenantSlug).Scan(&id)
+		`INSERT INTO store_publishers (tenant_id, slug, name, contact_email)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (tenant_id) DO UPDATE SET
+		     slug = EXCLUDED.slug, name = EXCLUDED.name,
+		     contact_email = EXCLUDED.contact_email, updated_at = NOW()
+		 RETURNING id::text`,
+		p.TenantID, p.Slug, p.Name, p.ContactEmail).Scan(&id)
 	if isUniqueViolation(err) {
+		// The slug is the other unique column, and it is the one a caller can
+		// collide on: somebody else already publishes under that handle.
 		return nil, ErrConflict
 	}
 	if err != nil {
@@ -236,8 +257,8 @@ func (s *Store) ListPublishers(ctx context.Context) ([]Publisher, error) {
 	list := make([]Publisher, 0)
 	for rows.Next() {
 		var p Publisher
-		if err := rows.Scan(&p.ID, &p.Slug, &p.Name, &p.ContactEmail, &p.Verified, &p.OwnerSub,
-			&p.OwnerEmail, &p.OwnerTenantID, &p.OwnerTenantSlug, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.TenantID, &p.Slug, &p.Name, &p.ContactEmail,
+			&p.Verified, &p.VerifiedAt, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, p)
@@ -247,8 +268,16 @@ func (s *Store) ListPublishers(ctx context.Context) ([]Publisher, error) {
 
 // SetPublisherVerified is the administrator's decision that a publisher is who
 // they claim to be.
-func (s *Store) SetPublisherVerified(ctx context.Context, id string, verified bool) error {
-	tag, err := s.db.Exec(ctx, `UPDATE store_publishers SET verified = $1 WHERE id = $2`, verified, id)
+func (s *Store) SetPublisherVerified(ctx context.Context, id string, verified bool, actorID string) error {
+	// Who decided, and when, alongside the flag itself. A badge that says
+	// "verified" and cannot say by whom is a badge nobody can question.
+	tag, err := s.db.Exec(ctx,
+		`UPDATE store_publishers
+		    SET verified = $1,
+		        verified_at = CASE WHEN $1 THEN NOW() END,
+		        verified_by = CASE WHEN $1 THEN NULLIF($3,'')::uuid END,
+		        updated_at = NOW()
+		  WHERE id = $2`, verified, id, actorID)
 	if err != nil {
 		return err
 	}
@@ -563,6 +592,70 @@ func (s *Store) queryVersions(ctx context.Context, query string, args ...any) ([
 // exists is refused rather than overwritten: instances cache by version, and a
 // manifest that changes under a version they already hold is a change they
 // would never see.
+// ErrInvalidSubmission is a manifest the caller can fix. Its message is meant
+// to be shown to them, which is why it carries the reason rather than a code.
+var ErrInvalidSubmission = errors.New("invalid submission")
+
+// SubmitManifest validates a manifest and puts it in the review queue.
+//
+// Validation lives here rather than in a handler so that every way in — the
+// studio, the release pipeline, whatever comes next — is held to the same
+// rules. Two copies of these checks would differ the first time one of them was
+// edited, and the difference would be a manifest one path accepted and the
+// platform later rejected on arrival at an instance, which is a support ticket
+// rather than an error message.
+func (s *Store) SubmitManifest(ctx context.Context, app *App, channel string,
+	manifest appcatalog.Manifest, submittedBy string) (*Version, error) {
+
+	if channel == "" {
+		channel = "stable"
+	}
+	if channel != "stable" && channel != "beta" {
+		return nil, fmt.Errorf(`%w: channel must be "stable" or "beta"`, ErrInvalidSubmission)
+	}
+	if manifest.ID != app.ID {
+		return nil, fmt.Errorf("%w: the manifest id must match the app id", ErrInvalidSubmission)
+	}
+	if (manifest.Type == appcatalog.TypeExternal) != (app.Type == appcatalog.TypeExternal) {
+		return nil, fmt.Errorf("%w: the manifest type must match the app type", ErrInvalidSubmission)
+	}
+	// Validated with an empty platform version: the app's own constraint is
+	// checked for sanity without being checked against this instance's version.
+	// A registry serves catalogues to instances older and newer than itself, and
+	// refusing a manifest for a platform it does not happen to be running would
+	// make the registry's own version a publishing rule.
+	if err := appcatalog.ValidateManifest(manifest, ""); err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidSubmission, err.Error())
+	}
+
+	version := &Version{
+		AppID: app.ID, Version: manifest.Version, Channel: channel,
+		MinPlatform: manifest.Platform, Manifest: manifest,
+		Status: StatusInReview, SubmittedBy: submittedBy,
+	}
+	if version.MinPlatform == "" {
+		version.MinPlatform = ">=0.1.0"
+	}
+	return s.SubmitVersion(ctx, version, ExternalFromManifest(app.ID, manifest))
+}
+
+// ExternalFromManifest builds the queryable external registration, or nil for a
+// module app.
+func ExternalFromManifest(appID string, m appcatalog.Manifest) *ExternalRegistration {
+	if !m.IsExternal() || m.External == nil {
+		return nil
+	}
+	embed := m.External.Embed
+	if embed == "" {
+		embed = "new_tab"
+	}
+	return &ExternalRegistration{
+		AppID: appID, LaunchURL: m.External.LaunchURL,
+		SSOClientID: m.External.SSOClientID, Scopes: m.External.Scopes,
+		Embed: embed, HealthURL: m.External.HealthURL,
+	}
+}
+
 func (s *Store) SubmitVersion(ctx context.Context, v *Version, external *ExternalRegistration) (*Version, error) {
 	manifest, err := json.Marshal(v.Manifest)
 	if err != nil {
@@ -624,7 +717,7 @@ func (s *Store) SubmitVersion(ctx context.Context, v *Version, external *Externa
 // Publishing is the only moment the catalogue every instance pulls actually
 // changes, which is why the revision is bumped inside the same transaction: a
 // snapshot built a microsecond earlier must not be served afterwards.
-func (s *Store) DecideVersion(ctx context.Context, versionID, action, actor, note string) error {
+func (s *Store) DecideVersion(ctx context.Context, versionID, action, actorID, actor, note string) error {
 	var status string
 	switch action {
 	case "publish":
@@ -670,17 +763,18 @@ func (s *Store) DecideVersion(ctx context.Context, versionID, action, actor, not
 			     repository  = COALESCE(v.manifest ->> 'repository', ''),
 			     homepage    = COALESCE(v.manifest ->> 'homepage', ''),
 			     license     = COALESCE(v.manifest ->> 'license', ''),
-			     updated_by  = $2,
+			     updated_by  = NULLIF($2,'')::uuid,
 			     updated_at  = NOW()
 			   FROM store_app_versions v
-			  WHERE v.id = $1 AND a.id = v.app_id`, versionID, actor); err != nil {
+			  WHERE v.id = $1 AND a.id = v.app_id`, versionID, actorID); err != nil {
 			return err
 		}
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO store_review_events (version_id, actor, action, note) VALUES ($1, $2, $3, $4)`,
-		versionID, actor, action, note); err != nil {
+		`INSERT INTO store_review_events (version_id, actor_id, actor, action, note)
+		 VALUES ($1, NULLIF($2,'')::uuid, $3, $4, $5)`,
+		versionID, actorID, actor, action, note); err != nil {
 		return err
 	}
 	if err := bumpRevision(ctx, tx); err != nil {
