@@ -1,0 +1,70 @@
+# Alertmanager — grouping, inhibition and routing.
+#
+# This is the half that never changes. The receivers are appended to it at
+# container start by render-config.sh, because whether e-mail or Telegram
+# exists at all is a property of the deployment: a stack that refuses to start
+# because no SMTP host was configured is a stack nobody installs, and a
+# bot_token cannot live in a file in this repository.
+#
+# Both receiver names below are always declared by the renderer, with or
+# without any delivery attached. A receiver that is only a name is valid and
+# does nothing, which is exactly the behaviour wanted from an unconfigured
+# channel: the alert still fires, still shows in Alertmanager's own UI and in
+# Grafana, and nothing logs a delivery failure every four hours.
+
+global:
+  resolve_timeout: 5m
+
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  # Group by the alert and the service, not by instance. One database going
+  # slow should be one message, not one per scrape target.
+  group_by: ["alertname", "service"]
+  # Wait this long for other alerts of the same group before sending the first
+  # message. A rollout that trips four rules at once arrives as one
+  # notification rather than four.
+  group_wait: 30s
+  group_interval: 5m
+  # How long before the same still-firing alert is repeated. Four hours is long
+  # enough not to be noise and short enough that one which arrived while nobody
+  # was awake is still in front of somebody in the morning.
+  repeat_interval: 4h
+  receiver: default
+
+  routes:
+    # A page goes to every configured channel and repeats hourly. A ticket goes
+    # to e-mail only and repeats every four — the point of the severity split
+    # is that one of them is allowed to wait until the morning.
+    - matchers:
+        - severity = "page"
+      receiver: urgent
+      group_wait: 10s
+      repeat_interval: 1h
+
+    - matchers:
+        - severity = "ticket"
+      receiver: default
+
+inhibit_rules:
+  # If the API is unreachable, its error budget is not the news. Everything
+  # else about the same service is suppressed while the process itself is gone.
+  - source_matchers:
+      - alertname = "NexusAPIDown"
+    target_matchers:
+      - service = "api"
+    equal: ["service"]
+
+  # A dead database explains an exhausted pool and a full connection table.
+  - source_matchers:
+      - alertname = "NexusPostgresDown"
+    target_matchers:
+      - alertname =~ "NexusDatabasePoolExhausted|NexusPostgresConnectionsHigh"
+
+  # And a page suppresses the ticket about the same thing.
+  - source_matchers:
+      - severity = "page"
+    target_matchers:
+      - severity = "ticket"
+    equal: ["alertname", "service"]

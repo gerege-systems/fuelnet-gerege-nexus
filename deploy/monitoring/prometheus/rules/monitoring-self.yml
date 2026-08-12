@@ -1,0 +1,62 @@
+# The monitoring stack watching itself.
+#
+# Every other rule in this directory is silent when the thing that evaluates it
+# is broken. These are the ones that catch the failure mode where the platform
+# looks healthy because nothing is looking at it any more — and they are also
+# the reason docs/MONITORING.md insists on an Uptime Kuma outside this host:
+# nothing in this file survives the server going down.
+
+groups:
+  - name: nexus_monitoring_self
+    rules:
+      - alert: NexusMonitoringTargetDown
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.job }} scrape target хариу өгөхгүй байна"
+          description: >-
+            10 минутын турш уншиж чадсангүй. Энэ нь тухайн exporter-ийн
+            хэмжүүрүүд dashboard дээр хоосон болно гэсэн үг — өгөгдөл байхгүй
+            нь "бүх зүйл хэвийн"-тэй яг адилхан харагддаг.
+          runbook: "docs/RUNBOOKS.md#nexusmonitoringtargetdown"
+
+      - alert: NexusAlertmanagerNotNotifying
+        expr: rate(alertmanager_notifications_failed_total[15m]) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Alertmanager мэдэгдэл илгээж чадахгүй байна"
+          description: >-
+            Мэдэгдэл илгээх оролдлого амжилтгүй болж байна — SMTP буруу,
+            Telegram token хүчингүй, эсвэл гарах сүлжээ хаалттай. Бүх alert
+            ажиллаж байгаа ч хэн ч хүлээж авахгүй байна.
+          runbook: "docs/RUNBOOKS.md#nexusalertmanagernotnotifying"
+
+      - alert: NexusPrometheusRuleEvaluationFailing
+        expr: rate(prometheus_rule_evaluation_failures_total[15m]) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Prometheus дүрэм тооцоолохдоо алдаа гаргаж байна"
+          description: >-
+            Дүрмийн илэрхийлэл унаж байна — ихэвчлэн хэмжүүрийн нэр өөрчлөгдсөн
+            эсвэл засварын алдаа. Унасан дүрэм хэзээ ч дохио өгөхгүй.
+          runbook: "docs/RUNBOOKS.md#nexusprometheusruleevaluationfailing"
+
+      - alert: NexusLokiRejectingLogs
+        expr: |
+          rate(loki_distributor_bytes_received_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Loki 30 минутын турш лог хүлээж аваагүй"
+          description: >-
+            Alloy ажиллахаа больсон, эсвэл Loki бичилтийг татгалзаж байна.
+            Аль ч тохиолдолд контейнеруудын лог зөвхөн `docker logs` дотор
+            үлдэж, контейнер дахин үүсэхэд алга болно.
+          runbook: "docs/RUNBOOKS.md#nexuslokirejectinglogs"

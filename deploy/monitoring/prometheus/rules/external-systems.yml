@@ -1,0 +1,80 @@
+# The systems this platform depends on and does not operate.
+#
+# ХУР, eID, ДАН, the eSign HSM, Gemini and the address-verification service are
+# somebody else's uptime. What these rules are for is telling the operator that
+# the failure they are getting reports about is not theirs — and giving them
+# the evidence to take to the other party.
+#
+# Every rule is guarded by a traffic condition. Without it, a system nobody has
+# called in the last ten minutes has an error ratio of 0/0, and a system called
+# twice with one failure has 50% — which would page somebody about a single
+# citizen mistyping a registration number at four in the morning.
+
+groups:
+  - name: nexus_external_systems
+    rules:
+      - record: nexus:external_error_ratio:rate10m
+        expr: |
+          sum by (system) (rate(external_request_duration_seconds_count{status="error"}[10m]))
+          /
+          clamp_min(sum by (system) (rate(external_request_duration_seconds_count[10m])), 0.001)
+
+      - record: nexus:external_request_rate:rate10m
+        expr: sum by (system) (rate(external_request_duration_seconds_count[10m]))
+
+      # 50% of calls failing, at more than one call every five minutes. One
+      # rule for all six systems: the `system` label carries which, and six
+      # near-identical rules would drift apart the first time one was edited.
+      - alert: NexusExternalSystemFailing
+        expr: |
+          nexus:external_error_ratio:rate10m > 0.5
+          and
+          nexus:external_request_rate:rate10m > 0.0033
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.system }} рүү хийсэн дуудлагын тэн хагасаас олон нь амжилтгүй"
+          description: >-
+            Сүүлийн 10 минутад {{ $labels.system }} рүү хийсэн дуудлагын
+            {{ $value | humanizePercentage }} нь алдаатай. Энэ нь энэ
+            платформын доголдол биш байх магадлалтай — гэхдээ хэрэглэгчид
+            нэвтэрч эсвэл гарын үсэг зурж чадахгүй байна.
+          runbook: "docs/RUNBOOKS.md#nexusexternalsystemfailing"
+
+      - alert: NexusExternalSystemDegraded
+        expr: |
+          nexus:external_error_ratio:rate10m > 0.15
+          and
+          nexus:external_request_rate:rate10m > 0.0033
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.system }} тогтворгүй ажиллаж байна"
+          description: >-
+            30 минутын турш алдааны хувь 15%-иас дээш. Зургаан хүсэлт тутмын
+            нэг нь унана гэдэг нь хэрэглэгчийн хувьд "заримдаа ажилладаг"
+            гэсэн үг — бүрэн унасанаас илүү удаан анзаарагддаг.
+          runbook: "docs/RUNBOOKS.md#nexusexternalsystemdegraded"
+
+      # Slow is its own failure. The eID poll is excluded because waiting is
+      # what it does; everything else answering in over ten seconds at p95 is
+      # holding a request goroutine and a pool connection while it waits.
+      - alert: NexusExternalSystemSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (system, le) (
+              rate(external_request_duration_seconds_bucket{operation!="poll"}[10m])
+            )
+          ) > 10
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.system }}-ийн p95 хариу 10 секундээс удаан"
+          description: >-
+            Удаан гадаад дуудлага нь хүсэлтийн goroutine болон pool-ын
+            холболтыг барьж байдаг тул тухайн систем рүү огт хандаагүй
+            хүсэлтүүд ч удаашрана.
+          runbook: "docs/RUNBOOKS.md#nexusexternalsystemslow"

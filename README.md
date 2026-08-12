@@ -337,6 +337,12 @@ npm run dev
 | `GEMINI_MODEL` / `GEMINI_TTS_MODEL` | Gemini 2.5 Flash загварууд | Chat ба дууны model сонголт |
 | `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |
 
+Мониторингийн стек нь **өөрийн орчинтой** — платформын `.env`-д хамаарахгүй.
+`GRAFANA_ADMIN_PASSWORD`, `MONITORING_DB_PASSWORD` болон дохиоллын сувгийн
+хувьсагчдыг [`deploy/.env.monitoring.example`](deploy/.env.monitoring.example)
+ба [`docs/MONITORING.md`](docs/MONITORING.md)-ээс үзнэ үү. Тусдаа байгаа
+шалтгаан нь стек өөрөө тусдаа: платформ түүнгүйгээр бүрэн ажиллана.
+
 ---
 
 ## API-н тойм

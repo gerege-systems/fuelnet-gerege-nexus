@@ -15,6 +15,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A monitoring stack that reads the platform
+
+`deploy/docker-compose.monitoring.yml`: Prometheus, Alertmanager, Loki, Alloy,
+Grafana, node_exporter, cAdvisor, postgres_exporter, redis_exporter. Guides in
+[`docs/MONITORING.md`](docs/MONITORING.md) and, for every alert,
+[`docs/RUNBOOKS.md`](docs/RUNBOOKS.md).
+
+- **A separate compose file, brought up as a separate project.** Nothing in
+  `docker-compose.prod.yml` depends on anything in it, no service in it is in a
+  request path, and taking it down is a safe thing to do at any hour. It reaches
+  the platform by joining the platform's own Docker network as an external one,
+  so Prometheus scrapes `gerege_nexus_backend:8080` directly rather than through
+  a published port.
+- **Alerting on the error budget, not on a threshold.** The Google SRE Workbook's
+  multi-window multi-burn-rate pattern against a 99.9% objective: 14.4× over
+  1h+5m and 6× over 6h+30m page, 1× over 3d+6h opens a ticket. Both windows must
+  be over the rate, which is what stops a spike that has already ended from
+  waking anybody and what lets the alert clear itself. Every external-system rule
+  is additionally guarded by a traffic condition — without one, a system called
+  twice at 04:00 with one failure is a 50% error rate.
+- **Runbooks are part of the alert.** Each rule carries a `runbook` annotation
+  pointing at its section, and each section says what happened, what to check in
+  the first five minutes, how to fix it and when to escalate. An alert nobody
+  knows what to do about is an alert that gets silenced.
+- **Dashboards as code**, with `allowUiUpdates: false`. Four of them: API
+  overview (RED plus remaining error budget), external systems, infrastructure,
+  and resilience/volume. A panel fixed at 02:00 during an incident is worth
+  keeping, and the way to keep it is a commit rather than a row in a volume.
+- **`monitoring` database role** (migration 00044) holding `pg_monitor` and
+  nothing else — no table, no tenant row. Created without a password, because a
+  migration is a file in this repository; the operator sets one once, and
+  `docs/MONITORING.md` §2.2 is the command.
+- **No secret in the repository.** Grafana's password is required with no
+  default. Alertmanager's receivers are rendered at container start from the
+  environment, so leaving SMTP or Telegram empty genuinely disables that channel
+  instead of producing a config Alertmanager refuses to load — and a stack that
+  will not start because nobody has a mail server is a stack nobody installs.
+- **Logs, without turning Loki into Elasticsearch.** Alloy reads the Docker
+  socket read-only and attaches `container`, `service`, `level` and `deployment`.
+  `request_id` and `tenant_id` are deliberately *not* labels: each distinct value
+  would be its own stream. They stay in the line, where `| json | request_id=…`
+  finds them at query time.
+- **Uptime Kuma is documented and deliberately not deployed here.** A monitor on
+  the server it monitors goes down with it. `docs/MONITORING.md` §9 has the
+  instructions for running it somewhere else.
+
 ### Added — The platform can now be measured
 
 `/metrics` carried two series: a request count and a request duration. That is

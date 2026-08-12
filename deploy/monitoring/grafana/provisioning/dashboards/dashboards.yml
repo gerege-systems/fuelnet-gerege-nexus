@@ -1,0 +1,23 @@
+# Dashboards come from files in this repository, not from Grafana's database.
+#
+# `allowUiUpdates: false` means an edit made in the browser cannot be saved. That
+# is the point of dashboard-as-code: a panel someone fixed at 02:00 during an
+# incident is worth keeping, and the way to keep it is a commit — not a row in a
+# volume that the next `docker compose down -v` removes without asking.
+#
+# Grafana rereads the directory on the interval below, so editing a JSON file on
+# the server shows up without a restart.
+
+apiVersion: 1
+
+providers:
+  - name: nexus
+    orgId: 1
+    folder: "Gerege Nexus"
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

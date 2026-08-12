@@ -1,0 +1,32 @@
+# Datasources, provisioned from this file rather than clicked in.
+#
+# A datasource created through the UI lives in Grafana's SQLite volume and
+# nowhere else: it survives a restart, does not survive the volume being
+# recreated, and is invisible in a diff. Every dashboard in this repository
+# refers to these two by uid, so the uids are fixed here and must not be
+# edited — changing one silently breaks every panel that names it.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: nexus-prometheus
+    type: prometheus
+    access: proxy
+    url: http://gerege_nexus_prometheus:9090
+    isDefault: true
+    jsonData:
+      # Matches the global scrape_interval, so Grafana's automatic step never
+      # asks for a resolution the data does not have.
+      timeInterval: 15s
+      httpMethod: POST
+    editable: false
+
+  - name: Loki
+    uid: nexus-loki
+    type: loki
+    access: proxy
+    url: http://gerege_nexus_loki:3100
+    jsonData:
+      maxLines: 1000
+    editable: false

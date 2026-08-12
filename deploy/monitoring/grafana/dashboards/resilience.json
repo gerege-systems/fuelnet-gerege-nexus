@@ -1,0 +1,872 @@
+{
+  "uid": "nexus-resilience",
+  "title": "Nexus — Тэсвэрлэлт ба эзлэхүүн",
+  "description": "Load shedder, дахин оролдлого, өгөгдлийн сангийн pool, бизнесийн эзлэхүүн. Платформ ямар ачаалалд, ямар байдалтай ажиллаж байна.",
+  "tags": [
+    "nexus",
+    "resilience"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "graphTooltip": 1,
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Одоо үйлчилж буй хүсэлт",
+      "description": "Тааз нь 1000. Түүнд хүрэхэд load shedder 503 буцааж эхэлнэ.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "resilience_in_flight_requests",
+          "legendFormat": "in flight",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 700
+              },
+              {
+                "color": "red",
+                "value": 950
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Татгалзсан хүсэлт (1ц)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "increase(resilience_load_shed_total[1h])",
+          "legendFormat": "shed",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Дахин оролдлого (1ц)",
+      "description": "Одоогоор зөвхөн integration delivery. Өсөх нь захиалагчийн webhook хүлээж авахгүй байгааг илтгэнэ.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(resilience_retry_total[1h]))",
+          "legendFormat": "retries",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Гарын үсэг (24ц)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(documents_signed_total{result=\"success\"}[24h]))",
+          "legendFormat": "signed",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Load shedding",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Зэрэг үйлчилж буй хүсэлт",
+      "description": "Хэвийн ажиллагааны хэмжээг мэдэхгүйгээр 1000 гэсэн тааз тохирсон эсэхийг шийдэх боломжгүй. Энэ график тэр асуултад хариулна.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "resilience_in_flight_requests",
+          "legendFormat": "in flight",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Татгалзал ба дахин оролдлого",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(resilience_load_shed_total[$__rate_interval]) * 60",
+          "legendFormat": "shed/мин",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (name) (rate(resilience_retry_total[$__rate_interval]) * 60)",
+          "legendFormat": "retry {{name}}",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Бизнесийн эзлэхүүн",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Нэвтрэлт — аргаар",
+      "description": "Цагт. Тенантаар задарсан тоог тайлангийн модулиас үзнэ — хэмжүүрийн label-д тенант зориудаар оруулаагүй.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (method) (rate(logins_total{result=\"success\"}[$__rate_interval]) * 3600)",
+          "legendFormat": "{{method}}",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Гарын үсэг — rail ба үр дүнгээр",
+      "description": "EID нь баталгаажсан гарын үсэг, HSM бол хуучин зам, DAN нь documents модулийн зам.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (rail, result) (rate(documents_signed_total[$__rate_interval]) * 3600)",
+          "legendFormat": "{{rail}} / {{result}}",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Нэхэмжлэх ба AI",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(invoices_created_total[$__rate_interval]) * 3600",
+          "legendFormat": "нэхэмжлэх/цаг",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (kind) (rate(ai_requests_total[$__rate_interval]) * 3600)",
+          "legendFormat": "AI {{kind}}",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Өгөгдлийн сангийн pool",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Холболтууд",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "pgxpool_acquired_conns",
+          "legendFormat": "эзлэгдсэн",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "pgxpool_idle_conns",
+          "legendFormat": "сул",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "pgxpool_total_conns",
+          "legendFormat": "нийт",
+          "range": true,
+          "instant": false,
+          "refId": "C",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "pgxpool_max_conns",
+          "legendFormat": "тааз",
+          "range": true,
+          "instant": false,
+          "refId": "D",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Хүлээлт",
+      "description": "Эхний тоо тэгээс салах нь pool багадаж эхэлснийг хамгийн эрт хэлдэг дохио.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nexus-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(pgxpool_empty_acquire_total[$__rate_interval]) * 60",
+          "legendFormat": "хоосон pool-д хүлээсэн/мин",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "nexus-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(pgxpool_acquire_duration_seconds_total[$__rate_interval])",
+          "legendFormat": "хүлээсэн хугацаа/сек",
+          "range": true,
+          "instant": false,
+          "refId": "B",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

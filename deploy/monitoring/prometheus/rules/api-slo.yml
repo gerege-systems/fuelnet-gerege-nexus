@@ -1,0 +1,171 @@
+# API availability, alerted on the error budget rather than on a threshold.
+#
+# The objective is 99.9% of requests answered without a 5xx, measured over 30
+# days. That allows 0.1% failures — the error budget — and what matters is not
+# the instantaneous error rate but how fast the budget is being spent. A 2%
+# error rate for thirty seconds is noise; the same rate sustained is an outage,
+# and a threshold alert cannot tell them apart without a long `for` clause that
+# also delays the real one.
+#
+# The multi-window multi-burn-rate pattern from the Google SRE Workbook. Each
+# severity pairs a long window with a short one at a twelfth of its length:
+# the long window says the budget is genuinely being spent, the short one says
+# it is still happening now. Both must be over the rate, which is what stops a
+# spike that has already ended from paging anybody and what makes the alert
+# clear on its own once the failures stop.
+#
+#   severity   long    short   burn rate   budget consumed if sustained
+#   page       1h      5m      14.4x       2% in an hour
+#   page       6h      30m     6x          5% in six hours
+#   ticket     3d      6h      1x          10% over three days
+#
+# 4xx is not a failure of this service. A rejected password and a refused
+# upload are the platform working; counting them would put the budget in the
+# hands of whoever is currently guessing credentials.
+
+groups:
+  - name: nexus_api_slo
+    rules:
+      # Recording rules, so every burn-rate expression below is one division
+      # rather than four, and so a dashboard and an alert can never disagree
+      # about what "the error rate" means.
+      - record: nexus:request_error_ratio:rate5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+
+      - record: nexus:request_error_ratio:rate30m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[30m]))
+          /
+          clamp_min(sum(rate(http_requests_total[30m])), 0.001)
+
+      - record: nexus:request_error_ratio:rate1h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[1h]))
+          /
+          clamp_min(sum(rate(http_requests_total[1h])), 0.001)
+
+      - record: nexus:request_error_ratio:rate6h
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[6h]))
+          /
+          clamp_min(sum(rate(http_requests_total[6h])), 0.001)
+
+      - record: nexus:request_error_ratio:rate3d
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[3d]))
+          /
+          clamp_min(sum(rate(http_requests_total[3d])), 0.001)
+
+      # 14.4 × 0.001 = 0.0144. At this rate the whole month's budget is gone in
+      # roughly two days, and 2% of it in the hour this fires on.
+      - alert: NexusAPIErrorBudgetBurningFast
+        expr: |
+          nexus:request_error_ratio:rate1h > 0.0144
+          and
+          nexus:request_error_ratio:rate5m > 0.0144
+        for: 2m
+        labels:
+          severity: page
+          service: api
+        annotations:
+          summary: "API-ийн алдааны төсөв маш хурдан зарцуулагдаж байна"
+          description: >-
+            Сүүлийн 1 цагт болон сүүлийн 5 минутад хоёуланд нь 5xx-ийн хувь
+            1.44%-иас давлаа (SLO 99.9%-ийн 14.4 дахин хурд). Ийм хурдаар
+            сарын алдааны төсөв 2 хоногт дуусна.
+          runbook: "docs/RUNBOOKS.md#nexusapierrorbudgetburningfast"
+
+      - alert: NexusAPIErrorBudgetBurning
+        expr: |
+          nexus:request_error_ratio:rate6h > 0.006
+          and
+          nexus:request_error_ratio:rate30m > 0.006
+        for: 15m
+        labels:
+          severity: page
+          service: api
+        annotations:
+          summary: "API-ийн алдааны төсөв хурдан зарцуулагдаж байна"
+          description: >-
+            Сүүлийн 6 цаг ба сүүлийн 30 минутад 5xx-ийн хувь 0.6%-иас давлаа
+            (6 дахин хурд). Хурдан унасан гэхээсээ илүү тогтвортой эвдрэлтэй
+            төлөв — ихэвчлэн нэг зам, нэг гадаад систем.
+          runbook: "docs/RUNBOOKS.md#nexusapierrorbudgetburning"
+
+      - alert: NexusAPIErrorBudgetSlowBurn
+        expr: |
+          nexus:request_error_ratio:rate3d > 0.001
+          and
+          nexus:request_error_ratio:rate6h > 0.001
+        for: 1h
+        labels:
+          severity: ticket
+          service: api
+        annotations:
+          summary: "API-ийн алдааны төсөв аажим зарцуулагдаж байна"
+          description: >-
+            3 хоног ба 6 цагийн аль алинд нь 5xx-ийн хувь SLO-гоос давлаа.
+            Яаралтай биш: хэн ч сэрэх шаардлагагүй, гэхдээ ажлын өдөр засаагүй
+            бол сарын SLO биелэхгүй.
+          runbook: "docs/RUNBOOKS.md#nexusapierrorbudgetslowburn"
+
+      # Latency is a separate objective from availability: a request answered in
+      # eight seconds is a failure to the person waiting and a success to the
+      # error-budget rule above.
+      #
+      # /auth/eid/poll and the signing poll are excluded by name. They are long
+      # polls that deliberately hold a connection open for up to twenty-five
+      # seconds while a citizen reaches for their phone; averaged in, they make
+      # p95 meaningless and the alert permanent.
+      - alert: NexusAPILatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{path!~".*/poll"}[10m])
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: ticket
+          service: api
+        annotations:
+          summary: "API-ийн p95 хариу 2 секундээс удаан байна"
+          description: >-
+            Урт poll-оос бусад бүх замын p95 хариу 10 минутын турш 2 секундээс
+            давлаа. Эхлээд DB pool-ын дүүрэлт, дараа нь гадаад системийн
+            хугацааг хар.
+          runbook: "docs/RUNBOOKS.md#nexusapilatencyhigh"
+
+      # The one that matters most and is easiest to overlook: no scrape means
+      # no data, and no data means every rule above evaluates to nothing and
+      # stays quiet.
+      - alert: NexusAPIDown
+        expr: up{job="nexus_api"} == 0
+        for: 2m
+        labels:
+          severity: page
+          service: api
+        annotations:
+          summary: "API-ийн /metrics хариу өгөхөө байлаа"
+          description: >-
+            Prometheus 2 минутын турш backend-ийн /metrics-ийг уншиж чадсангүй.
+            Процесс унасан, эсвэл гацсан, эсвэл сүлжээ тасарсан. Энэ үед
+            бусад бүх API alert чимээгүй болно — өгөгдөл ирэхгүй тул.
+          runbook: "docs/RUNBOOKS.md#nexusapidown"
+
+      - alert: NexusLoadShedding
+        expr: rate(resilience_load_shed_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: page
+          service: api
+        annotations:
+          summary: "Load shedder хүсэлт татгалзаж байна"
+          description: >-
+            Backend нь зэрэг үйлчлэх хүсэлтийн тааз (1000)-д хүрч, хүсэлтүүдийг
+            503-аар буцааж эхэллээ. Энэ бол хамгаалалт ажиллаж байгаа хэрэг —
+            гэхдээ хэрэглэгч алдаа хараад байна.
+          runbook: "docs/RUNBOOKS.md#nexusloadshedding"
