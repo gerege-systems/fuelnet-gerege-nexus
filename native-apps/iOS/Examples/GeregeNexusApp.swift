@@ -16,10 +16,17 @@ struct GeregeNexusApp: App {
     @State private var showWorkArea = false
 
     init() {
-        var configured = UserDefaults.standard.string(forKey: "native.settings.apiEndpoint") ?? "https://nexus.gerege.mn"
-        if configured == "https://api.nexus.gerege.mn" || configured == "http://localhost:8080" {
-            configured = "https://nexus.gerege.mn"
+        // iOS-ийн domain шугам руу зөөнө. Зөвхөн хуучин анхдагчуудыг зөөж,
+        // байгууллагын өөрийн хаяг тохируулсан суулгацыг хөндөхгүй.
+        let stored = UserDefaults.standard.string(forKey: "native.settings.apiEndpoint")
+        let configured = GeregeDeviceLine.migrate(stored)
+        if configured != stored {
             UserDefaults.standard.set(configured, forKey: "native.settings.apiEndpoint")
+            // Web endpoint нь API-тай ижил host дээр байх ёстой — тэгж байж
+            // ажлын мужаас гарах дуудлага same-origin болно.
+            if GeregeDeviceLine.migrate(UserDefaults.standard.string(forKey: "native.settings.webEndpoint")) == GeregeDeviceLine.origin {
+                UserDefaults.standard.set(GeregeDeviceLine.origin, forKey: "native.settings.webEndpoint")
+            }
         }
         let root = configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let url = URL(string: root.hasSuffix("/api/v1") ? root + "/" : root + "/api/v1/")!
@@ -43,7 +50,7 @@ struct GeregeNexusApp: App {
             .onOpenURL { _ in /* The in-flight poll owns completion; app link only re-activates this scene. */ }
         }
     }
-    private func registerPushToken(){guard let token=UserDefaults.standard.string(forKey:"native.push.apnsToken") else{return};let endpoint=UserDefaults.standard.string(forKey:"native.settings.apiEndpoint") ?? "https://nexus.gerege.mn";Task{try? await PushRegistration.registerAPNS(token:token,apiEndpoint:endpoint)}}
+    private func registerPushToken(){guard let token=UserDefaults.standard.string(forKey:"native.push.apnsToken") else{return};let endpoint=GeregeDeviceLine.migrate(UserDefaults.standard.string(forKey:"native.settings.apiEndpoint"));Task{try? await PushRegistration.registerAPNS(token:token,apiEndpoint:endpoint)}}
 }
 #else
 @main

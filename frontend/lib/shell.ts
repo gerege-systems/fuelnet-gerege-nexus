@@ -52,6 +52,10 @@ export const SHELL_METHODS = {
   /** Тенантын цэс өөрчлөгдсөнийг мэдэгдэнэ — бүрхүүл өөрийн native цэсээ дахин
    *  татах боломжтой болно. */
   MENU_CHANGED: "menu.changed",
+  /** Бүрхүүлийн эзэмшдэг дэлгэц рүү ХҮРЭЭН ДОТОР шилжинэ (`{ pane }`). Цонх
+   *  нээх дуудлага БИШ — гэрээний §1a. Reject ирвэл web тал өөрийн хуудсаа
+   *  үзүүлнэ. */
+  SHELL_OPEN_PANE: "shell.openPane",
   ESCPOS_PRINT: "escpos.print",
   ESCPOS_DRAWER: "escpos.drawer",
   SCANNER_START: "scanner.start",
@@ -84,6 +88,8 @@ export const SHELL_CAPABILITIES = {
   EXTERNAL_OPEN: "external.open",
   SECURE_STORE: "secure-store",
   MENU_NATIVE: "menu.native",
+  /** `shell.openPane` method-ын чадвар. */
+  SHELL_PANE: "shell.pane",
   ESCPOS: "escpos",
   SCANNER: "scanner",
   SERIAL: "serial",

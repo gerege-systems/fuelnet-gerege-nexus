@@ -9,6 +9,7 @@ import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
+import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
 import UserMenu from "@/components/UserMenu";
 import AICopilot from "@/components/AICopilot";
 import { Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, Webhook, Inbox, CalendarClock, Timer, MailCheck, MonitorCog } from "lucide-react";
@@ -49,6 +50,11 @@ const iconMap: Record<string, React.ReactNode> = {
   inbox:<Inbox className="w-5 h-5"/>, "calendar-clock":<CalendarClock className="w-5 h-5"/>, timer:<Timer className="w-5 h-5"/>,
 };
 const PUBLIC_ROUTES=["/","/login","/auth/eid/callback","/kiosk"];
+// Шугамын нүүр дэлгэц нэвтрэлт шаардахгүй. Тэр нь ажлын мужид web-ийн
+// нэвтрэх дэлгэц гарч ирэхийг ОРЛОХЫН тулд байгаа тул session байхгүй үед ч
+// зогсох ёстой — эс бөгөөс дахин /login руу түлхэж, шийдэх гэсэн асуудлаа
+// өөрөө үүсгэнэ.
+const isPublicPath=(path:string)=>PUBLIC_ROUTES.includes(path)||path.startsWith("/line/");
 const APP_ORDER=["io.example.contacts","io.example.products","io.example.inventory","io.example.billing","io.example.documents","io.example.esign","io.example.developer_portal","io.example.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
@@ -64,7 +70,15 @@ export default function Layout({children}:{children:React.ReactNode}){
   const reLoginTried=useRef(false);
   const pathname=usePathname(),router=useRouter(),{t,locale}=useI18n(),theme=useTheme();
   const {shell,inShell}=useShell();
-  const isPublic=PUBLIC_ROUTES.includes(pathname);
+  // Төхөөрөмжийн domain шугам (mac./win./ios./android./kiosk./pos.). Гүүр
+  // байгаа эсэхээс үл хамааран эдгээр host нь зөвхөн native хүрээнд үйлчилдэг
+  // тул тэнд web өөрийн chrome-оо огт зурахгүй. SSR-д `window` байхгүй учир
+  // mount-ын дараа уншина — эхний markup хөтчийнхтэй ижил гарч, hydration
+  // зөрөхгүй.
+  const [deviceLine,setDeviceLine]=useState<DeviceLine|null>(null);
+  useEffect(()=>setDeviceLine(currentDeviceLine()),[]);
+  const workAreaOnly=inShell||deviceLine!==null;
+  const isPublic=isPublicPath(pathname);
 
   useEffect(()=>setPanelOpen(localStorage.getItem("gerege_sidebar_open")!=="false"),[]);
   useEffect(()=>{
@@ -89,6 +103,11 @@ export default function Layout({children}:{children:React.ReactNode}){
           if(cancelled)return;
           if(result.ok){setAuthNonce(n=>n+1);return}
         }
+        // Төхөөрөмжийн шугам дээр `/login` гэсэн web хуудас байхгүй — proxy.ts
+        // түүнийг эргүүлж явуулдаг тул энд түлхвэл шилжилтийн мөчлөг үүснэ.
+        // Бүрхүүл нэвтрэлтээ барьж авч чадаагүй бол ажлын муж хоосон үлдэх нь
+        // зөв: дараагийн алхмыг native тал шийднэ.
+        if(currentDeviceLine())return;
         router.push("/login");
       }finally{
         if(!cancelled)setLoading(false);
@@ -170,12 +189,13 @@ export default function Layout({children}:{children:React.ReactNode}){
     {user?.is_admin&&<NavLink href="/settings/devices" active={pathname==="/settings/devices"} icon={<MonitorCog className="w-5 h-5"/>} label="Төхөөрөмжийн парк"/>}
   </MenuGroup></>;
 
-  // Бүрхүүл дотор: толгой хэсэг ба мобайл навигаци зурагдахгүй — хайлт,
+  // Бүрхүүл дотор ба төхөөрөмжийн domain шугам дээр:
+  // толгой хэсэг ба мобайл навигаци зурагдахгүй — хайлт,
   // хэрэглэгч, нэвтрэлт, цонхны үйлдлүүдийг native тал эзэмшинэ. Хажуугийн цэс
   // нь ЭНД үлдэнэ: тэр бол ажлын мужийн доторх навигаци бөгөөд аль апп
   // идэвхтэй, ямар эрхтэй, ямар хэлээр гэдгийг web тал аль хэдийн мэддэг.
   // AICopilot мөн ажлын мужийн хэсэг.
-  if(inShell)return <div className="gerege-shell gerege-workarea h-screen flex flex-col overflow-hidden">
+  if(workAreaOnly)return <div className="gerege-shell gerege-workarea h-screen flex flex-col overflow-hidden">
     <RibbonBar selected={selected} brandTitle={brandTitle} user={user} setShellSearchOpen={setShellSearchOpen} iconMap={iconMap} t={t} onLogout={logout} />
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <div className="gerege-sidebar bottom-0 left-0 z-40 flex overflow-hidden is-desktop-open">

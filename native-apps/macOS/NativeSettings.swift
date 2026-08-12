@@ -1,11 +1,19 @@
 import Foundation
 
 struct NativeSettings: Codable {
-    var schemaVersion = 2
+    /// macOS-ийн domain шугам. 2026-08-12-нд асав: DNS (wildcard), nginx vhost,
+    /// TLS гэрчилгээ, API-гийн origin allowlist дөрвүүлэн бэлэн.
+    ///
+    /// Web ба API нэг host дээр байгаа нь санаатай: ажлын мужаас гарах дуудлага
+    /// same-origin болж, session cookie нь `SameSite=Strict` хэвээр ажиллана.
+    /// Бүртгэл: `native-apps/shared/device_lines.json`.
+    static let lineOrigin = "https://mac.nexus.gerege.mn"
+
+    var schemaVersion = 4
     var launchAtLogin = false
     var language = "mn"
-    var webEndpoint = "https://nexus.gerege.mn"
-    var apiEndpoint = "https://nexus.gerege.mn"
+    var webEndpoint = NativeSettings.lineOrigin
+    var apiEndpoint = NativeSettings.lineOrigin
     var printerTransport = "USB"
     var printerHost = ""
     var printerPort = 9100
@@ -30,6 +38,15 @@ struct NativeSettings: Codable {
             if value.webEndpoint == "http://localhost:3000" { value.webEndpoint = "https://nexus.gerege.mn" }
             if value.apiEndpoint == "http://localhost:8080" { value.apiEndpoint = "https://nexus.gerege.mn" }
             value.schemaVersion = 2
+            value.save()
+        }
+        // v4: schemaVersion-ыг зөвхөн урагшлуулна. Хадгалагдсан хаягийг
+        // хөндөхгүй — шугам асахаас өмнөх богино хугацаанд хадгалагдсан утга
+        // (`https://nexus.gerege.mn`) нь ижил backend руу очдог тул ажилласаар
+        // байна. Түүнийг хүчээр зөөвөл хөтчийн шугамыг САНААТАЙ сонгосон
+        // суулгацыг булааж авах болно; шинэ суулгац `lineOrigin`-оор эхэлнэ.
+        if value.schemaVersion < 4 {
+            value.schemaVersion = 4
             value.save()
         }
         return value

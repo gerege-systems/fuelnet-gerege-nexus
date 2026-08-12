@@ -1,4 +1,6 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+import { apiBase } from "@/lib/apiBase";
+
+export { apiBase };
 
 async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
   // Server-owned content (menu labels, app store copy) is translated by the
@@ -9,7 +11,7 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
     "Accept-Language": locale,
     ...(options.headers as Record<string, string>),
   };
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(`${apiBase()}${url}`, {
     ...options,
     headers,
     credentials: "include",
@@ -693,7 +695,7 @@ export const api = {
     >("/esign/logs"),
 
   downloadEsignDocument: async (id: string, variant: "original" | "signed"): Promise<Blob> => {
-    const res = await fetch(`${API_BASE}/esign/documents/${id}/download?variant=${variant}`, {
+    const res = await fetch(`${apiBase()}/esign/documents/${id}/download?variant=${variant}`, {
       credentials: "include",
     });
     if (!res.ok) throw new Error("Download failed");

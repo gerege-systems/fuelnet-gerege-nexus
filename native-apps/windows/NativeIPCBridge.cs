@@ -43,6 +43,15 @@ namespace GeregeNexusNativeWin
                     case "menu.changed":
                         Resolve(requestId, true, null);
                         break;
+                    case "shell.openPane":
+                        // Ажлын муж бүрхүүлийн эзэмшдэг дэлгэц рүү шилжихийг
+                        // хүсэж байна. Шинэ цонх нээхгүй — ижил хүрээн доторх
+                        // дэлгэц солигдоно.
+                        var pane = root.TryGetProperty("params", out var paneParams) && paneParams.TryGetProperty("pane", out var paneValue)
+                            ? paneValue.GetString() ?? "" : "";
+                        var opened = _webView.Dispatcher.Invoke(() => _mainWindow.OpenPane(pane));
+                        Resolve(requestId, opened, opened ? null : "Unknown pane");
+                        break;
                     case "print.system":
                         await _webView.ExecuteScriptAsync("window.print()");
                         Resolve(requestId, true, null);

@@ -3,6 +3,7 @@
 package mn.gerege.nexus
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,8 +30,9 @@ private enum class SettingsSection(val title: String, val marker: String) {
 
 private class AndroidSettings(context: Context) {
     private val store = context.getSharedPreferences("native-settings-v1", Context.MODE_PRIVATE)
-    var webEndpoint by mutableStateOf(store.getString("webEndpoint", "http://10.0.2.2:3000")!!)
-    var apiEndpoint by mutableStateOf(store.getString("apiEndpoint", "http://10.0.2.2:8080")!!)
+    // Web ба API нэг host дээр — энэ build-ийн domain шугам (DeviceLine).
+    var webEndpoint by mutableStateOf(DeviceLine.migrate(store.getString("webEndpoint", null)))
+    var apiEndpoint by mutableStateOf(DeviceLine.migrate(store.getString("apiEndpoint", null)))
     var printerTransport by mutableStateOf(store.getString("printerTransport", "USB")!!)
     var printerHost by mutableStateOf(store.getString("printerHost", "")!!)
     var printerPort by mutableStateOf(store.getString("printerPort", "9100")!!)
@@ -50,7 +52,7 @@ private class AndroidSettings(context: Context) {
     var enrollmentCode by mutableStateOf("")
     var enrolledDeviceId by mutableStateOf(store.getString("enrolledDeviceId", "")!!)
     var enrollmentStatus by mutableStateOf(if (enrolledDeviceId.isBlank()) "Бүртгэгдээгүй" else "ACTIVE")
-    fun save() { store.edit().putInt("schemaVersion", 1).putString("webEndpoint", webEndpoint).putString("apiEndpoint", apiEndpoint)
+    fun save() { store.edit().putInt("schemaVersion", 2).putString("webEndpoint", webEndpoint).putString("apiEndpoint", apiEndpoint)
         .putString("printerTransport", printerTransport).putString("printerHost", printerHost).putString("printerPort", printerPort).putString("paperWidth", paperWidth)
         .putString("scannerMode", scannerMode).putString("serialPort", serialPort).putString("baudRate", baudRate).putBoolean("biometricLock", biometricLock)
         .putString("idleMinutes", idleMinutes).putString("deviceName", deviceName).putString("siteName", siteName).putBoolean("dedicatedMode", dedicatedMode)
@@ -145,7 +147,7 @@ fun NativeSettingsScreen(onClose: () -> Unit) {
             SettingsSection.Lockdown -> { SettingSwitch("Dedicated device mode", s.dedicatedMode) { s.dedicatedMode = it }; SettingText("Өдөр тутмын reboot", s.rebootHour, { s.rebootHour = it }); TestButton("Lock task mode шалгах") { setStatus("Device owner эрх шаардлагатай") } }
             SettingsSection.Drawer -> { SettingText("Printer pulse (ms)", s.drawerPulse, { s.drawerPulse = it }); TestButton("Шургуулга нээх") { scope.launch { runCatching { PeripheralAdapters.openDrawer(s.printerHost,s.printerPort.toIntOrNull()?:9100,s.drawerPulse.toIntOrNull()?:120) }.onSuccess { setStatus("Шургуулгын pulse илгээгдлээ") }.onFailure { setStatus(it.message?:"Drawer алдаа") } } } }
             SettingsSection.Update -> { SettingOptions("Суваг", listOf("Stable", "Pilot", "Internal"), s.updateChannel) { s.updateChannel = it }; SettingSwitch("Оношлогооны мэдээлэл", s.telemetry) { s.telemetry = it }; TestButton("Шинэчлэлт шалгах") { setStatus("${s.updateChannel} сувгийг шалгаж байна…") } }
-            SettingsSection.Diagnostics -> { SettingText("Android", "${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}", {}, false); SettingText("Shell contract", "1.3", {}, false); SettingText("WebView", android.webkit.WebView.getCurrentWebViewPackage()?.versionName ?: "Unknown", {}, false); TestButton("Лог export хийх…") { setStatus("Log exporter device adapter-т холбогдоно") } }
+            SettingsSection.Diagnostics -> { SettingText("Android", "${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}", {}, false); SettingText("Shell contract", "1.4", {}, false); SettingText("Domain шугам", Uri.parse(s.webEndpoint).host ?: s.webEndpoint, {}, false); SettingText("WebView", android.webkit.WebView.getCurrentWebViewPackage()?.versionName ?: "Unknown", {}, false); TestButton("Лог export хийх…") { setStatus("Log exporter device adapter-т холбогдоно") } }
         }
         HorizontalDivider(Modifier.padding(top = 12.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f)); Button(save) { Text("Хадгалах") }

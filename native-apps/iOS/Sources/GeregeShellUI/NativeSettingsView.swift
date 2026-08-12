@@ -22,8 +22,11 @@ public struct NativeSettingsView: View {
     @State private var selection: SettingsPane? = .general
     @State private var status = ""
     @AppStorage("native.settings.schemaVersion") private var schemaVersion = 1
-    @AppStorage("native.settings.webEndpoint") private var webEndpoint = "https://nexus.gerege.mn"
-    @AppStorage("native.settings.apiEndpoint") private var apiEndpoint = "https://nexus.gerege.mn"
+    // Web ба API нэг host дээр — iOS-ийн domain шугам. Ажлын мужаас гарах
+    // дуудлага same-origin болж, session cookie нь SameSite=Strict хэвээр
+    // ажиллана. Бүртгэл: native-apps/shared/device_lines.json.
+    @AppStorage("native.settings.webEndpoint") private var webEndpoint = GeregeDeviceLine.origin
+    @AppStorage("native.settings.apiEndpoint") private var apiEndpoint = GeregeDeviceLine.origin
     @AppStorage("native.settings.printerTransport") private var printerTransport = "AirPrint"
     @AppStorage("native.settings.printerHost") private var printerHost = ""
     @AppStorage("native.settings.printerPort") private var printerPort = "9100"
@@ -110,7 +113,8 @@ public struct NativeSettingsView: View {
                     Picker("Суваг", selection: $updateChannel) { ForEach(["Stable", "Pilot", "Internal"], id: \.self) { Text($0) } }; Toggle("Оношлогооны мэдээлэл", isOn: $telemetry)
                     test("Шинэчлэлт шалгах", "\(updateChannel) сувгийг шалгаж байна…")
                 case .diagnostics:
-                    LabeledContent("iOS/iPadOS", value: UIDevice.current.systemVersion); LabeledContent("Shell contract", value: "1.3")
+                    LabeledContent("iOS/iPadOS", value: UIDevice.current.systemVersion); LabeledContent("Shell contract", value: "1.4")
+                    LabeledContent("Domain шугам", value: URL(string: webEndpoint)?.host ?? webEndpoint)
                     LabeledContent("WebKit", value: "WKWebView"); test("Лог export хийх…", "Оношлогооны snapshot бэлэн боллоо")
                 }
             }
@@ -136,32 +140,69 @@ public struct NativeSettingsView: View {
     }
 }
 
+/// Аппын цорын ганц хүрээ.
+///
+/// Дүрэм: **popup-аас бусад бүх зүйл энэ хүрээн дотор**. Ажлын муж ба тохиргоо
+/// хоёр нь ижил tab bar-ын дээгүүр солигддог дэлгэцүүд — тусдаа sheet,
+/// fullScreenCover, эсвэл шинэ scene нээгдэхгүй. Тусдаа гарах эрхтэй зүйл бол
+/// зөвхөн `alert`, `confirmationDialog`, системийн share/save хуудас.
+///
+/// Тохиргоо гарахад webview нь `opacity(0)`-оор л нуугдана, устгагдахгүй. Энэ
+/// нь чимэг биш: SwiftUI тэр view-г мод (tree)-оос хасвал `WKWebView` дахин
+/// үүсч, ажлын муж эхнээсээ ачаалагдаад хэрэглэгчийн байсан хуудас, гүйлгэсэн
+/// байрлал, бөглөж байсан маягт бүгд алга болно.
 public struct NativeShellView: View {
+    private enum Pane { case work, settings }
+
     public let cookies: [SessionCookie]
     public let formFactor: String
     public let onRelogin: @MainActor () -> Void
-    @State private var settings = false
-    @State private var route = "/apps"
+    @State private var pane: Pane = .work
+    @State private var route = "/"
     public init(cookies: [SessionCookie], formFactor: String, onRelogin: @escaping @MainActor () -> Void) { self.cookies = cookies; self.formFactor = formFactor; self.onRelogin = onRelogin }
+
     public var body: some View {
-        if settings { NativeSettingsView(formFactor: formFactor) { settings = false } }
-        else { ShellWebView(cookies: cookies, formFactor: formFactor, route: route, onRelogin: onRelogin)
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 4) {
-                    tab("square.grid.2x2", "Аппууд", "/apps")
-                    tab("doc.text", "Баримт", "/documents")
-                    tab("person.2", "Харилцагч", "/contacts")
-                    Button { settings = true } label: { Label("Тохиргоо", systemImage: "gearshape").frame(maxWidth: .infinity) }
+        VStack(spacing: 0) {
+            ZStack {
+                ShellWebView(cookies: cookies, formFactor: formFactor, route: route,
+                             onRelogin: onRelogin,
+                             onOpenPane: { requested in
+                                 switch requested {
+                                 case "settings": pane = .settings; return true
+                                 case "work": pane = .work; return true
+                                 default: return false
+                                 }
+                             })
+                    .opacity(pane == .work ? 1 : 0)
+                    .accessibilityHidden(pane != .work)
+                if pane == .settings {
+                    NativeSettingsView(formFactor: formFactor) { pane = .work }
                 }
-                .labelStyle(.iconOnly).font(.title3).padding(.horizontal, 8).frame(height: 54).background(.bar)
             }
+            tabBar
         }
     }
 
+    /// Tab bar нь дэлгэц солигдох бүрд байрандаа үлдэнэ — энэ бол хүрээний
+    /// chrome, ажлын мужийн хэсэг биш.
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            tab("square.grid.2x2", "Аппууд", "/apps")
+            tab("doc.text", "Баримт", "/documents")
+            tab("person.2", "Харилцагч", "/contacts")
+            Button { pane = .settings } label: {
+                Label("Тохиргоо", systemImage: "gearshape").frame(maxWidth: .infinity)
+                    .foregroundStyle(pane == .settings ? Color.accentColor : Color.secondary)
+            }
+            .accessibilityLabel("Тохиргоо")
+        }
+        .labelStyle(.iconOnly).font(.title3).padding(.horizontal, 8).frame(height: 54).background(.bar)
+    }
+
     private func tab(_ icon: String, _ title: String, _ path: String) -> some View {
-        Button { route = path } label: {
+        Button { route = path; pane = .work } label: {
             Label(title, systemImage: icon).frame(maxWidth: .infinity)
-                .foregroundStyle(route == path ? Color.accentColor : Color.secondary)
+                .foregroundStyle(pane == .work && route == path ? Color.accentColor : Color.secondary)
         }
         .accessibilityLabel(title)
     }

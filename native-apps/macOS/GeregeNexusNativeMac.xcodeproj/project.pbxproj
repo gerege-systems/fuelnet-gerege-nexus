@@ -15,7 +15,7 @@
 		8D1107570486CEB800E417A5 /* NativeLoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107470486CEB800E417A5 /* NativeLoginViewController.swift */; };
 		8D1107580486CEB800E417A5 /* NativeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107480486CEB800E417A5 /* NativeSettings.swift */; };
 		8D1107590486CEB800E417A5 /* DeviceEnrollment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107490486CEB800E417A5 /* DeviceEnrollment.swift */; };
-		8D11075A0486CEB800E417A5 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D11074A0486CEB800E417A5 /* SettingsWindowController.swift */; };
+		8D11075A0486CEB800E417A5 /* SettingsPaneViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D11074A0486CEB800E417A5 /* SettingsPaneViewController.swift */; };
 		8D1107540486CEB800E417A5 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D1107440486CEB800E417A5 /* AppKit.framework */; };
 		8D1107550486CEB800E417A5 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8D1107450486CEB800E417A5 /* WebKit.framework */; };
 /* End PBXBuildFile section */
@@ -30,7 +30,7 @@
 		8D1107470486CEB800E417A5 /* NativeLoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLoginViewController.swift; sourceTree = "<group>"; };
 		8D1107480486CEB800E417A5 /* NativeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSettings.swift; sourceTree = "<group>"; };
 		8D1107490486CEB800E417A5 /* DeviceEnrollment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceEnrollment.swift; sourceTree = "<group>"; };
-		8D11074A0486CEB800E417A5 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		8D11074A0486CEB800E417A5 /* SettingsPaneViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPaneViewController.swift; sourceTree = "<group>"; };
 		8D1107440486CEB800E417A5 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		8D1107450486CEB800E417A5 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -77,7 +77,7 @@
 				8D1107470486CEB800E417A5 /* NativeLoginViewController.swift */,
 				8D1107480486CEB800E417A5 /* NativeSettings.swift */,
 				8D1107490486CEB800E417A5 /* DeviceEnrollment.swift */,
-				8D11074A0486CEB800E417A5 /* SettingsWindowController.swift */,
+				8D11074A0486CEB800E417A5 /* SettingsPaneViewController.swift */,
 			);
 			path = .;
 			sourceTree = "<group>";
@@ -147,7 +147,7 @@
 				8D1107570486CEB800E417A5 /* NativeLoginViewController.swift in Sources */,
 				8D1107580486CEB800E417A5 /* NativeSettings.swift in Sources */,
 				8D1107590486CEB800E417A5 /* DeviceEnrollment.swift in Sources */,
-				8D11075A0486CEB800E417A5 /* SettingsWindowController.swift in Sources */,
+				8D11075A0486CEB800E417A5 /* SettingsPaneViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

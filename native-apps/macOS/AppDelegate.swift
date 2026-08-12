@@ -33,8 +33,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu(title: "Gerege Nexus")
         appMenu.addItem(withTitle: "Gerege Nexus-ийн тухай", action: #selector(aboutApp), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Нэвтрэх цонх...", action: #selector(actionLogin), keyEquivalent: "l")
-        appMenu.addItem(withTitle: "Тохиргоо...", action: #selector(actionPreferences), keyEquivalent: ",")
+        // "…цонх" гэсэн нэр байхаа больсон: эдгээр нь тусдаа цонх БИШ, аппын
+        // ижил хүрээн дотор солигдох дэлгэцүүд.
+        appMenu.addItem(withTitle: "Түгжих / дахин нэвтрэх", action: #selector(actionLogin), keyEquivalent: "l")
+        appMenu.addItem(withTitle: "Тохиргоо", action: #selector(actionPreferences), keyEquivalent: ",")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Gerege Nexus-ээс гарах", action: #selector(actionQuit), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
@@ -43,6 +45,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // 2. Manage Menu: Удирдах
         let manageMenuItem = NSMenuItem()
         let manageMenu = NSMenu(title: "Удирдах")
+        manageMenu.addItem(withTitle: "Ажлын муж", action: #selector(actionWorkArea), keyEquivalent: "0")
+        manageMenu.addItem(withTitle: "Шугамын нүүр", action: #selector(actionLineHome), keyEquivalent: "h")
         manageMenu.addItem(withTitle: "Апп дэлгүүр (/apps)", action: #selector(actionApps), keyEquivalent: "1")
         manageMenu.addItem(withTitle: "Дахин ачаалах", action: #selector(actionReload), keyEquivalent: "r")
         manageMenuItem.submenu = manageMenu
@@ -73,6 +77,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func actionPreferences() {
         mainWindowController?.showSettings()
+    }
+
+    @objc private func actionWorkArea() {
+        mainWindowController?.showWorkArea()
+    }
+
+    @objc private func actionLineHome() {
+        mainWindowController?.loadRelativePath("/")
     }
 
     @objc private func actionApps() {

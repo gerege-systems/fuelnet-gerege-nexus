@@ -20,7 +20,7 @@ public final class URLSessionAuthTransport: AuthTransport, @unchecked Sendable {
     public let apiBase: URL
     private let session: URLSession
 
-    public init(apiBase: URL = URL(string: "https://nexus.gerege.mn/api/v1/")!, session: URLSession = .shared) {
+    public init(apiBase: URL = URL(string: GeregeDeviceLine.origin + "/api/v1/")!, session: URLSession = .shared) {
         self.apiBase = apiBase; self.session = session
     }
 

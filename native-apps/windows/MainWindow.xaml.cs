@@ -7,12 +7,30 @@ using System.Windows.Media.Imaging;
 
 namespace GeregeNexusNativeWin
 {
+    /// <summary>
+    /// Аппын цорын ганц цонх.
+    ///
+    /// Дүрэм: <b>popup-аас бусад бүх зүйл энэ хүрээн дотор</b>. Нэвтрэлт, ажлын
+    /// муж, тохиргоо гурвуул нэг цонхны дотор солигддог дэлгэцүүд. Тусдаа
+    /// Window нээх эрхтэй зүйл бол зөвхөн MessageBox болон файл сонгох диалог
+    /// гэх мэт богино насалдаг popup-ууд.
+    ///
+    /// Ажлын муж нь <c>win.nexus.gerege.mn</c> — Windows-ийн domain шугам. Тэр
+    /// host нь өөрийн <c>/api/v1</c>-ээ мөн үйлчилдэг тул webview доторх
+    /// дуудлага same-origin болж, session cookie нь SameSite=Strict хэвээр
+    /// ажиллана.
+    /// </summary>
     public partial class MainWindow : Window
     {
+        /// <summary>Хүрээн доторх дэлгэцүүд. Шинэ native дэлгэц нэмэх гэж
+        /// байвал энд нэмнэ — цонх нэмэхгүй.</summary>
+        private enum Pane { Work, Settings }
+
         private readonly NativeSettings _settings = NativeSettings.Load();
         private readonly string _baseUrl;
         private NativeIPCBridge? _ipcBridge;
         private readonly NativeAuth _auth;
+        private SettingsPane? _settingsPane;
         public string WebOrigin => new Uri(_baseUrl).GetLeftPart(UriPartial.Authority);
 
         public MainWindow()
@@ -20,7 +38,7 @@ namespace GeregeNexusNativeWin
             _baseUrl = _settings.WebEndpoint.TrimEnd('/');
             _auth = new NativeAuth(_settings.ApiEndpoint);
             InitializeComponent();
-            footerPlatform.Text = $"Windows · {ShellProfile.FormFactor}  |  Shell v1.3";
+            footerPlatform.Text = $"Windows · {ShellProfile.FormFactor}  |  Shell v1.4  |  {new Uri(_baseUrl).Host}";
             emailInput.ToolTip=NativeStrings.Get("auth_field_email","И-мэйл");passwordInput.ToolTip=NativeStrings.Get("auth_field_password","Нууц үг");passwordLoginButton.Content=NativeStrings.Get("auth_action_admin_sign_in","Админаар нэвтрэх");nationalIdInput.ToolTip=NativeStrings.Get("auth_eid_reg_number","Регистрийн дугаар");pushLoginButton.Content=NativeStrings.Get("auth_eid_send_request","eID апп руу хүсэлт илгээх");cancelLoginButton.Content=NativeStrings.Get("auth_action_cancel","Цуцлах");staffPinButton.Content=NativeStrings.Get("auth_action_staff_sign_in","Ээлжийн ажилтнаар нэвтрэх");
             staffPinPanel.Visibility = ShellProfile.FormFactor == "pos" ? Visibility.Visible : Visibility.Collapsed;
             _auth.StatusChanged += status => Dispatcher.Invoke(() => RenderLogin(status));
@@ -43,7 +61,7 @@ namespace GeregeNexusNativeWin
                     const pending=new Map(),listeners=new Map(); let sequence=0;
                     window.__geregeShellResolve=(id,ok,value)=>{const p=pending.get(id);if(!p)return;pending.delete(id);ok?p.resolve(value):p.reject(new Error(String(value)))};
                     window.__geregeShellEmit=(name,payload)=>(listeners.get(name)||[]).slice().forEach(fn=>fn(payload));
-                    window.GeregeShell=Object.freeze({version:'1.3',platform:'windows',formFactor:'" + ShellProfile.FormFactor + @"',capabilities:Object.freeze(" + System.Text.Json.JsonSerializer.Serialize(ShellProfile.Capabilities) + @"),
+                    window.GeregeShell=Object.freeze({version:'1.4',platform:'windows',formFactor:'" + ShellProfile.FormFactor + @"',capabilities:Object.freeze(" + System.Text.Json.JsonSerializer.Serialize(ShellProfile.Capabilities) + @"),
                       invoke(method,params={}){return new Promise((resolve,reject)=>{const id=String(++sequence);pending.set(id,{resolve,reject});window.chrome.webview.postMessage(JSON.stringify({id,method,params}))})},
                       on(name,handler){const list=listeners.get(name)||[];list.push(handler);listeners.set(name,list);return()=>{const i=list.indexOf(handler);if(i>=0)list.splice(i,1)}}});
                     document.documentElement.setAttribute('data-shell','windows');
@@ -60,6 +78,16 @@ namespace GeregeNexusNativeWin
                 };
 
                 webView.CoreWebView2.NavigationStarting += NavigationStarting;
+                // target="_blank" болон window.open нь хүрээнээс тасарсан хоёр
+                // дахь webview цонх нээхийг хүсдэг. Handled=true нь тэр цонхыг
+                // үүсгэхгүй гэсэн үг — хаяг нь зөвшөөрөгдсөн scheme-тэй бол
+                // системийн хөтчөөр нээгдэнэ.
+                webView.CoreWebView2.NewWindowRequested += (_, e) =>
+                {
+                    e.Handled = true;
+                    if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && target.Scheme is "http" or "https" or "mailto" or "tel")
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target.AbsoluteUri) { UseShellExecute = true });
+                };
                 webView.CoreWebView2.NavigationCompleted += (_, e) => { footerConnection.Text = e.IsSuccess ? $"●  Холбогдсон · {new Uri(webView.Source.ToString()).Host}" : "●  Холболт тасарсан"; footerConnection.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(e.IsSuccess ? "#62D9D4" : "#EF4444")); _ = webView.CoreWebView2.ExecuteScriptAsync("window.__geregeShellEmit&&window.__geregeShellEmit('shell:auth-changed',{reason:'navigation-session'})"); };
                 var deviceToken = CredentialManagerTokenStore.Load();
                 if (!string.IsNullOrWhiteSpace(deviceToken))
@@ -69,7 +97,7 @@ namespace GeregeNexusNativeWin
                     cookie.IsHttpOnly = true; cookie.IsSecure = api.Scheme == "https"; webView.CoreWebView2.CookieManager.AddOrUpdateCookie(cookie);
                     _ = new DeviceEnrollmentClient().TelemetryAsync(_settings.ApiEndpoint,deviceToken,"INFO","shell.started",new{form_factor=ShellProfile.FormFactor,runtime="webview2"});
                 }
-                if (ShellProfile.FormFactor == "kiosk" && !string.IsNullOrWhiteSpace(deviceToken)) { loginView.Visibility = Visibility.Collapsed; webView.Visibility = Visibility.Visible; nativeFooter.Visibility = Visibility.Visible; NavigatePath(ShellProfile.StartRoute); EnterKioskMode(); }
+                if (ShellProfile.FormFactor == "kiosk" && !string.IsNullOrWhiteSpace(deviceToken)) { EnterShell(); NavigatePath(ShellProfile.StartRoute); EnterKioskMode(); }
                 else ShowNativeLogin();
             }
             catch (Exception ex)
@@ -82,16 +110,86 @@ namespace GeregeNexusNativeWin
         {
             if (webView != null && webView.CoreWebView2 != null)
             {
+                // Ажлын муж руу чиглэсэн шилжилт нь ажлын мужийг ХАРУУЛНА. Үгүй
+                // бол цэснээс "Апп дэлгүүр" дарахад хуудас нь нууц ачаалагдаад
+                // хэрэглэгч тохиргоон дээрээ үлддэг.
+                if (navRail.Visibility == Visibility.Visible) ShowPane(Pane.Work);
                 string targetUrl = _baseUrl + relativePath;
                 webView.CoreWebView2.Navigate(targetUrl);
             }
         }
 
+        /// <summary>
+        /// Нэвтрэлт нь мөн энэ хүрээний дэлгэц: chrome-ыг нуугаад бүтнээр нь
+        /// бүрхэнэ. Тусдаа нэвтрэх цонх нээгдэхгүй.
+        /// </summary>
         public void ShowNativeLogin()
         {
             loginView.Visibility = Visibility.Visible;
             webView.Visibility = Visibility.Collapsed;
+            settingsHost.Visibility = Visibility.Collapsed;
+            navRail.Visibility = Visibility.Collapsed;
             nativeFooter.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>Нэвтэрсний дараа bürхүүлийн chrome-ыг гаргаж, ажлын муж дээр
+        /// эхэлнэ.</summary>
+        private void EnterShell()
+        {
+            loginView.Visibility = Visibility.Collapsed;
+            navRail.Visibility = Visibility.Visible;
+            nativeFooter.Visibility = Visibility.Visible;
+            ShowPane(Pane.Work);
+        }
+
+        /// <summary>Хүрээн доторх дэлгэцийг солино. Цонх нээхгүй, цонх хаахгүй.</summary>
+        private void ShowPane(Pane pane)
+        {
+            if (pane == Pane.Settings && _settingsPane == null)
+            {
+                _settingsPane = new SettingsPane();
+                // Шинэ хаяг руу шууд шилжүүлэхгүй. _baseUrl нь эхлэхэд уншигдаж,
+                // cookie store, navigation allowlist, гүүрийн origin шалгалт
+                // гурвуул тэр утган дээр тогтсон байдаг — зөвхөн хуудсыг
+                // ачаалах нь тэднийг зөрүүтэй үлдээж, гүүр чимээгүй унтардаг.
+                // Тиймээс хэрэглэгчид үнэнийг нь хэлнэ.
+                _settingsPane.EndpointsChanged += () =>
+                {
+                    footerConnection.Text = "●  Шинэ хаяг аппыг дахин эхлүүлсний дараа хэрэгжинэ";
+                    footerConnection.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF5, 0xA5, 0x24));
+                };
+                settingsHost.Content = _settingsPane;
+            }
+            webView.Visibility = pane == Pane.Work ? Visibility.Visible : Visibility.Collapsed;
+            settingsHost.Visibility = pane == Pane.Settings ? Visibility.Visible : Visibility.Collapsed;
+
+            var active = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x62, 0xD9, 0xD4));
+            var idle = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB8, 0xC1, 0xCE));
+            navWorkButton.Foreground = pane == Pane.Work ? active : idle;
+            navSettingsButton.Foreground = pane == Pane.Settings ? active : idle;
+        }
+
+        private void NavWork_Click(object sender, RoutedEventArgs e)
+        {
+            if (navRail.Visibility == Visibility.Visible) ShowPane(Pane.Work);
+        }
+
+        private void NavSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (navRail.Visibility == Visibility.Visible) ShowPane(Pane.Settings);
+        }
+
+        /// <summary>Гүүрийн <c>shell.openPane</c> эндээс ордог — ижил хүрээн
+        /// доторх дэлгэц солигдоно.</summary>
+        public bool OpenPane(string pane)
+        {
+            if (navRail.Visibility != Visibility.Visible) return false;
+            switch (pane)
+            {
+                case "settings": ShowPane(Pane.Settings); return true;
+                case "work": ShowPane(Pane.Work); return true;
+                default: return false;
+            }
         }
 
         private async void PasswordLogin_Click(object sender, RoutedEventArgs e) =>
@@ -128,7 +226,7 @@ namespace GeregeNexusNativeWin
                 if (source.Expires != DateTime.MinValue) cookie.Expires = source.Expires;
                 webView.CoreWebView2.CookieManager.AddOrUpdateCookie(cookie);
             }
-            loginView.Visibility = Visibility.Collapsed; webView.Visibility = Visibility.Visible; nativeFooter.Visibility = Visibility.Visible;
+            EnterShell();
             NavigatePath(ShellProfile.StartRoute);
         }
 
@@ -157,7 +255,14 @@ namespace GeregeNexusNativeWin
 
         private void MenuSettings_Click(object sender, RoutedEventArgs e)
         {
-            new SettingsWindow(this).ShowDialog();
+            // Өмнө нь энэ нь `new SettingsWindow(this).ShowDialog()` байсан —
+            // modal тусдаа цонх. Одоо ижил хүрээн доторх дэлгэц.
+            if (navRail.Visibility == Visibility.Visible) ShowPane(Pane.Settings);
+        }
+
+        private void MenuLineHome_Click(object sender, RoutedEventArgs e)
+        {
+            NavigatePath("/");
         }
 
         private void MenuApps_Click(object sender, RoutedEventArgs e)

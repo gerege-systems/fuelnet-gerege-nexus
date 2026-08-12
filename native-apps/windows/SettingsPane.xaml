@@ -1,6 +1,16 @@
-<Window x:Class="GeregeNexusNativeWin.SettingsWindow"
- xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="Gerege Nexus — Native Settings" Width="960" Height="680" MinWidth="780" MinHeight="540" WindowStartupLocation="CenterOwner">
+<!--
+ Тохиргооны дэлгэц — аппын хүрээн ДОТОР амьдардаг UserControl.
+
+ Өмнө нь энэ нь `ShowDialog()`-оор нээгддэг тусдаа Window байсан: modal тул
+ ард нь байгаа ажлын муж хөлддөг, taskbar дээр хоёр дахь бичлэг гарч,
+ kiosk/POS дээр бүтэн дэлгэцийн ард алга болдог байв. Одоо энэ нь MainWindow-
+ ийн content host дотор webView-тэй ижил байранд солигдоно.
+
+ Тусдаа цонх үлдээх ганц зөвшөөрөгдсөн зүйл бол popup: MessageBox, файл
+ сонгох диалог — богино насалдаг, эцэг цонхондоо холбогддог.
+-->
+<UserControl x:Class="GeregeNexusNativeWin.SettingsPane"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <Grid Background="#F5F7FA"><Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
   <Border Background="#E9EEF4" BorderBrush="#D5DCE5" BorderThickness="0,0,1,0">
    <DockPanel><TextBlock DockPanel.Dock="Top" Text="DEVICE CONSOLE" FontWeight="Bold" Foreground="#297E82" Margin="18,22,18,14"/>
@@ -25,8 +35,8 @@
    <StackPanel Name="devicePanel" Visibility="Collapsed"><TextBlock Text="Төхөөрөмжийн нэр"/><TextBox Name="deviceName"/><TextBlock Text="Байршил / site" Margin="0,12,0,0"/><TextBox Name="deviceSite"/><TextBlock Text="Нэг удаагийн enrollment code" Margin="0,12,0,0"/><TextBox Name="enrollmentCode" CharacterCasing="Upper"/><TextBlock Text="Device ID" Margin="0,12,0,0"/><TextBox Name="deviceId" IsReadOnly="True"/><TextBlock Text="Төлөв" Margin="0,12,0,0"/><TextBox Name="deviceStatus" IsReadOnly="True"/><StackPanel Orientation="Horizontal"><Button Content="Нэг удаагийн кодоор бүртгэх" Click="EnrollDevice_Click" Margin="0,18,8,0" Padding="16,7"/><Button Content="Device token шинэчлэх" Click="RotateToken_Click" Margin="0,18,0,0" Padding="16,7"/></StackPanel></StackPanel>
    <StackPanel Name="drawerPanel" Visibility="Collapsed"><TextBlock Text="Printer pulse (ms)"/><TextBox Name="drawerPulse"/><Button Content="Шургуулга нээх" Click="OpenDrawer_Click" HorizontalAlignment="Left" Margin="0,18,0,0" Padding="16,7"/></StackPanel>
    <StackPanel Name="updatePanel" Visibility="Collapsed"><TextBlock Text="Шинэчлэлийн суваг"/><ComboBox Name="updateChannel"><ComboBoxItem Content="Stable"/><ComboBoxItem Content="Pilot"/><ComboBoxItem Content="Internal"/></ComboBox><CheckBox Name="telemetry" Content="Оношлогооны мэдээлэл илгээх" Margin="0,16"/><Button Content="Шинэчлэлт шалгах" Click="CheckUpdates_Click" HorizontalAlignment="Left" Padding="16,7"/></StackPanel>
-   <StackPanel Name="diagnosticsPanel" Visibility="Collapsed"><TextBlock Text="Shell contract     1.3"/><TextBlock Text="Runtime             .NET 8 + WebView2" Margin="0,8"/><TextBlock Name="osVersion"/><Button Content="Лог export хийх…" Click="ExportLogs_Click" HorizontalAlignment="Left" Margin="0,18,0,0" Padding="16,7"/></StackPanel>
+   <StackPanel Name="diagnosticsPanel" Visibility="Collapsed"><TextBlock Text="Shell contract     1.4"/><TextBlock Text="Runtime             .NET 8 + WebView2" Margin="0,8"/><TextBlock Name="osVersion"/><Button Content="Лог export хийх…" Click="ExportLogs_Click" HorizontalAlignment="Left" Margin="0,18,0,0" Padding="16,7"/></StackPanel>
    <Border BorderBrush="#D5DCE5" BorderThickness="0,1,0,0" Margin="0,28,0,0" Padding="0,18,0,0"><DockPanel><TextBlock Name="status" Foreground="#55606F" VerticalAlignment="Center"/><Button DockPanel.Dock="Right" Content="Хадгалах" Click="Save_Click" Padding="20,8"/></DockPanel></Border>
   </StackPanel></ScrollViewer>
  </Grid>
-</Window>
+</UserControl>

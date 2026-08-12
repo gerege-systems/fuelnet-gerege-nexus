@@ -1,4 +1,4 @@
-# Bridge Contract v1.3 — Native Shell + Web Work Area
+# Bridge Contract v1.4 — Native Shell + Web Work Area
 
 Native бүрхүүл (Swift, C#, Kotlin) ба web app хоёрын хооронд байх
 `window.GeregeShell` гэрээний бүртгэл.
@@ -33,6 +33,113 @@ Web талын хэрэгжилт: [`frontend/lib/shell.ts`](../frontend/lib/she
 
 ---
 
+## 1a. Нэг хүрээний дүрэм
+
+Native клиент бүр **цорын ганц хүрээтэй**: macOS/Windows дээр нэг цонх, iOS/
+Android дээр нэг scene. Нэвтрэлт, ажлын муж, тохиргоо, профайл — бүгд тэр
+хүрээн дотор солигддог **дэлгэцүүд** болохоос тусдаа цонх биш.
+
+Хүрээнээс гарч болох цорын ганц зүйл бол **popup**: богино насалдаг, эцэг
+цонхондоо холбогддог, өөрөө навигаци агуулдаггүй элемент.
+
+| Зөвшөөрөгдөнө (popup) | Зөвшөөрөгдөхгүй |
+| --- | --- |
+| `NSAlert`, `NSMenu`, `NSSavePanel` | Хоёр дахь `NSWindow` |
+| `MessageBox`, файл сонгох диалог | `Window.ShowDialog()`, `Window.Show()` |
+| `alert`, `confirmationDialog`, share sheet | Хоёр дахь `WindowGroup`/scene |
+| `BiometricPrompt`, зөвшөөрлийн диалог | Хоёр дахь `Activity` |
+
+Мөн ажлын мужаас `window.open` / `target="_blank"` хийсэн шилжилт нь webview-ийн
+шинэ цонх нээхийг хүсдэг. Бүрхүүл тэр цонхыг **үүсгэхгүй** — хаяг нь
+зөвшөөрөгдсөн scheme-тэй бол системийн хөтчөөр нээгдэнэ.
+
+Дүрмийн шалтгаан нь загварын амт биш. Тусдаа цонх нь хэрэглэгчийг нэг аппын
+хоёр хүрээ хооронд үсрүүлж, taskbar/Dock дээр хоёр дахь бичлэг үлдээж, kiosk
+болон бүтэн дэлгэцийн горимд бүр огт олдохгүй болдог.
+
+**Дэлгэц солигдоход ажлын мужийг устгахгүй.** Native дэлгэц гарахад webview-г
+харагдацаас нуух нь зөв; view модоос хасах нь буруу. Хасвал webview дахин үүсч,
+хэрэглэгчийн байсан хуудас, гүйлгэсэн байрлал, бөглөж байсан маягт бүгд алга
+болно.
+
+---
+
+## 1b. Төхөөрөмжийн domain шугам
+
+**Backend цор ганц.** Гэхдээ клиент бүр өөрийн host-оор ханддаг:
+
+| Шугам | Хэн ашиглах | Төлөв |
+| --- | --- | --- |
+| `nexus.gerege.mn` | Хөтөч / PWA — web app өөрөө бүрэн апп | ✅ ажиллаж байна |
+| `mac.nexus.gerege.mn` | macOS | ✅ ажиллаж байна |
+| `win.nexus.gerege.mn` | Windows Desktop | ✅ ажиллаж байна |
+| `ios.nexus.gerege.mn` | iOS / iPadOS | ✅ ажиллаж байна |
+| `android.nexus.gerege.mn` | Android mobile / tablet | ✅ ажиллаж байна |
+| `kiosk.nexus.gerege.mn` | Kiosk (Windows, Android) | ✅ ажиллаж байна |
+| `pos.nexus.gerege.mn` | POS (Windows, Android) | ✅ ажиллаж байна |
+
+Бүх нэр `*.nexus.gerege.mn` wildcard-аар нэг IP руу очиж, зургуулаа нэг
+Let's Encrypt гэрчилгээнд багтана.
+
+> **ШИНЭ шугам нэмэхдээ клиентийг урьдчилж чиглүүлж БОЛОХГҮЙ.** DNS, nginx,
+> TLS, `DEVICE_LINE_ORIGINS` дөрвүүлэн бэлэн болохоос өмнө клиентийг зааж
+> өгвөл апп `A server with the specified hostname could not be found` гэж
+> унаж, нэвтрэх боломжгүй болно — энэ нь нэг удаа тохиолдсон. Дараалал ба
+> тухайн платформын яг аль мөрийг солихыг
+> [`native-apps/shared/device_lines.json`](../native-apps/shared/device_lines.json)-ы
+> `$provisioning` заана.
+
+Шугам бүр өөрийн host дээрээ `/api/v1`-ээ **мөн** үйлчилнэ; nginx тэдгээрийг
+бүгдийг НЭГ ижил API upstream руу дамжуулна
+([`deploy/nginx/device-lines.nexus.gerege.mn.conf`](../deploy/nginx/device-lines.nexus.gerege.mn.conf)).
+Шугам нь тусдаа origin өгөхийн тулд байгаа болохоос тусдаа сервис өгөхийн тулд
+биш.
+
+Энэ нь тав тухын шийдэл биш: ажлын мужаас гарах дуудлага **same-origin** болж,
+session cookie нь `SameSite=Strict` хэвээр ажиллаж, CORS preflight огт
+үүсэхгүй. Хэрэв клиентийг хуваалцсан host руу чиглүүлбэл cookie-гаар
+баталгаажсан бичих үйлдэл бүр cross-site болно.
+
+Шугам бүр тусдаа host учраас cookie нь host-only: mac дээрх session нь pos руу
+урсахгүй. Энэ бол тусгаарлалт, регресс биш.
+
+**API-гийн хаяг нь шугам дээр ҮРГЭЛЖ харьцангуй байх ёстой.**
+`NEXT_PUBLIC_API_URL` нь build үед шингэдэг ба production-д
+`https://nexus.gerege.mn/api/v1` гэж бичигддэг. Тэр утгыг төхөөрөмжийн шугам
+дээр ашиглавал дуудлага cross-origin болж, host-only session cookie ОГТ
+илгээгдэхгүй — API 401 буцааж, ажлын муж нэвтрэлт дууссан гэж үзээд web-ийн
+`/login` руу түлхэнэ. Native талд амжилттай нэвтэрсэн хэрнээ ажлын мужид
+нэвтрэх дэлгэц гарч ирэх хэлбэрээр илэрдэг. Тиймээс бүх fetch нь
+[`frontend/lib/apiBase.ts`](../frontend/lib/apiBase.ts)-аар дамжина: шугам
+дээр `/api/v1`, хөтөч дээр build-ийн утга.
+
+### Шугамын нүүр дэлгэц
+
+Шугам бүрийн үндэс (`/`) нь тухайн платформын **өөрийн нүүр дэлгэц** рүү
+шилжинэ: [`frontend/app/line/[line]/`](../frontend/app/line). Native клиент
+нэвтэрсний дараа `/`-ыг нээх ба тэндээс тухайн төхөөрөмжийн web дэлгэцүүд
+хөгжинө.
+
+Нүүр дэлгэц нэвтрэлт шаардахгүй. Тэр нь ажлын мужид web-ийн нэвтрэх дэлгэц
+гарч ирэхийг **орлохын тулд** байгаа тул session байхгүй үед ч зогсоно —
+эс бөгөөс шийдэх гэсэн асуудлаа өөрөө үүсгэнэ.
+
+Дэлгэцүүд нь өнгө, гарчгаараа биш **байрлалаараа** ялгаатай: ширээ (`desk`),
+гарын алга (`hand`), олон нийтийн терминал (`public`) гурав нь товчны хэмжээ,
+нягтрал, юуг эхэнд тавихыг шийднэ.
+
+Бүртгэлүүд — шугам нэмэхэд **гурвуулыг** нь өөрчилнө:
+
+- [`native-apps/shared/device_lines.json`](../native-apps/shared/device_lines.json) — native талын эх сурвалж
+- [`frontend/lib/deviceLine.ts`](../frontend/lib/deviceLine.ts) — web талын хуулбар
+- `DEVICE_LINE_ORIGINS` ба nginx vhost — deploy тал
+
+Web тал шугамыг `Host`-оор нь таньж
+([`frontend/proxy.ts`](../frontend/proxy.ts)) `Vary: Host` тавьж, `/login`-ыг
+хаана: төхөөрөмжийн шугам дээр нэвтрэлт бол native UI.
+
+---
+
 ## 2. Инжекцийн дүрэм
 
 | Дүрэм | Утга |
@@ -52,7 +159,7 @@ Document start дээр inject хийх шаардлага нь зөвхөн т�
 
 ```ts
 interface GeregeShell {
-  version: string;       // гэрээний semver, одоо "1.3"
+  version: string;       // гэрээний semver, одоо "1.4"
   platform: "macos" | "windows" | "ios" | "android" | "kiosk" | "pos";
   formFactor: "desktop" | "mobile" | "tablet" | "kiosk" | "pos";
   capabilities: string[];
@@ -81,6 +188,7 @@ interface GeregeShell {
 | `fs.save` | Файлыг хэрэглэгчийн сонгосон газарт хадгалах (`fs.saveAs` method). |
 | `secure-store` | Keychain / Credential Manager маягийн нууц хадгалалт. |
 | `menu.native` | Native цэсийг тенантын цэснээс динамикаар барих. |
+| `shell.pane` | Бүрхүүлийн эзэмшдэг дэлгэц рүү хүрээн дотор шилжих (`shell.openPane`). |
 
 Capability нэр ба method нэр нь тусдаа: capability нь *боломж*, method нь
 *дуудлага*. Жишээ нь `fs.save` чадвар нь `fs.saveAs` method-оор хэрэгжинэ.
@@ -173,6 +281,21 @@ capability шаардахгүй.
 | Параметр | `{}` |
 | Хариу | `null` |
 
+### `shell.openPane`
+
+Бүрхүүлийн эзэмшдэг дэлгэц рүү шилжинэ. Capability: `shell.pane`.
+
+| | |
+| --- | --- |
+| Параметр | `{ pane: "work" \| "settings" }` |
+| Хариу | `null` |
+| Алдаа | Танихгүй нэр, эсвэл хэрэглэгч хараахан нэвтрээгүй бол reject |
+
+Энэ нь **цонх нээх дуудлага биш** — ижил хүрээн доторх дэлгэц солигдоно
+(§1a). Ажлын муж "Төхөөрөмжийн тохиргоо" гэсэн холбоос гаргах бол native
+тохиргоог өөрөө зурахын оронд үүнийг дуудна. Reject ирвэл web тал өөрийн
+тохиргооны хуудсаа үзүүлнэ.
+
 ### Device method-ууд (v1.1–v1.3)
 
 | Method | Capability | Параметр | Хариу |
@@ -218,6 +341,10 @@ payload-ыг шууд дамжуулна.
 - **Major (1.x → 2.0)** — байгаа method-ын нэр, параметр, хариу, эсвэл
   event-ийн payload өөрчлөх, юм хасах. Бүрхүүл шинэ `version`-оо ЗААВАЛ
   зарлана.
+- **v1.4** нь minor: `shell.openPane` method ба `shell.pane` capability нэмэгдсэн,
+  байгаа юу ч өөрчлөгдөөгүй. v1.3 бүрхүүл дээр v1.4 web ажиллана —
+  `shell.openPane` нь reject хийж, web тал өөрийн тохиргооны хуудас руу
+  шилжинэ.
 - Device method нэмэхдээ түүнд харгалзах **capability-г мөн зарлана**.
   `auth.*` lifecycle method-ууд capability шаардахгүй.
 - Web тал үл мэдэгдэх method-ыг дуудаж болно — reject ирнэ гэдгийг тооцсон
@@ -262,10 +389,11 @@ C#/.NET сууриас эхэлнэ; Kotlin/Android суурь мөн энд н�
 
 | Зүйл | Утга |
 | --- | --- |
-| `version` | `1.3` |
+| `version` | `1.4` |
 | `platform` | `macos`, `windows`, `ios`, `android`, `kiosk`, `pos` |
-| `capabilities` | `notify`, `badge`, `external.open`, `print.system`, `fs.save` |
-| Хэрэгжсэн method | `notify.show`, `badge.set`, `external.open`, `print.system`, `fs.saveAs`, `menu.changed`, `auth.reLogin` |
+| `capabilities` | `notify`, `badge`, `external.open`, `print.system`, `fs.save`, `shell.pane` |
+| Хэрэгжсэн method | `notify.show`, `badge.set`, `external.open`, `print.system`, `fs.saveAs`, `menu.changed`, `auth.reLogin`, `shell.openPane` |
+| Хүрээ | Дөрвөн платформ дээр цорын ганц цонх/scene; тохиргоо нь хүрээн доторх дэлгэц (§1a) |
 | Reject хийдэг | `biometric.authenticate` — desktop дээр хэрэгжилт алга; web тал өөрийн fallback-аа ажиллуулна |
 | Илгээдэг event | `shell:navigate` (deep link, цэс, tray), `shell:search` (⌘/Ctrl+F) |
 
@@ -352,7 +480,32 @@ f.contentWindow.webkit?.messageHandlers?.geregeShell; // undefined байх ёс
 3. `window.open("https://example.com")` — мөн адил гадаад хөтчөөр нээгдэнэ.
 4. Аппын дотоод холбоос (жишээ нь `/apps`) хэвийн ажиллана.
 
-**G. Функциональ регресс байхгүй эсэх**
+**G. Нэг хүрээний дүрэм зөрчигдөөгүй эсэх** (§1a)
+
+1. Тохиргоог нээнэ: цэснээс, rail/tab-аас, мөн console дээр
+   `await window.GeregeShell.invoke("shell.openPane", { pane: "settings" })`.
+2. Гурвуулын дараа **шинэ цонх гараагүй**: macOS дээр Dock дүрс нэг хэвээр,
+   Windows дээр taskbar-д нэг бичлэг, Android дээр Recents-д нэг entry.
+3. Тохиргоон дээр байхад толгойн ribbon/menu, rail/tab bar, footer бүгд
+   байрандаа хэвээр — зөвхөн дунд хэсэг солигдсон.
+4. Ажлын муж руу буцаад **хуудас дахин ачаалагдаагүй** эсэхийг шалгана:
+   тохиргоо руу орохын өмнө хуудсыг доош гүйлгээд, буцаж ирэхэд ижил
+   байрлалдаа байх ёстой.
+
+**H. Төхөөрөмжийн domain шугам зөв эсэх** (§1b)
+
+1. Ажлын мужийн console дээр `location.host` — тухайн платформын шугам байна
+   (`mac.`, `win.`, `ios.`, `android.`, `kiosk.`, `pos.`).
+2. Network таб: `/api/v1/...` дуудлагууд **ижил host** руу явж байна; `OPTIONS`
+   preflight огт байхгүй.
+3. `document.cookie`-д `session_token` харагдахгүй (HttpOnly) ч API дуудлага
+   200 буцааж байна — cookie same-origin-оор явж байгаагийн шинж.
+4. Хөтчөөр `https://mac.nexus.gerege.mn/login` руу орвол `/apps` руу
+   шилжинэ — тэр шугам дээр нэвтрэлт нь native UI.
+5. `https://nexus.gerege.mn` хэвээр бүрэн web app: толгой хэсэг, хажуугийн цэс,
+   `/login` бүгд урьдын адил.
+
+**I. Функциональ регресс байхгүй эсэх**
 
 1. Цэсний мөрийн Хайх (⌘F) → үг бичиж Enter дарахад ажлын мужид хайлтын
    давхарга нээгдэж, үр дүн гарна.
