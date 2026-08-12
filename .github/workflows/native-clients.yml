@@ -4,9 +4,18 @@ on:
   push:
     branches: [main]
     paths: ["native-apps/**", ".github/workflows/native-clients.yml"]
+  # Deliberately unfiltered, unlike the push trigger above.
+  #
+  # These jobs are what actually compile the four clients, and on 2026-08-12
+  # they were advisory: a pull request merged with `android` red because branch
+  # protection required only Lint and Test, and main stopped building for
+  # Android until a follow-up landed. The fix is to make them required — and a
+  # required check that is path-filtered never reports on a pull request that
+  # misses the filter, so every backend-only change would wait for a job that
+  # is never going to run. Running them on every pull request is the price of
+  # having them gate anything at all.
   pull_request:
     branches: [main]
-    paths: ["native-apps/**", ".github/workflows/native-clients.yml"]
 
 permissions:
   contents: read
