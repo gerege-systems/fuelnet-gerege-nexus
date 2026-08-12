@@ -24,6 +24,7 @@ import (
 
 	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 )
 
 // PollWindow is how long the relying party holds a session poll open before it
@@ -156,6 +157,11 @@ func valueOr(value, fallback string) string {
 
 // StartDeviceLink starts the same QR/App2App contract used by Gerege Platform.
 func (s *EIDService) StartDeviceLink(ctx context.Context, callbackURL string) (*StartResult, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_device_link",
+		func() (*StartResult, error) { return s.startDeviceLink(ctx, callbackURL) })
+}
+
+func (s *EIDService) startDeviceLink(ctx context.Context, callbackURL string) (*StartResult, error) {
 	if s.mockMode {
 		return s.startMock("", true), nil
 	}
@@ -168,6 +174,11 @@ func (s *EIDService) StartDeviceLink(ctx context.Context, callbackURL string) (*
 
 // StartByNationalID pushes an approval request to the citizen's eID Mongolia app.
 func (s *EIDService) StartByNationalID(ctx context.Context, nationalID, callbackURL string) (*StartResult, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_by_national_id",
+		func() (*StartResult, error) { return s.startByNationalID(ctx, nationalID, callbackURL) })
+}
+
+func (s *EIDService) startByNationalID(ctx context.Context, nationalID, callbackURL string) (*StartResult, error) {
 	nationalID = strings.ToUpper(strings.TrimSpace(nationalID))
 	if len(nationalID) < 8 {
 		return nil, errors.New("invalid registration number")
@@ -192,6 +203,11 @@ func (s *EIDService) StartByNationalID(ctx context.Context, nationalID, callback
 // id, verification code, polling — is the sign-in flow's, which is why callers
 // finish with Poll.
 func (s *EIDService) StartSignature(ctx context.Context, nationalID, displayText, callbackURL string) (*StartResult, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_signature",
+		func() (*StartResult, error) { return s.startSignature(ctx, nationalID, displayText, callbackURL) })
+}
+
+func (s *EIDService) startSignature(ctx context.Context, nationalID, displayText, callbackURL string) (*StartResult, error) {
 	nationalID = strings.ToUpper(strings.TrimSpace(nationalID))
 	if len(nationalID) < 8 {
 		return nil, errors.New("invalid registration number")
@@ -239,7 +255,17 @@ func (s *EIDService) startMock(nationalID string, deviceLink bool) *StartResult 
 }
 
 // Poll long-polls the authoritative RP session and returns a normalized state.
+//
+// Its latency is mostly the citizen reaching for their phone rather than eID
+// being slow, which is why the external histogram's buckets run out to two
+// minutes: a p99 of ninety seconds on operation="poll" is a normal sign-in, not
+// an incident.
 func (s *EIDService) Poll(ctx context.Context, sessionID string) (*PollResult, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemEID, "poll",
+		func() (*PollResult, error) { return s.poll(ctx, sessionID) })
+}
+
+func (s *EIDService) poll(ctx context.Context, sessionID string) (*PollResult, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, errors.New("session_id is required")
 	}
@@ -287,6 +313,11 @@ func (s *EIDService) GetAuthorizeURL(redirectURI, state string) string {
 
 // ExchangeCode exchanges OAuth2 authorization code for E-ID Identity profile
 func (s *EIDService) ExchangeCode(ctx context.Context, code, redirectURI string) (*EIDIdentity, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemEID, "exchange_code",
+		func() (*EIDIdentity, error) { return s.exchangeCode(ctx, code, redirectURI) })
+}
+
+func (s *EIDService) exchangeCode(ctx context.Context, code, redirectURI string) (*EIDIdentity, error) {
 	if code == "" {
 		return nil, errors.New("empty authorization code")
 	}

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -157,7 +158,17 @@ func (s *store) documentForSigning(ctx context.Context, tenantID, id string) ([]
 }
 
 // markSigned records the outcome of a completed ceremony on the document.
+//
+// Both rails end here, which makes it the one place documents_signed_total can
+// be incremented without the two handlers having to agree on when a ceremony
+// counts as finished.
 func (s *store) markSigned(ctx context.Context, tenantID, id string, in signedDocument) error {
+	err := s.writeSigned(ctx, tenantID, id, in)
+	observability.RecordDocumentSigned(in.Provider, err == nil)
+	return err
+}
+
+func (s *store) writeSigned(ctx context.Context, tenantID, id string, in signedDocument) error {
 	_, err := s.db.Exec(ctx,
 		`UPDATE esign_documents SET
 		     status = 'SIGNED', provider = $1, signed_pdf = $2, signature_image = COALESCE($3, signature_image),

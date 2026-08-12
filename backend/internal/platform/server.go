@@ -516,7 +516,12 @@ func (s *Server) InstallAppForTenant(ctx context.Context, tenantID, appSlug, use
 func (s *Server) setupRoutes() {
 	r := s.router
 
-	r.Use(chimiddleware.Logger)
+	// First, so everything below it — the access log, every slog line a handler
+	// writes, and the X-Request-Id header the caller gets back — names the same
+	// request. It is also what makes a log line joinable to a trace once
+	// tracing is on.
+	r.Use(chimiddleware.RequestID)
+	r.Use(observability.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(resilience.NewLoadShedder(1000).Middleware)
 	r.Use(observability.MetricsMiddleware)

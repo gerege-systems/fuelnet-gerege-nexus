@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 )
 
 type CitizenInfo struct {
@@ -62,7 +63,17 @@ func NewGeregeService() *GeregeService {
 }
 
 // GetCitizenInfo queries citizen data from ХУР (xyp.gerege.mn)
+//
+// Timed as an external call even while the live implementation is missing: what
+// the histogram then reports is that every citizen lookup on this deployment
+// fails immediately, which is the truth an operator needs and would otherwise
+// have to read from a handler's error rate.
 func (s *GeregeService) GetCitizenInfo(ctx context.Context, regNumber string) (*CitizenInfo, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemXYP, "citizen_query",
+		func() (*CitizenInfo, error) { return s.getCitizenInfo(ctx, regNumber) })
+}
+
+func (s *GeregeService) getCitizenInfo(_ context.Context, regNumber string) (*CitizenInfo, error) {
 	if regNumber == "" {
 		return nil, errors.New("empty registration number")
 	}
@@ -90,6 +101,11 @@ func (s *GeregeService) GetCitizenInfo(ctx context.Context, regNumber string) (*
 
 // GetCompanyInfo queries legal entity data from ХУР (xyp.gerege.mn)
 func (s *GeregeService) GetCompanyInfo(ctx context.Context, companyReg string) (*CompanyInfo, error) {
+	return observability.ObserveExternalValue(ctx, observability.SystemXYP, "company_query",
+		func() (*CompanyInfo, error) { return s.getCompanyInfo(ctx, companyReg) })
+}
+
+func (s *GeregeService) getCompanyInfo(_ context.Context, companyReg string) (*CompanyInfo, error) {
 	if companyReg == "" {
 		return nil, errors.New("empty company registration number")
 	}

@@ -15,6 +15,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — The platform can now be measured
+
+`/metrics` carried two series: a request count and a request duration. That is
+the R and the D of RED and nothing else — no saturation, no business volume, no
+sign that a call to ХУР or eID had gone slow, and no way to tell a breach of the
+in-flight ceiling from any other 503. Everything a dashboard would need was
+missing before the dashboards were, which is why this lands before the stack
+that reads it (design: [`docs/MONITORING_AND_REPORTING_PROPOSAL.md`](docs/MONITORING_AND_REPORTING_PROPOSAL.md)).
+
+- **Saturation.** The Go runtime and process collectors are asserted rather than
+  assumed — client_golang registers both, and a test now fails if that ever
+  stops being true. The pgx pool is exported as a collector read at scrape time:
+  connections acquired, idle and total, the ceiling they are measured against,
+  and the counters for acquisitions that had to wait or were abandoned.
+- **Outbound calls.** One histogram,
+  `external_request_duration_seconds{system,operation,status}`, across ХУР, eID,
+  ДАН, the eSign HSM, Gemini and the address-verification service. It wraps the
+  call rather than the transport, because three of those six are reached through
+  clients whose `http.Client` is private to `open-gerege-core`. `system` is a
+  closed list and an unrecognised name folds into `other`, so a call site added
+  without a constant cannot widen the label set.
+- **Business volume.** `logins_total{method,result}`, `invoices_created_total`,
+  `documents_signed_total{rail,result}` and `ai_requests_total{kind}`, each
+  incremented at the one place every path through it converges — `failGoogle`
+  for one, `store.markSigned` for both e-signature rails. No tenant appears in
+  any label: that breakdown is a reporting question, answered against rows that
+  can be deleted rather than series that cannot.
+- **The load shedder is visible.** `resilience_load_shed_total` and
+  `resilience_in_flight_requests`. There is deliberately no breaker gauge: the
+  adaptive breaker the design document assumed was removed from
+  `platform/resilience` before this work began, and a gauge pinned at zero would
+  render a panel claiming every breaker is closed on a platform that has none.
+- **Logs carry the request.** Every `slog` line written while serving a request
+  now carries `request_id` and `tenant_id`, read from the context by a handler
+  wrapper rather than passed by hand through several hundred call sites. chi's
+  colour access logger is gone with it — it wrote an unparseable second format
+  into the middle of a JSON stream, named no request, and printed the raw path,
+  which for `/api/v1/verify/{ref}` meant logging a single-use credential.
+- **Audit events are kept.** New `audit_events` table (migration 00043) with the
+  00029 tenant policy, written alongside the existing log line by
+  `audit.Record` — same signature, so none of its sixty-eight call sites moved.
+  The write is best effort and bounded at one second: an audit row failing must
+  never fail the act it is recording, and the log line has already been written
+  by then. `user_id` is text and unconstrained, because the trail has to outlive
+  a deleted user and because the device handlers record `device:<id>` for an act
+  nobody signed in for.
+
 ### Added — Signing in with Google
 
 A "Google-ээр нэвтрэх" button beside eID on the platform's own sign-in screen,

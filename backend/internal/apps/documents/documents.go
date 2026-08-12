@@ -30,6 +30,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
@@ -866,6 +867,15 @@ func (m *DocumentsModule) RenameDocument(ctx context.Context, tenantID, docID, t
 // marked spent in the same transaction so a recorded signature and an unspent
 // session can never disagree.
 func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, method string, signature *verifiedSignature, sessionID string) (*Document, error) {
+	// Every signature on this module's rails is written here, so this is where
+	// documents_signed_total is counted. `method` is SignerEID or SignerDAN — a
+	// constant, never anything a request supplied.
+	doc, err := m.writeSignature(ctx, tenantID, docID, method, signature, sessionID)
+	observability.RecordDocumentSigned(method, err == nil)
+	return doc, err
+}
+
+func (m *DocumentsModule) writeSignature(ctx context.Context, tenantID, docID, method string, signature *verifiedSignature, sessionID string) (*Document, error) {
 	// The citizen has already approved by the time we get here, so an operator
 	// closing the dialog must not destroy their signature. The write runs on a
 	// context the caller cannot cancel — with its own deadline, so a stalled

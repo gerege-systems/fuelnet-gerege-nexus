@@ -30,6 +30,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 )
 
@@ -153,6 +154,7 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// somebody's Google session because they signed out of this platform is not
 	// something this platform has any business doing.
 
+	observability.RecordLogin(observability.LoginGoogle, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{
 		"method": "google",
 		"email":  identity.Email,
@@ -161,7 +163,11 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 // failGoogle returns somebody to the sign-in screen with a reason it can render.
+//
+// Every refusal on this rail comes through here, which is what makes it the one
+// place the failure counter belongs.
 func (s *Server) failGoogle(w http.ResponseWriter, r *http.Request, reason string) {
+	observability.RecordLogin(observability.LoginGoogle, false)
 	http.Redirect(w, r, config.WebOrigin()+"/login?sso_error="+reason, http.StatusFound)
 }
 

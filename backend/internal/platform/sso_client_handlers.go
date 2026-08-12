@@ -32,6 +32,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/jackc/pgx/v5"
 )
@@ -199,6 +200,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	// handleLogout: this is what becomes the id_token_hint.
 	ssoclient.SetIDTokenCookie(w, identity.IDToken, expiresAt)
 
+	observability.RecordLogin(observability.LoginSSO, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{
 		"method":   "sso",
 		"issuer":   s.ssoClient.Config().Issuer,
@@ -212,6 +214,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 // query parameter, and the screen it lands on is the one that knows the
 // person's language.
 func (s *Server) failSSO(w http.ResponseWriter, r *http.Request, reason string) {
+	observability.RecordLogin(observability.LoginSSO, false)
 	http.Redirect(w, r, config.WebOrigin()+"/login?sso_error="+reason, http.StatusFound)
 }
 
