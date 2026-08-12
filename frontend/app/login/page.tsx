@@ -13,7 +13,7 @@ import {ChevronDown,HelpCircle,Lock,Mail,ShieldCheck} from "lucide-react";
 /** Серверийн богино кодыг хүн уншихаар мессеж болгоно. Танихгүй кодыг — жишээ
     нь провайдерийн өөрийнх нь илгээсэн ер бусын алдааг — ерөнхий мэдэгдэл
     авна: код нь бүртгэлд үлддэг, дэлгэц дээр гарах ёсгүй. */
-const SSO_ERRORS:Record<string,TranslationKey>={no_account:"auth.sso.error_no_account",provider_unreachable:"auth.sso.error_unreachable",stale_request:"auth.sso.error_stale",access_denied:"auth.sso.error_denied"};
+const SSO_ERRORS:Record<string,TranslationKey>={no_account:"auth.sso.error_no_account",provider_unreachable:"auth.sso.error_unreachable",stale_request:"auth.sso.error_stale",access_denied:"auth.sso.error_denied",email_unverified:"auth.sso.error_email_unverified",domain_not_allowed:"auth.sso.error_domain_not_allowed"};
 
 /** Google-ийн албан ёсны дөрвөн өнгийн "G". */
 function GoogleMark(){return <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>}
@@ -22,7 +22,7 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
   // undefined = хараахан асуугаагүй. Энэ ялгаа чухал: асуухаас өмнө eID
   // хэлбэрийг зурчихвал холбоосон суулгац дээр хүн энд нэвтэрч болно гэж
   // хэсэг хугацаанд итгэж, дараа нь өөр рүү шилжсэн нь будлиантай.
-  const [sso,setSSO]=useState<{enabled:boolean;provider_name?:string;start_url?:string;local_login:boolean}|undefined>();
+  const [sso,setSSO]=useState<{enabled:boolean;provider_name?:string;start_url?:string;local_login:boolean;google?:{enabled:boolean;start_url?:string}}|undefined>();
   // Хэн асууж байна. Зөвхөн authorization хүсэлтээс ирсэн үед л утгатай, ба
   // нэрийг нь серверээс асууна — `next` дотор ирсэн client_id-г л ашиглаж,
   // дэлгэц дээр гарах нэрийг хаяг тодорхойлохыг зөвшөөрөхгүй.
@@ -32,7 +32,7 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
     const failed=new URLSearchParams(location.search).get("sso_error");if(failed)setError(t(SSO_ERRORS[failed]||"auth.sso.error_generic"));
     // Алдаагаа өөрөө барина: тохиргоо ирэхгүй бол энэ суулгац өөрөө нэвтрүүлдэг
     // гэж үзнэ — эс бөгөөс API-гийн түр саатал нэвтрэх дэлгэцийг хоослоно.
-    void api.ssoConfig().then(setSSO).catch(()=>setSSO({enabled:false,local_login:true}))},[t]);
+    void api.ssoConfig().then(setSSO).catch(()=>setSSO({enabled:false,local_login:true,google:{enabled:false}}))},[t]);
 
   useEffect(()=>{if(!next.startsWith("/oauth2/auth"))return;
     const clientID=new URLSearchParams(next.slice(next.indexOf("?")+1)).get("client_id");
@@ -45,6 +45,7 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
   // асуухгүй тул нэмэлт товч харуулахгүйгээр шууд илгээнэ.
   useEffect(()=>{if(sso?.enabled&&!sso.local_login&&sso.start_url&&!error)window.location.assign(`${sso.start_url}?next=${encodeURIComponent(next)}`)},[sso,next,error]);
   function startSSO(){if(sso?.start_url)window.location.assign(`${sso.start_url}?next=${encodeURIComponent(next)}`)}
+  function startGoogle(){if(sso?.google?.start_url)window.location.assign(`${sso.google.start_url}?next=${encodeURIComponent(next)}`)}
   // resetAccess before the push: router.push is a client-side navigation, so
   // whatever the previous session left cached would answer for this one.
   async function passwordLogin(e:React.FormEvent){e.preventDefault();setError("");try{await api.login(email,password);resetAccess();
@@ -92,12 +93,13 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
           {error&&!federated&&<p className="signin-alert">{error}</p>}
           <EIDLogin next={next} variant="signin"/>
 
-          {/* Google. Одоохондоо зөвхөн харагдац: backend талд Google провайдер
-              холбогдоогүй тул товч идэвхгүй байна — дарж болох мөртлөө юу ч
-              болдоггүй товч бол эвдэрсэн товч. */}
-          <div className="signin-or">{t("auth.signin.or")}</div>
-          <button className="signin-btn signin-btn--google" disabled title={t("auth.signin.google_soon")}><GoogleMark/> {t("auth.signin.google")}</button>
-          <p className="signin-note">{t("auth.signin.google_soon")}</p>
+          {/* Google. Сервер тохируулсан үед л гарна: тохируулаагүй байхад
+              дарж болох мөртлөө юу ч болдоггүй товч харуулах нь амлалт биш,
+              эвдрэл. */}
+          {sso?.google?.enabled&&<>
+            <div className="signin-or">{t("auth.signin.or")}</div>
+            <button className="signin-btn signin-btn--google" onClick={startGoogle}><GoogleMark/> {t("auth.signin.google")}</button>
+          </>}
 
           <div className="signin-footer">
             <hr/>

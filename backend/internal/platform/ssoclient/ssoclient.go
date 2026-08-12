@@ -45,6 +45,17 @@ import (
 // environment. Zero value means this deployment is not a client of anything,
 // which is what every existing deployment stays without touching its config.
 type Config struct {
+	// EnvPrefix is what the variables behind this configuration are called, so
+	// a refusal names the one the operator has to fix. "SSO_CLIENT" for the
+	// deployment-wide federation, "GOOGLE_LOGIN" for the Google button.
+	//
+	// EnvClientID is separate because the two families do not agree on it: the
+	// federation's is SSO_CLIENT_ID, not SSO_CLIENT_CLIENT_ID. Deriving it
+	// would have produced a variable name that does not exist, in the one
+	// message whose whole job is to name the variable to go and set.
+	EnvPrefix   string
+	EnvClientID string
+
 	// Issuer is the provider's issuer URL — the origin its discovery document
 	// is published under. Setting it is what turns client mode on.
 	Issuer string
@@ -123,6 +134,8 @@ func ConfigFromEnv() Config {
 	}
 
 	cfg := Config{
+		EnvPrefix:             "SSO_CLIENT",
+		EnvClientID:           "SSO_CLIENT_ID",
 		Issuer:                issuer,
 		ProviderName:          strings.TrimSpace(os.Getenv("SSO_CLIENT_PROVIDER_NAME")),
 		ClientID:              strings.TrimSpace(os.Getenv("SSO_CLIENT_ID")),
@@ -164,21 +177,36 @@ func (c Config) Validate() error {
 	if !c.Enabled() {
 		return nil
 	}
+	// A Config built by hand — in a test, or by a caller that has not said which
+	// family it belongs to — is the deployment-wide federation, so it is named
+	// as one. Both defaults move together deliberately: SSO_CLIENT's client id
+	// variable is SSO_CLIENT_ID, and defaulting only the prefix would name
+	// SSO_CLIENT_CLIENT_ID, which does not exist.
+	prefix, clientIDVar := c.EnvPrefix, c.EnvClientID
+	if prefix == "" {
+		prefix = "SSO_CLIENT"
+		if clientIDVar == "" {
+			clientIDVar = "SSO_CLIENT_ID"
+		}
+	}
 	u, err := url.Parse(c.Issuer)
 	if err != nil || !u.IsAbs() || u.Host == "" {
-		return errors.New("SSO_CLIENT_ISSUER must be an absolute URL")
+		return errors.New(prefix + "_ISSUER must be an absolute URL")
 	}
 	if u.Scheme != "https" && !isLoopback(u.Hostname()) {
-		return errors.New("SSO_CLIENT_ISSUER must use HTTPS unless it is on the loopback interface")
+		return errors.New(prefix + "_ISSUER must use HTTPS unless it is on the loopback interface")
+	}
+	if clientIDVar == "" {
+		clientIDVar = prefix + "_CLIENT_ID"
 	}
 	if c.ClientID == "" {
-		return errors.New("SSO_CLIENT_ID is required when SSO_CLIENT_ISSUER names a provider")
+		return errors.New(clientIDVar + " is required when " + prefix + "_ISSUER names a provider")
 	}
 	if c.RedirectURI == "" {
-		return errors.New("SSO_CLIENT_REDIRECT_URI could not be derived; set it, or set PUBLIC_ORIGIN")
+		return errors.New(prefix + "_REDIRECT_URI could not be derived; set it, or set PUBLIC_ORIGIN")
 	}
 	if _, err := url.Parse(c.RedirectURI); err != nil {
-		return errors.New("SSO_CLIENT_REDIRECT_URI must be an absolute URL")
+		return errors.New(prefix + "_REDIRECT_URI must be an absolute URL")
 	}
 	return nil
 }
