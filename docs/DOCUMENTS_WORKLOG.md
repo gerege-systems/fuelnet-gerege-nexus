@@ -179,7 +179,7 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJClVkH7M8Wi/veIH+7HA2BoJWJpT7cU7XLtQrvyIW1Q
 Нэмсний дараа:
 
 ```
-git -C "~/gerege/open-gerege-mn-erp (gerege-systems)" push origin main
+git -C "~/gerege/open-gerege-nexus (gerege-systems)" push origin main
 ```
 
 **Push нь юу хөдөлгөх вэ** (rebrand-ийн дараа): `ci.yml` (vet, migrate, `go test -race`,
