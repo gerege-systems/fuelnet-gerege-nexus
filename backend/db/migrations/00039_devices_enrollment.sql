@@ -1,8 +1,18 @@
+-- Дугаар нь 00032/00033-аас 00039/00040 болж шилжсэн: платформын мод дээр
+-- тэдгээр дугаарыг өөр migration аль хэдийн эзэлсэн байсан бөгөөд goose
+-- давхардсан хувилбар олоод panic хийдэг.
+--
+-- Тиймээс бүх зүйл дахин ажиллахад тэсвэртэй: DS-ийн мэдээллийн санд эдгээр
+-- объект хуучин дугаарын дор аль хэдийн үүссэн байгаа тул шинэ дугаараар
+-- дахин ажиллахад юу ч хийхгүй өнгөрөх ёстой. Шинэ сан дээр урьдын адил үүснэ.
+--
+-- CREATE POLICY нь IF NOT EXISTS-ийг PostgreSQL дээр дэмждэггүй тул бодлого
+-- бүрийн өмнө DROP POLICY IF EXISTS тавьсан.
 -- Native kiosk/POS devices enroll once, then authenticate with an opaque
 -- device token. Plain enrollment codes and device tokens are never persisted.
 -- +goose Up
 
-CREATE TABLE device_enrollment_codes (
+CREATE TABLE IF NOT EXISTS device_enrollment_codes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     code_hash TEXT NOT NULL UNIQUE,
@@ -12,7 +22,7 @@ CREATE TABLE device_enrollment_codes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE devices (
+CREATE TABLE IF NOT EXISTS devices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -28,17 +38,19 @@ CREATE TABLE devices (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_devices_tenant ON devices(tenant_id, status, name);
-CREATE INDEX idx_device_enrollment_live ON device_enrollment_codes(code_hash, expires_at) WHERE used_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_devices_tenant ON devices(tenant_id, status, name);
+CREATE INDEX IF NOT EXISTS idx_device_enrollment_live ON device_enrollment_codes(code_hash, expires_at) WHERE used_at IS NULL;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON devices, device_enrollment_codes TO gerege_nexus_app;
 ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE devices FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON devices;
 CREATE POLICY tenant_isolation ON devices TO gerege_nexus_app
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid);
 ALTER TABLE device_enrollment_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_enrollment_codes FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON device_enrollment_codes;
 CREATE POLICY tenant_isolation ON device_enrollment_codes TO gerege_nexus_app
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid);
@@ -46,14 +58,14 @@ CREATE POLICY tenant_isolation ON device_enrollment_codes TO gerege_nexus_app
 -- Enrollment and device authentication happen before a tenant is known, so a
 -- normal RLS query can never bootstrap itself. These narrowly scoped security
 -- definer functions reveal only the tenant/device matching an opaque digest.
-CREATE FUNCTION resolve_device_enrollment(p_code_hash TEXT)
+CREATE OR REPLACE FUNCTION resolve_device_enrollment(p_code_hash TEXT)
 RETURNS TABLE(id UUID, tenant_id UUID)
 LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
     SELECT e.id, e.tenant_id FROM device_enrollment_codes e
     WHERE e.code_hash=p_code_hash AND e.used_at IS NULL AND e.expires_at>NOW()
     FOR UPDATE
 $$;
-CREATE FUNCTION authenticate_device(p_token_hash TEXT)
+CREATE OR REPLACE FUNCTION authenticate_device(p_token_hash TEXT)
 RETURNS TABLE(id UUID, tenant_id UUID, name TEXT, platform TEXT, form_factor TEXT)
 LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
     UPDATE devices d SET last_seen_at=NOW(),updated_at=NOW()
