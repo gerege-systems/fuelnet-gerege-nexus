@@ -213,13 +213,15 @@ APPSTORE_SIGNING_KEY_ID=appstore-2026
 
 ### 6.3 Өгөгдөл шилжүүлэх
 
+Хэрэгслүүд image дотор байдаг — production хост дээр Go toolchain байхгүй.
+
 ```bash
 # Эхлээд юу болохыг харна — юу ч бичихгүй (өгөгдмөл).
-go run ./cmd/appstore-import \
+docker compose exec backend /app/appstore-import \
   -from "postgres://…/appstore_db" -to "$DATABASE_URL"
 
 # Тохирвол бичнэ.
-go run ./cmd/appstore-import \
+docker compose exec backend /app/appstore-import \
   -from "postgres://…/appstore_db" -to "$DATABASE_URL" -dry-run=false
 ```
 
@@ -234,7 +236,7 @@ Publisher бүр **тенант** болно (slug хэвээр — storefront-�
 ### 6.4 Cutover — байт тулгалт заавал
 
 ```bash
-go run ./cmd/catalog-diff \
+docker compose exec backend /app/catalog-diff \
   -old https://appstore.gerege.mn \
   -new https://appstore-next.gerege.mn \
   -platform 1.0.0 -channel stable

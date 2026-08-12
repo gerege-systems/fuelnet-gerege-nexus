@@ -33,6 +33,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
     -o /bin/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/migrate ./cmd/migrate
 
+# The operational tools, in the image because that is where an operator is.
+#
+# APPSTORE_OPERATIONS.md tells whoever is running a cutover to invoke these, and
+# it said `go run` — which assumes a Go toolchain on a production host that
+# deliberately has nothing on it but this image. A procedure that cannot be
+# followed with what is installed is a procedure nobody follows.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/appstore-import ./cmd/appstore-import
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/catalog-diff ./cmd/catalog-diff
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/publish-catalog ./cmd/publish-catalog
+
 
 # Production Alpine image
 FROM alpine:3.20
@@ -56,6 +69,9 @@ WORKDIR /app
 
 COPY --from=builder /bin/api /app/api
 COPY --from=builder /bin/migrate /app/migrate
+COPY --from=builder /bin/appstore-import /app/appstore-import
+COPY --from=builder /bin/catalog-diff /app/catalog-diff
+COPY --from=builder /bin/publish-catalog /app/publish-catalog
 # App-store catalog + goose migrations are read from disk at runtime.
 COPY catalog/ /app/catalog/
 COPY backend/db/migrations/ /app/db/migrations/
