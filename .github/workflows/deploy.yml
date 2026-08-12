@@ -392,3 +392,16 @@ jobs:
               echo "::error::/.well-known/openid-configuration is still not the API"
               exit 1
             fi
+
+            # The same proof for the App Store key set. This instance publishes
+            # no catalogue, so the API answers 503 — which is the point: a 503
+            # is the module refusing, and a 404 is the frontend, meaning the
+            # path was never routed. -o /dev/null -w keeps curl from failing on
+            # the non-2xx that is the expected answer here.
+            keys=$(curl -s -o /dev/null -w '%{http_code}' \
+                     https://nexus.gerege.mn/.well-known/appstore-keys.json)
+            if [ "$keys" = "404" ]; then
+              echo "::error::/.well-known/appstore-keys.json is hitting the frontend, not the API"
+              exit 1
+            fi
+            echo "App Store key set is served by the API (answered $keys)"
