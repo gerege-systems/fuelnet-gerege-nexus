@@ -262,6 +262,15 @@ export const api = {
   // its own, and returns the person to this deployment afterwards.
   logout: () => fetcher<{ status: string; end_session_url?: string }>("/auth/logout", { method: "POST" }),
 
+  // Who is asking, for the sign-in screen to name while nobody is signed in.
+  // Resolved by the server rather than read out of the URL: a name taken from a
+  // query parameter is a name anybody can write, which is how a convincing
+  // "sign in to <your bank>" screen gets built.
+  oauthClientInfo: (clientId: string) =>
+    fetcher<{ client_id: string; client_name: string; logo_uri?: string }>(
+      `/oauth2/client-info?client_id=${encodeURIComponent(clientId)}`,
+    ),
+
   // How this deployment signs people in. `enabled` false is the ordinary case:
   // the login screen shows its own eID and password forms. `enabled` true means
   // identity belongs to `provider_name`, and the screen's job is to hand the

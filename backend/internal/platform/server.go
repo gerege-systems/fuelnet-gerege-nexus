@@ -583,6 +583,12 @@ func (s *Server) setupRoutes() {
 		// redirect. Sharing the sign-in budget would have meant an office
 		// behind one address running itself out of sign-ins by clicking a
 		// button that only ever redirects.
+		// Who is asking. The sign-in screen shows the name of the application
+		// that sent somebody here, and it has to resolve it server-side —
+		// see HandleClientInfo for why passing it in the redirect would be a
+		// phishing kit rather than a feature.
+		api.Get("/oauth2/client-info", s.ssoProvider.HandleClientInfo)
+
 		api.Get("/auth/sso/config", s.handleSSOConfig)
 		api.Get("/auth/sso/start", s.handleSSOStart)
 		api.Get("/auth/sso/callback", s.handleSSOCallback)

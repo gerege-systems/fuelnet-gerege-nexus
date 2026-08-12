@@ -33,7 +33,12 @@ function hasDeadline(start:Start){return !Number.isNaN(Date.parse(start.expires_
 function sleep(ms:number){return new Promise(resolve=>setTimeout(resolve,ms))}
 function clock(seconds:number){return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`}
 
-export default function EIDLogin({next="/apps",compact=false}:{next?:string;compact?:boolean}){
+/**
+ * `variant="signin"` нь картын чимэглэлээ орхино — толгой ба хөл нь эргэн тойрны
+ * signin-card дээр аль хэдийн байгаа тул давхарлах нь утгагүй. Логик нь адилхан:
+ * зөвхөн юу зурагдах нь өөр.
+ */
+export default function EIDLogin({next="/apps",compact=false,variant="card"}:{next?:string;compact?:boolean;variant?:"card"|"signin"}){
   const {t}=useI18n();
   const [method,setMethod]=useState<Method>("id"),[phase,setPhase]=useState<Phase>("idle"),[nationalId,setNationalId]=useState(""),[start,setStart]=useState<Start|null>(null),[error,setError]=useState(""),[left,setLeft]=useState(0);
   // Each attempt takes a ticket. Anything asynchronous compares its ticket
@@ -102,9 +107,11 @@ export default function EIDLogin({next="/apps",compact=false}:{next?:string;comp
   const switchMethod=(value:Method)=>{stop();setMethod(value);setPhase("idle");setStart(null);setError("");if(value==="qr")void begin("qr")};
   const pending=phase==="starting"||phase==="waiting";
   const terminal=phase==="error"||phase==="expired"||phase==="refused";
+  const bare=variant==="signin";
   return <div className={`eid-login ${compact?"eid-login--compact":""}`} aria-live="polite">
-    <header className="eid-login__head"><span><Fingerprint/></span><div><h2>{t("auth.eid.title")}</h2><p>{t("auth.eid.subtitle")}</p></div></header>
+    {!bare&&<header className="eid-login__head"><span><Fingerprint/></span><div><h2>{t("auth.eid.title")}</h2><p>{t("auth.eid.subtitle")}</p></div></header>}
     <div className="eid-tabs" role="tablist"><button className={method==="id"?"is-active":""} onClick={()=>switchMethod("id")}>{t("auth.eid.tab_id")}</button><button className={method==="qr"?"is-active":""} onClick={()=>switchMethod("qr")}>{t("auth.eid.tab_qr")}</button></div>
+    {bare&&method==="id"&&!pending&&<p className="signin-instruction">{t("auth.eid.instruction")}</p>}
     {error&&<p className="eid-alert eid-alert--error">{error}</p>}{phase==="expired"&&<p className="eid-alert">{t("auth.message.expired")}</p>}{phase==="refused"&&<p className="eid-alert eid-alert--error">{t("auth.message.refused")}</p>}
     {method==="id"&&!pending&&<form onSubmit={e=>{e.preventDefault();void begin("id")}}><label htmlFor="eid-rd">{t("auth.eid.reg_number")}</label><input id="eid-rd" value={nationalId} onChange={e=>setNationalId(e.target.value.toUpperCase())} placeholder={t("auth.eid.reg_number_placeholder")} autoComplete="off" required minLength={8}/><button className="eid-primary"><Smartphone/> {t("auth.eid.send_request")}</button></form>}
     {phase==="starting"&&<div className="eid-status"><RefreshCw className="animate-spin"/> {t("auth.message.starting")}</div>}
@@ -116,6 +123,6 @@ export default function EIDLogin({next="/apps",compact=false}:{next?:string;comp
     {pending&&<button className="eid-cancel" onClick={cancel}><X/> {t("auth.action.cancel")}</button>}
     {phase==="success"&&<p className="eid-alert eid-alert--success">{t("auth.message.success")}</p>}
     {terminal&&<button className="eid-retry" onClick={()=>void begin(method)}><RefreshCw/> {t("auth.action.retry")}</button>}
-    <footer><ShieldCheck/> {t("auth.eid.footer")}</footer>
+    {!bare&&<footer><ShieldCheck/> {t("auth.eid.footer")}</footer>}
   </div>
 }

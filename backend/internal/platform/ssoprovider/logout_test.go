@@ -2,6 +2,7 @@ package ssoprovider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -180,5 +181,61 @@ func TestEndSessionIgnoresAnUnverifiableHint(t *testing.T) {
 	})
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want the unverified hint to buy the caller nothing", status)
+	}
+}
+
+// The sign-in screen asks who is behind an authorization request before
+// anybody has signed in, so this is unauthenticated and deliberately narrow.
+func TestClientInfoNamesTheClientAndNothingElse(t *testing.T) {
+	f := newFixture(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/oauth2/client-info?client_id="+f.client.ClientID, nil)
+	rec := httptest.NewRecorder()
+	f.provider.HandleClientInfo(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["client_name"] != f.client.ClientName {
+		t.Errorf("client_name = %q, want %q", body["client_name"], f.client.ClientName)
+	}
+	// Everything else about a client belongs to the tenant that owns it.
+	for _, leaked := range []string{"redirect_uris", "scopes", "grant_types", "tenant_id", "client_secret"} {
+		if _, present := body[leaked]; present {
+			t.Errorf("%s is exposed on an unauthenticated endpoint", leaked)
+		}
+	}
+}
+
+// An unknown client and a disabled one answer identically, so the endpoint
+// cannot be used to sort real client_ids from invented ones by their error.
+func TestClientInfoDoesNotDistinguishUnknownFromDisabled(t *testing.T) {
+	f := newFixture(t)
+
+	// Disabled after the fact, not at registration: CreateClient does not
+	// insert the column — a client is registered live and switched off later,
+	// which is the only order the developer portal offers.
+	disabled := *f.client
+	disabled.Disabled = true
+	if _, err := f.provider.store.UpdateClient(context.Background(), f.tenantID, &disabled); err != nil {
+		t.Fatalf("disable the client: %v", err)
+	}
+
+	answers := map[string]string{}
+	for name, clientID := range map[string]string{
+		"disabled": f.client.ClientID,
+		"unknown":  "app_never_registered_" + NewIdentifier(8),
+	} {
+		rec := httptest.NewRecorder()
+		f.provider.HandleClientInfo(rec,
+			httptest.NewRequest(http.MethodGet, "/api/v1/oauth2/client-info?client_id="+clientID, nil))
+		answers[name] = rec.Result().Status + " " + rec.Body.String()
+	}
+	if answers["disabled"] != answers["unknown"] {
+		t.Errorf("a disabled client answers %q and an unknown one %q", answers["disabled"], answers["unknown"])
 	}
 }

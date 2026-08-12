@@ -205,6 +205,45 @@ func (s *SSOProvider) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	redirectSuccess(w, r, redirectURI, code, state)
 }
 
+// HandleClientInfo names the application behind an authorization request, for
+// the sign-in screen to show while nobody is signed in yet.
+//
+// A person sent here from somewhere else is being asked for credentials by a
+// page they did not navigate to, and the first thing that screen has to answer
+// is "who is asking". The alternative — letting /oauth2/auth pass the name
+// along in the redirect to /login — would put that answer in a query parameter
+// anybody can write, which is a phishing kit rather than a feature: /login?
+// client_name=Bank%20of%20Somewhere would render exactly like the real thing.
+// Resolving it here means the name on the screen is the one that was
+// registered.
+//
+// Unauthenticated, because the whole point is that it is read before sign-in.
+// What it discloses is a registered client's display name to somebody who
+// already knows its client_id — which is not a secret, travels in every
+// authorization URL, and is shown on the consent screen a moment later anyway.
+// An unknown and a disabled client answer identically, so this cannot be used
+// to sort real client_ids from invented ones by their error.
+func (s *SSOProvider) HandleClientInfo(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.URL.Query().Get("client_id"))
+	if clientID == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "client_id is required")
+		return
+	}
+	client, err := s.store.GetClient(r.Context(), clientID)
+	if err != nil || client.Disabled {
+		writeOAuthError(w, http.StatusNotFound, "invalid_client", "unknown or disabled client")
+		return
+	}
+	// Deliberately three fields. Everything else on a client — its redirect
+	// URIs, its grants, its scopes, when its secret was rotated — is the owning
+	// tenant's business and has no place on an unauthenticated endpoint.
+	writeJSON(w, http.StatusOK, map[string]string{
+		"client_id":   client.ClientID,
+		"client_name": client.ClientName,
+		"logo_uri":    client.LogoURI,
+	})
+}
+
 // ConsentPrompt is what the consent screen renders.
 type ConsentPrompt struct {
 	ClientID    string  `json:"client_id"`
