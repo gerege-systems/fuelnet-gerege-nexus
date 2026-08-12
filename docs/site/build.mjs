@@ -45,7 +45,10 @@ const BLOB = `${GITHUB}/blob/main`;
  * site the moment the work lands.
  */
 const PAGES = [
-  {src: "README.md", slug: "overview", title: "Тойм", group: "Танилцуулга", lang: "mn"},
+  // The overview is the site's front door. There is no separate showcase page:
+  // the product's own landing page makes that argument, and saying it twice
+  // meant two places to keep true.
+  {src: "README.md", slug: "index", title: "Тойм", group: "Танилцуулга", lang: "mn"},
   {src: "docs/README_EN.md", slug: "overview-en", title: "Overview", group: "Танилцуулга", lang: "en"},
   {src: "docs/README_AR.md", slug: "overview-ar", title: "نظرة عامة", group: "Танилцуулга", lang: "ar", rtl: true},
   {src: "docs/README_ZH.md", slug: "overview-zh", title: "概览", group: "Танилцуулга", lang: "zh"},
@@ -195,7 +198,7 @@ function sidebar(current) {
       return `<div class="nav-group"><h4>${esc(group)}</h4><ul>${items}</ul></div>`;
     })
     .join("");
-  return `<nav class="sidebar" aria-label="Баримтын цэс"><a href="index.html" class="nav-home">Нүүр</a>${sections}</nav>`;
+  return `<nav class="sidebar" aria-label="Баримтын цэс">${sections}</nav>`;
 }
 
 function languageRow(page) {
@@ -211,7 +214,7 @@ function languageRow(page) {
   return `<div class="lang-row">${links}</div>`;
 }
 
-function shell({title, slug, body, toc = "", page, wide = false}) {
+function shell({title, slug, body, toc = "", page}) {
   const rtl = page?.rtl ? ' dir="rtl"' : "";
   return `<!doctype html>
 <html lang="${page?.lang ?? "mn"}">
@@ -223,15 +226,15 @@ function shell({title, slug, body, toc = "", page, wide = false}) {
 <link rel="icon" href="assets/icons/flag-mn.png">
 <link rel="stylesheet" href="assets/theme.css">
 </head>
-<body class="${wide ? "wide" : "doc"}">
+<body>
 <a class="skip" href="#content">Агуулга руу шилжих</a>
 <header class="topbar">
   <a class="brand" href="index.html"><span class="mark">GN</span> Gerege Nexus</a>
   <nav class="topnav">
-    <a href="index.html">Боломжууд</a>
-    <a href="overview.html">Тойм</a>
+    <a href="index.html">Тойм</a>
     <a href="architecture.html">Архитектур</a>
     <a href="module-authoring.html">Хөгжүүлэлт</a>
+    <a href="documents.html">Баримтын индекс</a>
   </nav>
   <div class="topactions">
     <a class="ghost" href="${GITHUB}" target="_blank" rel="noopener">GitHub</a>
@@ -239,7 +242,7 @@ function shell({title, slug, body, toc = "", page, wide = false}) {
   </div>
 </header>
 <div class="layout">
-${wide ? "" : sidebar(slug)}
+${sidebar(slug)}
 <main id="content"${rtl}>
 ${page ? languageRow(page) : ""}
 ${body}
@@ -277,11 +280,6 @@ for (const page of PAGES) {
   );
 }
 
-// The showcase home page is authored as HTML rather than Markdown: it is a
-// landing page, not a document, and its layout is the point.
-const home = readFileSync(join(HERE, "home.html"), "utf8");
-writeFileSync(join(OUT, "index.html"), shell({title: "Нээлттэй эхийн платформ", slug: "index", body: home, wide: true}));
-
 mkdirSync(join(OUT, "assets"), {recursive: true});
 cpSync(join(REPO, "docs/assets"), join(OUT, "assets"), {
   recursive: true,
@@ -292,4 +290,4 @@ cpSync(join(HERE, "theme.css"), join(OUT, "assets/theme.css"));
 // any file or directory whose name begins with an underscore.
 writeFileSync(join(OUT, ".nojekyll"), "");
 
-console.log(`built ${PAGES.length + 1} pages → ${relative(process.cwd(), OUT)}`);
+console.log(`built ${PAGES.length} pages → ${relative(process.cwd(), OUT)}`);

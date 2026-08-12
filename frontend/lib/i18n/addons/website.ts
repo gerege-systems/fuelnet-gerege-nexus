@@ -79,6 +79,97 @@ export const website = {
   "website.tech.eid_body": { mn: "Push, QR, App2App, баталгаажсан identity", en: "Push, QR, App2App, verified identity" },
   "website.tech.sso_body": { mn: "Холбогдсон аппууд, нэг session", en: "Connected applications, one session" },
 
+  // ─── The platform itself ───────────────────────────────────────────────────
+  // Everything above this line argues for the sign-in. Everything below argues
+  // for the platform behind it, and was moved here from the documentation site,
+  // which used to make the same case in a second place that could drift.
+
+  "website.arch.eyebrow": { mn: "ЯАГААД ЭНЭ АРХИТЕКТУР", en: "WHY THIS ARCHITECTURE" },
+  "website.arch.title": {
+    mn: "Модульт монолит — микросервисийн уян хатан, монолитын хурд",
+    en: "A modular monolith: the flexibility of microservices at the speed of one process",
+  },
+  "website.arch.lede": {
+    mn: "Модуль бүр өөрийн домэйн, миграц, эрхтэй. Гэвч бүгд нэг процесс дотор ажилладаг тул модуль хоорондын дуудлага сүлжээгээр явахгүй — Go-ийн функцийн дуудлага л болно.",
+    en: "Every module owns its domain, its migrations and its permissions. They all run in one process, so a call between two of them is a function call, not a network hop.",
+  },
+  "website.arch.modules_title": { mn: "Компиллогдсон Go модулиуд", en: "Compiled-in Go modules" },
+  "website.arch.modules_body": {
+    mn: "Модуль бүр нэг Go гэрээг хэрэгжүүлж нэг бинарид компиллогдоно. Маршрут, цэс, эрх, миграц бүгд модулийн өөрийнх.",
+    en: "Each module implements one Go contract and compiles into a single binary. Routes, menus, permissions and migrations all belong to the module itself.",
+  },
+  "website.arch.store_title": { mn: "Тенант бүрийн апп стор", en: "An app store for each tenant" },
+  "website.arch.store_body": {
+    mn: "Аль байгууллагад аль апп идэвхтэйг өгөгдлийн сан шийднэ. Суулгаагүй апп руу хандвал хориглоно — код нь байгаа ч хаалга нь хаалттай.",
+    en: "The database decides which apps an organisation runs. An app that is not installed refuses the request: the code is there, the door is not open.",
+  },
+  "website.arch.dag_title": { mn: "Хамаарал шийдвэрлэгч", en: "Dependency resolution" },
+  "website.arch.dag_body": {
+    mn: "Рекурсив шийдвэрлэлт, мөчлөг илрүүлэлт, хувилбарын шалгалт. Апп суулгахад түүний хамаарал бүр тохирох хувилбартайгаа хамт орно.",
+    en: "Recursive resolution with cycle detection and version checks, so installing an app brings every dependency it needs at a version that fits.",
+  },
+  "website.arch.catalog_title": { mn: "Нэг эх сурвалжтай каталог", en: "One catalogue, one source" },
+  "website.arch.catalog_body": {
+    mn: "Апп сторын каталог нь цорын ганц эх сурвалж бөгөөд гарын үсэгтэйгээр татагдана. Систем асах бүрд апп жагсаалт түүнээс шинэчлэгдэнэ.",
+    en: "The app catalogue is the single source of truth and is fetched signed. The list of apps is refreshed from it every time the system starts.",
+  },
+
+  "website.apps.eyebrow": { mn: "БЭЛЭН АППЛИКЕЙШНҮҮД", en: "APPLICATIONS INCLUDED" },
+  "website.apps.title": { mn: "Эхний өдрөөс ажиллах есөн апп", en: "Nine applications, working on day one" },
+  "website.apps.lede": {
+    mn: "Апп бүр байгууллагад суулгагдаж идэвхжсэн үед л нээгдэнэ. Хэрэггүйг нь унтраахад платформ багасахаас өөр юу ч болохгүй.",
+    en: "Each one opens only once an organisation installs and enables it. Turn off what you do not need and nothing breaks; the platform simply gets smaller.",
+  },
+  "website.apps.core": { mn: "Байгууллага ба ажилтнууд", en: "Organisation and people" },
+  "website.apps.contacts": { mn: "Харилцагчид — төрийн бүртгэлээс авто-бөглөлт", en: "Contacts, auto-filled from the state registry" },
+  "website.apps.products": { mn: "Бараа ба үнийн бүртгэл", en: "Products and pricing" },
+  "website.apps.inventory": { mn: "Агуулах, үлдэгдэл, эрэлтийн таамаг", en: "Inventory, stock and demand forecasting" },
+  "website.apps.billing": { mn: "Нэхэмжлэх, НӨАТ, e-Barimt", en: "Invoicing, VAT and e-Barimt receipts" },
+  "website.apps.documents": { mn: "Цахим баримт ба батламжийн урсгал", en: "Digital documents and approval flows" },
+  "website.apps.gov": { mn: "Төрийн үйлчилгээний шийдвэрлэх урсгал", en: "State service request workflows" },
+  "website.apps.esign": { mn: "eID-ээр хуулийн хүчинтэй цахим гарын үсэг", en: "Legally valid electronic signatures through eID" },
+  "website.apps.developer": { mn: "Хөгжүүлэгчийн портал ба OAuth2 SSO", en: "Developer portal and OAuth2 SSO" },
+
+  "website.depth.eyebrow": { mn: "ПЛАТФОРМЫН СУУРЬ", en: "UNDER THE PLATFORM" },
+  "website.depth.title": {
+    mn: "Бүтээгдэхүүн болгонд дахин бичих шаардлагагүй зүйлс",
+    en: "The parts you would otherwise rewrite for every product",
+  },
+  "website.depth.lede": {
+    mn: "Эдгээрийн аль нь ч нэмэлт биш. Платформын цөмд байрлах тул апп бүр тэднийг өвлөж авна.",
+    en: "None of this is an add-on. It sits in the core, so every application inherits it.",
+  },
+  "website.depth.resilience_title": { mn: "Тэсвэрлэлтийн хөдөлгүүр", en: "A resilience engine" },
+  "website.depth.resilience_body": {
+    mn: "Ачааллын дагуу тохирдог таслуур, ачаалал хаях механизм, давхардсан хүсэлтийн нэгтгэл, ухарч давтах логик — платформын нэг хэсэг.",
+    en: "Adaptive circuit breaking, load shedding, request coalescing and backoff retries, all part of the platform rather than each service.",
+  },
+  "website.depth.gov_title": { mn: "Төрийн систем рүү шууд", en: "Straight into state systems" },
+  "website.depth.gov_body": {
+    mn: "Иргэн, хуулийн этгээдийн лавлагаа төрийн мэдээлэл солилцооны системээс; тоон гарын үсэг, нэг удаагийн код, банкны суваг, царай танилт eID ба ДАН-аар.",
+    en: "Citizen and legal-entity lookups through the state exchange, with signatures, one-time codes, bank channels and biometrics via eID and DAN.",
+  },
+  "website.depth.security_title": { mn: "Анхдагчаараа хатуу", en: "Secure by default" },
+  "website.depth.security_body": {
+    mn: "Session токен зөвхөн хэшээрээ хадгалагдана, нууц үг bcrypt-ээр, OAuth2 танилт тогтмол хугацаанд шалгагдана, асуулга бүр байгууллагаараа хязгаарлагдана.",
+    en: "Session tokens are stored only as hashes, passwords use bcrypt, OAuth2 clients are compared in constant time, and every query is bounded by organisation.",
+  },
+  "website.depth.ai_title": { mn: "Өөрийн өгөгдөлд холбогдсон AI", en: "AI wired to your own data" },
+  "website.depth.ai_body": {
+    mn: "Байгууллагын бодит төлөвт холбогдсон туслах, агуулахын эрэлт таамаглагч. Харилцан яриа, яриа таних, унших, орчуулга нэг урсгал дээр.",
+    en: "An assistant connected to the organisation's real state, plus inventory forecasting. Chat, speech, reading and translation on one pipeline.",
+  },
+  "website.depth.i18n_title": { mn: "Долоон хэл, цоорхойгүй", en: "Seven languages, no gaps" },
+  "website.depth.i18n_body": {
+    mn: "Монгол хэл эх сурвалж, дээр нь НҮБ-ын албан ёсны зургаан хэл. Орчуулга дутуу бол CI алдаа өгдөг тул хагас орчуулагдсан дэлгэц нийтлэгдэхгүй.",
+    en: "Mongolian is the source, joined by the six official UN languages. CI fails on a missing translation, so a half-translated screen cannot ship.",
+  },
+  "website.depth.observability_title": { mn: "Ажиглалт ба аудит", en: "Observability and audit" },
+  "website.depth.observability_body": {
+    mn: "Хэмжүүр, амьд ба бэлэн байдлын шалгалт, хэн юуг хэзээ өөрчилснийг бүртгэсэн ул мөр — эхний өдрөөс.",
+    en: "Metrics, liveness and readiness probes, and a trail of who changed what and when — from the first day.",
+  },
+
   "website.message.footer_note": {
     mn: "eID-д суурилсан · Нээлттэй стандарт · Secure by design",
     en: "Built on eID · Open standards · Secure by design",

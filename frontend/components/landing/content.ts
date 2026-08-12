@@ -1,4 +1,21 @@
-import {Fingerprint, KeyRound, Layers, Network, ShieldCheck, Waypoints} from "lucide-react";
+import {
+  Activity,
+  Boxes,
+  BrainCircuit,
+  Fingerprint,
+  Gauge,
+  KeyRound,
+  Landmark,
+  Languages,
+  Layers,
+  Lock,
+  Network,
+  PackageCheck,
+  ShieldCheck,
+  Store,
+  Waypoints,
+  Workflow,
+} from "lucide-react";
 
 import type {TranslationKey} from "@/lib/i18n";
 
@@ -42,4 +59,43 @@ export const TECHNOLOGY: {icon: Icon; name: string; body: TranslationKey}[] = [
   {icon: Layers, name: "Gerege Nexus", body: "website.tech.erp_body"},
   {icon: Fingerprint, name: "eID Mongolia", body: "website.tech.eid_body"},
   {icon: KeyRound, name: "OIDC / SSO", body: "website.tech.sso_body"},
+];
+
+/**
+ * How the platform is put together, for the reader who has decided the sign-in
+ * works and now wants to know what they would be adopting.
+ */
+export const ARCHITECTURE: {icon: Icon; title: TranslationKey; body: TranslationKey}[] = [
+  {icon: Boxes, title: "website.arch.modules_title", body: "website.arch.modules_body"},
+  {icon: Store, title: "website.arch.store_title", body: "website.arch.store_body"},
+  {icon: Workflow, title: "website.arch.dag_title", body: "website.arch.dag_body"},
+  {icon: PackageCheck, title: "website.arch.catalog_title", body: "website.arch.catalog_body"},
+];
+
+/**
+ * The nine applications in the catalogue, in the order the catalogue lists
+ * them. Written out rather than fetched: this section is part of the argument
+ * the page makes, and a marketing claim that renders empty when an API is slow
+ * is worse than one that cannot change without a deploy.
+ */
+export const APPLICATIONS: TranslationKey[] = [
+  "website.apps.core",
+  "website.apps.contacts",
+  "website.apps.products",
+  "website.apps.inventory",
+  "website.apps.billing",
+  "website.apps.documents",
+  "website.apps.gov",
+  "website.apps.esign",
+  "website.apps.developer",
+];
+
+/** What every application inherits from the core, whether or not it asks. */
+export const PLATFORM_DEPTH: {icon: Icon; title: TranslationKey; body: TranslationKey}[] = [
+  {icon: Activity, title: "website.depth.resilience_title", body: "website.depth.resilience_body"},
+  {icon: Landmark, title: "website.depth.gov_title", body: "website.depth.gov_body"},
+  {icon: Lock, title: "website.depth.security_title", body: "website.depth.security_body"},
+  {icon: BrainCircuit, title: "website.depth.ai_title", body: "website.depth.ai_body"},
+  {icon: Languages, title: "website.depth.i18n_title", body: "website.depth.i18n_body"},
+  {icon: Gauge, title: "website.depth.observability_title", body: "website.depth.observability_body"},
 ];
