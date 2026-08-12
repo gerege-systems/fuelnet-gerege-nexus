@@ -15,6 +15,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Signing in with Google
+
+A "Google-ээр нэвтрэх" button beside eID on the platform's own sign-in screen,
+off unless `GOOGLE_LOGIN_CLIENT_ID` is set. It is an *addition*, not the
+federation added a moment ago: `SSO_CLIENT_ISSUER` closes this deployment's own
+sign-in paths and hands the question of who somebody is to a provider, while
+this is one more of its own answers and closes nothing. On a deployment that
+does federate, the button is withdrawn along with the rest — a front door
+nobody manages is exactly what federating was meant to remove.
+
+Google is an ordinary OpenID Connect provider, so there is no second
+implementation: the same discovery, PKCE, code exchange and RS256 `id_token`
+verification serve both, and both land on the same `(issuer, subject)` account
+resolution. What is written separately is only what differs — which cookie the
+flow parks in, and who is allowed through.
+
+- **The credentials are deliberately not the connectors'.** Drive and Meet
+  already use `GOOGLE_OAUTH_CLIENT_ID`; the same Google project usually issues
+  both and they may hold the same value, but inheriting a sign-in path from a
+  document connector would mean enabling the connector quietly opened a new
+  front door.
+- **Three filters, in order.** An unverified address is refused, because the
+  address is what an existing local account is matched on and an unverified one
+  would let anybody who can type into a Google profile claim somebody else's
+  account. Then `GOOGLE_LOGIN_ALLOWED_DOMAINS`, when set. Then the account
+  itself: with no `GOOGLE_LOGIN_TENANT` nobody is provisioned, so a Google
+  identity only ever reaches an account that already exists here.
+- **No `id_token` is kept.** That cookie exists so signing out can end the
+  session at a provider this deployment federates to; ending somebody's Google
+  session because they signed out of this platform is not this platform's
+  business.
+
 ### Added — A deployment can now be an SSO client, not only a provider
 
 The platform has always been an OpenID Connect provider: it could hand

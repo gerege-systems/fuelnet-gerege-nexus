@@ -83,6 +83,11 @@ var publicRoutes = []string{
 	"/api/v1/auth/sso/config",
 	"/api/v1/auth/sso/start",
 	"/api/v1/auth/sso/callback",
+	// Google sign-in, when this deployment offers it. Unauthenticated for
+	// exactly the reasons the pair above are: a person signing in has no
+	// session yet, and the state cookie is what makes the callback answerable.
+	"/api/v1/auth/google/start",
+	"/api/v1/auth/google/callback",
 
 	// The App Store registry, when this instance is the one publishing a
 	// catalogue. Public because a catalogue is read by an instance that holds

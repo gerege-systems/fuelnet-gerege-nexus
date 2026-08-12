@@ -89,7 +89,11 @@ type Server struct {
 	// ssoClient is the other half: the provider this deployment signs its own
 	// people in through, when it has one. Nil means it authenticates them
 	// itself, which is every deployment that has not set SSO_CLIENT_ISSUER.
-	ssoClient      *ssoclient.Client
+	ssoClient *ssoclient.Client
+	// googleLogin is a button on this platform's own sign-in screen rather than
+	// a replacement for it — see google_login_handlers.go for why the two are
+	// separate despite sharing every line of protocol.
+	googleLogin    *ssoclient.Client
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
@@ -200,6 +204,23 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		slog.Error("failed to sync app catalog into database", "error", err)
 	}
 
+	// Google sign-in. Off unless GOOGLE_LOGIN_CLIENT_ID is set, and validated
+	// here for the same reason the federation is: a button that cannot work
+	// should fail at startup, not under somebody's finger.
+	googleConfig := ssoclient.GoogleConfigFromEnv()
+	if err := googleConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("google sign-in configuration: %w", err)
+	}
+	var googleLogin *ssoclient.Client
+	if googleConfig.Enabled() {
+		googleLogin = ssoclient.New(googleConfig)
+		slog.Info("Google sign-in is enabled",
+			"client_id", googleConfig.ClientID,
+			"redirect_uri", googleConfig.RedirectURI,
+			"provisioning_tenant", googleConfig.TenantSlug,
+			"allowed_domains", ssoclient.GoogleAllowedDomains())
+	}
+
 	s := &Server{
 		db:            db,
 		installer:     installer,
@@ -220,6 +241,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		danSvc:         dan.NewDANService(),
 		ssoProvider:    ssoProvider,
 		ssoClient:      federatedSignIn,
+		googleLogin:    googleLogin,
 		geregeSvc:      gerege.NewGeregeService(),
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
@@ -590,6 +612,10 @@ func (s *Server) setupRoutes() {
 		api.Get("/oauth2/client-info", s.ssoProvider.HandleClientInfo)
 
 		api.Get("/auth/sso/config", s.handleSSOConfig)
+		// Google, when this deployment offers it. Same shape as the federated
+		// pair above and public for the same reasons.
+		api.Get("/auth/google/start", s.handleGoogleStart)
+		api.Get("/auth/google/callback", s.handleGoogleCallback)
 		api.Get("/auth/sso/start", s.handleSSOStart)
 		api.Get("/auth/sso/callback", s.handleSSOCallback)
 		// Device enrollment is the bootstrap: the one-time code is its authority,

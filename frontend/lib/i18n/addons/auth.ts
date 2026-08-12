@@ -100,6 +100,14 @@ export const auth = {
     en: "The sign-in provider could not be reached.",
   },
   "auth.sso.error_denied": { mn: "Нэвтрэх хүсэлт зөвшөөрөгдсөнгүй.", en: "The sign-in request was not approved." },
+  "auth.sso.error_email_unverified": {
+    mn: "Google таны и-мэйл хаягийг баталгаажуулаагүй байна.",
+    en: "Google has not verified that email address.",
+  },
+  "auth.sso.error_domain_not_allowed": {
+    mn: "Энэ и-мэйлийн домэйнд нэвтрэх эрх нээгээгүй байна.",
+    en: "Sign-in is not open to that email domain.",
+  },
   "auth.sso.error_no_account": {
     mn: "Таныг баталгаажууллаа, гэхдээ энэ систем дээр танд бүртгэл алга. Байгууллагынхаа админд хандана уу.",
     en: "You are verified, but this deployment has no account for you. Ask your administrator.",

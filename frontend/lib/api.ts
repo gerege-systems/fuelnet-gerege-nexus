@@ -276,9 +276,15 @@ export const api = {
   // identity belongs to `provider_name`, and the screen's job is to hand the
   // browser to `start_url` rather than to ask for anything.
   ssoConfig: () =>
-    fetcher<{ enabled: boolean; provider_name?: string; start_url?: string; local_login: boolean }>(
-      "/auth/sso/config",
-    ),
+    fetcher<{
+      enabled: boolean;
+      provider_name?: string;
+      start_url?: string;
+      local_login: boolean;
+      // Reported available only when it can actually be used: a deployment that
+      // federates has closed its own sign-in paths, and Google is one of them.
+      google: { enabled: boolean; start_url?: string };
+    }>("/auth/sso/config"),
 
   // permissions carries the effective grant of every role the member holds; it
   // is empty for administrators, who bypass the check.

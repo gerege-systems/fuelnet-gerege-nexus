@@ -17,16 +17,28 @@ import (
 	"time"
 )
 
-// The cookies this flow needs, and the paths they are confined to.
+// CookieSpec names a cookie and the path it is confined to.
 //
-// Neither is sent with an ordinary API call. FlowCookie only has to reach the
-// callback, and IDTokenCookie only has to reach the logout endpoint, so each is
-// scoped to exactly that — an id_token riding along on every /auth/me would be
-// a kilobyte of nothing on the platform's most frequent request.
-const (
-	FlowCookieName = "sso_flow"
-	FlowCookiePath = "/api/v1/auth/sso"
+// A deployment can have more than one sign-in in flight at once — it may
+// federate to a provider *and* offer Google — and two flows sharing one cookie
+// would mean starting the second silently discarded the first. One spec per
+// flow keeps them independent, and keeps each confined to the callback that
+// needs it.
+type CookieSpec struct{ Name, Path string }
 
+// The flows this package serves, and the cookie each parks its state in.
+//
+// Neither is sent with an ordinary API call: each is scoped to the one endpoint
+// that reads it. FederationFlow reaches only the federated callback,
+// GoogleFlow only Google's, and IDTokenCookie only the logout endpoint — an
+// id_token riding along on every /auth/me would be a kilobyte of nothing on
+// the platform's most frequent request.
+var (
+	FederationFlow = CookieSpec{Name: "sso_flow", Path: "/api/v1/auth/sso"}
+	GoogleFlow     = CookieSpec{Name: "google_flow", Path: "/api/v1/auth/google"}
+)
+
+const (
 	// #nosec G101 -- a cookie name, not a credential. gosec matches the
 	// identifier rather than the value, and every honest name for "the cookie
 	// the id_token is kept in" has "token" in it.
@@ -72,16 +84,16 @@ var ErrNoFlow = errors.New("no sign-in is in progress in this browser")
 var ErrStateMismatch = errors.New("the sign-in answer does not match the request that started it")
 
 // SetFlowCookie parks a pending sign-in in the browser.
-func SetFlowCookie(w http.ResponseWriter, flow Flow) {
+func SetFlowCookie(w http.ResponseWriter, spec CookieSpec, flow Flow) {
 	encoded, err := json.Marshal(flow)
 	if err != nil {
 		// Four strings; encoding them cannot fail.
 		panic("ssoclient: encode flow: " + err.Error())
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     FlowCookieName,
+		Name:     spec.Name,
 		Value:    base64.RawURLEncoding.EncodeToString(encoded),
-		Path:     FlowCookiePath,
+		Path:     spec.Path,
 		MaxAge:   int(flowTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   isProduction(),
@@ -98,10 +110,10 @@ func SetFlowCookie(w http.ResponseWriter, flow Flow) {
 // the state that has come back. The cookie is cleared whatever the outcome: a
 // flow is single-use, and one left behind after a failure is one that can be
 // retried by somebody who kept the code.
-func ReadFlow(w http.ResponseWriter, r *http.Request, state string) (Flow, error) {
-	ClearFlowCookie(w)
+func ReadFlow(w http.ResponseWriter, r *http.Request, spec CookieSpec, state string) (Flow, error) {
+	ClearFlowCookie(w, spec)
 
-	cookie, err := r.Cookie(FlowCookieName)
+	cookie, err := r.Cookie(spec.Name)
 	if err != nil || cookie.Value == "" {
 		return Flow{}, ErrNoFlow
 	}
@@ -120,9 +132,9 @@ func ReadFlow(w http.ResponseWriter, r *http.Request, state string) (Flow, error
 }
 
 // ClearFlowCookie removes a pending sign-in.
-func ClearFlowCookie(w http.ResponseWriter) {
+func ClearFlowCookie(w http.ResponseWriter, spec CookieSpec) {
 	http.SetCookie(w, &http.Cookie{
-		Name: FlowCookieName, Value: "", Path: FlowCookiePath,
+		Name: spec.Name, Value: "", Path: spec.Path,
 		MaxAge: -1, HttpOnly: true, Secure: isProduction(), SameSite: http.SameSiteLaxMode,
 	})
 }

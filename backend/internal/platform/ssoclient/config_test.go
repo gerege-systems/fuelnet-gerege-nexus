@@ -107,9 +107,9 @@ func TestDisplayNameFallsBackToTheHost(t *testing.T) {
 
 func TestFlowRoundTripsAndRefusesAMismatchedState(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	SetFlowCookie(recorder, Flow{State: "state-1", Nonce: "nonce-1", CodeVerifier: "verifier-1", Next: "/documents"})
+	SetFlowCookie(recorder, FederationFlow, Flow{State: "state-1", Nonce: "nonce-1", CodeVerifier: "verifier-1", Next: "/documents"})
 
-	cookie := findCookie(t, recorder, FlowCookieName)
+	cookie := findCookie(t, recorder, FederationFlow.Name)
 	if !cookie.HttpOnly {
 		t.Error("the flow cookie is readable by script")
 	}
@@ -119,14 +119,14 @@ func TestFlowRoundTripsAndRefusesAMismatchedState(t *testing.T) {
 	if cookie.SameSite != http.SameSiteLaxMode {
 		t.Errorf("SameSite = %v, want Lax", cookie.SameSite)
 	}
-	if cookie.Path != FlowCookiePath {
+	if cookie.Path != FederationFlow.Path {
 		t.Errorf("path = %q, want the cookie confined to the callback", cookie.Path)
 	}
 
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.AddCookie(cookie)
 
-	if _, err := ReadFlow(httptest.NewRecorder(), request, "a-different-state"); !errors.Is(err, ErrStateMismatch) {
+	if _, err := ReadFlow(httptest.NewRecorder(), request, FederationFlow, "a-different-state"); !errors.Is(err, ErrStateMismatch) {
 		t.Fatalf("err = %v, want ErrStateMismatch", err)
 	}
 
@@ -134,7 +134,7 @@ func TestFlowRoundTripsAndRefusesAMismatchedState(t *testing.T) {
 	// keeps the two reads independent.
 	request = httptest.NewRequest(http.MethodGet, "/", nil)
 	request.AddCookie(cookie)
-	flow, err := ReadFlow(httptest.NewRecorder(), request, "state-1")
+	flow, err := ReadFlow(httptest.NewRecorder(), request, FederationFlow, "state-1")
 	if err != nil {
 		t.Fatalf("ReadFlow: %v", err)
 	}
@@ -149,10 +149,10 @@ func TestReadFlowAlwaysClearsTheCookie(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	recorder := httptest.NewRecorder()
 
-	if _, err := ReadFlow(recorder, request, "state-1"); !errors.Is(err, ErrNoFlow) {
+	if _, err := ReadFlow(recorder, request, FederationFlow, "state-1"); !errors.Is(err, ErrNoFlow) {
 		t.Fatalf("err = %v, want ErrNoFlow", err)
 	}
-	if cookie := findCookie(t, recorder, FlowCookieName); cookie.MaxAge >= 0 {
+	if cookie := findCookie(t, recorder, FederationFlow.Name); cookie.MaxAge >= 0 {
 		t.Errorf("MaxAge = %d, want the cookie expired", cookie.MaxAge)
 	}
 }

@@ -83,19 +83,25 @@ func (s *Server) ssoStartURL() string {
 // is visible from the redirect anyway, and the login screen has to know before
 // it renders which of two completely different things it is.
 func (s *Server) handleSSOConfig(w http.ResponseWriter, r *http.Request) {
-	if !s.ssoClientEnabled() {
-		httpx.JSON(w, http.StatusOK, map[string]any{"enabled": false, "local_login": true})
-		return
-	}
-	cfg := s.ssoClient.Config()
-	httpx.JSON(w, http.StatusOK, map[string]any{
-		"enabled":       true,
-		"provider_name": cfg.DisplayName(),
-		"start_url":     s.ssoStartURL(),
+	answer := map[string]any{"enabled": false, "local_login": true}
+	if s.ssoClientEnabled() {
+		cfg := s.ssoClient.Config()
+		answer["enabled"] = true
+		answer["provider_name"] = cfg.DisplayName()
+		answer["start_url"] = s.ssoStartURL()
 		// Whether the screen should still offer the password and eID forms
 		// underneath the provider's button.
-		"local_login": cfg.LocalLogin,
-	})
+		answer["local_login"] = cfg.LocalLogin
+	}
+
+	// Google is reported only when it can actually be used. A deployment that
+	// federates has closed its local sign-in paths, and Google is one of them,
+	// so the button would be an offer this server would refuse.
+	answer["google"] = map[string]any{"enabled": false}
+	if s.googleLoginEnabled() && s.localLoginAllowed() {
+		answer["google"] = map[string]any{"enabled": true, "start_url": s.googleStartURL()}
+	}
+	httpx.JSON(w, http.StatusOK, answer)
 }
 
 // handleSSOStart begins a sign-in at the provider.
@@ -116,7 +122,7 @@ func (s *Server) handleSSOStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ssoclient.SetFlowCookie(w, ssoclient.Flow{
+	ssoclient.SetFlowCookie(w, ssoclient.FederationFlow, ssoclient.Flow{
 		State:        request.State,
 		Nonce:        request.Nonce,
 		CodeVerifier: request.CodeVerifier,
@@ -139,7 +145,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	query := r.URL.Query()
 
-	flow, err := ssoclient.ReadFlow(w, r, query.Get("state"))
+	flow, err := ssoclient.ReadFlow(w, r, ssoclient.FederationFlow, query.Get("state"))
 	if err != nil {
 		slog.Info("refused an SSO callback", "error", err)
 		s.failSSO(w, r, "stale_request")
@@ -169,7 +175,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := s.resolveOrProvisionSSOUser(r.Context(), identity)
+	userID, tenantID, err := s.resolveOrProvisionSSOUser(r.Context(), s.ssoClient.Config(), identity)
 	if err != nil {
 		var refusal signInError
 		if errors.As(err, &refusal) {
@@ -217,8 +223,8 @@ func (s *Server) failSSO(w http.ResponseWriter, r *http.Request, reason string) 
 // means that whoever is given a departed colleague's address inherits their
 // account. The subject is the one claim a provider guarantees to be stable and
 // never to reassign.
-func (s *Server) resolveOrProvisionSSOUser(ctx context.Context, identity *ssoclient.Identity) (userID, tenantID string, err error) {
-	issuer := s.ssoClient.Config().Issuer
+func (s *Server) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
+	issuer := cfg.Issuer
 
 	err = s.db.QueryRow(ctx,
 		`SELECT i.user_id::text, m.tenant_id::text
@@ -255,7 +261,7 @@ func (s *Server) resolveOrProvisionSSOUser(ctx context.Context, identity *ssocli
 		}
 	}
 
-	return s.provisionSSOUser(ctx, issuer, identity)
+	return s.provisionSSOUser(ctx, cfg, identity)
 }
 
 // provisionSSOUser creates the local account for a provider identity nothing
@@ -266,8 +272,8 @@ func (s *Server) resolveOrProvisionSSOUser(ctx context.Context, identity *ssocli
 // deployments membership is a deliberate act, and a federation that silently
 // admits everyone the provider knows is a wider door than the operator asked
 // for.
-func (s *Server) provisionSSOUser(ctx context.Context, issuer string, identity *ssoclient.Identity) (userID, tenantID string, err error) {
-	slug := s.ssoClient.Config().TenantSlug
+func (s *Server) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
+	issuer, slug := cfg.Issuer, cfg.TenantSlug
 	if slug == "" {
 		return "", "", signInError{"your identity is verified but this deployment has no account for you"}
 	}
