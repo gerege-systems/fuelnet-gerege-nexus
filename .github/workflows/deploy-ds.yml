@@ -91,6 +91,10 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.value }}
+          # Барих ажил дүрсээ `ghcr.io/<repo>/ds-*` гэж нэрлэдэг. Энэ нэрийг
+          # гараар бичих нь агуулахыг сольсон өдөр build нэг газар, rollout
+          # өөр газар заадаг болгоно — яг тэр зөрүү нэг удаа гарсан.
+          REPO_LOWER: ${{ github.repository }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.DS_POSTGRES_PASSWORD }}
@@ -100,14 +104,15 @@ jobs:
           host: ${{ vars.DS_DEPLOY_HOST }}
           username: root
           key: ${{ secrets.DS_DEPLOY_SSH_KEY }}
-          envs: IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN,POSTGRES_PASSWORD,SSO_DEFAULT_CLIENT_SECRET,PUSH_TOKEN_ENCRYPTION_KEY
+          envs: IMAGE_TAG,REPO_LOWER,REGISTRY_USER,REGISTRY_TOKEN,POSTGRES_PASSWORD,SSO_DEFAULT_CLIENT_SECRET,PUSH_TOKEN_ENCRYPTION_KEY
           script: |
             set -euo pipefail
             cd /opt/open-gerege-nexus-ds
             umask 077
+            REPO_LOWER=$(echo "$REPO_LOWER" | tr '[:upper:]' '[:lower:]')
             cat > .env <<EOF
-            IMAGE_BACKEND=ghcr.io/gerege-systems/open-gerege-nexus-desktop/ds-backend
-            IMAGE_FRONTEND=ghcr.io/gerege-systems/open-gerege-nexus-desktop/ds-frontend
+            IMAGE_BACKEND=ghcr.io/${REPO_LOWER}/ds-backend
+            IMAGE_FRONTEND=ghcr.io/${REPO_LOWER}/ds-frontend
             IMAGE_TAG=${IMAGE_TAG}
             POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
             SSO_DEFAULT_CLIENT_SECRET=${SSO_DEFAULT_CLIENT_SECRET}
