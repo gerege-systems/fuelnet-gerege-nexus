@@ -156,3 +156,64 @@ extension NSColor {
         return resolved
     }
 }
+
+// MARK: - AppCard
+
+/// Their `AppCard` — border, 1px stroke, 12 corner, 24 padding, card
+/// background. It is the unit every settings screen is built from over there,
+/// so it is a view here rather than a set of properties copied per screen.
+final class EIDCard: NSView {
+    private let content: NSView
+
+    /// - Parameter padding: their Space.cardPadding, which every card uses
+    ///   unless it is holding something that wants to reach the edge.
+    init(content: NSView, padding: CGFloat = 24) {
+        self.content = content
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = EIDRadius.lg
+        layer?.cornerCurve = .continuous
+        layer?.borderWidth = 1
+
+        content.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
+            content.topAnchor.constraint(equalTo: topAnchor, constant: padding),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
+        ])
+        applyColors()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
+    }
+
+    private func applyColors() {
+        layer?.backgroundColor = EID.cardBackground.eidCGColor(for: self)
+        layer?.borderColor = EID.cardStroke.eidCGColor(for: self)
+    }
+}
+
+/// A view that paints their settings surface and keeps painting it after a
+/// theme switch. Layer colours do not follow one on their own.
+final class ThemeAwareSurface: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        applyColors()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColors()
+    }
+
+    private func applyColors() { layer?.backgroundColor = EID.surface.eidCGColor(for: self) }
+}

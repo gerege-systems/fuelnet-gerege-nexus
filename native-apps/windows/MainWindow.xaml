@@ -6,7 +6,7 @@
         Height="820" Width="1280"
         MinHeight="680" MinWidth="1024"
         WindowStartupLocation="CenterScreen"
-        Background="#0B0F17">
+        Background="#0F172A">
     <Grid>
         <Grid.RowDefinitions>
             <!-- Row 0: Native Windows Top Menu Bar -->
@@ -17,7 +17,7 @@
         </Grid.RowDefinitions>
 
         <!-- Native Menu Bar -->
-        <Menu Grid.Row="0" Background="#111827" Foreground="#F3F4F6" Height="30">
+        <Menu Grid.Row="0" Background="#0F172A" Foreground="#F3F4F6" Height="30">
             <MenuItem Header="Gerege Nexus" Foreground="#F3F4F6" Padding="10,4">
                 <MenuItem Header="Gerege Nexus-ийн тухай" Click="MenuAbout_Click"/>
                 <Separator/>
@@ -54,10 +54,10 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Name="navRail" Grid.Column="0" Width="168" Background="#0D121B" BorderBrush="#1B2432" BorderThickness="0,0,1,0" Visibility="Collapsed">
+            <Border Name="navRail" Grid.Column="0" Width="168" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,1,0" Visibility="Collapsed">
                 <StackPanel Margin="10,14">
-                    <Button Name="navWorkButton" Content="▦   Ажлын муж" Click="NavWork_Click" HorizontalContentAlignment="Left" Padding="10,7" Margin="0,0,0,2" Background="Transparent" BorderThickness="0" Foreground="#62D9D4"/>
-                    <Button Name="navSettingsButton" Content="⚙   Тохиргоо" Click="NavSettings_Click" HorizontalContentAlignment="Left" Padding="10,7" Background="Transparent" BorderThickness="0" Foreground="#B8C1CE"/>
+                    <Button Name="navWorkButton" Content="▦   Ажлын муж" Click="NavWork_Click" HorizontalContentAlignment="Left" Padding="10,7" Margin="0,0,0,2" Background="Transparent" BorderThickness="0" Foreground="#84A8FF"/>
+                    <Button Name="navSettingsButton" Content="⚙   Тохиргоо" Click="NavSettings_Click" HorizontalContentAlignment="Left" Padding="10,7" Background="Transparent" BorderThickness="0" Foreground="#94A3B8"/>
                 </StackPanel>
             </Border>
 
@@ -185,13 +185,13 @@
             </Grid>
         </Grid>
 
-        <Border Name="nativeFooter" Grid.Row="2" Height="30" Background="#101620" BorderBrush="#263244" BorderThickness="0,1,0,0" Visibility="Collapsed">
+        <Border Name="nativeFooter" Grid.Row="2" Height="30" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0" Visibility="Collapsed">
             <Grid Margin="12,0">
                 <!-- Тохиргооны товч энэ мөрөөс хасагдсан: түүнийг зүүн талын
                      rail эзэмшинэ. Нэг үйлдэл хоёр газар байвал аль нь идэвхтэй
                      гэдгийг харуулах төлөв хоёр тийш хуваагдана. -->
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Name="footerConnection" Text="●  Холбогдож байна" Foreground="#62D9D4" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Name="footerConnection" Text="●  Холбогдож байна" Foreground="#84A8FF" FontSize="11" VerticalAlignment="Center"/>
                 <TextBlock Name="footerPlatform" Grid.Column="2" Text="Windows · Desktop  |  Shell v1.4" Foreground="#9CA3AF" FontSize="11" VerticalAlignment="Center"/>
             </Grid>
         </Border>
