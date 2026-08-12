@@ -18,11 +18,11 @@ import Trust from "@/components/landing/Trust";
  * (`#features`, `#trust`, `#technology`) own those ids themselves, so the
  * header's menu keeps working without this file knowing what is inside them.
  *
- * The order is an argument that narrows. The first half answers "can I get in
- * and is that safe", which is what a citizen arriving here wants. The second
- * half answers "what am I adopting", which is what the person deciding for an
- * organisation wants, and which used to be argued separately on the
- * documentation site — one page making the case is one page to keep true.
+ * The order answers questions in the order they are asked. What is this, and
+ * how is it built. What do I get. What is underneath it. Only then how identity
+ * works — which is why the page closes on the claim that signing in is not a
+ * screen but the floor everything above it stands on. Put first, that claim is
+ * a detail about a login box; put last, it is the point.
  */
 export default function LandingPage() {
   return (
@@ -30,12 +30,12 @@ export default function LandingPage() {
       <SiteHeader />
       <main>
         <Hero />
-        <Capabilities />
-        <Trust />
-        <Technology />
         <Architecture />
         <Applications />
         <PlatformDepth />
+        <Trust />
+        <Technology />
+        <Capabilities />
       </main>
       <SiteFooter />
     </div>

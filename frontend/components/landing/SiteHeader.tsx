@@ -9,9 +9,11 @@ import {useI18n} from "@/lib/i18n";
 /**
  * The public header.
  *
- * Three of the four menu items scroll to a section of this page; the fourth
- * leaves for the published documentation, so it opens in a new tab and carries
- * `rel="noopener"` rather than silently replacing the page someone is reading.
+ * The first three items scroll to a section of this page and are listed in the
+ * order those sections appear, so the first item is never the furthest away.
+ * The fourth leaves for the published documentation, so it opens in a new tab
+ * and carries `rel="noopener"` rather than silently replacing the page someone
+ * is reading.
  */
 export default function SiteHeader() {
   const {t} = useI18n();
@@ -23,9 +25,9 @@ export default function SiteHeader() {
         <span>Gerege Nexus</span>
       </a>
       <nav>
-        <a href="#features">{t("website.menu.features")}</a>
+        <a href="#architecture">{t("website.menu.architecture")}</a>
+        <a href="#applications">{t("website.menu.applications")}</a>
         <a href="#trust">{t("website.menu.trust")}</a>
-        <a href="#technology">{t("website.menu.technology")}</a>
         <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
           {t("website.menu.docs")}
         </a>
