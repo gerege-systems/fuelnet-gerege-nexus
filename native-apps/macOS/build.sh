@@ -25,7 +25,7 @@ swiftc \
   "${SCRIPT_DIR}/NativeLoginViewController.swift" \
   "${SCRIPT_DIR}/NativeSettings.swift" \
   "${SCRIPT_DIR}/DeviceEnrollment.swift" \
-  "${SCRIPT_DIR}/SettingsWindowController.swift" \
+  "${SCRIPT_DIR}/SettingsPaneViewController.swift" \
   "${SCRIPT_DIR}/MainWindowController.swift" \
   "${SCRIPT_DIR}/AppDelegate.swift" \
   "${SCRIPT_DIR}/main.swift" \

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import EIDLogin from "@/components/EIDLogin";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import { api, API_BASE } from "@/lib/api";
+import { api, apiBase } from "@/lib/api";
 import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { useTheme, type ColorMode } from "@/lib/theme";
@@ -28,7 +28,7 @@ import {
 /// бүрхүүлүүд мөн үүнийг татдаг тул бүх клиент ижил үнэнийг харна.
 function healthUrl(): string {
   try {
-    return new URL(API_BASE, window.location.href).origin + "/health";
+    return new URL(apiBase(), window.location.href).origin + "/health";
   } catch {
     return "/health";
   }
@@ -393,7 +393,7 @@ function LoginContent() {
           </span>
           <span className="hidden lg:flex items-center gap-1 text-slate-400">
             <Server className="w-3 h-3 text-blue-400" />
-            <span>API Endpoint: {API_BASE}</span>
+            <span>API Endpoint: {apiBase()}</span>
           </span>
           <span className="font-mono text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/60">
             MN · UTF-8 · eID Active
@@ -436,7 +436,7 @@ function LoginContent() {
                   <span>Сервер Холболт (API Endpoint)</span>
                 </label>
                 <p className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 font-mono text-[11px] break-all text-slate-700 dark:text-slate-300">
-                  {API_BASE}
+                  {apiBase()}
                 </p>
                 <p className="mt-1.5 text-[11px] text-slate-500">
                   {inShell

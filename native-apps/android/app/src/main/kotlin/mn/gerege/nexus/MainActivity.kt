@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.view.KeyEvent
+import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -59,8 +60,11 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val nativeSettings = getSharedPreferences("native-settings-v1", MODE_PRIVATE)
-        val webOrigin = nativeSettings.getString("webEndpoint", "http://10.0.2.2:3000")!!.trimEnd('/')
-        val apiRoot = nativeSettings.getString("apiEndpoint", "http://10.0.2.2:8080")!!.trimEnd('/')
+        // Web ба API нэг host дээр — энэ build-ийн domain шугам. Ажлын мужаас
+        // гарах дуудлага same-origin болж, session cookie нь SameSite=Strict
+        // хэвээр ажиллана.
+        val webOrigin = DeviceLine.migrate(nativeSettings.getString("webEndpoint", null)).trimEnd('/')
+        val apiRoot = DeviceLine.migrate(nativeSettings.getString("apiEndpoint", null)).trimEnd('/')
         val apiBase = if (apiRoot.endsWith("/api/v1")) "$apiRoot/" else "$apiRoot/api/v1/"
         val auth = AuthStateMachine(AuthApi(apiBase), MainScope())
         DeviceTokenStore(this).load()?.let { token -> MainScope().launch { runCatching { DeviceEnrollmentApi(apiBase).telemetry(token,"shell.started") } } }
@@ -143,21 +147,38 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
     }
 }
 
+private enum class Pane { Work, Settings }
+
+/**
+ * Аппын цорын ганц хүрээ.
+ *
+ * Дүрэм: **popup-аас бусад бүх зүйл энэ хүрээн дотор**. Ажлын муж ба тохиргоо
+ * хоёр нь ижил top bar болон bottom nav-ын дунд солигддог дэлгэцүүд — тусдаа
+ * Activity эсвэл Dialog нээгдэхгүй. Тусдаа гарах эрхтэй зүйл бол зөвхөн
+ * `BiometricPrompt`, системийн зөвшөөрлийн харилцах цонх зэрэг popup-ууд.
+ *
+ * WebView нь `remember`-т хадгалагдана. Энэ нь чимэг биш: өмнө нь тохиргоо
+ * гарахад бүх хүрээ солигдож, `AndroidView` композициос гарахад WebView устаж
+ * байсан — буцаж ирэхэд ажлын муж эхнээсээ ачаалагдаж, хэрэглэгчийн байсан
+ * хуудас, гүйлгэсэн байрлал, бөглөж байсан маягт бүгд алга болно.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable private fun WorkArea(auth: AuthStateMachine, webOrigin: String, apiOrigin: String, deviceToken: String?, biometric: ((Boolean, String?) -> Unit) -> Unit, relogin: () -> Unit) {
-    var showSettings by remember { mutableStateOf(false) }
-    var activeRoute by remember { mutableStateOf("/apps") }
-    var nativeWebView by remember { mutableStateOf<WebView?>(null) }
-    if (showSettings) { NativeSettingsScreen { showSettings = false }; return }
-    BackHandler(enabled = false) {}
-    Column(Modifier.fillMaxSize()) {
-      Surface(tonalElevation = 3.dp) { Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Gerege Nexus", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        TextButton({ showSettings = true }) { Text("Төхөөрөмжийн тохиргоо") }
-      } }
-      AndroidView(factory = { context ->
+    var pane by remember { mutableStateOf(Pane.Work) }
+    // Шугамын нүүр. Тэнд тухайн платформын өөрийн эхлэх дэлгэц
+    // рендерлэгдэнэ (frontend/app/line/<platform>).
+    val startRoute = "/"
+    var activeRoute by remember { mutableStateOf(startRoute) }
+    val context = LocalContext.current
+    val openPane: (String) -> Boolean = { requested ->
+        when (requested) {
+            "settings" -> { pane = Pane.Settings; true }
+            "work" -> { pane = Pane.Work; true }
+            else -> false
+        }
+    }
+    val nativeWebView = remember {
         WebView(context).apply {
-            nativeWebView = this
             setBackgroundColor(Color.rgb(11, 15, 23)); settings.javaScriptEnabled = true; settings.domStorageEnabled = true
             CookieManager.getInstance().setAcceptCookie(true)
             auth.sessionCookies().forEach { cookie ->
@@ -166,7 +187,7 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
             }
             if (deviceToken != null) CookieManager.getInstance().setCookie(apiOrigin, "device_token=$deviceToken; Path=/api/v1/devices; HttpOnly; SameSite=Strict")
             CookieManager.getInstance().flush()
-            installBridge(this, webOrigin, biometric, relogin)
+            installBridge(this, webOrigin, biometric, relogin, openPane)
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     if (request.isForMainFrame && sameOrigin(request.url, Uri.parse(webOrigin))) return false
@@ -175,22 +196,50 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
                 }
             }
             val scanBuffer=StringBuilder();setOnKeyListener { _,code,event -> if(event.action!=KeyEvent.ACTION_DOWN)return@setOnKeyListener false;if(code==KeyEvent.KEYCODE_ENTER&&scanBuffer.isNotEmpty()){val payload=JSONObject().put("value",scanBuffer.toString()).put("format","keyboard-wedge");evaluateJavascript("window.__geregeShellEmit&&window.__geregeShellEmit('shell:scan',${payload})",null);scanBuffer.clear();true}else{event.unicodeChar.takeIf{it>0}?.let{scanBuffer.append(it.toChar())};false} }
-            val route = when (BuildConfig.FORM_FACTOR) { "kiosk" -> "/kiosk"; "pos" -> "/pos"; else -> "/apps" }
-            loadUrl("$webOrigin$route")
+            loadUrl("$webOrigin$startRoute")
         }
-      }, modifier = Modifier.weight(1f).fillMaxWidth())
+    }
+    // `remember` нь WebView-г амьд байлгадаг ч сүүлд нь чөлөөлдөггүй. Хүрээ
+    // өөрөө композициос гарахад (жишээ нь гарах үед) native талын нөөцийг
+    // буцаана.
+    DisposableEffect(Unit) { onDispose { (nativeWebView.parent as? ViewGroup)?.removeView(nativeWebView); nativeWebView.destroy() } }
+    // Тохиргоо нээлттэй үед back нь ажлын муж руу буцаана — тусдаа Activity
+    // байхгүй тул системийн back өөрөө үүнийг мэдэхгүй. Ажлын муж дээр back нь
+    // өмнөх шигээ системд үлдэнэ.
+    BackHandler(enabled = pane != Pane.Work) { pane = Pane.Work }
+    Column(Modifier.fillMaxSize()) {
+      Surface(tonalElevation = 3.dp) { Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Gerege Nexus", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        TextButton({ pane = if (pane == Pane.Settings) Pane.Work else Pane.Settings }) {
+            Text(if (pane == Pane.Settings) "Ажлын муж" else "Төхөөрөмжийн тохиргоо")
+        }
+      } }
+      Box(Modifier.weight(1f).fillMaxWidth()) {
+        when (pane) {
+          // Тохиргооноос буцаж ирэхэд AndroidView шинэ holder үүсгээд ижил
+          // WebView-г дахин нэмнэ. Хуучин holder-оос салгаагүй бол Android
+          // "The specified child already has a parent" гэж унана.
+          Pane.Work -> AndroidView(
+            factory = { (nativeWebView.parent as? ViewGroup)?.removeView(nativeWebView); nativeWebView },
+            modifier = Modifier.fillMaxSize(),
+          )
+          Pane.Settings -> NativeSettingsScreen { pane = Pane.Work }
+        }
+      }
+      // Bottom nav нь дэлгэц солигдох бүрд байрандаа үлдэнэ — энэ бол хүрээний
+      // chrome, ажлын мужийн хэсэг биш.
       if (BuildConfig.FORM_FACTOR in setOf("mobile", "tablet")) NavigationBar(containerColor = ComposeColor(0xFF101620)) {
         listOf("▦" to ("Аппууд" to "/apps"), "▤" to ("Баримт" to "/documents"), "♙" to ("Харилцагч" to "/contacts")).forEach { (icon, item) ->
-          NavigationBarItem(selected = activeRoute == item.second, onClick = { activeRoute = item.second; nativeWebView?.loadUrl(webOrigin + item.second) }, icon = { Text(icon, fontSize = 20.sp) }, label = { Text(item.first) })
+          NavigationBarItem(selected = pane == Pane.Work && activeRoute == item.second, onClick = { activeRoute = item.second; pane = Pane.Work; nativeWebView.loadUrl(webOrigin + item.second) }, icon = { Text(icon, fontSize = 20.sp) }, label = { Text(item.first) })
         }
-        NavigationBarItem(selected = false, onClick = { showSettings = true }, icon = { Text("⚙", fontSize = 19.sp) }, label = { Text("Тохиргоо") })
+        NavigationBarItem(selected = pane == Pane.Settings, onClick = { pane = Pane.Settings }, icon = { Text("⚙", fontSize = 19.sp) }, label = { Text("Тохиргоо") })
       }
     }
 }
 
-private fun installBridge(webView: WebView, webOrigin: String, biometric: ((Boolean, String?) -> Unit) -> Unit, relogin: () -> Unit) {
-    val capabilities = when(BuildConfig.FORM_FACTOR){"kiosk"->listOf("escpos","scanner","device.identity","kiosk.lockdown","telemetry");"pos"->listOf("escpos","scanner","device.identity","secure-store","telemetry","biometric");else->listOf("secure-store","biometric","telemetry")}
-    val script = """(()=>{if(window.GeregeShell)return;const p=new Map(),l=new Map();let n=0;window.__geregeShellResolve=(id,ok,v)=>{const x=p.get(id);if(!x)return;p.delete(id);ok?x.resolve(v):x.reject(new Error(String(v)))};window.__geregeShellEmit=(name,payload)=>(l.get(name)||[]).slice().forEach(fn=>fn(payload));window.GeregeShell=Object.freeze({version:'1.3',platform:'android',formFactor:'${BuildConfig.FORM_FACTOR}',capabilities:Object.freeze(${org.json.JSONArray(capabilities)}),invoke(method,params={}){return new Promise((resolve,reject)=>{const id=String(++n);p.set(id,{resolve,reject});window.geregeNative.postMessage(JSON.stringify({id,method,params}))})},on(name,h){const a=l.get(name)||[];a.push(h);l.set(name,a);return()=>{const i=a.indexOf(h);if(i>=0)a.splice(i,1)}}});document.documentElement.setAttribute('data-shell','android')})();"""
+private fun installBridge(webView: WebView, webOrigin: String, biometric: ((Boolean, String?) -> Unit) -> Unit, relogin: () -> Unit, openPane: (String) -> Boolean) {
+    val capabilities = when(BuildConfig.FORM_FACTOR){"kiosk"->listOf("escpos","scanner","device.identity","kiosk.lockdown","telemetry","shell.pane");"pos"->listOf("escpos","scanner","device.identity","secure-store","telemetry","biometric","shell.pane");else->listOf("secure-store","biometric","telemetry","shell.pane")}
+    val script = """(()=>{if(window.GeregeShell)return;const p=new Map(),l=new Map();let n=0;window.__geregeShellResolve=(id,ok,v)=>{const x=p.get(id);if(!x)return;p.delete(id);ok?x.resolve(v):x.reject(new Error(String(v)))};window.__geregeShellEmit=(name,payload)=>(l.get(name)||[]).slice().forEach(fn=>fn(payload));window.GeregeShell=Object.freeze({version:'1.4',platform:'android',formFactor:'${BuildConfig.FORM_FACTOR}',capabilities:Object.freeze(${org.json.JSONArray(capabilities)}),invoke(method,params={}){return new Promise((resolve,reject)=>{const id=String(++n);p.set(id,{resolve,reject});window.geregeNative.postMessage(JSON.stringify({id,method,params}))})},on(name,h){const a=l.get(name)||[];a.push(h);l.set(name,a);return()=>{const i=a.indexOf(h);if(i>=0)a.splice(i,1)}}});document.documentElement.setAttribute('data-shell','android')})();"""
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(webView, script, setOf(webOrigin))
     WebViewCompat.addWebMessageListener(webView, "geregeNative", setOf(webOrigin), object : WebViewCompat.WebMessageListener {
         override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
@@ -206,6 +255,10 @@ private fun installBridge(webView: WebView, webOrigin: String, biometric: ((Bool
                 "kiosk.lockdown" -> { val enabled=body.optJSONObject("params")?.optBoolean("enabled",true)?:true;val activity=view.context as? android.app.Activity;runCatching { if(enabled)activity?.startLockTask() else activity?.stopLockTask() }.onSuccess { resolve(view,id,true,JSONObject().put("enabled",enabled)) }.onFailure { resolve(view,id,false,it.message) } }
                 "scanner.start", "scanner.stop" -> resolve(view,id,true,null)
                 "menu.changed" -> resolve(view, id, true, null)
+                // Ажлын муж бүрхүүлийн эзэмшдэг дэлгэц рүү шилжихийг хүсэж
+                // байна. Шинэ Activity нээхгүй — ижил хүрээн доторх дэлгэц
+                // солигдоно.
+                "shell.openPane" -> { val opened = openPane(body.optJSONObject("params")?.optString("pane") ?: ""); resolve(view, id, opened, if (opened) null else "Unknown pane") }
                 else -> resolve(view, id, false, "Unsupported method: $method")
             }
         }

@@ -4,7 +4,7 @@
  * backend/internal/apps/gov_services; nothing on this screen uses `any`.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+import { apiBase } from "@/lib/apiBase";
 
 export type FulfillmentMode = "LOCAL" | "DELEGATE" | "HYBRID";
 
@@ -241,7 +241,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     "Accept-Language": locale,
     ...(init.headers as Record<string, string>),
   };
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" });
+  const res = await fetch(`${apiBase()}${path}`, { ...init, headers, credentials: "include" });
   if (!res.ok) {
     let message = "Request failed";
     let code = "UNKNOWN";

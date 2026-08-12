@@ -494,3 +494,245 @@ html[data-shell] .gerege-main {
   border-top: 1px solid var(--gerege-border) !important;
   z-index: 30 !important;
 }
+
+/* ── Шугамын нүүр дэлгэц ─────────────────────────────────────────────────
+   Native хүрээний дотор, ribbon ба rail-ын дунд суудаг тул өөрийн толгой
+   хэсэг, навигаци зурахгүй. Хуудсын өнгө токеноор явна — гэрэлтэй, харанхуй,
+   дөрвөн accent бүгд дээр зөв. Шугамуудын цорын ганц ялгаа нь --line-alloy.
+
+   color-mix() ЗОРИУДААР ашиглаагүй: macOS 12-ийн WKWebView түүнийг мэдэхгүй,
+   тэнд дүрэм бүхэлдээ унана. rgb(<triple> / <alpha>) тэнд ажиллана. */
+.line-home {
+  --line-alloy: var(--gerege-blue);
+  --line-alloy-rgb: 0 100 225;
+  max-width: 74rem;
+  margin: 0 auto;
+  padding: 0.25rem 0 2rem;
+}
+
+.line-eyebrow {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--line-alloy);
+  margin: 0;
+}
+
+.line-title {
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.03;
+  color: var(--gerege-fg);
+  margin: 0.5rem 0 0;
+}
+
+.line-lede {
+  max-width: 52ch;
+  margin: 0.75rem 0 0;
+  color: var(--gerege-muted);
+  line-height: 1.55;
+}
+
+.line-body {
+  display: grid;
+  gap: 2.5rem;
+  margin-top: 2.5rem;
+  grid-template-columns: 17.5rem minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (max-width: 62rem) {
+  .line-body { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+}
+
+/* Гар утас, олон нийтийн терминал дээр эхлэх зүйл нь гэрэгэ биш, үйлдэл.
+   Пайз доошоо бууж, лавлагааны эд болж үлдэнэ. */
+.line-home--public .line-body,
+.line-home--hand .line-body { grid-template-columns: minmax(0, 1fr); }
+.line-home--public .paiza,
+.line-home--hand .paiza { order: 2; max-width: 22rem; }
+
+/* ── Гэрэгэ ─────────────────────────────────────────────────────────────
+   Энэ аппын нэрийг үүрсэн эд: Монголын эзэнт гүрэн элчдээ олгодог байсан
+   төмөр пайз. Эзэмшигчийн эрх, хаана хүчинтэйг нь сийлж бичдэг байсан —
+   төхөөрөмжийн бүртгэл яг үүнтэй ижил зүйл хийдэг тул энд түүнийг чимэг биш,
+   төхөөрөмжийн үнэмлэх болгож харууллаа.
+
+   Хуудсын өнгөний токенийг ЗОРИУДААР дагаагүй: металл нь тавигдсан цаасныхаа
+   өнгөөр солигддоггүй. Хар суурь нь хайлшийн өнгийг гэрэлтэй, харанхуй
+   хоёуланд тод байлгаж, хуудсан дээрх ганц зоримог эд болгоно. */
+.paiza { margin: 0; }
+
+.paiza-cord {
+  display: block;
+  position: relative;
+  width: 3.5rem;
+  height: 1.35rem;
+  margin: 0 auto -1px;
+  border: 1px solid rgb(var(--line-alloy-rgb) / 40%);
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+  background: linear-gradient(180deg, #202839, #171d29);
+  z-index: 1;
+}
+/* Оосорны нүх. Хуудсын дэвсгэрийг нэвт харуулснаар цоолсон мэт уншигдана. */
+.paiza-cord::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0.42rem;
+  transform: translateX(-50%);
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--gerege-bg);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 65%);
+}
+
+.paiza-face {
+  position: relative;
+  border: 1px solid rgb(var(--line-alloy-rgb) / 40%);
+  border-radius: 12px;
+  background:
+    radial-gradient(115% 70% at 50% 0%, rgb(var(--line-alloy-rgb) / 26%), rgb(var(--line-alloy-rgb) / 0%) 62%),
+    linear-gradient(180deg, #1d2431 0%, #141a24 55%, #10151e 100%);
+  padding: 1.5rem 1.375rem 1.25rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), 0 10px 28px rgb(8 12 20 / 22%);
+}
+
+.paiza-mark {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.44em;
+  text-indent: 0.44em;
+  text-align: center;
+  color: rgb(var(--line-alloy-rgb) / 95%);
+  margin: 0 0 1.375rem;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 55%);
+}
+
+.paiza-inscription { margin: 0; display: grid; }
+.paiza-inscription > div {
+  display: grid;
+  grid-template-columns: 4.75rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+}
+.paiza-inscription > div:first-child { border-top: none; }
+.paiza-inscription dt {
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 42%);
+}
+.paiza-inscription dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem;
+  color: #e9eef6;
+  overflow-wrap: anywhere;
+}
+
+.paiza-seal {
+  margin: 1.25rem 0 0;
+  padding-top: 0.875rem;
+  border-top: 1px solid rgb(var(--line-alloy-rgb) / 28%);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--line-alloy-rgb) / 95%);
+  text-align: center;
+}
+
+.paiza-note {
+  margin: 0.875rem 0.125rem 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--gerege-muted);
+}
+
+/* ── Хаанаас эхлэх ───────────────────────────────────────────────────────
+   Ширээн дээр эдгээр нь жагсаалт: хайрцаг бүр нэмэх тусам пайзтай өрсөлдөнө.
+   Зоримог байдлыг нэг газар зарцуулна. */
+.line-actions-head {
+  margin: 0 0 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gerege-muted);
+}
+
+.line-actions ul { list-style: none; margin: 0; padding: 0; }
+
+.line-action {
+  display: flex;
+  gap: 0.875rem;
+  align-items: center;
+  padding: 0.875rem 0.5rem;
+  border-top: 1px solid var(--gerege-border);
+  text-decoration: none;
+  transition: padding-left 0.15s ease, background-color 0.15s ease;
+}
+.line-actions li:last-child .line-action { border-bottom: 1px solid var(--gerege-border); }
+.line-action:hover { background: var(--gerege-surface-2); padding-left: 0.875rem; }
+.line-action:focus-visible { outline: 2px solid var(--line-alloy); outline-offset: -2px; }
+
+.line-action-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  background: rgb(var(--line-alloy-rgb) / 12%);
+  color: var(--line-alloy);
+}
+.line-action-icon svg { width: 1.0625rem; height: 1.0625rem; }
+
+.line-action-text { min-width: 0; }
+.line-action-text strong { display: block; color: var(--gerege-fg); font-size: 0.9375rem; font-weight: 600; }
+.line-action-text small { display: block; margin-top: 0.0625rem; color: var(--gerege-muted); font-size: 0.75rem; }
+
+/* Зогсож байгаа хүн хүрдэг дэлгэц: том бай, цөөн сонголт. Энд хайрцаг нь
+   чимэг биш — хүрэх талбайг нүдэнд харуулна. */
+.line-home--public .line-actions ul {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  margin-top: 0.75rem;
+}
+.line-home--public .line-action {
+  border: 1px solid var(--gerege-border);
+  border-radius: var(--gerege-radius-card);
+  background: var(--gerege-surface);
+  padding: 1.75rem;
+  gap: 1.25rem;
+  height: 100%;
+}
+.line-home--public .line-action:hover { border-color: var(--line-alloy); background: var(--gerege-surface); padding-left: 1.75rem; }
+.line-home--public .line-action-icon { width: 3.5rem; height: 3.5rem; border-radius: 14px; }
+.line-home--public .line-action-icon svg { width: 1.75rem; height: 1.75rem; }
+.line-home--public .line-action-text strong { font-size: 1.375rem; }
+.line-home--public .line-action-text small { font-size: 0.9375rem; margin-top: 0.25rem; }
+
+/* Нэг гараар барьж байгаа дэлгэц: мөр өндөр, эрхий хуруунд хүрэхээр. */
+.line-home--hand .line-action { padding: 1.0625rem 0.5rem; }
+
+.line-home--unknown { max-width: 40rem; padding-top: 3rem; }
+.line-home--unknown code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line-action { transition: none; }
+  .line-action:hover { padding-left: 0.5rem; }
+  .line-home--public .line-action:hover { padding-left: 1.75rem; }
+}

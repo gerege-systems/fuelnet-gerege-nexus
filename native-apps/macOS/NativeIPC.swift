@@ -57,6 +57,19 @@ public class NativeIPCBridge: NSObject, WKScriptMessageHandler {
             }
         case "menu.changed":
             resolve(requestId, ok: true, value: NSNull())
+        case "shell.openPane":
+            // Ажлын муж бүрхүүлийн эзэмшдэг дэлгэц рүү шилжихийг хүсэж байна.
+            // Шинэ цонх нээхгүй — ижил хүрээн доторх дэлгэц солигдоно.
+            switch params["pane"] as? String {
+            case "settings":
+                DispatchQueue.main.async { self.windowController?.showSettings() }
+                resolve(requestId, ok: true, value: NSNull())
+            case "work":
+                DispatchQueue.main.async { self.windowController?.showWorkArea() }
+                resolve(requestId, ok: true, value: NSNull())
+            default:
+                resolve(requestId, ok: false, value: "Unknown pane")
+            }
         case "auth.reLogin":
             windowController?.showNativeLogin()
             resolve(requestId, ok: true, value: NSNull())

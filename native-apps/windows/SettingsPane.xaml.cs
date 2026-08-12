@@ -5,11 +5,18 @@ using System.Windows.Controls;
 
 namespace GeregeNexusNativeWin;
 
-public partial class SettingsWindow : Window
+public partial class SettingsPane : UserControl
 {
     private readonly NativeSettings settings = NativeSettings.Load();
     private readonly DeviceEnrollmentClient deviceClient = new();
-    public SettingsWindow(Window owner) { InitializeComponent(); Owner = owner; LoadValues(); Loaded += async (_, _) => await RefreshDeviceAsync(); }
+
+    /// <summary>
+    /// Web/API endpoint өөрчлөгдөж хадгалагдсаныг бүрхүүлд дуулгана — ажлын
+    /// муж өөр origin дээр дахин ачаалагдах ёстой болно.
+    /// </summary>
+    public event Action? EndpointsChanged;
+
+    public SettingsPane() { InitializeComponent(); LoadValues(); Loaded += async (_, _) => await RefreshDeviceAsync(); }
 
     private static string Selected(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
     private static void Select(ComboBox box, string value) => box.SelectedItem = box.Items.Cast<ComboBoxItem>().FirstOrDefault(x => x.Content?.ToString() == value) ?? box.Items[0];
@@ -30,6 +37,7 @@ public partial class SettingsWindow : Window
         (key switch { "connection" => connectionPanel, "printer" => printerPanel, "scanner" => scannerPanel, "serial" => serialPanel, "privacy" => privacyPanel, "device" => devicePanel, "drawer" => drawerPanel, "update" => updatePanel, "diagnostics" => diagnosticsPanel, _ => generalPanel }).Visibility = Visibility.Visible;
     }
     private void Save_Click(object sender, RoutedEventArgs e) {
+        var endpointsMoved = settings.WebEndpoint != webEndpoint.Text.Trim() || settings.ApiEndpoint != apiEndpoint.Text.Trim();
         settings.LaunchAtLogin = launchAtLogin.IsChecked == true; settings.Language = Selected(language); settings.WebEndpoint = webEndpoint.Text.Trim(); settings.ApiEndpoint = apiEndpoint.Text.Trim();
         settings.PrinterTransport = Selected(printerTransport); settings.PrinterHost = printerHost.Text.Trim(); settings.PrinterPort = int.TryParse(printerPort.Text, out var port) ? port : 9100; settings.PaperWidth = Selected(paperWidth);
         settings.ScannerMode = Selected(scannerMode); settings.ScannerSuffix = Selected(scannerSuffix); settings.SerialPort = serialPort.Text.Trim(); settings.BaudRate = int.TryParse(Selected(baudRate), out var baud) ? baud : 9600;
@@ -37,6 +45,7 @@ public partial class SettingsWindow : Window
         settings.DeviceName = deviceName.Text.Trim(); settings.Site = deviceSite.Text.Trim(); settings.DeviceId = deviceId.Text.Trim();
         settings.DrawerPulseMs = int.TryParse(drawerPulse.Text,out var pulse) ? Math.Clamp(pulse,1,510) : 120;
         settings.Save(); status.Text = "Хадгаллаа";
+        if (endpointsMoved) EndpointsChanged?.Invoke();
     }
     private void TestConnection_Click(object s, RoutedEventArgs e) => status.Text = "Web/API холболтыг шалгаж байна…";
     private async void TestPrinter_Click(object s, RoutedEventArgs e) { try { status.Text="Принтерт холбогдож байна…"; await PeripheralAdapters.PrintNetworkTestAsync(printerHost.Text.Trim(),int.TryParse(printerPort.Text,out var p)?p:9100); status.Text="Туршилтын баримт илгээгдлээ"; } catch(Exception ex){status.Text=ex.Message;} }

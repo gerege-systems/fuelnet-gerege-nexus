@@ -1,6 +1,19 @@
 import AppKit
 
-final class SettingsWindowController: NSWindowController {
+/// Тохиргооны дэлгэц — аппын хүрээн ДОТОР амьдардаг.
+///
+/// Өмнө нь энэ нь өөрийн `NSWindow`-той байсан. Тусдаа цонх нь хэрэглэгчийг
+/// нэг аппын хоёр өөр хүрээ хооронд үсрүүлдэг, Dock дээр хоёр дүрс үлдээдэг,
+/// бүтэн дэлгэцийн горимд бүр огт олдохгүй болдог. Одоо энэ нь `NSView` —
+/// ажлын мужийг сольж, ижил ribbon, ижил sidebar, ижил footer-ын дунд гарна.
+///
+/// Тусдаа цонх үлдээх ганц зөвшөөрөгдсөн зүйл бол popup: `NSAlert`, `NSMenu`,
+/// `NSSavePanel` — эдгээр нь богино насалж, эцэг цонхондоо холбогдоно.
+final class SettingsPaneViewController: NSViewController {
+    /// Endpoint өөрчлөгдөхөд бүрхүүлд дуулгана — ажлын муж өөр origin руу
+    /// ачаалагдах ёстой болно.
+    var onEndpointChanged: (() -> Void)?
+
     private enum Section: Int, CaseIterable {
         case general, connection, printer, scanner, serial, privacy, device, update, diagnostics
         var title: String { switch self {
@@ -20,15 +33,20 @@ final class SettingsWindowController: NSWindowController {
     private let deviceClient = MacDeviceEnrollmentClient()
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 920, height: 650),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Gerege Nexus — Native Settings"; window.minSize = NSSize(width: 760, height: 520); window.center()
-        super.init(window: window); build(); show(.general)
+        super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    override func loadView() {
+        // Хүрээн дотор амьдардаг тул хэмжээгээ өөрөө шийдэхгүй — эцэг нь
+        // autoresizing-аар сунгана. Энд өгсөн frame нь зөвхөн эхний утга.
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 920, height: 650))
+        build()
+        show(.general)
+    }
+
     private func build() {
-        guard let content = window?.contentView else { return }
+        let content = view
         let split = NSSplitView(frame: content.bounds); split.isVertical = true; split.dividerStyle = .thin; split.autoresizingMask = [.width, .height]
         let sidebar = NSVisualEffectView(); sidebar.material = .sidebar; sidebar.blendingMode = .behindWindow
         let menu = NSStackView(); menu.orientation = .vertical; menu.alignment = .leading; menu.spacing = 4; menu.edgeInsets = NSEdgeInsets(top: 20, left: 12, bottom: 20, right: 12)
@@ -114,8 +132,8 @@ final class SettingsWindowController: NSWindowController {
 
     @objc private func toggleLaunch(_ s: NSSwitch) { settings.launchAtLogin = s.state == .on; persist() }
     @objc private func changeLanguage(_ s: NSPopUpButton) { settings.language = s.titleOfSelectedItem ?? "mn"; persist() }
-    @objc private func changeWeb(_ s: NSTextField) { settings.webEndpoint = s.stringValue; persist() }
-    @objc private func changeAPI(_ s: NSTextField) { settings.apiEndpoint = s.stringValue; persist() }
+    @objc private func changeWeb(_ s: NSTextField) { settings.webEndpoint = s.stringValue; persist(); onEndpointChanged?() }
+    @objc private func changeAPI(_ s: NSTextField) { settings.apiEndpoint = s.stringValue; persist(); onEndpointChanged?() }
     @objc private func changePrinterTransport(_ s: NSPopUpButton) { settings.printerTransport = s.titleOfSelectedItem ?? "USB"; persist() }
     @objc private func changePrinterHost(_ s: NSTextField) { settings.printerHost = s.stringValue; persist() }
     @objc private func changePrinterPort(_ s: NSTextField) { settings.printerPort = s.integerValue; persist() }

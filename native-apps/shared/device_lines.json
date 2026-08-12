@@ -1,0 +1,93 @@
+{
+  "$comment": [
+    "Төхөөрөмжийн domain шугамуудын цорын ганц эх сурвалж.",
+    "",
+    "Дүрэм: backend ЦОР ГАНЦ. Шугам бүр өөрийн host-той ч /api/v1 нь бүгд",
+    "нэг ижил API upstream руу очно (deploy/nginx/device-lines.gerege.mn.conf).",
+    "Тиймээс webview доторх дуудлага үргэлж SAME-ORIGIN — session cookie нь",
+    "SameSite=Strict хэвээр ажиллаж, CORS preflight огт үүсэхгүй.",
+    "",
+    "Шугам бүр тусдаа host учраас cookie нь host-only: mac дээрх session нь",
+    "pos руу урсахгүй. Энэ нь тусгаарлалт, регресс биш.",
+    "",
+    "Хөтчийн шугам (browserLine) хэвээр үлдэнэ — тэнд web app өөрөө бүрэн апп.",
+    "Төхөөрөмжийн шугам дээр web нь зөвхөн native хүрээн доторх ажлын муж."
+  ],
+  "$provisioning": [
+    "Шугамууд 2026-08-12-нд АСАВ. Дөрвүүлэн бэлэн:",
+    "  1. DNS   *.nexus.gerege.mn → 38.180.145.75 (wildcard)",
+    "  2. nginx deploy/nginx/device-lines.nexus.gerege.mn.conf",
+    "  3. TLS   /etc/letsencrypt/live/device-lines.nexus.gerege.mn (6 нэр, 2026-11-10)",
+    "  4. API   DEVICE_LINE_ORIGINS → ALLOWED_ORIGINS",
+    "",
+    "Мөн deploy/nginx/000-catch-all.conf нэмэгдсэн: wildcard-аас болж дурын",
+    "дэд домэйн resolve болдог болсон тул нэрээ нэрлээгүй хүсэлт нэг",
+    "бүтээгдэхүүнээс нөгөө рүү унахаас сэргийлнэ.",
+    "",
+    "ШИНЭ шугам нэмэх дараалал (нэг шугамд):",
+    "  DNS (wildcard хамарна) → nginx server_name → certbot → DEVICE_LINE_ORIGINS",
+    "  → хамгийн СҮҮЛД клиентийн 'client' талбарт заасан мөр.",
+    "Эсрэг дараалал нь аппыг байхгүй host руу чиглүүлж унагаана."
+  ],
+  "browserLine": {
+    "platform": "browser",
+    "prodOrigin": "https://nexus.gerege.mn",
+    "devOrigin": "http://localhost:3000"
+  },
+  "deviceLines": {
+    "macos": {
+      "formFactor": "desktop",
+      "line": "https://mac.nexus.gerege.mn",
+      "provisioned": true,
+      "devOrigin": "http://localhost:3000",
+      "startRoute": "/",
+      "client": "native-apps/macOS/NativeSettings.swift → lineOrigin",
+      "home": "/line/macos"
+    },
+    "windows": {
+      "formFactor": "desktop",
+      "line": "https://win.nexus.gerege.mn",
+      "provisioned": true,
+      "devOrigin": "http://localhost:3000",
+      "startRoute": "/",
+      "client": "native-apps/windows/ShellProfile.cs → LineOrigin",
+      "home": "/line/windows"
+    },
+    "ios": {
+      "formFactor": "mobile",
+      "line": "https://ios.nexus.gerege.mn",
+      "provisioned": true,
+      "devOrigin": "http://localhost:3000",
+      "startRoute": "/",
+      "client": "native-apps/iOS/Sources/GeregeShellKit/DeviceLine.swift → origin",
+      "home": "/line/ios"
+    },
+    "android": {
+      "formFactor": "mobile",
+      "line": "https://android.nexus.gerege.mn",
+      "provisioned": true,
+      "devOrigin": "http://10.0.2.2:3000",
+      "startRoute": "/",
+      "client": "native-apps/android/app/src/main/kotlin/mn/gerege/nexus/DeviceLine.kt → origin",
+      "home": "/line/android"
+    },
+    "kiosk": {
+      "formFactor": "kiosk",
+      "line": "https://kiosk.nexus.gerege.mn",
+      "provisioned": true,
+      "devOrigin": "http://localhost:3000",
+      "startRoute": "/",
+      "client": "ShellProfile.cs (Windows) / DeviceLine.kt (Android)",
+      "home": "/line/kiosk"
+    },
+    "pos": {
+      "formFactor": "pos",
+      "line": "https://pos.nexus.gerege.mn",
+      "provisioned": true,
+      "devOrigin": "http://localhost:3000",
+      "startRoute": "/",
+      "client": "ShellProfile.cs (Windows) / DeviceLine.kt (Android)",
+      "home": "/line/pos"
+    }
+  }
+}

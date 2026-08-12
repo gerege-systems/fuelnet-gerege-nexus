@@ -1,8 +1,11 @@
 {
+  "$comment": [
+    "Хаягууд энэ файлд БАЙХГҮЙ. Тэдгээр нь төхөөрөмж тус бүрийн domain шугам",
+    "болсон тул `device_lines.json`-д амьдарна. Энд зөвхөн цонхны хэмжээ зэрэг",
+    "хаягаас хамааралгүй зүйлс үлдэнэ."
+  ],
   "appName": "Gerege Nexus Shell Native",
   "appVersion": "1.0.0-native",
-  "devUrl": "http://localhost:3000",
-  "productionUrl": "http://localhost:8080",
   "defaultWidth": 1280,
   "defaultHeight": 820,
   "minWidth": 1024,

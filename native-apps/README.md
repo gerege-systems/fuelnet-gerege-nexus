@@ -2,6 +2,57 @@
 
 This directory (`native-apps/`) contains the native client codebases: **iOS/iPadOS** (`GeregeShellKit` SPM + SwiftUI/WKWebView), **windows** (C#/.NET 8 WPF + WebView2), **android** (Kotlin/Compose/WebView), and **macOS** (AppKit/WKWebView).
 
+Each client develops natively from here on. Where a screen is still web, it is
+embedded as one of the app's own screens rather than as a second window.
+
+---
+
+## 🧱 Two rules that govern every client
+
+**1. One frame.** Each client has exactly one window (macOS/Windows) or one
+scene (iOS/Android). Login, the work area, and settings are *screens* that swap
+inside that frame — never separate windows. The only thing allowed out of the
+frame is a popup: `NSAlert`/`NSMenu`/`NSSavePanel`, `MessageBox` and file
+dialogs, `alert`/`confirmationDialog`/share sheets, `BiometricPrompt` and
+permission dialogs. `window.open` and `target="_blank"` from the work area do
+not open a second webview; the shell hands the URL to the system browser.
+
+Swapping to a native screen hides the webview, it does not remove it. Removing
+it rebuilds the webview and the person loses their page, their scroll position
+and anything half-typed.
+
+**2. One backend, one domain line per device.** The backend is single. Each
+client talks to its own host, and that host serves `/api/v1` too, so calls from
+inside the webview are same-origin — the session cookie stays `SameSite=Strict`
+and no CORS preflight is ever issued.
+
+| Client | Line | Status |
+| --- | --- | --- |
+| Browser / PWA | `nexus.gerege.mn` | ✅ live |
+| macOS | `mac.nexus.gerege.mn` | ✅ live |
+| Windows Desktop | `win.nexus.gerege.mn` | ✅ live |
+| iOS / iPadOS | `ios.nexus.gerege.mn` | ✅ live |
+| Android mobile / tablet | `android.nexus.gerege.mn` | ✅ live |
+| Kiosk | `kiosk.nexus.gerege.mn` | ✅ live |
+| POS | `pos.nexus.gerege.mn` | ✅ live |
+
+All six are covered by a `*.nexus.gerege.mn` wildcard A record and share one
+Let's Encrypt certificate.
+
+**When adding a NEW line, do not point a client at it before it resolves.** The
+app fails with `A server with the specified hostname could not be found` and
+nobody can sign in — this happened once. Do the DNS/nginx/TLS/CORS work first
+and change the client's origin constant last. The order and the exact line to
+edit are in [`shared/device_lines.json`](shared/device_lines.json)
+under `$provisioning`.
+
+Adding a line is a three-file change: [`shared/device_lines.json`](shared/device_lines.json),
+[`../frontend/lib/deviceLine.ts`](../frontend/lib/deviceLine.ts), and the deploy
+side (`DEVICE_LINE_ORIGINS` plus
+[`../deploy/nginx/device-lines.nexus.gerege.mn.conf`](../deploy/nginx/device-lines.nexus.gerege.mn.conf)).
+
+Both rules are specified in [`../docs/SHELL_CONTRACT.md`](../docs/SHELL_CONTRACT.md) §1a and §1b.
+
 ---
 
 ## 📁 Architecture Overview
@@ -11,7 +62,8 @@ native-apps/
 ├── macOS/                   # macOS Native Shell (Swift 5.10 + AppKit + WKWebView)
 │   ├── main.swift           # NSApplication Entry Point
 │   ├── AppDelegate.swift    # App Lifecycle & Native Menu Bar (Gerege Nexus, Удирдах, Харах)
-│   ├── MainWindowController.swift # NSWindow & WKWebView Integration
+│   ├── MainWindowController.swift    # The single window: ribbon, rail, pane host, footer
+│   ├── SettingsPaneViewController.swift # Settings as an in-frame NSView, not a window
 │   ├── NativeIPC.swift      # WKScriptMessageHandler Native IPC Bridge
 │   └── build.sh             # Swiftc Compilation Script
 │
@@ -24,7 +76,8 @@ native-apps/
 ├── windows/                 # Windows Native Shell (C# .NET 8 + WPF + WebView2)
 │   ├── GeregeNexusWin.csproj # .NET 8 Project File
 │   ├── App.xaml / App.xaml.cs # WPF Application Lifecycle
-│   ├── MainWindow.xaml / MainWindow.xaml.cs # Native Window & WebView2 Integration
+│   ├── MainWindow.xaml / MainWindow.xaml.cs # The single window: menu, rail, pane host, footer
+│   ├── SettingsPane.xaml / SettingsPane.xaml.cs # Settings as an in-frame UserControl
 │   └── NativeIPCBridge.cs   # CoreWebView2.WebMessageReceived IPC Bridge
 │
 ├── android/                 # Android mobile/tablet/kiosk/POS clients
@@ -32,7 +85,8 @@ native-apps/
 │   └── app/                 # Four form-factor flavors
 │
 └── shared/                  # Shared Specifications & Configurations
-    ├── app_config.json      # Platform settings & dev server URLs
+    ├── app_config.json      # Window sizing & platform notes
+    ├── device_lines.json    # Canonical platform → origin map (one backend behind all)
     └── IPC_CONTRACT.md      # Bi-directional JSON IPC Message Contract Specification
 ```
 
@@ -96,13 +150,15 @@ form-factor flavor-тай: `mobile`, `tablet`, `kiosk`, `pos`; auth state machin
 
 ## ⚡ Native Features & Principles Preserved
 
-1. **Native Login + Web Work Area**: Password and eID push are native controls. On success the shell copies `session_token` into the webview cookie store and opens `/apps`; web `/login` is never rendered in a native client.
+1. **Native Login + Web Work Area**: Password and eID push are native controls. On success the shell copies `session_token` into the webview cookie store and opens the start route; web `/login` is never rendered in a native client, and the device lines redirect it away server-side.
 2. **Native Menu Bar**:
-   - macOS Top Menu Bar (`Gerege Nexus`, `Удирдах`, `Харах`) with native shortcuts (`⌘L`, `⌘,`, `⌘R`, `⌘Q`).
+   - macOS Top Menu Bar (`Gerege Nexus`, `Удирдах`, `Харах`) with native shortcuts (`⌘L`, `⌘,`, `⌘0`, `⌘R`, `⌘Q`).
    - Windows Native Menu Bar (`Gerege Nexus`, `Удирдах`, `Харах`) with shortcuts (`Ctrl+L`, `Ctrl+,`, `F5`).
-3. **Bridge Contract v1.3**:
+3. **In-frame navigation**: a native rail (desktop) or tab bar (mobile) switches between the work area and the shell's own screens. It is deliberately *not* a copy of the tenant app menu — the work area draws that itself, and duplicating it would split one menu across two states.
+4. **Bridge Contract v1.4**:
    - `window.GeregeShell` is injected at document start, main-frame only.
    - `auth.reLogin` returns to native login; unknown methods reject.
+   - `shell.openPane` lets the work area move to a shell-owned screen without opening anything.
    - [`../docs/NATIVE_LOGIN_SPEC.md`](../docs/NATIVE_LOGIN_SPEC.md) defines the shared state machine.
 
 ## Deployment ба update суваг
