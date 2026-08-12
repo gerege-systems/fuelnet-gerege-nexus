@@ -98,7 +98,10 @@ native-apps/
 
 - iOS/iPadOS — Xcode-д `iOS/GeregeNexusIOS.xcodeproj`-ийг нээгээд `GeregeNexusIOS` scheme-ийг ажиллуулна. `project.yml` нь XcodeGen-ээр төслийг дахин үүсгэх эх файл.
 - macOS — Xcode-д `macOS/GeregeNexusNativeMac.xcodeproj`-ийг нээгээд `GeregeNexusNativeMac` scheme-ийг ажиллуулна.
-- Android — Android Studio-д `android/` хавтсыг нээнэ. Repository-д Gradle wrapper орсон тул тусдаа Gradle суулгах шаардлагагүй.
+- Android — Android Studio-д `android/` хавтсыг нээнэ. Энд `.xcodeproj` эсвэл
+  `.sln` шиг тусдаа project файл БАЙХГҮЙ нь зөв: Gradle төслийн хувьд
+  `settings.gradle.kts` бүхий хавтас нь өөрөө төсөл. Wrapper нь repository-д
+  орсон тул Gradle тусад нь суулгах шаардлагагүй.
 - Windows — Visual Studio 2022-д `windows/GeregeNexusNativeWin.sln`-ийг нээнэ. Solution дотор WPF app болон `GeregeShell.Core` хоёулаа байна.
 
 ### 1. macOS Native Shell (Swift + AppKit)
@@ -140,7 +143,14 @@ Android Studio-д `native-apps/android`-ыг нээнэ. Нэг app module дө�
 form-factor flavor-тай: `mobile`, `tablet`, `kiosk`, `pos`; auth state machine
 нь `:core` модульд байна.
 
+**Prerequisites**: Android SDK. Android Studio-гаар нээхэд `local.properties`-ыг
+өөрөө үүсгэдэг тул IDE дотор юу ч хийх шаардлагагүй. Харин **командын мөрнөөс**
+барихад тэр файл (эсвэл `ANDROID_HOME`) заавал хэрэгтэй — эс бөгөөс Gradle
+`SDK location not found` гэж шууд унана. `local.properties` нь машин бүрт өөр
+зам агуулдаг тул git-д ороогүй.
+
 ```bash
+export ANDROID_HOME="$HOME/Library/Android/sdk"   # эсвэл local.properties бичих
 ./gradlew :core:test
 ./gradlew :app:assembleMobileDebug
 ./gradlew :app:assembleTabletDebug :app:assembleKioskDebug :app:assemblePosDebug
