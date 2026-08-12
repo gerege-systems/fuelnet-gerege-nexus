@@ -17,6 +17,14 @@ import android.view.KeyEvent
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import mn.gerege.nexus.ui.brand.BrandScreen
+import mn.gerege.nexus.ui.brand.BrandSectionLabel
+import mn.gerege.nexus.ui.brand.BrandSecurityFooter
+import mn.gerege.nexus.ui.brand.LoadingPrimaryButton
+import mn.gerege.nexus.ui.theme.GeregeNexusTheme
+import mn.gerege.nexus.ui.theme.LocalGw
+import mn.gerege.nexus.ui.theme.Radius
+import mn.gerege.nexus.ui.theme.Space
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -91,7 +99,7 @@ private fun GeregeApp(auth: AuthStateMachine, webOrigin: String, apiOrigin: Stri
     val deviceToken = remember { DeviceTokenStore(context).load() }
     var authenticated by remember { mutableStateOf(BuildConfig.FORM_FACTOR == "kiosk" && deviceToken != null) }
     LaunchedEffect(phase) { if (phase is LoginPhase.Success) { authenticated = true; if(fcmToken!=null)auth.registerPushToken(fcmToken,context.packageName) } }
-    MaterialTheme(colorScheme = darkColorScheme(primary = ComposeColor(0xFF22B8B5), background = ComposeColor(0xFF0B0F17), surface = ComposeColor(0xFF111827))) {
+    GeregeNexusTheme {
         if (authenticated) WorkArea(auth, webOrigin, apiOrigin, deviceToken, biometric) { authenticated = false; auth.cancel() }
         else NativeLogin(auth, deviceToken)
     }
@@ -109,24 +117,28 @@ private fun NativeLogin(auth: AuthStateMachine, deviceToken: String?) {
     LaunchedEffect(waiting?.deviceLinkUrl) {
         if(BuildConfig.FORM_FACTOR in setOf("mobile","tablet")) waiting?.deviceLinkUrl?.let { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
     }
-    Box(Modifier.fillMaxSize().background(ComposeColor(0xFF0B0F17)).padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(Modifier.widthIn(max = if (BuildConfig.FORM_FACTOR == "tablet") 520.dp else 420.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("GEREGE / NEXUS", color = ComposeColor(0xFF62D9D4), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-            Text("Таны баталгаатай\nажлын орчин", color = ComposeColor.White, fontSize = 34.sp, lineHeight = 38.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(12.dp))
-            if(BuildConfig.FORM_FACTOR != "kiosk") { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.auth_field_email)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email));OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.auth_field_password)) }, singleLine = true, visualTransformation = PasswordVisualTransformation());Button({ auth.password(email, password) }, Modifier.fillMaxWidth().height(48.dp), enabled = phase !is LoginPhase.Starting && phase !is LoginPhase.Waiting, shape = RoundedCornerShape(8.dp)) { Text(stringResource(R.string.auth_action_admin_sign_in)) };HorizontalDivider(Modifier.padding(vertical = 10.dp)) }
+    val gw = LocalGw.current
+    BrandScreen {
+      Box(Modifier.fillMaxSize().padding(Space.xl), contentAlignment = Alignment.Center) {
+        Column(Modifier.widthIn(max = if (BuildConfig.FORM_FACTOR == "tablet") 520.dp else 420.dp), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            BrandSectionLabel("GEREGE / NEXUS")
+            Text("Таны баталгаатай\nажлын орчин", color = gw.fg1, fontSize = 34.sp, lineHeight = 38.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(Space.md))
+            if(BuildConfig.FORM_FACTOR != "kiosk") { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.auth_field_email)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email));OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.auth_field_password)) }, singleLine = true, visualTransformation = PasswordVisualTransformation());LoadingPrimaryButton(label = stringResource(R.string.auth_action_admin_sign_in), isLoading = phase is LoginPhase.Starting, isEnabled = phase !is LoginPhase.Starting && phase !is LoginPhase.Waiting, onClick = { auth.password(email, password) });HorizontalDivider(Modifier.padding(vertical = Space.sm), color = gw.divider) }
             OutlinedTextField(nationalId, { nationalId = it.uppercase() }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.auth_eid_reg_number)) }, singleLine = true)
-            Button({ auth.push(nationalId) }, Modifier.fillMaxWidth().height(48.dp), enabled = phase !is LoginPhase.Starting && phase !is LoginPhase.Waiting, shape = RoundedCornerShape(8.dp)) { Text(stringResource(R.string.auth_eid_send_request)) }
+            LoadingPrimaryButton(label = stringResource(R.string.auth_eid_send_request), isLoading = phase is LoginPhase.Starting, isEnabled = phase !is LoginPhase.Starting && phase !is LoginPhase.Waiting, onClick = { auth.push(nationalId) })
             if(BuildConfig.FORM_FACTOR in setOf("mobile","tablet")) OutlinedButton({ auth.appToApp("https://nexus.gerege.mn/auth/eid/callback") }, Modifier.fillMaxWidth(), enabled = phase !is LoginPhase.Starting && phase !is LoginPhase.Waiting) { Text(stringResource(R.string.auth_action_app_to_app)) }
             if(BuildConfig.FORM_FACTOR=="kiosk") { OutlinedButton({ auth.appToApp("") },Modifier.fillMaxWidth(),enabled=phase !is LoginPhase.Starting&&phase !is LoginPhase.Waiting){Text("eID QR үүсгэх")};waiting?.deviceLinkUrl?.let{Image(qrBitmap(it).asImageBitmap(),"eID QR",Modifier.size(220.dp).align(Alignment.CenterHorizontally))} }
             if (BuildConfig.FORM_FACTOR in setOf("pos", "tablet") && deviceToken != null) {
-                HorizontalDivider(Modifier.padding(vertical = 8.dp)); Text("Ажилтны хурдан нэвтрэлт", color = ComposeColor.White, fontWeight = FontWeight.SemiBold)
+                HorizontalDivider(Modifier.padding(vertical = Space.sm), color = gw.divider); BrandSectionLabel("АЖИЛТНЫ ХУРДАН НЭВТРЭЛТ")
                 OutlinedTextField(staffPin, { staffPin = it.filter(Char::isDigit).take(12) }, Modifier.fillMaxWidth(), label = { Text("PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                 Button({ auth.staffPin(staffPin, deviceToken) }, Modifier.fillMaxWidth(), enabled = staffPin.length >= 4 && phase !is LoginPhase.Starting) { Text(stringResource(R.string.auth_action_staff_sign_in)) }
             }
             StatusBlock(phase)
             if (phase is LoginPhase.Starting || phase is LoginPhase.Waiting) TextButton(auth::cancel, Modifier.align(Alignment.End)) { Text(stringResource(R.string.auth_action_cancel)) }
+            BrandSecurityFooter("Нууц үг дамжуулахгүй · Баталгаажуулалт eID апп дотор")
         }
+      }
     }
 }
 
@@ -142,8 +154,9 @@ private fun qrBitmap(value:String,size:Int=440):Bitmap{val matrix=QRCodeWriter()
         LoginPhase.Refused -> "Хүсэлтээс татгалзсан байна."
         is LoginPhase.Error -> phase.message
     }
-    if (text.isNotEmpty()) Surface(color = ComposeColor(0xFF172334), shape = RoundedCornerShape(8.dp)) {
-        Text(text, Modifier.fillMaxWidth().padding(16.dp), color = ComposeColor(0xFFE5E7EB))
+    val gw = LocalGw.current
+    if (text.isNotEmpty()) Surface(color = gw.surface2, shape = RoundedCornerShape(Radius.md)) {
+        Text(text, Modifier.fillMaxWidth().padding(Space.lg), color = gw.fg1)
     }
 }
 
