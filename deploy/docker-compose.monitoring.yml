@@ -102,6 +102,13 @@ services:
       - "127.0.0.1:9093:9093"
     networks:
       - monitoring
+      # And the platform's own network, so the operator console can read the
+      # firing alerts for its front page (CP-4). The direction is what makes
+      # this necessary: Prometheus joined `platform` to *scrape* the API, and
+      # this is the API reading Alertmanager. Nothing new is published — the
+      # port stays bound to loopback — the console simply reaches it by
+      # container name instead of through the host.
+      - platform
 
   # Traces. Does nothing at all until a backend is started with
   # OTEL_EXPORTER_OTLP_ENDPOINT pointing at it, which is the deployment's

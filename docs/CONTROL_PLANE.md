@@ -261,14 +261,21 @@ banner болно. Хугацаатай тул өөрөө алга болно.
 Тохируулга (заавал биш — байхгүй бол дэлгэц "тохируулаагүй" гэж хэлнэ):
 
 ```
-PROMETHEUS_URL=http://host.docker.internal:9091
-ALERTMANAGER_URL=http://host.docker.internal:9093
+PROMETHEUS_URL=http://gerege_nexus_prometheus:9090
+ALERTMANAGER_URL=http://gerege_nexus_alertmanager:9093
 GRAFANA_URL=https://nexus.gerege.mn/grafana
 ```
 
-Мониторингийн стек нь тусдаа compose бөгөөд хостын loopback дээр нийтлэгддэг
-тул `docker-compose.prod.yml` дотор backend-д `extra_hosts:
-host.docker.internal:host-gateway` мөр нэмэгдсэн.
+**Контейнерийн нэрээр**, хостын loopback-аар биш. Мониторингийн стекийн портууд
+нь `127.0.0.1`-д л нийтлэгддэг тул контейнер дотроос host gateway (172.17.0.1)
+рүү хандахад хүрэхгүй — production дээр яг үүнийг туршиж үзсэн. Prometheus нь
+API-г scrape хийхийн тулд платформын сүлжээнд аль хэдийн нэгдсэн байсан;
+Alertmanager-ыг мөн адил нэгтгэв (`deploy/docker-compose.monitoring.yml`),
+чиглэл нь эсрэг — консол түүнийг уншина. Шинээр нийтлэгдсэн порт байхгүй.
+
+`docker-compose.prod.yml` дотор backend-д `extra_hosts:
+host.docker.internal:host-gateway` мөр үлдсэн: өөр байрлалд байрлуулсан
+мониторингийн стектэй суулгацад тэр зам хэрэг болно.
 
 **Тенант бүрийн алдааны түвшин** нь Prometheus-аас БИШ, `audit_events`-ээс
 уншигдана. Учир нь Үе шат 1-д гаргасан шийдвэр: хэмжүүрт тенантын label
