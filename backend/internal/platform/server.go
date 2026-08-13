@@ -367,7 +367,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		Installer: s, Mail: s.emailVerify, TenantChanged: s.forgetSuspension,
 		Settings: s.settings, Flags: s.featureFlags,
 		Warnings: ConfigurationWarnings, CatalogStatus: s.catalogSyncStatus,
-		SyncCatalog: s.syncCatalogFromRegistry,
+		SyncCatalog:     s.syncCatalogFromRegistry,
 		PlatformVersion: PlatformVersion,
 	})
 
