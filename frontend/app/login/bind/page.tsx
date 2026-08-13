@@ -63,7 +63,7 @@ export default function BindPage(){const {t}=useI18n();
         {info&&consented&&<>
           <div><h1 className="signin-card__title">{t("auth.bind.verify_title")}</h1>
             <p className="signin-card__lede">{t("auth.bind.verify_lede")}</p></div>
-          <EIDLogin next="/apps" variant="signin" binding={binding}/>
+          <EIDLogin next="/profile" variant="signin" binding={binding}/>
         </>}
       </div>
     </section>

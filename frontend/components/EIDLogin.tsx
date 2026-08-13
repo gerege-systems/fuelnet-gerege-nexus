@@ -38,7 +38,7 @@ function clock(seconds:number){return `${Math.floor(seconds/60)}:${String(second
  * signin-card дээр аль хэдийн байгаа тул давхарлах нь утгагүй. Логик нь адилхан:
  * зөвхөн юу зурагдах нь өөр.
  */
-export default function EIDLogin({next="/apps",compact=false,variant="card",binding}:{next?:string;compact?:boolean;variant?:"card"|"signin";binding?:string}){
+export default function EIDLogin({next="/profile",compact=false,variant="card",binding}:{next?:string;compact?:boolean;variant?:"card"|"signin";binding?:string}){
   const {t}=useI18n();
   const [method,setMethod]=useState<Method>("id"),[phase,setPhase]=useState<Phase>("idle"),[nationalId,setNationalId]=useState(""),[start,setStart]=useState<Start|null>(null),[error,setError]=useState(""),[left,setLeft]=useState(0);
   // Each attempt takes a ticket. Anything asynchronous compares its ticket

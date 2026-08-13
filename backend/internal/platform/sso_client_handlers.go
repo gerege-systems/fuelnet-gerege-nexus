@@ -40,7 +40,14 @@ import (
 
 // defaultLandingPath is where somebody who signed in without asking for
 // anywhere in particular ends up.
-const defaultLandingPath = "/apps"
+//
+// Their own record rather than the app store. Somebody who just proved who
+// they are has a question the app store cannot answer — which organisation am
+// I in, and did that sign-in land where I expected — and somebody arriving by
+// a route they did not choose (a first Google sign-in, a fresh eID binding)
+// most needs to see what was linked to them. A person heading for a particular
+// screen still gets it: `next` is honoured, and this is only the fallback.
+const defaultLandingPath = "/profile"
 
 // ssoClientEnabled reports whether this deployment signs people in elsewhere.
 func (s *Server) ssoClientEnabled() bool {
