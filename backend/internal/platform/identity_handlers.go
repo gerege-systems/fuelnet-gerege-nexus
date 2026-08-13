@@ -117,7 +117,7 @@ func (s *Server) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 	s.linkEIDIdentity(r.Context(), userID, result.Identity)
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid-app")
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
+		reportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -170,7 +170,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid")
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
+		reportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -242,7 +242,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "dan")
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
+		reportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)

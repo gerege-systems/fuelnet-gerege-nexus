@@ -26,18 +26,22 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 	"github.com/go-chi/chi/v5"
@@ -98,6 +102,15 @@ type Server struct {
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
 	appGate        *memo.Cache[bool]
+	// settings and featureFlags are the two things the console can change
+	// without a deployment. Both are memory with a timer behind them; both are
+	// on the invalidation bus so a change is felt on every replica at once.
+	settings     *settings.Store
+	featureFlags *flags.Store
+	// suspended answers "is this organisation closed" without a query per
+	// request. Registered on the invalidation bus, so resuming one takes
+	// effect everywhere rather than after every replica's own TTL.
+	suspended      *memo.Cache[bool]
 	bus            *cache.Bus
 	sharedLogin    *security.SharedLimiter
 	sharedPoll     *security.SharedLimiter
@@ -105,6 +118,11 @@ type Server struct {
 	sharedVerify   *security.SharedLimiter
 	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
+	// cp is the operator console. It is a field on this server rather than a
+	// process of its own for the reason the plan gives: one binary. What keeps
+	// it separate is everything else — its own hostname, accounts, sessions,
+	// cookie, database role and audit table.
+	cp *controlplane.Service
 
 	// The last thing the catalogue sync did. An administrator pressing "check
 	// for updates" gets an answer; the hourly one leaves only a log line, and a
@@ -123,6 +141,13 @@ const appGateTTL = 30 * time.Second
 
 // appGateCacheName is what the invalidation bus knows the gate cache as.
 const appGateCacheName = "appgate"
+
+// The other two things the bus carries. Named here rather than in their own
+// packages because the names are this server's arrangement, not theirs.
+const (
+	settingsCacheName = "settings"
+	flagsCacheName    = "flags"
+)
 
 // forgetAppGate drops one tenant's cached installation answers, here and on
 // every other replica.
@@ -253,6 +278,9 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
 		appGate:        memo.New[bool](appGateTTL),
+		suspended:      memo.New[bool](suspendedTTL),
+		settings:       settings.NewStore(db),
+		featureFlags:   flags.NewStore(db),
 		bus:            bus,
 		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
@@ -290,6 +318,38 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// message can arrive as soon as the subscriber connects.
 	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
 	s.bus.Register(appGateCacheName, s.appGate)
+	s.bus.Register(suspendedCacheName, s.suspended)
+	s.bus.Register(settingsCacheName, s.settings)
+	s.bus.Register(flagsCacheName, s.featureFlags)
+	s.settings.OnChange(func() { s.bus.Invalidate(settingsCacheName, "") })
+	s.featureFlags.OnChange(func() { s.bus.Invalidate(flagsCacheName, "") })
+
+	// The process-wide stores the scattered consumers read: the idle timeout in
+	// auth, the catalogue's interval, the copilot's model, and every
+	// flags.Enabled in every module. Installed before the first request rather
+	// than lazily, so no request is served with "no store, use the environment"
+	// while a value sits in the database.
+	settings.UseStore(s.settings)
+	flags.UseStore(s.featureFlags)
+
+	// A first read, so the platform starts with what the console last decided
+	// rather than with the defaults for the first thirty seconds. A failure is
+	// not fatal — the environment and the defaults are still there — but it is
+	// worth saying, because a deployment that logs this every start has a
+	// database the settings never load from.
+	settingsCtx, cancelSettings := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := s.settings.Load(settingsCtx); err != nil {
+		slog.Warn("could not read the platform settings at startup", "error", err)
+	}
+	if err := s.featureFlags.Load(settingsCtx); err != nil {
+		slog.Warn("could not read the feature flags at startup", "error", err)
+	}
+	cancelSettings()
+
+	// Said once at startup and again on the console's home screen, because a
+	// contradiction between two pieces of configuration is exactly the thing
+	// nobody notices until it matters.
+	warnAboutConflictingConfiguration()
 
 	// Deployment-wide budgets for the endpoints where a per-replica one is not
 	// a budget at all. Each is nil without Redis, and a nil one allows.
@@ -298,6 +358,17 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	s.sharedPoll = security.NewSharedLimiter(client, "poll", pollRatePerMinute, time.Minute)
 	s.sharedAI = security.NewSharedLimiter(client, "ai", aiRatePerMinute, time.Minute)
 	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
+
+	// The console borrows two of the platform's own services: the installer,
+	// so a new organisation's apps are installed by the same code path the
+	// store uses, and the mail rail, so its first administrator can be
+	// invited. Nothing else of the platform is reachable from it.
+	s.cp = controlplane.New(db, controlplane.Deps{
+		Installer: s, Mail: s.emailVerify, TenantChanged: s.forgetSuspension,
+		Settings: s.settings, Flags: s.featureFlags,
+		Warnings: ConfigurationWarnings, CatalogStatus: s.catalogSyncStatus,
+		PlatformVersion: PlatformVersion,
+	})
 
 	s.setupRoutes()
 	return s, nil
@@ -370,6 +441,32 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.eidMN.StartHousekeeping(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
+	// Yesterday's usage, every night: what the console charts and what the AI
+	// limit is enforced against.
+	metering.New(s.db).Start(ctx)
+	// What the console can change without a deployment. Both refresh on their
+	// own timer as well as on the bus, so a deployment without Redis is at
+	// most thirty seconds behind.
+	s.settings.StartRefresh(ctx)
+	s.featureFlags.StartRefresh(ctx)
+	// The console's sessions are a separate table with the same problem, and
+	// the organisations whose grace period has ended are removed by the same
+	// call.
+	s.cp.StartHousekeeping(ctx)
+	// An impersonation whose session has expired is over; the row that says so
+	// is what both the console and the organisation read.
+	async.Go("impersonation-sweep", func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			s.endImpersonations(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	})
 	// Abandoned identity bindings hold verified claims about somebody, so they
 	// do not get to sit in the table after they stop being redeemable.
 	async.Go("identity-binding-sweep", func() {
@@ -429,15 +526,20 @@ func (s *Server) startCatalogSync(ctx context.Context) {
 	if !s.catalogSource.Remote() {
 		return
 	}
-	interval := s.catalogSource.SyncInterval()
 	async.Go("catalog-sync", func() {
-		ticker := time.NewTicker(interval)
+		// The interval is read on every round rather than captured, because it
+		// is a platform setting now: an operator who slows the polling down
+		// during a registry incident should not have to restart the platform
+		// for it to take effect. A change is felt after the current wait, which
+		// is the most anybody could reasonably expect of a poll.
+		ticker := time.NewTicker(s.catalogInterval())
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				ticker.Reset(s.catalogInterval())
 				syncCtx, cancel := context.WithTimeout(ctx, catalogLoadTimeout)
 				changed, err := s.syncCatalogFromRegistry(syncCtx)
 				cancel()
@@ -450,6 +552,36 @@ func (s *Server) startCatalogSync(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// catalogInterval is how long to wait before asking the registry again.
+//
+// The setting, then whatever the catalogue source worked out from the
+// environment at startup. A minute is the floor for the reason source.go gives:
+// below that this stops being a poll and becomes a load generator pointed at
+// somebody else's registry.
+func (s *Server) catalogInterval() time.Duration {
+	interval := settings.Duration(settings.CatalogSyncInterval)
+	if interval <= 0 {
+		interval = s.catalogSource.SyncInterval()
+	}
+	if interval < time.Minute {
+		interval = time.Minute
+	}
+	return interval
+}
+
+// catalogSyncStatus is what the console shows about the catalogue: when it was
+// last fetched, whether that worked, and why not.
+func (s *Server) catalogSyncStatus() (time.Time, bool, string) {
+	s.syncMu.RLock()
+	defer s.syncMu.RUnlock()
+	// A deployment in file mode has never synced and never will, which is not
+	// a failure — it is what "no registry configured" looks like.
+	if s.lastSyncAt.IsZero() && !s.catalogSource.Remote() {
+		return time.Time{}, true, "the catalogue comes from the bundled file"
+	}
+	return s.lastSyncAt, s.lastSyncOK, s.lastSyncErr
 }
 
 // recordSync remembers how the last attempt went.
@@ -584,6 +716,16 @@ func (s *Server) setupRoutes() {
 	// Prometheus Metrics Endpoint
 	r.Handle("/metrics", observability.MetricsHandler())
 
+	// The operator console (docs/CONTROL_PLANE_PLAN.md).
+	//
+	// Mounted unconditionally, and closed by its own first middleware rather
+	// than by leaving the routes off: a route table that changes shape with the
+	// environment is one where "is the console reachable" has a different
+	// answer in production from the one the tests exercise. HostGate answers
+	// 404 for every request that did not arrive on the console's hostname,
+	// which on this deployment is every request that is not an operator's.
+	r.Route("/cp/api", s.cp.Routes)
+
 	// OpenID Connect Provider & OAuth2 Authorization Server.
 	//
 	// These sit at the root rather than under /api/, which is where the
@@ -608,6 +750,21 @@ func (s *Server) setupRoutes() {
 
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
+		// The two journeys that begin in the operator console and finish here,
+		// on the hostname the person actually uses. Both are unauthenticated
+		// by necessity — somebody choosing a password has no session, and an
+		// operator's console session means nothing on this host — and both
+		// are single-use tokens with short lives (see access_recovery.go).
+		//
+		// Rate limited with the sign-in budget: they are credential
+		// endpoints, and a token that can be guessed quickly is a token that
+		// can be guessed.
+		api.Group(func(recovery chi.Router) {
+			recovery.Use(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin))
+			recovery.Get("/auth/credential", s.handleCredentialCheck)
+			recovery.Post("/auth/credential/redeem", s.handleCredentialRedeem)
+			recovery.Post("/auth/impersonation/redeem", s.handleImpersonationRedeem)
+		})
 		// Auth with rate limiting
 		// Every path by which this deployment establishes an identity of its
 		// own. On a deployment that federates, requireLocalLogin closes all of
@@ -750,12 +907,12 @@ func (s *Server) setupRoutes() {
 			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
 			// AI Copilot & Forecasting
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/copilot", s.handleAICopilot)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/chat", s.handleAIChat)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/stt", s.handleAISTT)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/tts", s.handleAITTS)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/translate", s.handleAITranslate)
-			pr.Get("/ai/stock-forecast", s.handleAIForecast)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/copilot", s.handleAICopilot)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/chat", s.handleAIChat)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/stt", s.handleAISTT)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/tts", s.handleAITTS)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/translate", s.handleAITranslate)
+			pr.With(s.aiQuota).Get("/ai/stock-forecast", s.handleAIForecast)
 			pr.With(s.requireAdmin).Get("/admin/ai/prompts", s.handleAIListPrompts)
 			pr.With(s.requireAdmin).Put("/admin/ai/prompts/{key}", s.handleAIUpdatePrompt)
 			pr.With(s.requireAdmin).Get("/admin/ai/knowledge", s.handleAIListKnowledge)

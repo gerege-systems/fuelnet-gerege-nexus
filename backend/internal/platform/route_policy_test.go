@@ -66,6 +66,16 @@ var publicRoutes = []string{
 	"/api/v1/auth/eid/start-id",
 	"/api/v1/auth/eid/poll",
 	"/api/v1/auth/dan/login",
+	// Choosing a password from an invitation or a reset, and stepping into an
+	// organisation as an operator. Both journeys begin in the control plane,
+	// on a hostname behind an address allowlist, and finish here — where the
+	// person has no session yet and the operator's console session means
+	// nothing. What authorises each is a single-use token: 256 bits, stored as
+	// a digest, claimed with a conditional UPDATE, and short-lived (an hour
+	// for a handover, a day for a password link). See access_recovery.go.
+	"/api/v1/auth/credential",
+	"/api/v1/auth/credential/redeem",
+	"/api/v1/auth/impersonation/redeem",
 
 	// Signing in through the provider this deployment is a client of, when it
 	// is one. Each carries its own authority rather than a session: the config

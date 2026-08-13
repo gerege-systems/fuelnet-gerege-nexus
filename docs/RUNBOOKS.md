@@ -713,3 +713,148 @@ docker compose -f deploy/docker-compose.monitoring.yml \
 
 **Өргөжүүлэх.** Шаардлагагүй. Гэхдээ энэ байдалтай ослыг мөрдөх нь хэд
 дахин хэцүү болно гэдгийг санаж, эхэлж зас.
+
+---
+
+## Операторын консол
+
+Консолын дохионууд бусдаасаа өөр асуулт тавьдаг: "систем эрүүл үү" биш,
+"хэн нэгэн орох гэж оролдож байна уу". Консол нь nginx-ийн хаягийн
+жагсаалтын ард байдаг тул эдгээр оролдлого нь **зөвшөөрөгдсөн сүлжээнээс**
+ирж байна — гаднаас ирсэн бол энэ хүртэл хүрэхгүй байсан.
+
+### NexusControlPlaneLoginFailures
+
+**Юу болсон.** 15 минутын дотор консол руу 5-аас олон удаа амжилтгүй нэвтрэх
+оролдлого болов.
+
+**Эхний 5 минут.**
+
+1. Шалтгааныг ялга — Prometheus дээр:
+   ```
+   sum by (result) (increase(cp_login_attempts_total[1h]))
+   ```
+   - `bad_password` давамгайлж байвал → нууц үг тааж байна.
+   - `bad_code` давамгайлж байвал → нууц үг нь **зөв** байж болзошгүй, зөвхөн
+     хоёр дахь хүчин зүйл нь зогсоож байна. Энэ нь илүү яаралтай.
+   - `unknown` давамгайлж байвал → байхгүй и-мэйл хаягуудыг оролдож байна:
+     жагсаалт таамаглаж байгаа хэрэг.
+   - `no_second_factor` → bootstrap тасалдсан бүртгэл байна. §3.4-ийг үз.
+2. Аль хаягнаас ирснийг:
+   ```bash
+   grep '/cp/api/session' /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head
+   ```
+3. Тэр хаяг хэний вэ? `cp-allowlist.conf` дотор хэн байгааг хар.
+
+**Засах.**
+
+- Оператор өөрөө андуурсан бол → түгжээ 15 минутын дараа өөрөө тайлагдана.
+  Яаралтай бол DB-ээс:
+  ```sql
+  UPDATE operator_accounts SET failed_login_attempts = 0, locked_until = NULL
+   WHERE lower(email) = lower('...');
+  ```
+- Танихгүй хаяг бол → тэр хаягийг `cp-allowlist.conf`-оос хас, nginx reload.
+  Дараа нь тухайн сүлжээнд юу болж байгааг шалга: жагсаалтад байгаа хаягнаас
+  оролдлого ирсэн нь тэр машин эсвэл VPN-ийн бүртгэл алдагдсан гэсэн үг.
+- `bad_password` олон боловч дараа нь `success` гарсан бол → тэр session-ыг
+  `operator_audit`-аас шалга: хэн, хаанаас, юу хийсэн.
+
+**Өргөжүүлэх.** `bad_code` олноор гарсан, эсвэл амжилтгүйн дараа амжилттай
+нэвтрэлт болсон бол — тухайн операторт **утсаар** холбогдож, өөрөө мөн эсэхийг
+асуу. Тийм биш бол бүх session-ыг цуцалж, нууц үг ба TOTP-ийг дахин үүсгэ.
+
+### NexusControlPlaneLockout
+
+**Юу болсон.** Аль хэдийн түгжигдсэн бүртгэл рүү оролдлого үргэлжилж байна.
+Хүн андуурсан бол зогсдог; үргэлжилж байгаа нь автоматжуулсан оролдлого.
+
+**Эхний 5 минут.**
+
+1. Дээрхтэй ижил — аль бүртгэл, аль хаягнаас.
+2. `operator_audit`-д тэр бүртгэлээр амжилттай юу болсныг шалга:
+   ```sql
+   SELECT created_at, action, ip FROM operator_audit
+    WHERE operator_email = '...' ORDER BY created_at DESC LIMIT 50;
+   ```
+
+**Засах.**
+
+1. Хаягийг `cp-allowlist.conf`-оос **шууд хас**, `nginx -t && systemctl reload nginx`.
+2. Бүртгэлийг идэвхгүй болго:
+   ```sql
+   UPDATE operator_accounts SET disabled_at = NOW() WHERE lower(email) = lower('...');
+   UPDATE operator_sessions SET revoked_at = NOW()
+    WHERE operator_id = (SELECT id FROM operator_accounts WHERE lower(email) = lower('...'))
+      AND revoked_at IS NULL;
+   ```
+3. Бусад операторуудад мэдэгд.
+
+**Өргөжүүлэх.** Шууд. Энэ бол хамгийн эрхтэй интерфэйс рүү чиглэсэн
+үргэлжилсэн оролдлого бөгөөд аль хэдийн дотоод сүлжээнд байгаа хэн нэгнээс
+ирж байна.
+
+### NexusBreakGlassUsed
+
+**Юу болсон.** Онцгой байдлын (break-glass) операторын бүртгэлээр консол руу
+нэвтэрлээ. Энэ бүртгэлийн нууц үг офлайн сейфэнд байдаг бөгөөд ердийн үед
+хэзээ ч хэрэглэгддэггүй.
+
+**Эхний 5 минут.**
+
+1. **Хэн нээв?** Сейфийг хариуцагчаас утсаар асуу — мессежээр биш.
+2. Хаанаас:
+   ```bash
+   docker logs gerege_nexus_api 2>&1 | grep "BREAK GLASS"
+   ```
+   Мөр нь и-мэйл ба IP-г агуулна.
+3. Тэр session юу хийснийг:
+   ```sql
+   SELECT created_at, action, target_type, target_id, reason, ip
+     FROM operator_audit
+    WHERE operator_email = '<break-glass email>'
+    ORDER BY created_at DESC LIMIT 100;
+   ```
+
+**Засах.**
+
+- **Төлөвлөгөөт бол** (бүх superadmin-ий TOTP алдагдсан г.м.): ажил дууссаны
+  дараа нууц үгийг нь ЗААВАЛ солиж, сейфэнд шинээр хийнэ. Дараа нь энгийн
+  superadmin бүртгэлүүдийг сэргээ.
+- **Төлөвлөгөөт биш бол** — зөвшөөрөлгүй хандалт гэж үз:
+  ```sql
+  UPDATE operator_accounts SET disabled_at = NOW() WHERE break_glass;
+  UPDATE operator_sessions SET revoked_at = NOW() WHERE revoked_at IS NULL;
+  ```
+  Дараа нь `cp-allowlist.conf`-оос танихгүй хаягийг хас, nginx-ийг reload
+  хийж, `operator_audit`-ыг бүхэлд нь шалга.
+
+**Өргөжүүлэх.** Шууд, хэн нэгнийг сэрээж. Энэ бол платформын хамгийн эрхтэй
+хаалга бөгөөд дуут дохио нь зориудаар чанга.
+
+### NexusControlPlaneUnrecordedWrite
+
+**Юу болсон.** Консолын хүсэлт 500 буцаалаа. Хамгийн магадлалтай шалтгаан нь
+`RequireAudit` — `Service.Do`-г тойрч бичсэн handler-ийн хариуг барьсан.
+
+**Эхний 5 минут.**
+
+```bash
+docker logs gerege_nexus_api 2>&1 | grep -i "without an audit record"
+docker logs gerege_nexus_api 2>&1 | grep -i "control plane:" | tail -30
+```
+
+- "answered successfully without an audit record" → кодын алдаа. Тухайн
+  handler `Do`-г ашиглах ёстой. Мөрөнд бичигдсэн `path` нь хаанаас хайхыг
+  хэлнэ.
+- "is not available (run the migrations up to 00049_control_plane)" → миграц
+  ажиллаагүй. `docker compose ... run --rm migrate up`.
+- "permission denied for table ..." → operator role-д тухайн хүснэгтийн эрх
+  олгогдоогүй. Энэ нь **зөв ажиллаж буй** хамгаалалт: query нь тэр хүснэгтийг
+  унших ёстой эсэхийг эхлээд шийд, дараа нь миграцаар тодорхой нэмнэ.
+
+**Засах.** Кодын алдаа тул засвар нь commit. Түр зуурын тойрох арга байхгүй —
+audit-гүй бичилтийг зөвшөөрөх нь энэ давхаргын утгыг бүхэлд нь алдагдуулна.
+
+**Өргөжүүлэх.** Ажлын өдөр. Гэхдээ өгөгдлийн санд ул мөргүй өөрчлөлт орсон
+байж болзошгүй тул тухайн үйлдлийг гараар шалга.

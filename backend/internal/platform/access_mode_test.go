@@ -1,0 +1,213 @@
+package platform
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// CP-3 item 0, against a real database: in private mode nobody is provisioned
+// however they authenticate, switching to public takes effect without a
+// restart, and the sign-in screen is told which mode it is looking at.
+//
+// These use the real provisioning functions rather than the check they call,
+// because the failure being guarded against is somebody adding a third way
+// into the platform that does not consult the mode — and a test of
+// mayProvisionAccount alone would pass while that happened.
+
+// accessModeServer builds a server with a settings store on the test database,
+// and puts the platform in a known mode.
+func accessModeServer(t *testing.T, mode string) (*Server, *pgxpool.Pool) {
+	t.Helper()
+	pool := lockoutPool(t)
+
+	store := settings.NewStore(pool)
+	settings.UseStore(store)
+	t.Cleanup(func() { settings.UseStore(nil) })
+
+	setMode(t, pool, store, mode)
+	return &Server{db: pool, settings: store}, pool
+}
+
+// setMode writes the access mode and reloads, which is what the console's own
+// write does after it commits.
+func setMode(t *testing.T, pool *pgxpool.Pool, store *settings.Store, mode string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO platform_settings (key, value) VALUES ($1, $2)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		settings.AccessMode, mode); err != nil {
+		t.Fatalf("write the access mode: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM platform_settings WHERE key = $1`, settings.AccessMode)
+	})
+	if err := store.Load(context.Background()); err != nil {
+		t.Fatalf("load the settings: %v", err)
+	}
+	if got := settings.Get(settings.AccessMode); got != mode {
+		t.Fatalf("the mode is %q after writing %q", got, mode)
+	}
+}
+
+// A first sign-in through eID creates nobody while the platform is private.
+func TestAPrivatePlatformProvisionsNobodyThroughEID(t *testing.T) {
+	server, pool := accessModeServer(t, settings.AccessPrivate)
+
+	// A provisioning tenant is configured, so the only thing standing between
+	// this identity and a new account is the mode.
+	slug := fmt.Sprintf("jit-%d", time.Now().UnixNano())
+	var tenantID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).
+		Scan(&tenantID); err != nil {
+		t.Fatalf("create the provisioning organisation: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, tenantID)
+	})
+	t.Setenv("EID_JIT_TENANT_SLUG", slug)
+	t.Setenv("EID_RP_SECRET", "test-linking-key")
+
+	identity := &eid.EIDIdentity{
+		CivilID:   fmt.Sprintf("ЖИТ%d", time.Now().UnixNano()),
+		FirstName: "Бат",
+		LastName:  "Дорж",
+	}
+
+	if _, _, err := server.resolveOrProvisionEIDUser(context.Background(), identity); err == nil {
+		t.Fatal("a private platform provisioned an account through eID")
+	} else {
+		var visible signInError
+		if !errors.As(err, &visible) {
+			t.Fatalf("the refusal is not one the person can be shown: %v", err)
+		}
+	}
+
+	var people int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM memberships WHERE tenant_id = $1::uuid`, tenantID).Scan(&people); err != nil {
+		t.Fatalf("count the members: %v", err)
+	}
+	if people != 0 {
+		t.Fatalf("%d accounts were created while the platform was private", people)
+	}
+}
+
+// The same through a federated provider, which is the other way in.
+func TestAPrivatePlatformProvisionsNobodyThroughSSO(t *testing.T) {
+	server, pool := accessModeServer(t, settings.AccessPrivate)
+
+	slug := fmt.Sprintf("sso-jit-%d", time.Now().UnixNano())
+	var tenantID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).
+		Scan(&tenantID); err != nil {
+		t.Fatalf("create the provisioning organisation: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, tenantID)
+	})
+
+	config := ssoclient.Config{Issuer: "https://provider.example", TenantSlug: slug}
+	identity := &ssoclient.Identity{
+		Subject: fmt.Sprintf("subject-%d", time.Now().UnixNano()),
+		Email:   fmt.Sprintf("stranger-%d@example.mn", time.Now().UnixNano()),
+		Name:    "A Stranger",
+	}
+
+	if _, _, err := server.resolveOrProvisionSSOUser(context.Background(), config, identity); err == nil {
+		t.Fatal("a private platform provisioned an account through a federated provider")
+	}
+
+	var people int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM memberships WHERE tenant_id = $1::uuid`, tenantID).Scan(&people); err != nil {
+		t.Fatalf("count the members: %v", err)
+	}
+	if people != 0 {
+		t.Fatalf("%d accounts were created while the platform was private", people)
+	}
+}
+
+// Switching to public takes effect on the next request, with no restart — the
+// property that makes this a setting rather than an environment variable.
+func TestSwitchingToPublicOpensProvisioningWithoutARestart(t *testing.T) {
+	server, pool := accessModeServer(t, settings.AccessPrivate)
+
+	slug := fmt.Sprintf("open-%d", time.Now().UnixNano())
+	var tenantID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).
+		Scan(&tenantID); err != nil {
+		t.Fatalf("create the provisioning organisation: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, tenantID)
+	})
+
+	config := ssoclient.Config{Issuer: "https://provider.example", TenantSlug: slug}
+	identity := &ssoclient.Identity{
+		Subject: fmt.Sprintf("subject-%d", time.Now().UnixNano()),
+		Email:   fmt.Sprintf("newcomer-%d@example.mn", time.Now().UnixNano()),
+		Name:    "A Newcomer",
+	}
+
+	if _, _, err := server.resolveOrProvisionSSOUser(context.Background(), config, identity); err == nil {
+		t.Fatal("the platform was open while private")
+	}
+
+	// The same process, the same objects, one row changed.
+	setMode(t, pool, server.settings, settings.AccessPublic)
+
+	userID, gotTenant, err := server.resolveOrProvisionSSOUser(context.Background(), config, identity)
+	if err != nil {
+		t.Fatalf("a public platform refused to provision: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1::uuid`, userID)
+	})
+	if gotTenant != tenantID {
+		t.Fatalf("the account landed in %s, want %s", gotTenant, tenantID)
+	}
+}
+
+// The sign-in screen has to know, or it offers a way in that this deployment
+// will refuse.
+func TestTheSignInConfigurationReportsTheMode(t *testing.T) {
+	server, pool := accessModeServer(t, settings.AccessPrivate)
+
+	read := func() string {
+		recorder := httptest.NewRecorder()
+		server.handleSSOConfig(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("the configuration endpoint answered %d", recorder.Code)
+		}
+		var body struct {
+			AccessMode string `json:"access_mode"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return body.AccessMode
+	}
+
+	if got := read(); got != settings.AccessPrivate {
+		t.Fatalf("the configuration reports %q", got)
+	}
+	setMode(t, pool, server.settings, settings.AccessPublic)
+	if got := read(); got != settings.AccessPublic {
+		t.Fatalf("the configuration still reports %q after the switch", got)
+	}
+}

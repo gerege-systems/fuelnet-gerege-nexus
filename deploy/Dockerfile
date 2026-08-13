@@ -45,6 +45,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
         -o /bin/catalog-diff ./cmd/catalog-diff
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
         -o /bin/publish-catalog ./cmd/publish-catalog
+# The control plane has no sign-up screen, so the first operator account is
+# made with this — on the host, by somebody who already holds the database
+# credentials. It has to be in the image for the same reason as the tools
+# above: the production host has a Docker daemon and nothing else.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/operator-bootstrap ./cmd/operator-bootstrap
 
 
 # Production Alpine image
@@ -72,6 +78,7 @@ COPY --from=builder /bin/migrate /app/migrate
 COPY --from=builder /bin/appstore-import /app/appstore-import
 COPY --from=builder /bin/catalog-diff /app/catalog-diff
 COPY --from=builder /bin/publish-catalog /app/publish-catalog
+COPY --from=builder /bin/operator-bootstrap /app/operator-bootstrap
 # App-store catalog + goose migrations are read from disk at runtime.
 COPY catalog/ /app/catalog/
 COPY backend/db/migrations/ /app/db/migrations/

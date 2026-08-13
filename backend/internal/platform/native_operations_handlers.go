@@ -79,7 +79,7 @@ func (s *Server) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
 	}
 	token, expires, err := s.issueSession(r, userID, device.TenantID, "staff-pin")
 	if err != nil {
-		httpx.Error(w, 500, "failed to establish staff session")
+		reportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expires)

@@ -15,6 +15,241 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — The break-glass account, and the storage limit that refuses
+
+The last two things the design document asked for and the phases had not
+delivered.
+
+- **Break-glass** (§2.4 of the plan): one emergency operator account whose
+  password lives in a safe. It grants nothing extra — the same password and the
+  same authenticator as everybody — and the whole of it is what happens when it
+  is used: an ERROR log line naming who and from where, a metric of its own, a
+  `severity: page` alert on that metric, and its own action in the operator
+  audit. A locked door with an alarm on it rather than a hidden one. The
+  database permits exactly one such account, because the second one becomes
+  somebody's ordinary login and the alarm starts crying wolf.
+- **The storage limit now refuses.** CP-2 recorded it and CP-5 measured it;
+  this is the check, at the one place on the platform where a file of any size
+  is kept. It compares against the last nightly measurement rather than summing
+  every blob on each upload — a storage quota is a commercial boundary, and the
+  disk alert is what protects the platform.
+- The metering query for storage now sums `esign_documents.byte_size`, a column
+  the upload already writes, rather than measuring the blobs themselves.
+
+### Added — Counting what each organisation used, from the database rather than from the metrics
+
+CP-5, the last phase of the control plane. `usage_events` holds one row per
+organisation per metric per day, written by a job that runs nightly and again
+during the day, so the console is never showing yesterday's picture to somebody
+looking at it after lunch.
+
+- **Not from Prometheus, deliberately.** The first phase decided that no metric
+  would ever carry a tenant label, because a label whose values are customers
+  is a series count that only grows. The bill for that decision comes due here
+  and is paid in SQL — and arguably at a profit, because what gets counted is
+  *acts recorded in the audit trail* rather than HTTP requests, which is what a
+  usage line should be based on in the first place.
+- **Not an event per request.** A row per API call is a table nobody can query
+  by the second month. What is stored is the day's total, and re-running a
+  day's collection rewrites it rather than doubling it.
+- **Two of the five metrics are not sums, and nothing sums them.** Active people
+  is a peak — adding daily actives over a month counts the same person thirty
+  times — and storage is a reading, where a sum would be a number that never
+  goes down. The screen labels them accordingly.
+- **The console reads usage and cannot write it.** `usage_events` is granted to
+  the operator role for SELECT alone, so there is no console request that can
+  change a number a bill might rest on. That is the first question anybody asks
+  of a metering system in a dispute, and the answer should be a grant rather
+  than a promise.
+- The monthly AI limit CP-2 could only record is now enforced against these
+  numbers, in middleware rather than in each of the six AI handlers, answering
+  429 — the allowance is spent, not the request forbidden. Storage remains
+  measured and shown as not-yet-enforced, because refusing an upload means a
+  check on every upload path and the screen should not imply one that is not
+  there.
+
+### Added — A front page that answers "is the platform well", and the platform's first backup
+
+CP-4. The console's home screen is now the deployment's health — requests,
+errors, latency, the government systems' lights, what is alerting, the disk,
+which background jobs have quietly stopped, what version is running — and the
+organisation list moved to its own page. Every panel links into Grafana, and
+none of it tries to replace Grafana.
+
+- **This platform had no backups.** Not a gap in the console: a gap in the
+  platform. `deploy/scripts/backup.sh` takes a `pg_dump`, prunes what is older
+  than a fortnight, and — the part that matters — writes the outcome into
+  `platform_backups` whether it worked or not, because a cron job that fails
+  silently is discovered on the morning somebody needs it. The console shows
+  the last backup, its size, and the date of the last *restore test*, which is
+  recorded by hand: an untested backup is not a backup, and the only way to
+  know one has been tested is that somebody says so.
+- **The deploy button asks GitHub, and can do nothing else.** It dispatches the
+  workflow this repository already has, with a fine-grained token scoped to
+  that workflow, behind a superadmin capability and a second factor — and it
+  hands back the link to the run rather than polling somebody else's API for
+  ten minutes. No shell, no `docker exec`, no environment editing: the plan
+  lists all three among the things this console deliberately does not have.
+- **Per-organisation error rates come from the audit trail, not from
+  Prometheus**, because the very first phase decided that no metric would ever
+  carry a tenant label. That decision has a price and this is it — paid
+  deliberately, and arguably at a profit, since what an operator wants to know
+  is whose *work* is failing.
+- Every panel degrades on its own. A Prometheus that is down leaves the alerts,
+  the jobs, the backups and the versions intact, and a deployment with no
+  monitoring stack at all gets a page that says so rather than a page of zeroes
+  that reads as "everything is fine". NaN — what PromQL returns when it divides
+  by nothing — is read as zero rather than reaching a screen.
+
+### Added — A platform that can be told to behave differently, without a deploy
+
+CP-3, and the setting it exists for: **this platform is private by default**.
+Until now, whether a stranger who could authenticate somewhere else became a
+user here was decided by which environment variables happened to be set —
+`EID_JIT_TENANT_SLUG` in one file, `SSO_CLIENT_TENANT` in another, read by two
+packages, with no single place that answered "can somebody get in".
+
+- **`platform.access_mode`.** One check, at the one thing every provisioning
+  path does — create an account — and it is closed unless somebody says
+  otherwise. Signing in as an existing user is untouched; so is an invitation,
+  because being invited *is* the registration. The sign-in screen reads the
+  mode and explains itself rather than letting people discover it by failing,
+  and switching to public takes effect on the next request with no restart.
+- **Settings that cannot hold a secret.** Every key is declared in Go with a
+  kind, a default, a validation and the environment variable it still falls
+  back to. There is no `secret` kind — not "should not be used", does not
+  exist — and `Register` panics on a key that reads like one, so a credential
+  cannot reach a table an operator can edit. A row whose key is not declared is
+  ignored, so writing to the table is not a way to introduce behaviour.
+- **Every change has a reason, a history and one button back.** The rollback is
+  itself a change: it writes a new history row rather than removing the one it
+  undoes, because a history that can be rewound is a history somebody can edit.
+  Values reach the running platform through a thirty-second refresh *and* the
+  invalidation bus, so a change is felt everywhere at once where Redis is
+  present and within half a minute where it is not.
+- **Feature flags with an expiry that is a reminder, not a switch.** Kinds
+  (release, kill switch, experiment), per-organisation overrides, and a
+  percentage rollout keyed on a stable hash — an organisation inside 10% is
+  still inside 50%, and two flags at the same percentage select different
+  organisations. Flags that have outlived their date keep working and appear as
+  a warning on the configuration screen, which is the only thing that ever
+  clears flag debt. A module's kill switch is a naming convention rather than
+  new machinery: `module.<app id>.disabled`.
+- **Maintenance and announcements.** Read-only for the platform or for one
+  organisation, refusing writes with 503 while leaving every read and the way
+  out working. Announcements carry their own expiry and arrive with `/me`, so
+  the shell shows a banner without a second thing to poll.
+- The first four settings — the access mode, the session idle timeout, the
+  catalogue's sync interval and the AI model — are read where they are used
+  rather than captured at startup, so changing them means changing them.
+
+### Fixed
+
+- Creating an organisation from the console could not have worked on a
+  deployment with the row-level grants applied: the trigger that seeds a
+  tenant's roles writes `role_permissions`, and the first administrator's
+  account needs `INSERT` on `users`, neither of which the console's role held.
+  Both were found by CP-3's integration tests rather than by a customer, which
+  is the argument for narrow grants: a forgotten one fails loudly.
+
+### Added — Operating an organisation from the console, without being able to take it
+
+CP-2 gives the console the buttons CP-1 deliberately withheld: creating an
+organisation, closing one, deleting one, helping somebody back into their
+account, and — with a reason and a banner — looking at the platform as they see
+it. Everything in it is shaped by one rule: an operator should be able to do
+their job without being able to do quiet damage.
+
+- **Nothing is sudden.** Suspension is reversible and ends every live session in
+  the same transaction. Deletion is not a button: one superadmin asks, a
+  *different* one agrees — the database refuses a self-approval with a CHECK
+  constraint, not just the Go code — and only then does a thirty-day countdown
+  start, cancellable throughout. The console holds no DELETE privilege on any
+  table; a sweep on the platform path removes the rows when the time comes.
+- **The console cannot change a password.** It sends a link. Migration `00050`
+  grants it UPDATE on exactly two columns of `users` — the lockout counter and
+  its expiry — so a support handler that tried to write a password hash is
+  refused by PostgreSQL. The platform had no password-reset flow at all before
+  this; invitations and resets now share one single-use, 24-hour token, sent
+  through the mail rail the platform already had.
+- **Impersonation, made impossible to do quietly.** A typed reason, the second
+  factor again, thirty minutes, an amber banner the session itself drives, and
+  two audit trails — ours and the organisation's own, which their
+  administrators can read. A single-use sixty-second handover carries it across
+  the hostname boundary, because a cookie cannot. A suspended organisation
+  cannot be entered this way.
+- **Limits.** `tenant_quotas` records people, storage and AI calls per
+  organisation, soft (warns) or hard (refuses). Only the user count is enforced
+  today, because it is the only one this platform can count; the screen says so
+  rather than implying otherwise, and CP-5's metering is what switches the
+  other two on.
+- Creating an organisation installs its apps through the platform's own
+  installer — the same path the store uses, with its dependency resolution —
+  and reports which ones did not land instead of throwing the organisation
+  away. Its first administrator gets an invitation, never a password an
+  operator chose.
+- The four operator roles are not a ladder: `operator` can open an organisation
+  and cannot look inside one; `support` is the other way round. The whole
+  authorization model is one map in `operator.go`.
+
+### Added — A console for operating the platform, kept away from the platform
+
+Somebody has to be able to see which organisations exist, which apps they run
+and what has been done to them — and until now that somebody used `psql`. This
+is the first phase of the operator console described in
+[`docs/CONTROL_PLANE_PLAN.md`](docs/CONTROL_PLANE_PLAN.md): the foundation, on
+which suspension, support and configuration are built next. Guide in
+[`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md).
+
+- **One binary, nothing else shared.** The console is `/cp/api` on the same Go
+  process and `/cp` on the same Next.js build, because a second service would
+  double the deployment and the monitoring for a console two people use. It
+  shares nothing else: its own hostname, accounts, sessions, cookie, database
+  role and audit table. A tenant administrator's account being taken reaches
+  none of it.
+- **Three layers to reach it, none trusting another.** nginx serves
+  `cp.nexus.gerege.mn` behind an address allowlist that ships denying everyone;
+  the API and the frontend both answer **404** — not 403, which would confirm
+  something is there — to a request on any other hostname; and sign-in needs a
+  password *and* an authenticator code. `CONTROL_PLANE_HOST` unset in
+  production means the console does not exist, which is the safe reading of a
+  variable nobody set.
+- **The console cannot write.** Migration `00049` gives it a database role of
+  its own with SELECT on ten named tables and read-only policies to match — so
+  "the operator sees every organisation" is a list of permissions rather than a
+  switch that turns row-level security off. A table nobody granted is a table
+  the console cannot read, and a new one does not become visible by existing.
+- **A write that was not recorded did not happen.** Every console write goes
+  through one function that puts the change and its `operator_audit` row in the
+  *same transaction*, and the middleware above it withholds the response —
+  headers, cookies and all — from any write that answered successfully without
+  an audit row. The table refuses UPDATE and DELETE at the database, by trigger,
+  including from the role that owns it.
+- **A code works once.** The time step of every accepted TOTP is stored and must
+  strictly increase, so a code read over somebody's shoulder within its thirty
+  seconds is already spent. Verified against RFC 6238's own test vectors.
+- **No sign-up screen, ever.** The first operator is created by
+  `operator-bootstrap` on the host, by somebody who already holds the database
+  credentials — no default password, no first-run page, no environment variable
+  left behind. The account cannot sign in until a code from its authenticator is
+  confirmed, so an interrupted setup leaves a locked door rather than a
+  password-only one.
+- Sessions last 8 hours and end after 30 minutes idle, against the platform's
+  12 and 90; step-up re-confirms the second factor for five minutes before a
+  dangerous action, and is mounted on nothing yet because nothing dangerous
+  exists yet.
+- `cp_login_attempts_total{result}` counts sign-in attempts by outcome, apart
+  from `logins_total`: platform sign-ins fail all day because people mistype
+  passwords, while a dozen failures against the console in an hour is somebody
+  trying.
+
+### Fixed
+
+- The CSRF middleware defended the tenant session cookie and would not have
+  defended the console's, which was introduced in the same change. Both are
+  named in one place now, so the next cookie-authenticated surface is a line
+  there rather than a hole.
+
 ### Added — One organisation seeing another's report, with their permission
 
 A coal mine contracts a hundred transport companies. Each keeps its trips in its

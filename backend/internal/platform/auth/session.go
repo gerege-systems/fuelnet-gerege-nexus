@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,11 @@ const touchInterval = time.Minute
 
 // IdleTimeoutFromEnv reads SESSION_IDLE_TIMEOUT as a Go duration ("45m", "2h").
 // An unset or unreadable value gives the default; "0" turns it off.
+//
+// Still exported and still reading the environment, because the environment is
+// still the fallback — but the value the platform actually uses now comes from
+// idleTimeout below, which asks the settings registry first. A deployment that
+// only sets the variable behaves exactly as it did.
 func IdleTimeoutFromEnv() time.Duration {
 	raw := strings.TrimSpace(os.Getenv("SESSION_IDLE_TIMEOUT"))
 	if raw == "" {
@@ -58,6 +64,23 @@ func IdleTimeoutFromEnv() time.Duration {
 		return DefaultIdleTimeout
 	}
 	return parsed
+}
+
+// idleTimeout is what Resolve enforces, read per request rather than captured
+// at construction.
+//
+// Per request because the point of making it a setting is that changing it
+// takes effect — an operator who shortens the timeout during an incident
+// should not have to restart the platform to mean it. The read is a map lookup
+// behind a read lock, which is what the store exists to make cheap.
+func (s *SessionStore) idleTimeout() time.Duration {
+	if settings.Default == nil {
+		// No store: the value captured at construction, which is the
+		// environment or the default. This is every test and the first moments
+		// of a process.
+		return s.idle
+	}
+	return settings.Duration(settings.SessionIdleTimeout)
 }
 
 var ErrSessionInvalid = errors.New("session is invalid or expired")
@@ -83,6 +106,17 @@ func NewSessionStore(db *pgxpool.Pool, ttl time.Duration) *SessionStore {
 	}
 	return &SessionStore{db: db, ttl: ttl, idle: IdleTimeoutFromEnv()}
 }
+
+// HashSessionToken is the digest a session row is found by.
+//
+// Exported because the control plane's impersonation writes a session row of
+// its own — with an expiry and an operator id this store knows nothing about —
+// and it must produce exactly the digest Resolve looks for. A second hashing
+// helper elsewhere would be a second place for the two to drift apart.
+func HashSessionToken(token string) string { return hashToken(token) }
+
+// NewSessionToken mints a token in the same shape as this package's own.
+func NewSessionToken() (string, error) { return newToken() }
 
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
@@ -136,8 +170,8 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 	// idleCutoff is passed rather than computed in SQL so that turning the
 	// timeout off is a value this query does not have to branch on.
 	idleCutoff := time.Time{}
-	if s.idle > 0 {
-		idleCutoff = time.Now().Add(-s.idle)
+	if idle := s.idleTimeout(); idle > 0 {
+		idleCutoff = time.Now().Add(-idle)
 	}
 
 	var claims UserClaims
@@ -155,6 +189,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		)
 		SELECT s.user_id::text, s.tenant_id::text, u.email,
 		        ARRAY(SELECT a::text FROM unnest(s.allowed_tenant_ids) a) AS allowed,
+		        COALESCE(s.impersonated_by::text, '') AS impersonated_by,
 		        EXISTS (
 		            SELECT 1 FROM memberships m
 		            JOIN membership_roles mr ON mr.membership_id=m.id
@@ -167,7 +202,8 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		   JOIN users u ON u.id = s.user_id
 		   JOIN memberships sm ON sm.tenant_id=s.tenant_id AND sm.user_id=s.user_id`,
 		hashToken(token), nullableTime(idleCutoff), touchInterval.String()).
-		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.AllowedTenantIDs, &claims.IsAdmin)
+		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.AllowedTenantIDs,
+			&claims.ImpersonatedBy, &claims.IsAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return UserClaims{}, ErrSessionInvalid
@@ -175,6 +211,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		return UserClaims{}, fmt.Errorf("resolve session: %w", err)
 	}
 
+	claims.Impersonated = claims.ImpersonatedBy != ""
 	return claims, nil
 }
 

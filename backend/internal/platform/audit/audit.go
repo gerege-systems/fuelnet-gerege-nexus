@@ -47,7 +47,37 @@ var db *pgxpool.Pool
 // server construction, before any request is served.
 func UseDatabase(pool *pgxpool.Pool) { db = pool }
 
+// impersonationKey marks a request as an operator acting as somebody else.
+//
+// A context value rather than a parameter, because Record has sixty-eight call
+// sites and none of them should have to remember this — the whole value of the
+// mark is that it cannot be forgotten by the one handler where it matters.
+type impersonationKey struct{}
+
+// MarkImpersonated says that everything recorded from this context was done by
+// a platform operator wearing somebody's account.
+//
+// Called once, by the platform's authentication middleware, from the session
+// row. From there every audit row the request writes carries the mark, so the
+// organisation reading its own trail sees which entries were ours — which is
+// the promise §3.B makes to them.
+func MarkImpersonated(ctx context.Context, operatorID string) context.Context {
+	return context.WithValue(ctx, impersonationKey{}, operatorID)
+}
+
+func impersonatedBy(ctx context.Context) string {
+	operatorID, _ := ctx.Value(impersonationKey{}).(string)
+	return operatorID
+}
+
 func Record(ctx context.Context, tenantID, userID, action, resource string, details map[string]any) {
+	if operatorID := impersonatedBy(ctx); operatorID != "" {
+		if details == nil {
+			details = map[string]any{}
+		}
+		details["impersonated"] = true
+		details["operator_id"] = operatorID
+	}
 	slog.Info("AUDIT_EVENT",
 		"tenant_id", tenantID,
 		"user_id", userID,

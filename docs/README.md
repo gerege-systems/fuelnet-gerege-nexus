@@ -68,7 +68,9 @@ Spanish) — seven in total.
 | [`REPORT_SHARING.md`](REPORT_SHARING.md) | MN | Тенант дамнасан тайлан: grant, counterparty хүрээ, хоёр талын audit |
 | [`MONITORING.md`](MONITORING.md) | MN | Ажиглалтын стек: асаах, Grafana, лог хайх, шинэ хэмжүүр нэмэх |
 | [`RUNBOOKS.md`](RUNBOOKS.md) | MN | Дохио бүрд: юу болсон, юу шалгах, яаж засах, хэзээ өргөжүүлэх |
+| [`CONTROL_PLANE.md`](CONTROL_PLANE.md) | MN | Операторын консол: босгох, эрх, анхны оператор үүсгэх, аюулгүй байдлын дүрмүүд |
 | [`MONITORING_AND_REPORTING_PROPOSAL.md`](MONITORING_AND_REPORTING_PROPOSAL.md) | MN | Ажиглалт ба тайлангийн давхаргын дизайны санал |
+| [`CONTROL_PLANE_PLAN.md`](CONTROL_PLANE_PLAN.md) | MN | Операторын консолын дизайн ба үе шатуудын төлөвлөгөө |
 | [`TRANSLATION_GUIDE.md`](TRANSLATION_GUIDE.md) | MN | Долоон хэлний толь бичиг, орчуулга нэмэх урсгал |
 
 ## Төслийн журам — Project governance

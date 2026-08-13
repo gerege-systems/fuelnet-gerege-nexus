@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -83,15 +82,7 @@ var demoTenants = []struct {
 // seedingEnabled reports whether the documented demo account should be
 // created. The account has a published password, so it is never seeded into a
 // production environment unless the operator asks for it explicitly.
-func seedingEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("SEED_DEMO_DATA"))) {
-	case "true", "1", "yes":
-		return true
-	case "false", "0", "no":
-		return false
-	}
-	return !config.IsProduction()
-}
+func seedingEnabled() bool { return config.SeedingEnabled() }
 
 // appIntaller is what the seeder needs from the platform server: the catalogue
 // has to be in the apps table before an installation row can reference it, and

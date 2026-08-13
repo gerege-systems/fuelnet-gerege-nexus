@@ -40,6 +40,40 @@ import (
 // It is created by migration 00029 and owns nothing.
 const AppRole = "gerege_nexus_app"
 
+// OperatorRole is what the control plane's own queries run as. Migration 00049
+// creates it with SELECT on a hand-written list of tables and read-only
+// policies to match, so "the operator sees every organisation" is a set of
+// named permissions rather than a switch that turns the isolation off.
+//
+// It is deliberately not the login role. The platform path (no tenant in
+// context) is outside the policies entirely and can write anything; a console
+// whose whole job is to look at other people's organisations must not run
+// there, or the first handler with a typo in it becomes a cross-tenant write.
+const OperatorRole = "gerege_nexus_operator"
+
+type contextKey string
+
+// operatorKey marks a request as the control plane's. It lives here rather than
+// in a shared package because dbguard is what acts on it, and a marker any
+// package could set is a marker no reviewer can trace.
+const operatorKey contextKey = "dbguard_operator"
+
+// AsOperator binds the queries made with this context to OperatorRole.
+//
+// Only the control plane's middleware calls it, and only after an operator
+// session has been resolved. It carries no tenant: every control-plane query
+// names the organisation it is asking about in its own WHERE clause, which is
+// what makes each one reviewable on its own.
+func AsOperator(ctx context.Context) context.Context {
+	return context.WithValue(ctx, operatorKey, true)
+}
+
+// IsOperator reports whether ctx was marked by AsOperator.
+func IsOperator(ctx context.Context) bool {
+	marked, _ := ctx.Value(operatorKey).(bool)
+	return marked
+}
+
 // bindStatement sets all three variables in one round trip.
 //
 // `role` is an ordinary GUC, so set_config assigns it exactly as SET ROLE would
@@ -69,6 +103,11 @@ func allowedLiteral(ids []string) string {
 // the security control, on a deployment whose migrations had not caught up.
 type Guard struct {
 	enabled atomic.Bool
+	// operatorReady is the same idea for OperatorRole, tracked apart because
+	// the two arrive in different migrations. A deployment that has 00029 but
+	// not 00049 serves tenants normally and has no control plane at all — which
+	// is the honest answer, since the console's tables are not there either.
+	operatorReady atomic.Bool
 }
 
 // Install attaches the binding to a pool configuration. It must be called
@@ -84,7 +123,19 @@ func (g *Guard) Install(cfg *pgxpool.Config) {
 			return true, nil
 		}
 		role, tenantID, allowed := "none", "", ""
-		if id, err := tenant.FromContext(ctx); err == nil && id != "" {
+		id, idErr := tenant.FromContext(ctx)
+		switch {
+		case IsOperator(ctx):
+			// Refused rather than quietly served as the login role: falling
+			// back would hand the console more access than the role it asked
+			// for, which is the opposite of what an unmet precondition should
+			// do. The control plane stops working until 00049 is applied, and
+			// its tables do not exist until then either.
+			if !g.operatorReady.Load() {
+				return false, fmt.Errorf("dbguard: %s is not available (run the migrations up to 00049_control_plane)", OperatorRole)
+			}
+			role = OperatorRole
+		case idErr == nil && id != "":
 			role, tenantID = AppRole, id
 			// Only ever widened by the session, and only past the same
 			// membership check that produced the acting tenant.
@@ -156,8 +207,41 @@ func (g *Guard) Probe(ctx context.Context, pool *pgxpool.Pool) error {
 
 	g.enabled.Store(true)
 	slog.Info("dbguard: row-level tenant isolation is active", "role", AppRole)
+
+	g.probeOperator(ctx, conn)
 	return nil
 }
+
+// probeOperator decides whether control-plane contexts may bind, on the
+// connection Probe is already holding.
+//
+// Failure is not an error returned to the caller: a deployment that has not run
+// 00049 has no operator accounts, no console tables and nobody able to sign in
+// to it, so the platform starting normally is the correct outcome. What must
+// not happen is the console appearing to work while its queries run as the
+// login role, and that is what the flag prevents.
+//
+// The connection is put back on the login role afterwards for the same reason
+// Probe does it: a pooled connection wearing a role nothing asked for is the
+// binding this package exists to prevent.
+func (g *Guard) probeOperator(ctx context.Context, conn *pgxpool.Conn) {
+	if _, err := conn.Exec(ctx, bindStatement, OperatorRole, "", ""); err != nil {
+		slog.Info("dbguard: the control plane's database role is not available",
+			"role", OperatorRole, "reason", err)
+		return
+	}
+	if _, err := conn.Exec(ctx, bindStatement, "none", "", ""); err != nil {
+		slog.Error("dbguard: could not return the probe connection to the login role", "error", err)
+		return
+	}
+	g.operatorReady.Store(true)
+	slog.Info("dbguard: the control plane may bind its own database role", "role", OperatorRole)
+}
+
+// OperatorReady reports whether control-plane contexts can be bound. The
+// console's routes ask before they are mounted, so a deployment without 00049
+// answers 404 rather than 500.
+func (g *Guard) OperatorReady() bool { return g.operatorReady.Load() }
 
 // ProbeUntilEnabled keeps probing until the guard is on or ctx is cancelled.
 //
