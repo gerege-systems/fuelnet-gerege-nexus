@@ -82,6 +82,11 @@ services:
         --web.external-url=${MONITORING_PUBLIC_URL:-http://localhost:9093}/alertmanager
         --web.route-prefix=/
     environment:
+      # The clock an alert is read on. Alertmanager renders StartsAt with the
+      # container's zone, and a message that says 02:32 UTC to somebody holding
+      # a phone that says 10:32 is asking them to do arithmetic at the worst
+      # possible moment. Seen on the first real alert this stack delivered.
+      TZ: ${ALERT_TIMEZONE:-Asia/Ulaanbaatar}
       ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
       ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
       ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
