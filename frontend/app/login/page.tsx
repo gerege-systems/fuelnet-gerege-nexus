@@ -22,7 +22,7 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
   // undefined = хараахан асуугаагүй. Энэ ялгаа чухал: асуухаас өмнө eID
   // хэлбэрийг зурчихвал холбоосон суулгац дээр хүн энд нэвтэрч болно гэж
   // хэсэг хугацаанд итгэж, дараа нь өөр рүү шилжсэн нь будлиантай.
-  const [sso,setSSO]=useState<{enabled:boolean;provider_name?:string;start_url?:string;local_login:boolean;google?:{enabled:boolean;start_url?:string}}|undefined>();
+  const [sso,setSSO]=useState<{enabled:boolean;provider_name?:string;start_url?:string;local_login:boolean;google?:{enabled:boolean;start_url?:string};access_mode?:"public"|"private"}|undefined>();
   // Хэн асууж байна. Зөвхөн authorization хүсэлтээс ирсэн үед л утгатай, ба
   // нэрийг нь серверээс асууна — `next` дотор ирсэн client_id-г л ашиглаж,
   // дэлгэц дээр гарах нэрийг хаяг тодорхойлохыг зөвшөөрөхгүй.
@@ -90,6 +90,12 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
 
         {showLocal&&<>
           {!federated&&<div><h1 className="signin-card__title">{t("auth.signin.title")}</h1><p className="signin-card__lede">{t("auth.signin.lede")}</p></div>}
+          {/* A private deployment provisions nobody. Saying so here is the
+              difference between somebody understanding why eID signed them in
+              nowhere and somebody trying it four more times: the server refuses
+              the same way whatever this screen shows, and this is the sentence
+              that makes the refusal make sense. */}
+          {sso?.access_mode==="private"&&<p className="signin-note">{t("auth.message.platform_private")}</p>}
           {error&&!federated&&<p className="signin-alert">{error}</p>}
           <EIDLogin next={next} variant="signin"/>
 

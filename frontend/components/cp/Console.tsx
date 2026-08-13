@@ -90,6 +90,8 @@ export default function Console({ children }: { children: React.ReactNode }) {
             <ConsoleLink href="/cp" label={t("cp.section.tenants")} />
             <ConsoleLink href="/cp/support" label={t("cp.section.support")} />
             <ConsoleLink href="/cp/approvals" label={t("cp.section.approvals")} />
+            <ConsoleLink href="/cp/config" label={t("cp.section.config")} />
+            <ConsoleLink href="/cp/announcements" label={t("cp.section.announcements")} />
           </nav>
           <div className="flex-1" />
           <span className="text-sm text-slate-300">

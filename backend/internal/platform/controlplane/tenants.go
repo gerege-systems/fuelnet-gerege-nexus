@@ -56,6 +56,8 @@ type TenantSummary struct {
 	SuspendedAt         *time.Time `json:"suspended_at"`
 	SuspensionReason    string     `json:"suspension_reason"`
 	DeletionScheduledAt *time.Time `json:"deletion_scheduled_at"`
+	// MaintenanceAt is CP-3's read-only mode for this one organisation.
+	MaintenanceAt *time.Time `json:"maintenance_at"`
 }
 
 // ListTenants answers the console's main screen.
@@ -79,7 +81,7 @@ func (s *Service) ListTenants(ctx context.Context, search string) ([]TenantSumma
 		        (SELECT count(*) FROM app_installations i
 		          WHERE i.tenant_id = t.id AND i.enabled AND i.status = 'installed'),
 		        (SELECT max(s.last_seen_at) FROM sessions s WHERE s.tenant_id = t.id),
-		        t.suspended_at, t.suspension_reason, t.deletion_scheduled_at
+		        t.suspended_at, t.suspension_reason, t.deletion_scheduled_at, t.maintenance_at
 		   FROM tenants t
 		   LEFT JOIN tenant_profiles p ON p.tenant_id = t.id
 		  WHERE $1 = ''
@@ -98,7 +100,8 @@ func (s *Service) ListTenants(ctx context.Context, search string) ([]TenantSumma
 		var row TenantSummary
 		if err := rows.Scan(&row.ID, &row.Slug, &row.Name, &row.RegistrationNumber,
 			&row.CreatedAt, &row.UserCount, &row.AppCount, &row.LastActivityAt,
-			&row.SuspendedAt, &row.SuspensionReason, &row.DeletionScheduledAt); err != nil {
+			&row.SuspendedAt, &row.SuspensionReason, &row.DeletionScheduledAt,
+			&row.MaintenanceAt); err != nil {
 			return nil, fmt.Errorf("control plane: read an organisation: %w", err)
 		}
 		summaries = append(summaries, row)
@@ -188,14 +191,15 @@ func (s *Service) GetTenant(ctx context.Context, tenantID string) (TenantDetail,
 		        (SELECT count(*) FROM app_installations i
 		          WHERE i.tenant_id = t.id AND i.enabled AND i.status = 'installed'),
 		        (SELECT max(s.last_seen_at) FROM sessions s WHERE s.tenant_id = t.id),
-		        t.suspended_at, t.suspension_reason, t.deletion_scheduled_at
+		        t.suspended_at, t.suspension_reason, t.deletion_scheduled_at, t.maintenance_at
 		   FROM tenants t
 		   LEFT JOIN tenant_profiles p ON p.tenant_id = t.id
 		  WHERE t.id = $1::uuid`, tenantID).
 		Scan(&detail.ID, &detail.Slug, &detail.Name, &detail.RegistrationNumber,
 			&detail.LegalName, &detail.TaxNumber, &detail.CreatedAt,
 			&detail.UserCount, &detail.AppCount, &detail.LastActivityAt,
-			&detail.SuspendedAt, &detail.SuspensionReason, &detail.DeletionScheduledAt)
+			&detail.SuspendedAt, &detail.SuspensionReason, &detail.DeletionScheduledAt,
+			&detail.MaintenanceAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TenantDetail{}, ErrTenantNotFound
 	}

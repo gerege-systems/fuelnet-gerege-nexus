@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,15 +48,43 @@ type generator interface {
 	GenerateContent(context.Context, gemini.Request) (gemini.Response, error)
 }
 type CopilotService struct {
-	db    *pgxpool.Pool
-	chat  generator
-	tts   generator
+	db  *pgxpool.Pool
+	tts generator
+	// base and key are held so the chat client can be rebuilt when the model
+	// changes. They are the two things that never change at runtime — an
+	// address and a credential, which is precisely the pair the settings
+	// registry refuses to hold.
+	base, key string
+
+	// chat is rebuilt when the configured model changes.
+	//
+	// The model is a platform setting now (settings.AIModel), so an operator
+	// can move the deployment onto a newer Gemini without a deploy — which is
+	// the whole point of it being a setting. The client carries its model, so
+	// "the model changed" means "build another client", and this is where that
+	// is noticed: once per call, comparing two strings.
+	chatMu    sync.Mutex
+	chatModel string
+	chat      generator
+
 	voice string
+}
+
+// chatClient returns a generator for the model that is configured now.
+func (s *CopilotService) chatClient() generator {
+	model := settings.Get(settings.AIModel)
+
+	s.chatMu.Lock()
+	defer s.chatMu.Unlock()
+	if s.chat == nil || s.chatModel != model {
+		s.chat = observe(gemini.NewClient(s.base, s.key, model), "generate")
+		s.chatModel = model
+	}
+	return s.chat
 }
 
 func NewCopilotService(db *pgxpool.Pool) *CopilotService {
 	base, key := os.Getenv("GEMINI_API_BASE"), os.Getenv("GEMINI_API_KEY")
-	chatModel := os.Getenv("GEMINI_MODEL")
 	ttsModel := os.Getenv("GEMINI_TTS_MODEL")
 	if ttsModel == "" {
 		ttsModel = "gemini-2.5-flash-preview-tts"
@@ -65,7 +95,8 @@ func NewCopilotService(db *pgxpool.Pool) *CopilotService {
 	}
 	return &CopilotService{
 		db:    db,
-		chat:  observe(gemini.NewClient(base, key, chatModel), "generate"),
+		base:  base,
+		key:   key,
 		tts:   observe(gemini.NewClient(base, key, ttsModel), "tts"),
 		voice: voice,
 	}
@@ -102,7 +133,7 @@ func (s *CopilotService) Query(ctx context.Context, req CopilotRequest) (*Copilo
 	greq := gemini.Request{SystemInstruction: &gemini.Content{Parts: []gemini.Part{{Text: system}}}, Contents: contents, Tools: []gemini.Tool{{FunctionDeclarations: toolDeclarations()}}}
 	steps := []Step{}
 	for round := 0; round < maxToolRounds; round++ {
-		out, err := s.chat.GenerateContent(ctx, greq)
+		out, err := s.chatClient().GenerateContent(ctx, greq)
 		if err != nil {
 			if errors.Is(err, gemini.ErrNotConfigured) || errors.Is(err, gemini.ErrUnavailable) {
 				return s.localFallback(ctx, req), nil
@@ -239,7 +270,7 @@ func (s *CopilotService) Transcribe(ctx context.Context, audio Audio) (string, e
 	if err := validateAudio(&audio); err != nil {
 		return "", err
 	}
-	r, e := s.chat.GenerateContent(ctx, gemini.Request{Contents: []gemini.Content{{Role: "user", Parts: []gemini.Part{{Text: "Transcribe this audio exactly. Return only the transcript."}, {InlineData: &gemini.Blob{MimeType: audio.Mime, Data: audio.Data}}}}}})
+	r, e := s.chatClient().GenerateContent(ctx, gemini.Request{Contents: []gemini.Content{{Role: "user", Parts: []gemini.Part{{Text: "Transcribe this audio exactly. Return only the transcript."}, {InlineData: &gemini.Blob{MimeType: audio.Mime, Data: audio.Data}}}}}})
 	if e != nil {
 		return "", e
 	}
@@ -247,7 +278,7 @@ func (s *CopilotService) Transcribe(ctx context.Context, audio Audio) (string, e
 }
 func (s *CopilotService) Translate(ctx context.Context, text, target string) (string, error) {
 	target = truncate(target, 12)
-	r, e := s.chat.GenerateContent(ctx, gemini.Request{Contents: []gemini.Content{{Role: "user", Parts: []gemini.Part{{Text: "Translate the following text to language code " + target + ". Return only the translation:\n" + truncate(text, 8000)}}}}})
+	r, e := s.chatClient().GenerateContent(ctx, gemini.Request{Contents: []gemini.Content{{Role: "user", Parts: []gemini.Part{{Text: "Translate the following text to language code " + target + ". Return only the translation:\n" + truncate(text, 8000)}}}}})
 	if e != nil {
 		return "", e
 	}

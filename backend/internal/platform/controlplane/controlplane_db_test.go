@@ -248,13 +248,18 @@ func TestOperatorRoleReadsButCannotWrite(t *testing.T) {
 		t.Fatalf("the operator role cannot read memberships: %v", err)
 	}
 
-	// And writes nothing. Both of these are refused by the grants rather than
-	// by a WHERE clause somebody has to remember to write.
-	if _, err := pool.Exec(ctx,
-		`INSERT INTO tenants (slug, name) VALUES ('cp-test-should-fail', 'should not exist')`); err == nil {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE slug = 'cp-test-should-fail'`)
-		t.Fatal("the operator role created an organisation")
+	// And what it may not write, it may not write — refused by the grants
+	// rather than by a WHERE clause somebody has to remember.
+	//
+	// Creating an organisation is *not* on this list, because CP-2 gave the
+	// console that on purpose: opening one is reversible, and removing one is
+	// the thing that is not.
+	if _, err := pool.Exec(ctx, `DELETE FROM tenants WHERE slug = 'nothing-matching'`); err == nil {
+		t.Fatal("the operator role can delete organisations")
 	}
+	// The column grant is the sharp one: the console may write a person's
+	// lockout state and nothing else about them, so this is refused even
+	// though the row is one it can read and partly update.
 	if _, err := pool.Exec(ctx, `UPDATE users SET name = name`); err == nil {
 		t.Fatal("the operator role updated a person's record")
 	}

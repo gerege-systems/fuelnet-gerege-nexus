@@ -15,6 +15,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
@@ -40,6 +41,13 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		// holding a token issued a moment before, or a replica whose cache is
 		// a few seconds behind, is refused here.
 		if s.refuseIfSuspended(w, r, claims.TenantID) {
+			return
+		}
+
+		// Maintenance is checked after suspension and before anything else,
+		// and only for writes: the point of a maintenance window is that
+		// people can still see what they need.
+		if s.refuseIfReadOnly(w, r, claims.TenantID) {
 			return
 		}
 
@@ -92,6 +100,17 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 			// apps that run outside this binary. A database that cannot answer
 			// refuses here rather than admitting: this is the check that keeps
 			// one tenant out of another tenant's application.
+			// A module's kill switch, before the installation check: an app
+			// being switched off platform-wide is an operator's decision
+			// during an incident, and it should not depend on what any
+			// organisation has installed.
+			if flags.Enabled(r.Context(), flags.ModuleKillSwitch(appID)) {
+				httpx.JSON(w, http.StatusServiceUnavailable, map[string]string{
+					"error": "энэ модулийг түр хугацаанд унтраасан байна",
+				})
+				return
+			}
+
 			enabled, err := s.appInstalled(r.Context(), tenantID, appID)
 			if err != nil {
 				slog.Error("could not check the app installation", "error", err,

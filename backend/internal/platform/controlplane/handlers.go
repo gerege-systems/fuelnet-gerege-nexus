@@ -101,6 +101,33 @@ func (s *Service) Routes(r chi.Router) {
 
 		signedIn.With(s.RequireCapability(CapImpersonate), s.RequireStepUp).
 			Post("/tenants/{id}/impersonate", s.handleImpersonate)
+
+		// How the platform behaves. Reading is part of the tenant-read
+		// capability because "what is this deployment configured to do" is
+		// context for every other screen; writing is its own.
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/settings", s.handleListSettings)
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/settings/history", s.handleSettingHistory)
+		// Step-up on the write: the access mode is here, and switching a
+		// platform to public is the single most consequential field in the
+		// console.
+		signedIn.With(s.RequireCapability(CapSettingsWrite), s.RequireStepUp).
+			Put("/settings/{key}", s.handleSetSetting)
+		signedIn.With(s.RequireCapability(CapSettingsWrite), s.RequireStepUp).
+			Post("/settings/rollback/{id}", s.handleRollbackSetting)
+
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/flags", s.handleListFlags)
+		signedIn.With(s.RequireCapability(CapFlagsWrite)).Post("/flags", s.handleSaveFlag)
+		signedIn.With(s.RequireCapability(CapFlagsWrite)).Delete("/flags/{key}", s.handleDeleteFlag)
+		signedIn.With(s.RequireCapability(CapFlagsWrite)).
+			Put("/flags/{key}/override", s.handleFlagOverride)
+
+		signedIn.With(s.RequireCapability(CapSettingsWrite)).
+			Post("/tenants/{id}/maintenance", s.handleTenantMaintenance)
+
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/announcements", s.handleListAnnouncements)
+		signedIn.With(s.RequireCapability(CapAnnounce)).Post("/announcements", s.handleAnnounce)
+		signedIn.With(s.RequireCapability(CapAnnounce)).
+			Delete("/announcements/{id}", s.handleWithdrawAnnouncement)
 	})
 }
 
@@ -433,4 +460,170 @@ func (s *Service) handleListOperators(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"operators": operators})
+}
+
+// The configuration screens.
+
+func (s *Service) handleListSettings(w http.ResponseWriter, r *http.Request) {
+	values, err := s.ListSettings(r.Context())
+	if err != nil {
+		fail(w, err, "could not read the settings")
+		return
+	}
+	// The warnings ride along with the values, because they are about the
+	// values: a configuration that contradicts itself belongs on the screen
+	// where somebody can fix it.
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"settings": values,
+		"warnings": s.warnings(),
+	})
+}
+
+func (s *Service) handleSettingHistory(w http.ResponseWriter, r *http.Request) {
+	changes, err := s.SettingHistory(r.Context(), r.URL.Query().Get("key"))
+	if err != nil {
+		fail(w, err, "could not read the history")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"changes": changes})
+}
+
+func (s *Service) handleSetSetting(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		Value string `json:"value"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.SetSetting(r.Context(), sess, chi.URLParam(r, "key"), body.Value, body.Reason); err != nil {
+		fail(w, err, "could not change the setting")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+func (s *Service) handleRollbackSetting(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.RollbackSetting(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not roll the setting back")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "rolled back"})
+}
+
+func (s *Service) handleListFlags(w http.ResponseWriter, r *http.Request) {
+	list, err := s.ListFlags(r.Context())
+	if err != nil {
+		fail(w, err, "could not read the flags")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"flags": list})
+}
+
+func (s *Service) handleSaveFlag(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var input FlagInput
+	if !decode(w, r, &input) {
+		return
+	}
+	if err := s.SaveFlag(r.Context(), sess, input); err != nil {
+		fail(w, err, "could not save the flag")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+func (s *Service) handleDeleteFlag(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.DeleteFlag(r.Context(), sess, chi.URLParam(r, "key"), body.Reason); err != nil {
+		fail(w, err, "could not delete the flag")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (s *Service) handleFlagOverride(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		TenantID string `json:"tenant_id"`
+		// A pointer: null means "remove the override and go back to the
+		// rollout", which is a different instruction from "off".
+		Enabled *bool `json:"enabled"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.SetFlagOverride(r.Context(), sess, chi.URLParam(r, "key"),
+		body.TenantID, body.Enabled, body.Reason); err != nil {
+		fail(w, err, "could not set the override")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+func (s *Service) handleTenantMaintenance(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		On      bool   `json:"on"`
+		Message string `json:"message"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.SetTenantMaintenance(r.Context(), sess, chi.URLParam(r, "id"),
+		body.On, body.Message, body.Reason); err != nil {
+		fail(w, err, "could not change the maintenance state")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+func (s *Service) handleListAnnouncements(w http.ResponseWriter, r *http.Request) {
+	announcements, err := s.ListAnnouncements(r.Context())
+	if err != nil {
+		fail(w, err, "could not read the announcements")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"announcements": announcements})
+}
+
+func (s *Service) handleAnnounce(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		Announcement
+		Reason string `json:"reason"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.Announce(r.Context(), sess, body.Announcement, body.Reason); err != nil {
+		fail(w, err, "could not publish the announcement")
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, map[string]string{"status": "published"})
+}
+
+func (s *Service) handleWithdrawAnnouncement(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.WithdrawAnnouncement(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not withdraw the announcement")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "withdrawn"})
 }

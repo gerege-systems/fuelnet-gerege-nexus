@@ -99,6 +99,11 @@ func (s *Server) handleSSOConfig(w http.ResponseWriter, r *http.Request) {
 	// Google is reported only when it can actually be used. A deployment that
 	// federates has closed its local sign-in paths, and Google is one of them,
 	// so the button would be an offer this server would refuse.
+	// Whether this platform admits strangers. The sign-in screen reads it to
+	// decide whether to offer a way in at all — a "sign up" affordance on a
+	// private deployment is an invitation to a refusal.
+	answer["access_mode"] = accessMode()
+
 	answer["google"] = map[string]any{"enabled": false}
 	if s.googleLoginEnabled() && s.localLoginAllowed() {
 		answer["google"] = map[string]any{"enabled": true, "start_url": s.googleStartURL()}
@@ -321,6 +326,12 @@ func (s *Server) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, ide
 		`INSERT INTO users (email, password_hash, name, is_admin) VALUES ($1,$2,$3,FALSE)
 		 ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
 		 RETURNING id::text`, email, passwordHash, name).Scan(&userID); err != nil {
+		return "", "", err
+	}
+	// The platform's access mode. A federated provider vouching for somebody
+	// is not the same as this platform having decided to admit them, and in
+	// private mode it is the second half that is missing.
+	if err = mayProvisionAccount("sso"); err != nil {
 		return "", "", err
 	}
 	// The organisation's limit, checked before it grows. A provider that

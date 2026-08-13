@@ -555,6 +555,13 @@ func (s *Server) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.EI
 		return "", "", err
 	}
 
+	// The platform's access mode, before the environment's provisioning
+	// tenant: a deployment that set EID_JIT_TENANT_SLUG once and has since
+	// been closed should stop provisioning, and this is the order in which
+	// that reads correctly.
+	if err := mayProvisionAccount("eid"); err != nil {
+		return "", "", err
+	}
 	tenantSlug := strings.TrimSpace(os.Getenv("EID_JIT_TENANT_SLUG"))
 	if tenantSlug == "" {
 		return "", "", signInError{"eID identity is verified but account provisioning is disabled"}
@@ -632,6 +639,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"email":       email,
 		"is_admin":    claims.IsAdmin,
 		"permissions": granted,
+		// What the platform wants to tell this person right now: a maintenance
+		// window, or an announcement an operator broadcast.
+		"notices": s.notices(r.Context(), claims.TenantID),
 		// Whether a platform operator is inside this account right now. The
 		// shell draws a banner from it that cannot be dismissed — the person
 		// whose screen this is has a right to know, and so does anybody

@@ -15,6 +15,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A platform that can be told to behave differently, without a deploy
+
+CP-3, and the setting it exists for: **this platform is private by default**.
+Until now, whether a stranger who could authenticate somewhere else became a
+user here was decided by which environment variables happened to be set —
+`EID_JIT_TENANT_SLUG` in one file, `SSO_CLIENT_TENANT` in another, read by two
+packages, with no single place that answered "can somebody get in".
+
+- **`platform.access_mode`.** One check, at the one thing every provisioning
+  path does — create an account — and it is closed unless somebody says
+  otherwise. Signing in as an existing user is untouched; so is an invitation,
+  because being invited *is* the registration. The sign-in screen reads the
+  mode and explains itself rather than letting people discover it by failing,
+  and switching to public takes effect on the next request with no restart.
+- **Settings that cannot hold a secret.** Every key is declared in Go with a
+  kind, a default, a validation and the environment variable it still falls
+  back to. There is no `secret` kind — not "should not be used", does not
+  exist — and `Register` panics on a key that reads like one, so a credential
+  cannot reach a table an operator can edit. A row whose key is not declared is
+  ignored, so writing to the table is not a way to introduce behaviour.
+- **Every change has a reason, a history and one button back.** The rollback is
+  itself a change: it writes a new history row rather than removing the one it
+  undoes, because a history that can be rewound is a history somebody can edit.
+  Values reach the running platform through a thirty-second refresh *and* the
+  invalidation bus, so a change is felt everywhere at once where Redis is
+  present and within half a minute where it is not.
+- **Feature flags with an expiry that is a reminder, not a switch.** Kinds
+  (release, kill switch, experiment), per-organisation overrides, and a
+  percentage rollout keyed on a stable hash — an organisation inside 10% is
+  still inside 50%, and two flags at the same percentage select different
+  organisations. Flags that have outlived their date keep working and appear as
+  a warning on the configuration screen, which is the only thing that ever
+  clears flag debt. A module's kill switch is a naming convention rather than
+  new machinery: `module.<app id>.disabled`.
+- **Maintenance and announcements.** Read-only for the platform or for one
+  organisation, refusing writes with 503 while leaving every read and the way
+  out working. Announcements carry their own expiry and arrive with `/me`, so
+  the shell shows a banner without a second thing to poll.
+- The first four settings — the access mode, the session idle timeout, the
+  catalogue's sync interval and the AI model — are read where they are used
+  rather than captured at startup, so changing them means changing them.
+
+### Fixed
+
+- Creating an organisation from the console could not have worked on a
+  deployment with the row-level grants applied: the trigger that seeds a
+  tenant's roles writes `role_permissions`, and the first administrator's
+  account needs `INSERT` on `users`, neither of which the console's role held.
+  Both were found by CP-3's integration tests rather than by a customer, which
+  is the argument for narrow grants: a forgotten one fails loudly.
+
 ### Added — Operating an organisation from the console, without being able to take it
 
 CP-2 gives the console the buttons CP-1 deliberately withheld: creating an

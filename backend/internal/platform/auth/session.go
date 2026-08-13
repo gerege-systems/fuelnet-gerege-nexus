@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,11 @@ const touchInterval = time.Minute
 
 // IdleTimeoutFromEnv reads SESSION_IDLE_TIMEOUT as a Go duration ("45m", "2h").
 // An unset or unreadable value gives the default; "0" turns it off.
+//
+// Still exported and still reading the environment, because the environment is
+// still the fallback — but the value the platform actually uses now comes from
+// idleTimeout below, which asks the settings registry first. A deployment that
+// only sets the variable behaves exactly as it did.
 func IdleTimeoutFromEnv() time.Duration {
 	raw := strings.TrimSpace(os.Getenv("SESSION_IDLE_TIMEOUT"))
 	if raw == "" {
@@ -58,6 +64,23 @@ func IdleTimeoutFromEnv() time.Duration {
 		return DefaultIdleTimeout
 	}
 	return parsed
+}
+
+// idleTimeout is what Resolve enforces, read per request rather than captured
+// at construction.
+//
+// Per request because the point of making it a setting is that changing it
+// takes effect — an operator who shortens the timeout during an incident
+// should not have to restart the platform to mean it. The read is a map lookup
+// behind a read lock, which is what the store exists to make cheap.
+func (s *SessionStore) idleTimeout() time.Duration {
+	if settings.Default == nil {
+		// No store: the value captured at construction, which is the
+		// environment or the default. This is every test and the first moments
+		// of a process.
+		return s.idle
+	}
+	return settings.Duration(settings.SessionIdleTimeout)
 }
 
 var ErrSessionInvalid = errors.New("session is invalid or expired")
@@ -147,8 +170,8 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 	// idleCutoff is passed rather than computed in SQL so that turning the
 	// timeout off is a value this query does not have to branch on.
 	idleCutoff := time.Time{}
-	if s.idle > 0 {
-		idleCutoff = time.Now().Add(-s.idle)
+	if idle := s.idleTimeout(); idle > 0 {
+		idleCutoff = time.Now().Add(-idle)
 	}
 
 	var claims UserClaims

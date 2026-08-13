@@ -79,3 +79,23 @@ func normalizeLocale(tag string) string {
 	}
 	return ""
 }
+
+// SeedingEnabled reports whether the documented demo account should be created.
+//
+// It lives here rather than beside the seeder because two packages need the
+// same answer: the seeder, which acts on it, and the platform, which warns when
+// it disagrees with the access mode — a seeder that creates accounts on a
+// platform configured to create no accounts is somebody's intent getting lost
+// between two files.
+//
+// The account has a published password, so it is never seeded into production
+// unless an operator asks for it in so many words.
+func SeedingEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SEED_DEMO_DATA"))) {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	}
+	return !IsProduction()
+}

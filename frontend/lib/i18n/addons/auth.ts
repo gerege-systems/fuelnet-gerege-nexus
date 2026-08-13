@@ -3,6 +3,10 @@
  * fallback.
  */
 export const auth = {
+  "auth.message.platform_private": {
+    mn: "Энэ платформ хаалттай горимд байна: зөвхөн урьдчилан бүртгэгдсэн хүн нэвтэрнэ. eID, ДАН, Google-ээр баталгаажсан ч бүртгэлгүй бол данс үүсэхгүй — байгууллагынхаа админаас урилга хүсэн үү.",
+    en: "This platform is private: only people who have already been registered can sign in. Proving who you are with eID, ДАН or Google will not create an account — ask your organisation's administrator for an invitation.",
+  },
   "auth.view.set_password_invite": { mn: "Нууц үгээ тохируулах", en: "Choose your password" },
   "auth.view.set_password_reset": { mn: "Нууц үгээ шинэчлэх", en: "Set a new password" },
   "auth.field.new_password": { mn: "Шинэ нууц үг", en: "New password" },

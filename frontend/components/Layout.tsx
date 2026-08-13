@@ -311,6 +311,7 @@ export default function Layout({children}:{children:React.ReactNode}){
 
   return <div className="gerege-shell min-h-screen flex flex-col">
     <ImpersonationBanner active={!!user?.impersonated}/>
+    <PlatformNotices notices={user?.notices}/>
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
       <TenantSwitcher current={user?.tenant_id} currentName={user?.tenant_name}>
         {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege Nexus" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
@@ -560,4 +561,25 @@ function ImpersonationBanner({active}:{active:boolean}){
     <ShieldCheck className="w-4 h-4 shrink-0"/>
     <span>{t("web.message.impersonated")}</span>
   </div>;
+}
+
+/**
+ * What the platform is telling everybody: a maintenance window, or an
+ * announcement an operator broadcast from the console.
+ *
+ * Above the chrome and not dismissible, like the impersonation banner beside
+ * it, because both answer a question somebody is about to ask support: "why
+ * can I not save this" and "what is happening tonight". A notice that can be
+ * closed is a notice the next person does not see.
+ */
+function PlatformNotices({notices}:{notices?:Array<{kind:string;title:string;body:string}>}){
+  if(!notices?.length) return null;
+  const tone=(kind:string)=>kind==="maintenance"?"bg-slate-800 text-slate-100"
+    :kind==="warning"?"bg-amber-100 text-amber-900 border-b border-amber-200"
+    :"bg-blue-50 text-blue-900 border-b border-blue-100";
+  return <>{notices.map((notice,index)=>
+    <div key={index} role="status" className={`w-full text-sm px-4 py-2 ${tone(notice.kind)}`}>
+      <strong className="font-medium">{notice.title}</strong>
+      {notice.body&&<span className="ml-2 opacity-90">{notice.body}</span>}
+    </div>)}</>;
 }

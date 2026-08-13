@@ -62,6 +62,14 @@ const (
 	// an organisation keeps. Support has to cross it to do their job, with a
 	// reason, a time limit and a banner; operators do not.
 	CapImpersonate Capability = "user.impersonate"
+
+	// CapSettingsWrite changes how the platform behaves — the access mode, the
+	// timeouts, the maintenance switch.
+	CapSettingsWrite Capability = "settings.write"
+	// CapFlagsWrite turns features on and off, including the kill switches.
+	CapFlagsWrite Capability = "flags.write"
+	// CapAnnounce tells everybody something.
+	CapAnnounce Capability = "announce"
 )
 
 // capabilities is the whole authorization model, in one readable place.
@@ -87,11 +95,16 @@ var capabilities = map[Role]map[Capability]bool{
 		CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true,
 		CapTenantCreate: true, CapTenantSuspend: true, CapTenantDelete: true,
 		CapApprove: true, CapQuotaWrite: true, CapSupport: true, CapImpersonate: true,
+		CapSettingsWrite: true, CapFlagsWrite: true, CapAnnounce: true,
 	},
 	RoleOperator: {
 		CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true,
 		CapTenantCreate: true, CapTenantSuspend: true, CapQuotaWrite: true,
 		CapSupport: true,
+		// The day-to-day configuration work is this role's remit — including
+		// the kill switches, because the person on call at two in the morning
+		// is an operator and not a superadmin.
+		CapSettingsWrite: true, CapFlagsWrite: true, CapAnnounce: true,
 	},
 	RoleSupport: {
 		CapTenantRead: true, CapAuditRead: true,

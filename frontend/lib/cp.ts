@@ -42,6 +42,7 @@ export interface TenantSummary {
   suspended_at: string | null;
   suspension_reason: string;
   deletion_scheduled_at: string | null;
+  maintenance_at?: string | null;
 }
 
 export interface Quota {
@@ -274,4 +275,81 @@ export const cp = {
 
   /** The export is a download rather than a fetch: it is a file. */
   exportURL: (id: string) => `${BASE}/tenants/${id}/export`,
+
+  settings: () => request<{ settings: Setting[]; warnings: string[] }>("/settings"),
+  settingHistory: (key: string) =>
+    request<{ changes: SettingChange[] }>(`/settings/history?key=${encodeURIComponent(key)}`),
+  setSetting: (key: string, value: string, reason: string) =>
+    request<{ status: string }>(`/settings/${encodeURIComponent(key)}`,
+      { method: "PUT", body: JSON.stringify({ value, reason }) }),
+  rollbackSetting: (changeID: string, reason: string) =>
+    request<{ status: string }>(`/settings/rollback/${changeID}`,
+      { method: "POST", body: JSON.stringify({ reason }) }),
+
+  flags: () => request<{ flags: Flag[] }>("/flags"),
+  saveFlag: (flag: Partial<Flag> & { key: string; reason: string }) =>
+    request<{ status: string }>("/flags", { method: "POST", body: JSON.stringify(flag) }),
+  deleteFlag: (key: string, reason: string) =>
+    request<{ status: string }>(`/flags/${encodeURIComponent(key)}`,
+      { method: "DELETE", body: JSON.stringify({ reason }) }),
+  flagOverride: (key: string, tenantID: string, enabled: boolean | null, reason: string) =>
+    request<{ status: string }>(`/flags/${encodeURIComponent(key)}/override`,
+      { method: "PUT", body: JSON.stringify({ tenant_id: tenantID, enabled, reason }) }),
+
+  maintenance: (tenantID: string, on: boolean, message: string, reason: string) =>
+    request<{ status: string }>(`/tenants/${tenantID}/maintenance`,
+      { method: "POST", body: JSON.stringify({ on, message, reason }) }),
+
+  announcements: () => request<{ announcements: Announcement[] }>("/announcements"),
+  announce: (body: Partial<Announcement> & { title: string; reason: string }) =>
+    request<{ status: string }>("/announcements", { method: "POST", body: JSON.stringify(body) }),
+  withdraw: (id: string, reason: string) =>
+    request<{ status: string }>(`/announcements/${id}`,
+      { method: "DELETE", body: JSON.stringify({ reason }) }),
 };
+
+export interface Setting {
+  key: string;
+  kind: "bool" | "int" | "duration" | "string" | "enum";
+  default: string;
+  env?: string;
+  options?: string[];
+  description: string;
+  current: string;
+  /** Where the current value came from: the console, the environment, or the code. */
+  source: "database" | "environment" | "default";
+  updated_at: string | null;
+}
+
+export interface SettingChange {
+  id: string;
+  key: string;
+  previous_value: string | null;
+  new_value: string;
+  reason: string;
+  changed_by: string;
+  changed_at: string;
+}
+
+export interface Flag {
+  key: string;
+  description: string;
+  owner: string;
+  kind: "release" | "kill_switch" | "experiment";
+  enabled: boolean;
+  rollout: number;
+  expires_at: string | null;
+  updated_at: string;
+  overrides?: Record<string, boolean>;
+}
+
+export interface Announcement {
+  id: string;
+  tenant_id: string | null;
+  kind: "info" | "warning" | "maintenance";
+  title: string;
+  body: string;
+  starts_at: string;
+  ends_at: string | null;
+  created_at: string;
+}

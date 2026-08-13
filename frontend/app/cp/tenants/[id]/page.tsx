@@ -23,6 +23,7 @@ import {
   Play,
   Trash2,
   Undo2,
+  Wrench,
 } from "lucide-react";
 
 import Console, { useConsole } from "@/components/cp/Console";
@@ -160,6 +161,21 @@ function Detail() {
                     // not lose the window that can end it.
                     window.open(url, "_blank", "noopener");
                   },
+                })
+              }
+            />
+          )}
+          {may("settings.write") && (
+            <ActionButton
+              icon={<Wrench className="w-4 h-4" />}
+              label={tenant.maintenance_at ? t("cp.action.maintenance_off") : t("cp.action.maintenance_on")}
+              onClick={() =>
+                action.run({
+                  title: tenant.maintenance_at ? t("cp.action.maintenance_off") : t("cp.action.maintenance_on"),
+                  detail: tenant.name,
+                  perform: (reason) =>
+                    cp.maintenance(tenant.id, !tenant.maintenance_at, reason, reason),
+                  onDone: load,
                 })
               }
             />
@@ -308,8 +324,9 @@ function Detail() {
  * the two can be compared by eye when a capability is added.
  */
 const CAPABILITIES: Record<string, string[]> = {
-  superadmin: ["tenant.suspend", "tenant.delete", "quota.write", "support.act", "user.impersonate", "approval.decide"],
-  operator: ["tenant.suspend", "quota.write", "support.act"],
+  superadmin: ["tenant.suspend", "tenant.delete", "quota.write", "support.act",
+    "user.impersonate", "approval.decide", "settings.write"],
+  operator: ["tenant.suspend", "quota.write", "support.act", "settings.write"],
   support: ["support.act", "user.impersonate"],
   auditor: [],
 };

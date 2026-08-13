@@ -198,28 +198,39 @@ func ensureAdmin(ctx context.Context, tx pgx.Tx, tenantID, email, name string) (
 		return "", err
 	}
 
-	var userID string
-	if err := tx.QueryRow(ctx,
+	// Insert-or-select rather than an upsert, in all three of the statements
+	// below, and the reason is the database's rather than Go's: the console's
+	// role holds INSERT on these tables and UPDATE on almost none of their
+	// columns (migrations 00050 and 00051). An `ON CONFLICT DO UPDATE` asks
+	// for UPDATE even when the conflict never happens, so the natural way to
+	// write this is refused by PostgreSQL — which is the grant working, not a
+	// problem with it. The conflict is a real case here: 00008's trigger
+	// creates an `admin` role the moment the organisation row lands.
+	userID, err := insertOrSelect(ctx, tx,
 		`INSERT INTO users (email, password_hash, name, is_admin)
-		 VALUES ($1, $2, $3, FALSE)
-		 ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-		 RETURNING id::text`, email, unusable, name).Scan(&userID); err != nil {
+		 VALUES ($1, $2, $3, FALSE) ON CONFLICT (email) DO NOTHING
+		 RETURNING id::text`,
+		`SELECT id::text FROM users WHERE email = $1`,
+		[]any{email, unusable, name}, []any{email})
+	if err != nil {
 		return "", fmt.Errorf("create the administrator's account: %w", err)
 	}
 
-	var membershipID string
-	if err := tx.QueryRow(ctx,
+	membershipID, err := insertOrSelect(ctx, tx,
 		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)
-		 ON CONFLICT (tenant_id, user_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
-		 RETURNING id::text`, tenantID, userID).Scan(&membershipID); err != nil {
+		 ON CONFLICT (tenant_id, user_id) DO NOTHING RETURNING id::text`,
+		`SELECT id::text FROM memberships WHERE tenant_id = $1::uuid AND user_id = $2::uuid`,
+		[]any{tenantID, userID}, []any{tenantID, userID})
+	if err != nil {
 		return "", fmt.Errorf("add the administrator to the organisation: %w", err)
 	}
 
-	var roleID string
-	if err := tx.QueryRow(ctx,
+	roleID, err := insertOrSelect(ctx, tx,
 		`INSERT INTO roles (tenant_id, code, name) VALUES ($1::uuid, 'admin', 'Tenant Admin')
-		 ON CONFLICT (tenant_id, code) DO UPDATE SET name = roles.name
-		 RETURNING id::text`, tenantID).Scan(&roleID); err != nil {
+		 ON CONFLICT (tenant_id, code) DO NOTHING RETURNING id::text`,
+		`SELECT id::text FROM roles WHERE tenant_id = $1::uuid AND code = 'admin'`,
+		[]any{tenantID}, []any{tenantID})
+	if err != nil {
 		return "", fmt.Errorf("create the administrator role: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
@@ -228,6 +239,32 @@ func ensureAdmin(ctx context.Context, tx pgx.Tx, tenantID, email, name string) (
 		return "", fmt.Errorf("grant the administrator role: %w", err)
 	}
 	return userID, nil
+}
+
+// insertOrSelect runs an insert that may find the row already there, and
+// returns the id either way.
+//
+// Two statements in one transaction rather than an upsert. See the note in
+// ensureAdmin for why the upsert is not available to this role, and note that
+// the pair is safe here for the ordinary reason: they are in the caller's
+// transaction, and the unique constraint is what decides the race.
+func insertOrSelect(ctx context.Context, tx pgx.Tx, insert, selectExisting string,
+	insertArgs, selectArgs []any,
+) (string, error) {
+	var id string
+	err := tx.QueryRow(ctx, insert, insertArgs...).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	// No rows from the insert means the conflict clause swallowed it, so the
+	// row belongs to somebody else's earlier statement — or to a trigger.
+	if err := tx.QueryRow(ctx, selectExisting, selectArgs...).Scan(&id); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 // installApps asks the platform to install each app and reports both lists.

@@ -436,11 +436,15 @@ export const api = {
       // Reported available only when it can actually be used: a deployment that
       // federates has closed its own sign-in paths, and Google is one of them.
       google: { enabled: boolean; start_url?: string };
+      // "private" means this deployment provisions nobody: somebody who has
+      // never been invited cannot get in however they authenticate, so the
+      // screen says so instead of letting them find out by failing.
+      access_mode?: "public" | "private";
     }>("/auth/sso/config"),
 
   // permissions carries the effective grant of every role the member holds; it
   // is empty for administrators, who bypass the check.
-  getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[]; impersonated?: boolean }>("/auth/me"),
+  getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[]; impersonated?: boolean; notices?: Array<{ kind: string; title: string; body: string }> }>("/auth/me"),
 
   // The organisations the signed-in person may act for. A membership in one is
   // the common case, so callers should expect a list of one rather than treat

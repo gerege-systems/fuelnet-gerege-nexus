@@ -31,6 +31,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
@@ -39,6 +40,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 	"github.com/go-chi/chi/v5"
@@ -99,6 +101,11 @@ type Server struct {
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
 	appGate        *memo.Cache[bool]
+	// settings and featureFlags are the two things the console can change
+	// without a deployment. Both are memory with a timer behind them; both are
+	// on the invalidation bus so a change is felt on every replica at once.
+	settings     *settings.Store
+	featureFlags *flags.Store
 	// suspended answers "is this organisation closed" without a query per
 	// request. Registered on the invalidation bus, so resuming one takes
 	// effect everywhere rather than after every replica's own TTL.
@@ -133,6 +140,13 @@ const appGateTTL = 30 * time.Second
 
 // appGateCacheName is what the invalidation bus knows the gate cache as.
 const appGateCacheName = "appgate"
+
+// The other two things the bus carries. Named here rather than in their own
+// packages because the names are this server's arrangement, not theirs.
+const (
+	settingsCacheName = "settings"
+	flagsCacheName    = "flags"
+)
 
 // forgetAppGate drops one tenant's cached installation answers, here and on
 // every other replica.
@@ -264,6 +278,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		permissions:    rbac.NewSQLPermissionStore(db),
 		appGate:        memo.New[bool](appGateTTL),
 		suspended:      memo.New[bool](suspendedTTL),
+		settings:       settings.NewStore(db),
+		featureFlags:   flags.NewStore(db),
 		bus:            bus,
 		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
@@ -302,6 +318,37 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
 	s.bus.Register(appGateCacheName, s.appGate)
 	s.bus.Register(suspendedCacheName, s.suspended)
+	s.bus.Register(settingsCacheName, s.settings)
+	s.bus.Register(flagsCacheName, s.featureFlags)
+	s.settings.OnChange(func() { s.bus.Invalidate(settingsCacheName, "") })
+	s.featureFlags.OnChange(func() { s.bus.Invalidate(flagsCacheName, "") })
+
+	// The process-wide stores the scattered consumers read: the idle timeout in
+	// auth, the catalogue's interval, the copilot's model, and every
+	// flags.Enabled in every module. Installed before the first request rather
+	// than lazily, so no request is served with "no store, use the environment"
+	// while a value sits in the database.
+	settings.UseStore(s.settings)
+	flags.UseStore(s.featureFlags)
+
+	// A first read, so the platform starts with what the console last decided
+	// rather than with the defaults for the first thirty seconds. A failure is
+	// not fatal — the environment and the defaults are still there — but it is
+	// worth saying, because a deployment that logs this every start has a
+	// database the settings never load from.
+	settingsCtx, cancelSettings := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := s.settings.Load(settingsCtx); err != nil {
+		slog.Warn("could not read the platform settings at startup", "error", err)
+	}
+	if err := s.featureFlags.Load(settingsCtx); err != nil {
+		slog.Warn("could not read the feature flags at startup", "error", err)
+	}
+	cancelSettings()
+
+	// Said once at startup and again on the console's home screen, because a
+	// contradiction between two pieces of configuration is exactly the thing
+	// nobody notices until it matters.
+	warnAboutConflictingConfiguration()
 
 	// Deployment-wide budgets for the endpoints where a per-replica one is not
 	// a budget at all. Each is nil without Redis, and a nil one allows.
@@ -317,6 +364,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// invited. Nothing else of the platform is reachable from it.
 	s.cp = controlplane.New(db, controlplane.Deps{
 		Installer: s, Mail: s.emailVerify, TenantChanged: s.forgetSuspension,
+		Settings: s.settings, Flags: s.featureFlags,
+		Warnings: ConfigurationWarnings,
 	})
 
 	s.setupRoutes()
@@ -390,6 +439,11 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.eidMN.StartHousekeeping(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
+	// What the console can change without a deployment. Both refresh on their
+	// own timer as well as on the bus, so a deployment without Redis is at
+	// most thirty seconds behind.
+	s.settings.StartRefresh(ctx)
+	s.featureFlags.StartRefresh(ctx)
 	// The console's sessions are a separate table with the same problem, and
 	// the organisations whose grace period has ended are removed by the same
 	// call.
@@ -467,15 +521,20 @@ func (s *Server) startCatalogSync(ctx context.Context) {
 	if !s.catalogSource.Remote() {
 		return
 	}
-	interval := s.catalogSource.SyncInterval()
 	async.Go("catalog-sync", func() {
-		ticker := time.NewTicker(interval)
+		// The interval is read on every round rather than captured, because it
+		// is a platform setting now: an operator who slows the polling down
+		// during a registry incident should not have to restart the platform
+		// for it to take effect. A change is felt after the current wait, which
+		// is the most anybody could reasonably expect of a poll.
+		ticker := time.NewTicker(s.catalogInterval())
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				ticker.Reset(s.catalogInterval())
 				syncCtx, cancel := context.WithTimeout(ctx, catalogLoadTimeout)
 				changed, err := s.syncCatalogFromRegistry(syncCtx)
 				cancel()
@@ -488,6 +547,23 @@ func (s *Server) startCatalogSync(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// catalogInterval is how long to wait before asking the registry again.
+//
+// The setting, then whatever the catalogue source worked out from the
+// environment at startup. A minute is the floor for the reason source.go gives:
+// below that this stops being a poll and becomes a load generator pointed at
+// somebody else's registry.
+func (s *Server) catalogInterval() time.Duration {
+	interval := settings.Duration(settings.CatalogSyncInterval)
+	if interval <= 0 {
+		interval = s.catalogSource.SyncInterval()
+	}
+	if interval < time.Minute {
+		interval = time.Minute
+	}
+	return interval
 }
 
 // recordSync remembers how the last attempt went.

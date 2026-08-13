@@ -43,6 +43,8 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -68,6 +70,11 @@ type Mailer interface {
 type Deps struct {
 	Installer Installer
 	Mail      Mailer
+	// Settings and Flags are what CP-3 edits. Held as the platform's own
+	// stores rather than rebuilt here, so a change the console makes is felt
+	// by the running platform rather than by a second copy of it.
+	Settings *settings.Store
+	Flags    *flags.Store
 	// TenantChanged is called after the console changes an organisation's
 	// lifecycle, so the platform can drop what it has cached about it — on
 	// every replica, through the invalidation bus, rather than after each of
@@ -77,6 +84,11 @@ type Deps struct {
 	// this package must not know that those caches exist, and the platform
 	// must not have to expose them.
 	TenantChanged func(tenantID string)
+	// Warnings are the platform's own complaints about its configuration — a
+	// demo seeder on a private deployment, and whatever CP-4 adds. A callback
+	// because the answer lives in the platform package, which imports this one:
+	// the console asks rather than reaching.
+	Warnings func() []string
 }
 
 // Service holds what every control-plane request needs.
@@ -85,7 +97,10 @@ type Service struct {
 	sessions      *SessionStore
 	installer     Installer
 	mail          Mailer
+	settings      *settings.Store
+	flags         *flags.Store
 	tenantChanged func(tenantID string)
+	warningsFrom  func() []string
 	// host is the only hostname the console answers on, from
 	// CONTROL_PLANE_HOST. Empty has a meaning that depends on the environment —
 	// see hostGate.
@@ -100,7 +115,10 @@ func New(db *pgxpool.Pool, deps Deps) *Service {
 		sessions:      NewSessionStore(db),
 		installer:     deps.Installer,
 		mail:          deps.Mail,
+		settings:      deps.Settings,
+		flags:         deps.Flags,
 		tenantChanged: deps.TenantChanged,
+		warningsFrom:  deps.Warnings,
 		host:          normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
 	}
 }
@@ -118,6 +136,27 @@ func (s *Service) changed(tenantID string) {
 	if s.tenantChanged != nil {
 		s.tenantChanged(tenantID)
 	}
+}
+
+// warnings is what the configuration screen shows above the fields: the
+// platform's own complaints, plus the feature flags that have outlived the date
+// somebody gave them.
+//
+// Flag debt is only ever paid when somebody is reminded, and the moment they
+// are looking at the configuration is the moment to remind them.
+func (s *Service) warnings() []string {
+	warnings := make([]string, 0, 2)
+	if s.warningsFrom != nil {
+		warnings = append(warnings, s.warningsFrom()...)
+	}
+	if s.flags != nil {
+		if _, expired := s.flags.Snapshot(time.Now()); len(expired) > 0 {
+			warnings = append(warnings,
+				"Хугацаа нь дууссан feature flag: "+strings.Join(expired, ", ")+
+					". Кодоос нь салгаад flag-ийг устгах цаг болсон.")
+		}
+	}
+	return warnings
 }
 
 // scoped puts a context on the operator's database role.
