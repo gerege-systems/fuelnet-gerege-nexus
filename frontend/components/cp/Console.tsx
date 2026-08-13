@@ -90,63 +90,84 @@ export default function Console({ children }: { children: React.ReactNode }) {
 
   return (
     <ConsoleContext.Provider value={{ operator, signOut }}>
-      <div className="flex min-h-screen">
-        {/*
-          The navigation is a column rather than a bar across the top, and the
-          reason is arithmetic: six destinations in a row leave a screen whose
-          width is spent on chrome before any of it is spent on a table of
-          organisations. Down the side they cost sixteen rems and never
-          reflow, and the pages they lead to are wide tables that want the
-          height.
-        */}
-        <aside className="w-16 lg:w-60 shrink-0 bg-slate-900 text-slate-100 flex flex-col sticky top-0 h-screen">
-          <Link
-            href="/cp"
-            className="h-14 flex items-center gap-2 px-4 font-semibold shrink-0 border-b border-slate-800"
-          >
-            <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
-            <span className="hidden lg:inline truncate">{t("cp.view.title")}</span>
+      {/*
+        The product's own shell, class for class. The console had a dark bar of
+        its own for a phase, and the argument for it — an operator with both
+        windows open should know which is which — is answered better by the
+        badge in the corner than by a different design system: two visual
+        languages in one repository is two things to maintain and one of them
+        always falls behind.
+      */}
+      <div className="gerege-shell min-h-screen flex flex-col">
+        <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50 px-4 gap-3">
+          <Link href="/cp" className="flex items-center gap-2.5 font-semibold text-slate-900">
+            <span className="w-9 h-9 rounded-lg grid place-items-center bg-slate-900">
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
+            </span>
+            <span className="min-w-0">
+              <small className="block text-[11px] leading-4 text-slate-500">Gerege Nexus</small>
+              <strong className="block text-[15px] leading-5 truncate">{t("cp.view.title")}</strong>
+            </span>
           </Link>
 
-          <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
-            <ConsoleLink href="/cp" exact icon={<Activity className="w-5 h-5" />} label={t("cp.section.health")} />
-            <ConsoleLink href="/cp/tenants" icon={<Building2 className="w-5 h-5" />} label={t("cp.section.tenants")} />
-            <ConsoleLink href="/cp/support" icon={<LifeBuoy className="w-5 h-5" />} label={t("cp.section.support")} />
-            <ConsoleLink href="/cp/approvals" icon={<CheckCheck className="w-5 h-5" />} label={t("cp.section.approvals")} />
-            <ConsoleLink href="/cp/config" icon={<SlidersHorizontal className="w-5 h-5" />} label={t("cp.section.config")} />
-            <ConsoleLink href="/cp/announcements" icon={<Megaphone className="w-5 h-5" />} label={t("cp.section.announcements")} />
-          </nav>
+          <div className="flex-1" />
 
-          {/* Who is signed in stays visible while they work: an operator with
-              two consoles open should never have to guess which account this
-              window is holding. */}
-          <div className="border-t border-slate-800 p-2 shrink-0">
-            <div className="hidden lg:block px-2 pb-2 pt-1">
-              <p className="text-sm text-slate-200 truncate">{operator.name}</p>
-              <p className="text-xs text-slate-400 truncate">{t(`cp.role.${operator.role}`)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              title={t("cp.action.sign_out")}
-              className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
-            >
-              <LogOut className="w-5 h-5 shrink-0" />
-              <span className="hidden lg:inline">{t("cp.action.sign_out")}</span>
-            </button>
-          </div>
-        </aside>
+          <span className="hidden sm:block text-sm text-slate-600 truncate max-w-[16rem]">
+            {operator.name} · {t(`cp.role.${operator.role}`)}
+          </span>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 transition"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">{t("cp.action.sign_out")}</span>
+          </button>
+        </header>
 
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mx-auto max-w-6xl">{children}</div>
-        </main>
+        <div className="flex flex-1 min-h-0">
+          <aside className="w-16 lg:w-60 shrink-0 border-r border-[var(--gerege-border)] bg-[var(--gerege-chrome)] py-4">
+            <nav className="px-2 space-y-6">
+              <MenuGroup title={t("cp.group.watch")}>
+                <ConsoleLink href="/cp" exact icon={<Activity className="w-5 h-5" />} label={t("cp.section.health")} />
+              </MenuGroup>
+
+              <MenuGroup title={t("cp.group.organisations")}>
+                <ConsoleLink href="/cp/tenants" icon={<Building2 className="w-5 h-5" />} label={t("cp.section.tenants")} />
+                <ConsoleLink href="/cp/support" icon={<LifeBuoy className="w-5 h-5" />} label={t("cp.section.support")} />
+                <ConsoleLink href="/cp/approvals" icon={<CheckCheck className="w-5 h-5" />} label={t("cp.section.approvals")} />
+              </MenuGroup>
+
+              <MenuGroup title={t("cp.group.platform")}>
+                <ConsoleLink href="/cp/config" icon={<SlidersHorizontal className="w-5 h-5" />} label={t("cp.section.config")} />
+                <ConsoleLink href="/cp/announcements" icon={<Megaphone className="w-5 h-5" />} label={t("cp.section.announcements")} />
+              </MenuGroup>
+            </nav>
+          </aside>
+
+          <main className="gerege-main flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+            <div className="mx-auto max-w-6xl">{children}</div>
+          </main>
+        </div>
       </div>
     </ConsoleContext.Provider>
   );
 }
 
+/** A titled group of destinations, as the product's own sidebar has. */
+function MenuGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="gerege-menu-group">
+      <h3 className="hidden lg:block px-3 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+        {title}
+      </h3>
+      <div className="space-y-0.5">{children}</div>
+    </section>
+  );
+}
+
 /**
- * One destination in the sidebar.
+ * One destination.
  *
  * `exact` exists for the front page: every other route begins with /cp, so a
  * prefix test would light the first entry on every screen in the console.
@@ -169,11 +190,11 @@ function ConsoleLink({
       href={href}
       title={label}
       aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
-        active ? "bg-slate-800 text-white" : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+      className={`gerege-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition ${
+        active ? "gerege-nav-link-active font-semibold" : ""
       }`}
     >
-      <span className="shrink-0">{icon}</span>
+      <span className="gerege-nav-icon shrink-0">{icon}</span>
       <span className="hidden lg:inline truncate">{label}</span>
     </Link>
   );

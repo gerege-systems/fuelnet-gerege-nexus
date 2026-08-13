@@ -256,4 +256,8 @@ export const cp = {
     mn: "Хэрэглээ хараахан тоологдоогүй байна — тоолол шөнө бүр ажиллана.",
     en: "Nothing has been counted yet — the collection runs nightly.",
   },
+
+  "cp.group.watch": { mn: "Ажиглалт", en: "Watch" },
+  "cp.group.organisations": { mn: "Байгууллага", en: "Organisations" },
+  "cp.group.platform": { mn: "Платформ", en: "Platform" },
 };
