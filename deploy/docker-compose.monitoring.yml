@@ -82,6 +82,11 @@ services:
         --web.external-url=${MONITORING_PUBLIC_URL:-http://localhost:9093}/alertmanager
         --web.route-prefix=/
     environment:
+      # The clock an alert is read on. Alertmanager renders StartsAt with the
+      # container's zone, and a message that says 02:32 UTC to somebody holding
+      # a phone that says 10:32 is asking them to do arithmetic at the worst
+      # possible moment. Seen on the first real alert this stack delivered.
+      TZ: ${ALERT_TIMEZONE:-Asia/Ulaanbaatar}
       ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
       ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
       ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
@@ -203,7 +208,12 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - gerege_nexus_monitoring_grafana:/var/lib/grafana
     ports:
-      - "127.0.0.1:3009:3000"
+      # A variable rather than a constant, because 3009 is not free everywhere.
+      # This host runs three products side by side and a sibling stack's
+      # frontend already had it, so the first rollout failed on "port is
+      # already allocated" — after every other container had started, which is
+      # the least helpful moment to find out.
+      - "127.0.0.1:${GRAFANA_PORT:-3009}:3000"
     networks:
       - monitoring
     depends_on:
