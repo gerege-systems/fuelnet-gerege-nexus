@@ -15,7 +15,17 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldCheck } from "lucide-react";
+import { usePathname } from "next/navigation";
+import {
+  Activity,
+  Building2,
+  CheckCheck,
+  LifeBuoy,
+  LogOut,
+  Megaphone,
+  ShieldCheck,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { cp, Unauthorized, type Operator } from "@/lib/cp";
 import { useI18n } from "@/lib/i18n";
@@ -80,42 +90,91 @@ export default function Console({ children }: { children: React.ReactNode }) {
 
   return (
     <ConsoleContext.Provider value={{ operator, signOut }}>
-      <header className="bg-slate-900 text-slate-100">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
-          <Link href="/cp" className="flex items-center gap-2 font-semibold">
-            <ShieldCheck className="w-5 h-5 text-amber-400" />
-            {t("cp.view.title")}
-          </Link>
-          <nav className="flex items-center gap-1 text-sm">
-            <ConsoleLink href="/cp" label={t("cp.section.health")} />
-            <ConsoleLink href="/cp/tenants" label={t("cp.section.tenants")} />
-            <ConsoleLink href="/cp/support" label={t("cp.section.support")} />
-            <ConsoleLink href="/cp/approvals" label={t("cp.section.approvals")} />
-            <ConsoleLink href="/cp/config" label={t("cp.section.config")} />
-            <ConsoleLink href="/cp/announcements" label={t("cp.section.announcements")} />
-          </nav>
-          <div className="flex-1" />
-          <span className="text-sm text-slate-300">
-            {operator.name} · {t(`cp.role.${operator.role}`)}
-          </span>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="text-sm rounded-lg px-3 py-1.5 bg-slate-800 hover:bg-slate-700 transition"
+      <div className="flex min-h-screen">
+        {/*
+          The navigation is a column rather than a bar across the top, and the
+          reason is arithmetic: six destinations in a row leave a screen whose
+          width is spent on chrome before any of it is spent on a table of
+          organisations. Down the side they cost sixteen rems and never
+          reflow, and the pages they lead to are wide tables that want the
+          height.
+        */}
+        <aside className="w-16 lg:w-60 shrink-0 bg-slate-900 text-slate-100 flex flex-col sticky top-0 h-screen">
+          <Link
+            href="/cp"
+            className="h-14 flex items-center gap-2 px-4 font-semibold shrink-0 border-b border-slate-800"
           >
-            {t("cp.action.sign_out")}
-          </button>
-        </div>
-      </header>
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+            <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+            <span className="hidden lg:inline truncate">{t("cp.view.title")}</span>
+          </Link>
+
+          <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
+            <ConsoleLink href="/cp" exact icon={<Activity className="w-5 h-5" />} label={t("cp.section.health")} />
+            <ConsoleLink href="/cp/tenants" icon={<Building2 className="w-5 h-5" />} label={t("cp.section.tenants")} />
+            <ConsoleLink href="/cp/support" icon={<LifeBuoy className="w-5 h-5" />} label={t("cp.section.support")} />
+            <ConsoleLink href="/cp/approvals" icon={<CheckCheck className="w-5 h-5" />} label={t("cp.section.approvals")} />
+            <ConsoleLink href="/cp/config" icon={<SlidersHorizontal className="w-5 h-5" />} label={t("cp.section.config")} />
+            <ConsoleLink href="/cp/announcements" icon={<Megaphone className="w-5 h-5" />} label={t("cp.section.announcements")} />
+          </nav>
+
+          {/* Who is signed in stays visible while they work: an operator with
+              two consoles open should never have to guess which account this
+              window is holding. */}
+          <div className="border-t border-slate-800 p-2 shrink-0">
+            <div className="hidden lg:block px-2 pb-2 pt-1">
+              <p className="text-sm text-slate-200 truncate">{operator.name}</p>
+              <p className="text-xs text-slate-400 truncate">{t(`cp.role.${operator.role}`)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              title={t("cp.action.sign_out")}
+              className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
+            >
+              <LogOut className="w-5 h-5 shrink-0" />
+              <span className="hidden lg:inline">{t("cp.action.sign_out")}</span>
+            </button>
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mx-auto max-w-6xl">{children}</div>
+        </main>
+      </div>
     </ConsoleContext.Provider>
   );
 }
 
-function ConsoleLink({ href, label }: { href: string; label: string }) {
+/**
+ * One destination in the sidebar.
+ *
+ * `exact` exists for the front page: every other route begins with /cp, so a
+ * prefix test would light the first entry on every screen in the console.
+ */
+function ConsoleLink({
+  href,
+  label,
+  icon,
+  exact,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  exact?: boolean;
+}) {
+  const pathname = usePathname();
+  const active = exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
   return (
-    <Link href={href} className="rounded-lg px-3 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800 transition">
-      {label}
+    <Link
+      href={href}
+      title={label}
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+        active ? "bg-slate-800 text-white" : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+      }`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="hidden lg:inline truncate">{label}</span>
     </Link>
   );
 }
