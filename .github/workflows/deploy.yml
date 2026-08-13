@@ -13,6 +13,12 @@ name: Deploy to Production (nexus.gerege.mn)
 #
 # Required repository secrets:
 #   DEPLOY_SSH_KEY              private key for the deploy user (required)
+#   DEPLOY_DISPATCH_TOKEN       fine-grained token the operator console uses to
+#                               trigger *this* workflow, and nothing else. It
+#                               reaches the server as GITHUB_DEPLOY_TOKEN; the
+#                               names differ because GitHub refuses secrets
+#                               beginning with GITHUB_. Optional: without it the
+#                               console's deploy button refuses and says why.
 #   DEPLOY_HOST                 defaults to nexus.gerege.mn
 #   DEPLOY_USER                 defaults to deploy
 #   DEPLOY_PORT                 defaults to 22
@@ -207,6 +213,25 @@ jobs:
           APPSTORE_PUBLIC_KEY: ${{ secrets.APPSTORE_PUBLIC_KEY }}
           CATALOG_SYNC_INTERVAL: ${{ vars.CATALOG_SYNC_INTERVAL || '1h' }}
           CONSOLE_ORIGIN: ${{ vars.CONSOLE_ORIGIN }}
+          # The operator console. Empty means this deployment has none: the
+          # /cp routes answer 404 on every hostname, which is the safe reading
+          # of a variable nobody set (docs/CONTROL_PLANE.md §2).
+          CONTROL_PLANE_HOST: ${{ vars.CONTROL_PLANE_HOST }}
+          # What the console's front page reads. The monitoring stack listens
+          # on the host's loopback, so the address is the host gateway — the
+          # compose file adds the extra_hosts entry that resolves it.
+          PROMETHEUS_URL: ${{ vars.PROMETHEUS_URL }}
+          ALERTMANAGER_URL: ${{ vars.ALERTMANAGER_URL }}
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          # The console's deploy button asks GitHub to run *this* workflow. The
+          # token must be a fine-grained one scoped to it and nothing else;
+          # without it the button refuses and says so.
+          #
+          # The secret is called DEPLOY_DISPATCH_TOKEN rather than matching the
+          # variable: GitHub refuses to create any secret whose name begins
+          # with GITHUB_, so a secret of that name would silently be empty for
+          # ever — which is the failure mode this comment exists to prevent.
+          GITHUB_DEPLOY_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
           DEMO_MODE: ${{ env.DEMO_MODE }}
           EID_MOCK_MODE: ${{ env.EID_MOCK_MODE }}
           EID_JIT_TENANT_SLUG: ${{ env.EID_JIT_TENANT_SLUG }}
@@ -216,7 +241,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER || 'deploy' }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN,REPO,REDIS_URL,POSTGRES_PASSWORD,SSO_DEFAULT_CLIENT_SECRET,GEMINI_API_KEY,EID_RP_UUID,EID_RP_SECRET,EID_BASE_URL,ESIGN_TOKEN,EID_SIGN_SIGNER_CERT_PEM,EID_SIGN_SIGNER_KEY_PEM,PUBLIC_ORIGIN,DEMO_MODE,EID_MOCK_MODE,EID_JIT_TENANT_SLUG,INTEGRATION_ENCRYPTION_KEY,GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,GOOGLE_LOGIN_CLIENT_ID,GOOGLE_LOGIN_CLIENT_SECRET,GOOGLE_LOGIN_TENANT,GOOGLE_LOGIN_ALLOWED_DOMAINS,DROPBOX_OAUTH_CLIENT_ID,DROPBOX_OAUTH_CLIENT_SECRET,APP_CATALOG_URL,APPSTORE_PUBLIC_KEY,CATALOG_SYNC_INTERVAL,CONSOLE_ORIGIN
+          envs: IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN,REPO,REDIS_URL,POSTGRES_PASSWORD,SSO_DEFAULT_CLIENT_SECRET,GEMINI_API_KEY,EID_RP_UUID,EID_RP_SECRET,EID_BASE_URL,ESIGN_TOKEN,EID_SIGN_SIGNER_CERT_PEM,EID_SIGN_SIGNER_KEY_PEM,PUBLIC_ORIGIN,DEMO_MODE,EID_MOCK_MODE,EID_JIT_TENANT_SLUG,INTEGRATION_ENCRYPTION_KEY,GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,GOOGLE_LOGIN_CLIENT_ID,GOOGLE_LOGIN_CLIENT_SECRET,GOOGLE_LOGIN_TENANT,GOOGLE_LOGIN_ALLOWED_DOMAINS,DROPBOX_OAUTH_CLIENT_ID,DROPBOX_OAUTH_CLIENT_SECRET,APP_CATALOG_URL,APPSTORE_PUBLIC_KEY,CATALOG_SYNC_INTERVAL,CONSOLE_ORIGIN,CONTROL_PLANE_HOST,PROMETHEUS_URL,ALERTMANAGER_URL,GRAFANA_URL,GITHUB_DEPLOY_TOKEN
           script: |
             set -euo pipefail
             APP_DIR=/opt/open-gerege-nexus
@@ -258,6 +283,12 @@ jobs:
             APPSTORE_PUBLIC_KEY=${APPSTORE_PUBLIC_KEY}
             CATALOG_SYNC_INTERVAL=${CATALOG_SYNC_INTERVAL}
             CONSOLE_ORIGIN=${CONSOLE_ORIGIN}
+            CONTROL_PLANE_HOST=${CONTROL_PLANE_HOST}
+            PROMETHEUS_URL=${PROMETHEUS_URL}
+            ALERTMANAGER_URL=${ALERTMANAGER_URL}
+            GRAFANA_URL=${GRAFANA_URL}
+            GITHUB_DEPLOY_TOKEN=${GITHUB_DEPLOY_TOKEN}
+            GITHUB_REPOSITORY=${REPO}
             EOF
 
             echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin

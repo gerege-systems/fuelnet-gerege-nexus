@@ -279,6 +279,11 @@ host.docker.internal:host-gateway` мөр нэмэгдсэн.
 
 ### Deploy товч
 
+Токен нь GitHub-ийн repository secret-д **`DEPLOY_DISPATCH_TOKEN`** нэрээр
+хадгалагдана (GitHub нь `GITHUB_`-ээр эхэлсэн secret үүсгэхийг зөвшөөрдөггүй),
+серверт `GITHUB_DEPLOY_TOKEN` болж очно. Fine-grained, зөвхөн энэ workflow-д
+`actions: write` эрхтэй байх ёстой.
+
 GitHub Actions-ийн deploy workflow-г `workflow_dispatch`-аар өдөөнө. Серверт
 **юу ч гүйцэтгэхгүй**, env хөндөхгүй, SSH хийхгүй. Токен нь зөвхөн тэр
 workflow-д эрхтэй fine-grained байх ёстой. Superadmin + step-up. Явцыг
