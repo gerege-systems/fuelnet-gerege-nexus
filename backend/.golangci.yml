@@ -18,6 +18,21 @@ linters:
       - path: _test\.go
         linters: [errcheck]
 
+      # SA5011 reads `if x == nil { t.Fatalf(...) }` followed by a dereference
+      # as a possible nil dereference. It is not one: t.Fatal calls FailNow,
+      # which calls runtime.Goexit, so nothing after it runs. Whether
+      # staticcheck sees that depends on the analysis facts it has for the
+      # testing package, which is why this began failing on a commit that
+      # changed no Go code at all — the same three files had passed for months.
+      #
+      # Scoped to tests, and to this one check, because outside a test the
+      # warning is worth having. The alternative — a `return` after every
+      # t.Fatalf — states that Fatal might not stop, which is worse than the
+      # warning it silences.
+      - path: _test\.go
+        text: "SA5011"
+        linters: [staticcheck]
+
       # misspell only knows English, and these lines are deliberately not in
       # it: the menu labels the server owns now carry all seven platform
       # languages inline. Left on, it reads "Inventario" as a typo for
