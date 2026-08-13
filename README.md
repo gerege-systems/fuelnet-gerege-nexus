@@ -330,6 +330,8 @@ npm run dev
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS зөвшөөрөгдсөн эх сурвалж |
 | `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
 | `CONTROL_PLANE_HOST` | — | Операторын консолын хост. Production дээр хоосон бол консол огт байхгүй ([`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)) |
+| `PROMETHEUS_URL` / `ALERTMANAGER_URL` / `GRAFANA_URL` | — | Консолын нүүр хуудсанд хэмжүүр, дохио, гүнзгий линк. Хоосон бол тэр хэсэг "тохируулаагүй" гэж харагдана |
+| `GITHUB_DEPLOY_TOKEN` / `GITHUB_REPOSITORY` | — | Консолын deploy товч. Токен нь зөвхөн deploy workflow-д эрхтэй fine-grained байх ёстой |
 | `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх. Платформ хаалттай (private) горимтой бол зөрчилдөх тул boot дээр анхааруулна |
 | `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
 | `SSO_CLIENT_ISSUER` / `SSO_CLIENT_ID` | — | Тохируулбал энэ суулгац нэрлэсэн провайдерийн клиент болно: эндэх нэвтрэлт хаагдаж, гарах нь провайдер дээр дуусна |

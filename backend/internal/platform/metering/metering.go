@@ -1,0 +1,241 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ */
+
+// Package metering counts what each organisation used, once a day.
+//
+// It exists for two readers. The console shows it, so an operator can see who
+// is growing and who is about to cross a limit; and the quota checks read it,
+// so a limit on AI calls or storage is enforced against a number somebody can
+// point at rather than one computed differently in each handler.
+//
+// Three decisions shape it, and each is a road not taken:
+//
+//   - **Not from Prometheus.** The first phase decided that no metric would
+//     carry a tenant label, because a label whose values are customers is a
+//     series count that only ever grows. The price is that this counting
+//     happens in SQL — and the profit is that it counts *acts* recorded in the
+//     audit trail rather than HTTP requests, which is what a bill should be
+//     based on.
+//   - **Not an event per request.** A row per API call is a table nobody can
+//     query by the second month. What is stored is the day's total, one row
+//     per organisation per metric, written by a job that runs after midnight.
+//   - **Not derived on read.** The numbers could be computed from the source
+//     tables whenever somebody asks, and they would be correct until the day
+//     an organisation is deleted or a retention sweep removes the rows they
+//     were counted from. A usage record has to outlive what it counted.
+package metering
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// The metrics, as a closed list. A name that is not here is never written, so
+// the console and the quota checks can rely on what they find.
+const (
+	// ActiveUsers is how many distinct people used the organisation that day.
+	ActiveUsers = "active_users"
+	// Actions is every act recorded in the organisation's audit trail — the
+	// closest honest answer to "how much did they use the platform".
+	//
+	// Deliberately not called api_calls: it does not count requests, it counts
+	// the things worth recording, and naming it after what it is avoids an
+	// invoice line nobody can reconcile.
+	Actions = "actions"
+	// AICalls is copilot, chat, transcription, speech and translation.
+	AICalls = "ai_calls"
+	// ReportsSent is scheduled reports delivered.
+	ReportsSent = "reports_sent"
+	// StorageMB is what the organisation is keeping — the signed documents and
+	// the files behind them, which is where the bytes on this platform are.
+	StorageMB = "storage_mb"
+)
+
+// Metrics is the list, in the order the console shows them.
+func Metrics() []string { return []string{ActiveUsers, Actions, AICalls, ReportsSent, StorageMB} }
+
+// Collector writes the daily rows.
+type Collector struct{ db *pgxpool.Pool }
+
+func New(db *pgxpool.Pool) *Collector { return &Collector{db: db} }
+
+// Start runs the collection shortly after every midnight, and once at startup.
+//
+// The startup run is what makes a deployment that was switched off overnight
+// catch up: CollectDay is idempotent — the primary key is (tenant, day,
+// metric) and the write is an upsert — so running it again for a day already
+// counted rewrites the same numbers.
+func (c *Collector) Start(ctx context.Context) {
+	async.Go("usage-metering", func() {
+		// Yesterday, at startup, because today is not over.
+		c.CollectDay(ctx, time.Now().AddDate(0, 0, -1))
+		for {
+			wait := untilNextRun(time.Now())
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wait):
+			}
+			c.CollectDay(ctx, time.Now().AddDate(0, 0, -1))
+			// And today's numbers so far, so the console is not a day behind
+			// for anybody looking at it in the afternoon. Rewritten on every
+			// run until the day ends and the figure settles.
+			c.CollectDay(ctx, time.Now())
+		}
+	})
+}
+
+// collectionHour is when the day's totals are taken: a little after midnight,
+// late enough that anything still finishing at 23:59 has landed.
+const collectionHour = 1
+
+func untilNextRun(now time.Time) time.Duration {
+	next := time.Date(now.Year(), now.Month(), now.Day(), collectionHour, 10, 0, 0, now.Location())
+	if !next.After(now) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next.Sub(now)
+}
+
+// CollectDay counts one day for every organisation.
+//
+// One statement per metric rather than one per organisation: a deployment with
+// two hundred organisations would otherwise make a thousand round trips a
+// night, and the aggregate is what SQL is for.
+func (c *Collector) CollectDay(ctx context.Context, day time.Time) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	date := day.Format("2006-01-02")
+	for metric, query := range queries {
+		if err := c.collect(ctx, metric, query, date); err != nil {
+			// One metric failing must not stop the others: a platform whose
+			// storage query is slow should still know how many people signed
+			// in.
+			slog.Warn("metering: could not collect a metric",
+				"metric", metric, "day", date, "error", err)
+		}
+	}
+}
+
+// queries is the whole of the counting.
+//
+// Each takes the day as $1 and produces (tenant_id, value). They run on the
+// platform path — the collector is not anybody's request — and every one of
+// them is a plain aggregate over a table that carries a tenant_id.
+var queries = map[string]string{
+	// Somebody whose session was used that day. `last_seen_at` rather than
+	// created_at: a person who signed in on Monday and worked through Friday
+	// is active every one of those days, which is what an "active user" means
+	// to whoever is paying for one.
+	ActiveUsers: `
+		SELECT tenant_id, count(DISTINCT user_id)
+		  FROM sessions
+		 WHERE last_seen_at::date = $1::date
+		 GROUP BY tenant_id`,
+
+	Actions: `
+		SELECT tenant_id, count(*)
+		  FROM audit_events
+		 WHERE created_at::date = $1::date AND tenant_id IS NOT NULL
+		 GROUP BY tenant_id`,
+
+	AICalls: `
+		SELECT tenant_id, count(*)
+		  FROM audit_events
+		 WHERE created_at::date = $1::date AND tenant_id IS NOT NULL
+		   AND action LIKE 'ai.%'
+		 GROUP BY tenant_id`,
+
+	ReportsSent: `
+		SELECT tenant_id, count(*)
+		  FROM audit_events
+		 WHERE created_at::date = $1::date AND tenant_id IS NOT NULL
+		   AND action LIKE 'reports.%'
+		 GROUP BY tenant_id`,
+
+	// Storage is a state rather than an event: what is being kept *now*, not
+	// what arrived that day. It is written against the day it was measured, so
+	// the series reads as "how much they were holding on the 3rd".
+	//
+	// The signed documents are where the bytes are on this platform — PDFs in
+	// BYTEA columns. octet_length is exact and cheap enough at this frequency;
+	// pg_total_relation_size would have been per table rather than per tenant.
+	StorageMB: `
+		SELECT tenant_id,
+		       ceil(sum(bytes) / 1048576.0)::bigint
+		  FROM (
+		      SELECT tenant_id,
+		             octet_length(original_pdf) +
+		             COALESCE(octet_length(signed_pdf), 0) AS bytes
+		        FROM esign_documents
+		  ) AS files
+		 GROUP BY tenant_id`,
+}
+
+// collect writes one metric's rows for one day.
+//
+// The day and the metric name are parameters of the *outer* statement, so a
+// counting query is free to ignore the day — the storage one does, because it
+// measures what is being kept now rather than what happened then.
+func (c *Collector) collect(ctx context.Context, metric, query, date string) error {
+	// The insert and the count in one statement: the alternative reads every
+	// row into Go to write it straight back, which is a round trip per
+	// organisation for no reason.
+	_, err := c.db.Exec(ctx, fmt.Sprintf(`
+		INSERT INTO usage_events (tenant_id, day, metric, value, recorded_at)
+		SELECT tenant_id, $1::date, $2, value, NOW() FROM (%s) AS counted(tenant_id, value)
+		ON CONFLICT (tenant_id, day, metric)
+		DO UPDATE SET value = EXCLUDED.value, recorded_at = NOW()`, query),
+		date, metric)
+	return err
+}
+
+// MonthToDate is what a monthly quota is checked against.
+//
+// The current month, from the first to today, for one organisation and one
+// metric. Today's own row is included and is rewritten by every collection, so
+// a limit is enforced against numbers that are hours old at worst — which is
+// the right trade for a check that runs on the request path.
+func MonthToDate(ctx context.Context, db *pgxpool.Pool, tenantID, metric string) (int64, error) {
+	var total int64
+	if err := db.QueryRow(ctx,
+		`SELECT COALESCE(sum(value), 0) FROM usage_events
+		  WHERE tenant_id = $1::uuid AND metric = $2
+		    AND day >= date_trunc('month', CURRENT_DATE)`,
+		tenantID, metric).Scan(&total); err != nil {
+		return 0, fmt.Errorf("metering: read the month's %s: %w", metric, err)
+	}
+	return total, nil
+}
+
+// Latest is the most recent value of a metric that is a state rather than a
+// count — storage, which is measured rather than accumulated.
+//
+// An organisation with no rows yet is zero rather than an error: nothing has
+// been counted for them, which is what a new organisation looks like on the
+// morning before the first collection.
+func Latest(ctx context.Context, db *pgxpool.Pool, tenantID, metric string) (int64, error) {
+	var value int64
+	err := db.QueryRow(ctx,
+		`SELECT COALESCE(value, 0) FROM usage_events
+		  WHERE tenant_id = $1::uuid AND metric = $2
+		  ORDER BY day DESC LIMIT 1`, tenantID, metric).Scan(&value)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("metering: read the latest %s: %w", metric, err)
+	}
+	return value, nil
+}

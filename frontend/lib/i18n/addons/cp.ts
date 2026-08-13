@@ -239,4 +239,21 @@ export const cp = {
     en: "No backup has ever reported. Install deploy/scripts/backup.sh in cron.",
   },
   "cp.message.never_tested": { mn: "Хэзээ ч туршаагүй", en: "Never tested" },
+
+  "cp.section.usage": { mn: "Хэрэглээ", en: "Usage" },
+  "cp.action.usage": { mn: "Хэрэглээ", en: "Usage" },
+  "cp.field.counted": { mn: "Сүүлд тоолсон", en: "Last counted" },
+
+  "cp.metric.active_users": { mn: "Идэвхтэй хэрэглэгч (өдрийн дээд)", en: "Active people (daily peak)" },
+  "cp.metric.actions": { mn: "Бүртгэгдсэн үйлдэл", en: "Recorded actions" },
+  "cp.metric.ai_calls": { mn: "AI дуудлага", en: "AI calls" },
+  "cp.metric.reports_sent": { mn: "Илгээсэн тайлан", en: "Reports sent" },
+  "cp.metric.storage_mb": { mn: "Хадгалалт (MB)", en: "Storage (MB)" },
+
+  "cp.state.not_enforced": { mn: "хэрэгжихгүй", en: "not enforced" },
+  "cp.message.no_usage": { mn: "Энэ хугацаанд тоолол алга.", en: "Nothing counted in this window." },
+  "cp.message.never_counted": {
+    mn: "Хэрэглээ хараахан тоологдоогүй байна — тоолол шөнө бүр ажиллана.",
+    en: "Nothing has been counted yet — the collection runs nightly.",
+  },
 };

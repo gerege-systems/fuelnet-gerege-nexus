@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
@@ -25,6 +27,7 @@ import (
 
 func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("copilot")
+	s.recordAIUse(r, "copilot")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -53,6 +56,7 @@ func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("chat")
+	s.recordAIUse(r, "chat")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -73,6 +77,7 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAISTT(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("stt")
+	s.recordAIUse(r, "stt")
 	var req struct {
 		Audio ai.Audio `json:"audio"`
 	}
@@ -90,6 +95,7 @@ func (s *Server) handleAISTT(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("tts")
+	s.recordAIUse(r, "tts")
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -107,6 +113,7 @@ func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAITranslate(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("translate")
+	s.recordAIUse(r, "translate")
 	var req struct {
 		Text   string    `json:"text"`
 		Audio  *ai.Audio `json:"audio"`
@@ -248,6 +255,7 @@ func aiStatus(error) int { return http.StatusBadGateway }
 
 func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("forecast")
+	s.recordAIUse(r, "forecast")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -261,4 +269,22 @@ func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(forecast)
+}
+
+// recordAIUse writes the act into the organisation's audit trail.
+//
+// The Prometheus counter beside it answers "how much AI is this deployment
+// using"; this answers "how much is *this organisation* using", which the
+// metric deliberately cannot — no tenant labels, ever (§Үе шат 1). CP-5's
+// metering counts these rows, and the monthly AI quota is enforced against
+// that count, so this one line is what makes an AI limit meanable.
+//
+// Best effort, like every audit write: an organisation's copilot must not stop
+// working because a row could not be inserted.
+func (s *Server) recordAIUse(r *http.Request, kind string) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		return
+	}
+	audit.Record(r.Context(), claims.TenantID, claims.UserID, "ai."+kind, kind, nil)
 }

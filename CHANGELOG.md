@@ -15,6 +15,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Counting what each organisation used, from the database rather than from the metrics
+
+CP-5, the last phase of the control plane. `usage_events` holds one row per
+organisation per metric per day, written by a job that runs nightly and again
+during the day, so the console is never showing yesterday's picture to somebody
+looking at it after lunch.
+
+- **Not from Prometheus, deliberately.** The first phase decided that no metric
+  would ever carry a tenant label, because a label whose values are customers
+  is a series count that only grows. The bill for that decision comes due here
+  and is paid in SQL — and arguably at a profit, because what gets counted is
+  *acts recorded in the audit trail* rather than HTTP requests, which is what a
+  usage line should be based on in the first place.
+- **Not an event per request.** A row per API call is a table nobody can query
+  by the second month. What is stored is the day's total, and re-running a
+  day's collection rewrites it rather than doubling it.
+- **Two of the five metrics are not sums, and nothing sums them.** Active people
+  is a peak — adding daily actives over a month counts the same person thirty
+  times — and storage is a reading, where a sum would be a number that never
+  goes down. The screen labels them accordingly.
+- **The console reads usage and cannot write it.** `usage_events` is granted to
+  the operator role for SELECT alone, so there is no console request that can
+  change a number a bill might rest on. That is the first question anybody asks
+  of a metering system in a dispute, and the answer should be a grant rather
+  than a promise.
+- The monthly AI limit CP-2 could only record is now enforced against these
+  numbers, in middleware rather than in each of the six AI handlers, answering
+  429 — the allowance is spent, not the request forbidden. Storage remains
+  measured and shown as not-yet-enforced, because refusing an upload means a
+  check on every upload path and the screen should not imply one that is not
+  there.
+
 ### Added — A front page that answers "is the platform well", and the platform's first backup
 
 CP-4. The console's home screen is now the deployment's health — requests,

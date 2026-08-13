@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
+  BarChart3,
   Building2,
   Download,
   Eye,
@@ -210,6 +211,13 @@ function Detail() {
               }
             />
           )}
+          <Link
+            href={`/cp/tenants/${tenant.id}/usage`}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <BarChart3 className="w-4 h-4" />
+            {t("cp.action.usage")}
+          </Link>
           {may("tenant.delete") && (
             <a
               href={cp.exportURL(tenant.id)}

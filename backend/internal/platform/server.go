@@ -36,6 +36,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
@@ -440,6 +441,9 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.eidMN.StartHousekeeping(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
+	// Yesterday's usage, every night: what the console charts and what the AI
+	// limit is enforced against.
+	metering.New(s.db).Start(ctx)
 	// What the console can change without a deployment. Both refresh on their
 	// own timer as well as on the bus, so a deployment without Redis is at
 	// most thirty seconds behind.
@@ -897,12 +901,12 @@ func (s *Server) setupRoutes() {
 			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
 			// AI Copilot & Forecasting
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/copilot", s.handleAICopilot)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/chat", s.handleAIChat)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/stt", s.handleAISTT)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/tts", s.handleAITTS)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI)).Post("/ai/translate", s.handleAITranslate)
-			pr.Get("/ai/stock-forecast", s.handleAIForecast)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/copilot", s.handleAICopilot)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/chat", s.handleAIChat)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/stt", s.handleAISTT)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/tts", s.handleAITTS)
+			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/translate", s.handleAITranslate)
+			pr.With(s.aiQuota).Get("/ai/stock-forecast", s.handleAIForecast)
 			pr.With(s.requireAdmin).Get("/admin/ai/prompts", s.handleAIListPrompts)
 			pr.With(s.requireAdmin).Put("/admin/ai/prompts/{key}", s.handleAIUpdatePrompt)
 			pr.With(s.requireAdmin).Get("/admin/ai/knowledge", s.handleAIListKnowledge)

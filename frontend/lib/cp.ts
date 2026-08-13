@@ -276,6 +276,9 @@ export const cp = {
   /** The export is a download rather than a fetch: it is a file. */
   exportURL: (id: string) => `${BASE}/tenants/${id}/export`,
 
+  usage: (tenantID: string) => request<Usage>(`/tenants/${tenantID}/usage`),
+  usageCSVURL: (tenantID: string) => `${BASE}/tenants/${tenantID}/usage.csv`,
+
   health: () => request<Overview>("/health"),
   deploy: (ref: string, reason: string) =>
     request<{ status: string; url: string }>("/deploy",
@@ -391,4 +394,22 @@ export interface Overview {
   };
   version: { platform: string; release: string; migration: number; migration_applied_at: string | null };
   warnings: string[];
+}
+
+export interface UsageSeries {
+  metric: string;
+  points: Array<{ day: string; value: number }>;
+  /** A sum for counted metrics, the latest reading for storage, the peak for people. */
+  total: number;
+  month_to_date: number;
+  limit: number | null;
+  /** Whether crossing the limit actually stops anything today. */
+  enforced: boolean;
+}
+
+export interface Usage {
+  tenant_id: string;
+  series: UsageSeries[];
+  /** Null when nothing has ever been counted, which the screen says. */
+  collected: string | null;
 }
