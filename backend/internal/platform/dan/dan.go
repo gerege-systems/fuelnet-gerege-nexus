@@ -130,3 +130,19 @@ func (s *DANService) authenticateDANCitizen(regNumber, otpCode string) (*DANProf
 
 	return nil, fmt.Errorf("%w: live OTP authentication is not implemented in this build", ErrUnavailable)
 }
+
+// Mode reports how this deployment reaches ДАН — see gerege.GeregeService.Mode
+// for why the three states are named rather than reduced to a bool.
+func (s *DANService) Mode() string {
+	switch {
+	case s.mockMode:
+		return "mock"
+	case s.apiKey != "":
+		return "live"
+	default:
+		return "unconfigured"
+	}
+}
+
+// Endpoint is the address ДАН calls are sent to.
+func (s *DANService) Endpoint() string { return s.endpoint }

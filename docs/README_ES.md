@@ -126,12 +126,13 @@ los microservicios.
 | # | Aplicación | ID | Ruta | Descripción |
 | --- | --- | --- | --- | --- |
 | 1 | Organización y personas | `io.gerege.nexus.organisation` | `/organisation` | Los departamentos y las personas que trabajan en ellos. Instalada por defecto para un inquilino nuevo y desinstalable; la identidad legal de la organización no es una app, sino parte de la plataforma |
-| 2 | Contactos | `io.gerege.nexus.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
-| 3 | Productos | `io.gerege.nexus.products` | `/products` | Catálogo, precios y SKU por inquilino |
-| 4 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
-| 5 | Facturación y e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
-| 6 | Documentos digitales y firma electrónica | `io.gerege.nexus.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
-| 7 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
+| 2 | Enlace con la administración electrónica | `io.gerege.nexus.egov` | `/egov` | Consultas a ХУР (ciudadanos y personas jurídicas), estado de los canales eID y ДАН, e historial. Instalada por defecto y desinstalable |
+| 3 | Contactos | `io.gerege.nexus.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
+| 4 | Productos | `io.gerege.nexus.products` | `/products` | Catálogo, precios y SKU por inquilino |
+| 5 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
+| 6 | Facturación y e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
+| 7 | Documentos digitales y firma electrónica | `io.gerege.nexus.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
+| 8 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
 
 Las rutas solo se abren una vez que la aplicación está instalada y habilitada
 para el inquilino; de lo contrario el control devuelve `403 Forbidden`.

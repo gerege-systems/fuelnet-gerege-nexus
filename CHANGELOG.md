@@ -15,6 +15,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `egov`, the front door to the state's systems
+
+The last of the three naming corrections, and the only one that creates a module
+rather than renaming one. The pieces existed and were scattered: the ХУР registry
+lookups were two handlers in the platform's own route table, whether the eID, ДАН
+and ХУР rails were even configured was knowable only from the deployment's
+environment, and what had been looked up sat in the audit log with nothing
+pointing at it.
+
+- **New app `io.gerege.nexus.egov`** — "Цахим засгийн холболт" / "e-Government
+  Link", three screens under `/egov`: registry lookups, the state of the three
+  rails, and the history of what this organisation asked. In `DefaultApps`, so
+  every existing tenant gets it on the next boot, and removable like any other.
+- **`POST /api/v1/xyp/citizen` and `/company` moved to `/api/v1/egov/*`** and are
+  now behind the app gate. They were platform routes any tenant could reach with
+  the permission; a tenant that removes this app now loses them, at both
+  addresses.
+- **Permissions `xyp.citizen.read` / `xyp.company.read` → `egov.citizen.read` /
+  `egov.company.read`** (migration `00057`, with a `down`, renamed in place so
+  every grant survives), plus a new `egov.read` for the screens.
+- **`PermissionDefinition` gained `AdminOnly`.** The installer decided who gets a
+  permission by looking at the end of its code — anything ending `.read` went to
+  every member of the organisation — and the two registry lookups are a `.read`
+  by grammar and an administrative act by consequence. Without this the rename
+  would have silently handed "look up any citizen by registration number" to
+  every employee, since migration 00024 had granted the old codes to the
+  administrator role alone.
+- **Contacts degrades instead of depending.** Its registry auto-fill now calls
+  the e-Government endpoint and the button is not offered when the app is
+  absent, rather than being offered and answering 403. `egov` exports a
+  `Registry` interface for in-process callers; contacts is deliberately not a
+  dependent of the app.
+- **A first test of the app gate itself** (`app_gate_test.go`). It had none:
+  every module is mounted behind `appGateMiddleware` and nothing asserted what
+  that does. Writing it found a nil-pointer dereference in `NewServer` that
+  would have panicked every deployment at startup.
+
+What deliberately did **not** move into the app: the eID and ДАН sign-in flows,
+which run before anybody is signed in, and a person's own list of linked
+identities with the button that unlinks one. The second is the same reasoning
+`profile_handlers.go` has carried since before this module existed — an app is
+installed per organisation and an administrator can remove one, and somebody's
+ability to detach their own national identity is not their employer's to take
+away. The connections screen links to `/profile` rather than owning it.
+
+#### Deprecated — to be removed in the next release
+
+- `POST /api/v1/xyp/citizen` and `POST /api/v1/xyp/company`, now mounted by the
+  app alongside the `/api/v1/egov/*` pair.
+
 ### Changed — `developer_portal` becomes `sso_clients`
 
 The second of the three naming corrections. `developer_portal` named the wrong

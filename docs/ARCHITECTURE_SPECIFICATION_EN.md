@@ -45,7 +45,8 @@ organizations, wired directly into Mongolia's national digital infrastructure.
 ### 1.3 State data exchange and identity
 
 - **XYP state exchange** — citizen civil registration (`WS100101`) and legal
-  entity data (`WS100201`).
+  entity data (`WS100201`). The client stays in the platform; the surface a
+  person uses is the `egov` app (`/egov`) — lookups, rail status and history.
 - **DAN and E-ID** ([`eidmongolia.mn`](https://eidmongolia.mn),
   [`developer.gerege.mn`](https://developer.gerege.mn)) — PKI digital signature,
   mobile OTP, bank SSO and biometric face verification.

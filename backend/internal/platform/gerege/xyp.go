@@ -126,3 +126,25 @@ func (s *GeregeService) getCompanyInfo(_ context.Context, companyReg string) (*C
 
 	return nil, fmt.Errorf("XYP live service at %s requires valid XYP_API_KEY credentials", s.endpoint)
 }
+
+// Mode reports how this deployment reaches ХУР, for the screen that has to say
+// so out loud.
+//
+// It is a string rather than a bool because the three states are genuinely
+// different: "live" means a credential is held and a real registry answers,
+// "mock" means the fixtures answer and nothing about the reply is authoritative,
+// and "unconfigured" means every lookup will fail. A screen that showed only
+// "connected" would report the middle one as the first.
+func (s *GeregeService) Mode() string {
+	switch {
+	case s.mockMode:
+		return "mock"
+	case s.apiKey != "":
+		return "live"
+	default:
+		return "unconfigured"
+	}
+}
+
+// Endpoint is the address lookups are sent to.
+func (s *GeregeService) Endpoint() string { return s.endpoint }

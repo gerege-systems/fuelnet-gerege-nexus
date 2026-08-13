@@ -113,12 +113,13 @@
 | # | 应用 | ID | 路由 | 说明 |
 | --- | --- | --- | --- | --- |
 | 1 | 组织与人员 | `io.gerege.nexus.organisation` | `/organisation` | 部门结构与人员名录。新租户默认安装，可以卸载；组织的法律信息不是应用，而是平台的一部分 |
-| 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | 客户与供应商目录，支持 XYP 自动填充 |
-| 3 | Products | `io.gerege.nexus.products` | `/products` | 商品目录、定价与租户级 SKU |
-| 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | 仓库、库存与出入库流水 |
-| 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | 开票、10% 增值税与 e-Barimt 税务凭证 |
-| 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | 文档流转、签名与审批 |
-| 7 | SSO 客户端 | `io.gerege.nexus.sso_clients` | `/sso-clients` | 通过本平台登录用户的系统所用的 OAuth2 客户端注册 |
+| 2 | 电子政务连接 | `io.gerege.nexus.egov` | `/egov` | ХУР 的公民与法人查询、eID 与 ДАН 通道状态、查询历史。默认安装，可卸载 |
+| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | 客户与供应商目录，支持 XYP 自动填充 |
+| 4 | Products | `io.gerege.nexus.products` | `/products` | 商品目录、定价与租户级 SKU |
+| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | 仓库、库存与出入库流水 |
+| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | 开票、10% 增值税与 e-Barimt 税务凭证 |
+| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | 文档流转、签名与审批 |
+| 8 | SSO 客户端 | `io.gerege.nexus.sso_clients` | `/sso-clients` | 通过本平台登录用户的系统所用的 OAuth2 客户端注册 |
 
 只有当应用在该租户下安装并启用后路由才会开放，否则网关返回 `403 Forbidden`。
 

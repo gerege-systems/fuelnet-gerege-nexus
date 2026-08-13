@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useResource } from "@/lib/useResource";
 import { useI18n } from "@/lib/i18n";
@@ -21,6 +21,24 @@ export default function ContactsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", active: true });
   const [error, setError] = useState("");
+  // Whether the state-registry lookup is available at all on this tenant.
+  //
+  // The auto-fill is a convenience the e-Government app provides, and contacts
+  // is deliberately not a dependent of it: an address book must open, list and
+  // create on a deployment that has no state integration. So the capability is
+  // asked about once and the button simply is not offered when the answer is
+  // no — rather than being offered and failing with a 403 the person cannot
+  // act on.
+  const [egovAvailable, setEgovAvailable] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api.egovInstalled().then((yes) => {
+      if (live) setEgovAvailable(yes);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const { data: contacts, loading, reload: loadContacts } = useResource(
     async () => (await api.getContacts()) || [],
@@ -117,7 +135,7 @@ export default function ContactsPage() {
         <Modal label={t("contacts.view.create_title")}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-900">{t("contacts.view.create_title")}</h2>
-            <button
+            {egovAvailable && <button
               type="button"
               onClick={async () => {
                 try {
@@ -134,7 +152,7 @@ export default function ContactsPage() {
                 }
               }}
               className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 transition"
-            >{t("contacts.action.xyp_autofill")}</button>
+            >{t("contacts.action.xyp_autofill")}</button>}
           </div>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>

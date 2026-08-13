@@ -151,6 +151,28 @@ async function mutateApp(url: string) {
   return result;
 }
 
+/** One connection to a state system, as this deployment is configured. */
+export interface EgovRail {
+  id: string;
+  name: string;
+  /** "live" | "mock" | "unconfigured" — a mock rail answers, and none of it is authoritative. */
+  mode: string;
+  endpoint?: string;
+}
+
+export interface EgovConnections {
+  rails: EgovRail[];
+  /** Where a person manages their own linked identities. Not this app's. */
+  identities_path: string;
+}
+
+export interface EgovHistoryEntry {
+  action: string;
+  user_id: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
 export type IntegrationProvider =
   | "webhook"
   | "government"
@@ -861,7 +883,11 @@ export const api = {
       }>
     >("/ai/stock-forecast"),
 
-  // XYP State Data Exchange (xyp.gerege.mn)
+  // e-Government Link — the ХУР registry, reached through the egov app.
+  //
+  // A tenant without that app installed gets 403 here rather than a result.
+  // That is a state a caller has to handle rather than an error to report: see
+  // egovInstalled below, and the contacts screen, which hides the button.
   queryXYPCitizen: (regNumber: string) =>
     fetcher<{
       reg_number: string;
@@ -872,7 +898,7 @@ export const api = {
       address: string;
       passport_status: string;
       verified: boolean;
-    }>("/xyp/citizen", {
+    }>("/egov/citizen", {
       method: "POST",
       body: JSON.stringify({ reg_number: regNumber }),
     }),
@@ -886,10 +912,29 @@ export const api = {
       vat_payer: boolean;
       status: string;
       founding_date: string;
-    }>("/xyp/company", {
+    }>("/egov/company", {
       method: "POST",
       body: JSON.stringify({ company_reg: companyReg }),
     }),
+
+  getEgovConnections: () => fetcher<EgovConnections>("/egov/connections"),
+  getEgovHistory: () => fetcher<EgovHistoryEntry[]>("/egov/history"),
+
+  // Whether this tenant has the e-Government app.
+  //
+  // Asked rather than assumed, because the answer changes what a screen should
+  // offer and not merely what it shows: contacts pre-fills an address from the
+  // citizen registry when it can, and a button that always 403s is worse than
+  // no button. Any failure answers false — a screen that cannot find out
+  // should degrade the same way as one that found out the answer was no.
+  egovInstalled: async (): Promise<boolean> => {
+    try {
+      const installed = await api.getInstalledApps();
+      return (installed || []).some((app) => app.app_id === "io.gerege.nexus.egov" && app.enabled);
+    } catch {
+      return false;
+    }
+  },
 
   // External Integrations Manager.
   //

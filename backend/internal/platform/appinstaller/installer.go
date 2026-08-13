@@ -36,7 +36,7 @@ import (
 // It is a list in the platform rather than a flag in the manifest, because a
 // third party publishing an app that installs itself everywhere is not a thing
 // this store should be able to express.
-var DefaultApps = []string{"io.gerege.nexus.organisation"}
+var DefaultApps = []string{"io.gerege.nexus.organisation", "io.gerege.nexus.egov"}
 
 // IsDefaultApp reports whether an app is installed for new tenants without
 // anybody asking. It does not mean the app is permanent — nothing is.
@@ -319,6 +319,14 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 				 ON CONFLICT DO NOTHING`, adminRoleID, perm.Code); err != nil {
 				return fmt.Errorf("grant %s to the admin role: %w", perm.Code, err)
 			}
+		}
+
+		// A permission the module marks administrative stops here. The admin
+		// role has it from the grant above; the default manager and user roles
+		// do not get it, and an administrator who wants somebody to have it
+		// says so in Access control.
+		if perm.AdminOnly {
+			continue
 		}
 
 		// Odoo-style additive default groups: managers receive operational

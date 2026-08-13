@@ -118,6 +118,8 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 - **ХУР — Төрийн мэдээлэл солилцооны систем** (`platform/gerege/xyp.go`):
   иргэний бүртгэл (`WS100101`), хуулийн этгээдийн баталгаажуулалт (`WS100201`).
+  Клиент нь платформд үлдэж, хэрэглэгчид харагдах нүүр нь `apps/egov` —
+  лавлагаа, сувгийн төлөв, лавлагааны түүх гурван дэлгэц (`/egov`).
 - **Үндэсний E-ID ба ДАН** ([`developer.gerege.mn`](https://developer.gerege.mn),
   [`eidmongolia.mn`](https://eidmongolia.mn)) — тоон гарын үсэг (PKI), нэг
   удаагийн код (Mobile OTP), банкны суваг (Bank SSO), царай танилт (Biometric).
@@ -155,14 +157,15 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 | # | Апп | ID | Зам | Тайлбар |
 | --- | --- | --- | --- | --- |
 | 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Хэлтэс нэгж, ажилтнуудын бүртгэл. Шинэ тенантад default-оор суух ч устгаж болно; байгууллагын хуулийн профайл нь апп биш, платформын хэсэг |
-| 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
-| 3 | Products | `io.gerege.nexus.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
-| 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
-| 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
-| 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
-| 7 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | Энэ платформоор дамжуулан нэвтрэх системүүдийн OAuth2 клиент бүртгэл |
-| 8 | State Services | `io.gerege.nexus.gov_services` | `/gov-services` | Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, баталгаажуулалт, цаг захиалга |
-| 9 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
+| 2 | e-Government Link | `io.gerege.nexus.egov` | `/egov` | ХУР-ын иргэн/хуулийн этгээдийн лавлагаа, eID ба ДАН сувгийн төлөв, лавлагааны түүх. Default-оор суух ч устгаж болно |
+| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
+| 4 | Products | `io.gerege.nexus.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
+| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
+| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
+| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
+| 8 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | Энэ платформоор дамжуулан нэвтрэх системүүдийн OAuth2 клиент бүртгэл |
+| 9 | State Services | `io.gerege.nexus.gov_services` | `/gov-services` | Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, баталгаажуулалт, цаг захиалга |
+| 10 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
 
 Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрутууд нээгдэнэ. Суулгаагүй апп
 руу хандвал `403 Forbidden` буцна.

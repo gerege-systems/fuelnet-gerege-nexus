@@ -32,6 +32,7 @@ func TestTheAppStoreProfileLoadsLikeAnyOtherCatalogue(t *testing.T) {
 
 	want := map[string]bool{
 		"io.gerege.nexus.organisation":      true,
+		"io.gerege.nexus.egov":              true,
 		"io.gerege.nexus.appstore_registry": true,
 		"io.gerege.nexus.publisher_studio":  true,
 		"io.gerege.nexus.store_review":      true,

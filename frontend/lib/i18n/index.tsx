@@ -17,6 +17,7 @@ import { core } from "./addons/core";
 import { sso_clients } from "./addons/sso_clients";
 import { modules } from "./addons/modules";
 import { documents } from "./addons/documents";
+import { egov } from "./addons/egov";
 import { emailverify } from "./addons/emailverify";
 import { esign } from "./addons/esign";
 import { gov } from "./addons/gov";
@@ -93,6 +94,7 @@ const dictionary = {
   ...sso_clients,
   ...modules,
   ...documents,
+  ...egov,
   ...emailverify,
   ...esign,
   ...gov,

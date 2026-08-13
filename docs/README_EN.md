@@ -128,12 +128,13 @@ from **Settings → Appearance**. See the
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
 | 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Departments and the people in them. Installed by default for a new tenant and removable; the organisation's legal profile is not an app but part of the platform |
-| 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
-| 3 | Products | `io.gerege.nexus.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
-| 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
-| 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
-| 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Document routing, signatures, approvals |
-| 7 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for the systems that sign people in through this platform |
+| 2 | e-Government Link | `io.gerege.nexus.egov` | `/egov` | ХУР citizen and legal-entity lookups, the state of the eID and ДАН rails, and a record of what was asked. Installed by default and removable |
+| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
+| 4 | Products | `io.gerege.nexus.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
+| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
+| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
+| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Document routing, signatures, approvals |
+| 8 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for the systems that sign people in through this platform |
 
 Routes only open once the app is installed and enabled for the tenant; otherwise
 the gate returns `403 Forbidden`.

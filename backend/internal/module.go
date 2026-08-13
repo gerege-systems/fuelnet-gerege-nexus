@@ -17,6 +17,16 @@ type PermissionDefinition struct {
 	Code        string `json:"code"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// AdminOnly withholds this permission from the default manager and user
+	// roles when the app is installed. The tenant administrator still receives
+	// it, and it can still be handed to any role by hand from Access control.
+	//
+	// It exists because the installer otherwise decides who gets a permission
+	// by looking at the end of its code: anything ending `.read` is granted to
+	// every member. That is a fine default for reading this organisation's own
+	// rows and a bad one for reading somebody's national registry record, which
+	// is a `.read` by grammar and an administrative act by consequence.
+	AdminOnly bool `json:"admin_only,omitempty"`
 }
 
 // MenuDefinition defines a navigation menu item for an app module.

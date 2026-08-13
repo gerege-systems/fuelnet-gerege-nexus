@@ -124,12 +124,13 @@ PostgreSQL определяет, какие приложения активны 
 | # | Приложение | ID | Маршрут | Описание |
 | --- | --- | --- | --- | --- |
 | 1 | Организация и сотрудники | `io.gerege.nexus.organisation` | `/organisation` | Подразделения и работающие в них сотрудники. Устанавливается по умолчанию для нового тенанта и может быть удалено; юридические данные организации — не приложение, а часть платформы |
-| 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Справочник клиентов и поставщиков с автозаполнением из XYP |
-| 3 | Products | `io.gerege.nexus.products` | `/products` | Каталог, цены и SKU в рамках арендатора |
-| 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Склады, остатки, журнал движений |
-| 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Счета, НДС 10%, налоговые чеки e-Barimt |
-| 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Маршрутизация документов, подписи, согласования |
-| 7 | SSO-клиенты | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2-клиенты систем, которые выполняют вход пользователей через эту платформу |
+| 2 | Подключение к электронному правительству | `io.gerege.nexus.egov` | `/egov` | Справки ХУР по гражданам и юрлицам, состояние каналов eID и ДАН, история запросов. Устанавливается по умолчанию и может быть удалено |
+| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Справочник клиентов и поставщиков с автозаполнением из XYP |
+| 4 | Products | `io.gerege.nexus.products` | `/products` | Каталог, цены и SKU в рамках арендатора |
+| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Склады, остатки, журнал движений |
+| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Счета, НДС 10%, налоговые чеки e-Barimt |
+| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Маршрутизация документов, подписи, согласования |
+| 8 | SSO-клиенты | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2-клиенты систем, которые выполняют вход пользователей через эту платформу |
 
 Маршруты открываются только после установки и включения приложения для
 арендатора, иначе шлюз возвращает `403 Forbidden`.

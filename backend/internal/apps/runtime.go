@@ -10,6 +10,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
@@ -40,11 +41,16 @@ type Runtime struct {
 type InstalledApps = reports.InstalledApps
 
 func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmongolia.Service,
-	sso *ssoprovider.SSOProvider, installedApps InstalledApps) Runtime {
+	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails egov.Rails,
+	installedApps InstalledApps) Runtime {
 	// First, and not merely in order: organisation is what the others assume. It is the
 	// organisation, the people in it and how it is arranged — the module Odoo
 	// calls base and never lets you uninstall.
 	organisation.New(db)
+	// The state's systems, as an app rather than as two handlers in the
+	// platform's route table. The low-level clients stay where they are; this
+	// is their app-facing surface, and the thing contacts reaches through.
+	egov.New(db, xyp, rails)
 	contacts.New(db)
 	products.New(db)
 	inventory.New(db, false)

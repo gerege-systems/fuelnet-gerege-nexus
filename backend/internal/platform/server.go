@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
@@ -182,7 +183,25 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// the pointer that is about to be filled. Reports are listed per request,
 	// long after this line.
 	var server *Server
-	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider,
+
+	// The three clients to the state's systems, built before the modules
+	// because one of the modules is their app-facing surface. They go on the
+	// server below as well; this is the same value, not a second one, so what
+	// the e-Government screen reports is what the platform actually holds.
+	geregeSvc, eidSvc, danSvc := gerege.NewGeregeService(), eid.NewEIDService(), dan.NewDANService()
+
+	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider, geregeSvc,
+		// What this deployment is wired to. Read per call rather than captured
+		// as a snapshot, and assembled here because this is the only place all
+		// three clients are in scope — egov names the shape, the platform
+		// answers it.
+		func() []egov.Rail {
+			return []egov.Rail{
+				{ID: "xyp", Name: "ХУР", Mode: geregeSvc.Mode(), Endpoint: geregeSvc.Endpoint()},
+				{ID: "eid", Name: "eID Mongolia", Mode: eidSvc.Mode(), Endpoint: eidSvc.Endpoint()},
+				{ID: "dan", Name: "ДАН", Mode: danSvc.Mode(), Endpoint: danSvc.Endpoint()},
+			}
+		},
 		func(ctx context.Context, tenantID string) (map[string]bool, error) {
 			return server.installedAppSet(ctx, tenantID)
 		})
@@ -270,12 +289,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		emailVerify:    emailverify.NewService(db),
 		copilotSvc:     ai.NewCopilotService(db),
 		forecaster:     ai.NewForecaster(db),
-		eidSvc:         eid.NewEIDService(),
-		danSvc:         dan.NewDANService(),
+		eidSvc:         eidSvc,
+		danSvc:         danSvc,
 		ssoProvider:    ssoProvider,
 		ssoClient:      federatedSignIn,
 		googleLogin:    googleLogin,
-		geregeSvc:      gerege.NewGeregeService(),
+		geregeSvc:      geregeSvc,
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
 		appGate:        memo.New[bool](appGateTTL),
@@ -940,12 +959,6 @@ func (s *Server) setupRoutes() {
 			pr.With(s.requireAdmin).Put("/admin/ai/prompts/{key}", s.handleAIUpdatePrompt)
 			pr.With(s.requireAdmin).Get("/admin/ai/knowledge", s.handleAIListKnowledge)
 			pr.With(s.requireAdmin).Post("/admin/ai/knowledge", s.handleAICreateKnowledge)
-
-			// XYP State Information Exchange System (xyp.gerege.mn)
-			// XYP responses contain authoritative citizen/company data. Merely
-			// belonging to a tenant is not enough authority to query that data.
-			pr.With(rbac.RequirePermission(s.permissions, "xyp.citizen.read")).Post("/xyp/citizen", s.handleXYPCitizenQuery)
-			pr.With(rbac.RequirePermission(s.permissions, "xyp.company.read")).Post("/xyp/company", s.handleXYPCompanyQuery)
 
 			// External Integrations Manager (admin-only: a connector target URL
 			// makes the server issue arbitrary outbound requests, and an OAuth

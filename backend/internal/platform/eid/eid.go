@@ -450,3 +450,20 @@ func (s *EIDService) fetchUserInfo(ctx context.Context, accessToken string) (*EI
 		AuthenticatedAt: time.Now(),
 	}, nil
 }
+
+// Mode reports how this deployment reaches eID Mongolia — see
+// gerege.GeregeService.Mode for why the three states are named rather than
+// reduced to a bool.
+func (s *EIDService) Mode() string {
+	switch {
+	case s.mockMode:
+		return "mock"
+	case s.clientSecret != "":
+		return "live"
+	default:
+		return "unconfigured"
+	}
+}
+
+// Endpoint is where a sign-in is started.
+func (s *EIDService) Endpoint() string { return s.authorizeURL }

@@ -24,7 +24,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
 func (s *Server) handleEIDStart(w http.ResponseWriter, r *http.Request) {
@@ -267,58 +266,4 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 			"is_admin":  claims.IsAdmin,
 		},
 	})
-}
-
-func (s *Server) handleXYPCitizenQuery(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
-	if !ok {
-		return
-	}
-
-	var req struct {
-		RegNumber string `json:"reg_number"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RegNumber == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid registration number")
-		return
-	}
-
-	info, err := s.geregeSvc.GetCitizenInfo(r.Context(), req.RegNumber)
-	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
-		return
-	}
-
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "xyp.citizen_queried", "xyp", map[string]any{"reg_number": req.RegNumber})
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(info)
-}
-
-func (s *Server) handleXYPCompanyQuery(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
-	if !ok {
-		return
-	}
-
-	var req struct {
-		CompanyReg string `json:"company_reg"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CompanyReg == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid company registration number")
-		return
-	}
-
-	info, err := s.geregeSvc.GetCompanyInfo(r.Context(), req.CompanyReg)
-	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
-		return
-	}
-
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "xyp.company_queried", "xyp", map[string]any{"company_reg": req.CompanyReg})
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(info)
 }

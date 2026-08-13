@@ -92,17 +92,22 @@ func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 	}
 }
 
-// withDefaultApp puts the platform's own app beside a fixture.
+// withDefaultApp puts the platform's own apps beside a fixture.
 //
-// Every real catalogue carries it, and a catalogue without it is now refused as
-// one that predates this build — so a fixture testing anything else has to
-// carry it as well, or it is testing that refusal by accident.
+// Every real catalogue carries them, and a catalogue without one is now refused
+// as predating this build — so a fixture testing anything else has to carry
+// them as well, or it is testing that refusal by accident.
+//
+// Built from DefaultApps rather than from a literal list, so adding a default
+// app does not silently fail every catalogue fixture in the package.
 func withDefaultApp(apps ...appcatalog.CatalogApp) []appcatalog.CatalogApp {
-	defaultApp := appcatalog.CatalogApp{
-		ID: appinstaller.DefaultApps[0], Slug: "organisation", Version: "1.0.0",
-		Manifest: appcatalog.Manifest{
-			ID: appinstaller.DefaultApps[0], Name: "Organisation & People", Version: "1.0.0",
-		},
+	catalog := make([]appcatalog.CatalogApp, 0, len(appinstaller.DefaultApps)+len(apps))
+	for _, id := range appinstaller.DefaultApps {
+		slug := id[strings.LastIndex(id, ".")+1:]
+		catalog = append(catalog, appcatalog.CatalogApp{
+			ID: id, Slug: slug, Version: "1.0.0",
+			Manifest: appcatalog.Manifest{ID: id, Name: slug, Version: "1.0.0"},
+		})
 	}
-	return append([]appcatalog.CatalogApp{defaultApp}, apps...)
+	return append(catalog, apps...)
 }
