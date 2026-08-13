@@ -151,7 +151,7 @@ Usage:
   DATABASE_URL=... operator-bootstrap -email you@example.mn -name "Your Name" [-role superadmin]
 
 In production, with the compose stack running:
-  docker exec -it gerege_nexus_api /app/operator-bootstrap -email ... -name "..."
+  docker exec -it gerege_nexus_backend /app/operator-bootstrap -email ... -name "..."
 
 Roles: superadmin (everything), operator (daily work), support (people),
 auditor (read-only). See docs/CONTROL_PLANE.md.

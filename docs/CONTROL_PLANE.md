@@ -88,7 +88,7 @@ query нь login role-оор явахгүй, огт явахгүй).
 Вэб бүртгэл **байхгүй**. Эхний бүртгэлийг DB-ийн эрхтэй хүн тушаалаар үүсгэнэ:
 
 ```bash
-docker exec -it gerege_nexus_api /app/operator-bootstrap \
+docker exec -it gerege_nexus_backend /app/operator-bootstrap \
     -email you@gerege.mn -name "Таны нэр" -role superadmin
 ```
 
