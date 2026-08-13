@@ -149,6 +149,11 @@ func readPassword() (string, error) {
 			"(use `docker exec -it`, not `docker exec`)")
 	}
 
+	// The rule is said before the password is asked for, not after it has been
+	// typed twice. Learning a requirement by being refused is a small thing
+	// that wastes somebody's time at exactly the wrong moment — the first
+	// minute of setting up the console.
+	fmt.Printf("Choose a password of at least %d characters.\n", controlplane.MinPasswordLength)
 	fmt.Print("Password: ")
 	first, err := term.ReadPassword(fd)
 	fmt.Println()

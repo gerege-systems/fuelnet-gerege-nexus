@@ -31,10 +31,13 @@ import (
 // ErrOperatorExists is returned when the address is already taken.
 var ErrOperatorExists = errors.New("an operator with that address already exists")
 
-// minPasswordLength is what a console account is held to. Longer than the
+// MinPasswordLength is what a console account is held to. Longer than the
 // tenant side's, because there are five of these accounts and they are the
 // platform.
-const minPasswordLength = 12
+//
+// Exported so the command that asks for the password can say the rule before
+// asking rather than after refusing.
+const MinPasswordLength = 12
 
 // NewOperator is what the bootstrap command was asked to create.
 type NewOperator struct {
@@ -73,8 +76,8 @@ func CreateOperator(ctx context.Context, db *pgxpool.Pool, params NewOperator) (
 		return Operator{}, Enrolment{}, errors.New("a name is required")
 	case !params.Role.Valid():
 		return Operator{}, Enrolment{}, fmt.Errorf("%q is not one of the four operator roles", params.Role)
-	case len(params.Password) < minPasswordLength:
-		return Operator{}, Enrolment{}, fmt.Errorf("the password must be at least %d characters", minPasswordLength)
+	case len(params.Password) < MinPasswordLength:
+		return Operator{}, Enrolment{}, fmt.Errorf("the password must be at least %d characters", MinPasswordLength)
 	}
 
 	hash, err := auth.HashPassword(params.Password)
