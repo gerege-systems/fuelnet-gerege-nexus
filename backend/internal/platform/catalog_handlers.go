@@ -351,6 +351,9 @@ func (s *Server) handleUpgradeApp(w http.ResponseWriter, r *http.Request) {
 // version exists. It answers what happened rather than always "ok": an
 // administrator who presses it needs to know whether anything moved.
 func (s *Server) handleSyncCatalog(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Deprecation", "true")
+	w.Header().Set("Link", `</cp/api/catalog/sync>; rel="successor-version"`)
+
 	if !s.catalogSource.Remote() {
 		httpx.Error(w, http.StatusNotImplemented,
 			"this deployment reads its app catalog from a file; there is no registry to sync with")
@@ -438,6 +441,9 @@ func (s *Server) handleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
 // that tells them apart — and it is also where an app that is held back stops
 // being a mystery, because the reason is on the installed-apps list beside it.
 func (s *Server) handleCatalogStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Deprecation", "true")
+	w.Header().Set("Link", `</cp/api/catalog/status>; rel="successor-version"`)
+
 	s.syncMu.RLock()
 	at, ok, failure := s.lastSyncAt, s.lastSyncOK, s.lastSyncErr
 	s.syncMu.RUnlock()

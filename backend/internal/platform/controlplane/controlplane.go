@@ -93,6 +93,8 @@ type Deps struct {
 	// worked, and why not. The platform holds it in memory; the console shows
 	// it. A callback for the same reason as Warnings.
 	CatalogStatus func() (at time.Time, ok bool, detail string)
+	// SyncCatalog triggers a manual refresh of the app catalogue from the remote registry.
+	SyncCatalog func(ctx context.Context) (changed bool, err error)
 	// PlatformVersion is the semver this binary claims, stamped at build time.
 	PlatformVersion string
 }
@@ -108,6 +110,7 @@ type Service struct {
 	tenantChanged     func(tenantID string)
 	warningsFrom      func() []string
 	catalogStatusFrom func() (time.Time, bool, string)
+	syncCatalogFn     func(ctx context.Context) (bool, error)
 	platformVersion   string
 	// host is the only hostname the console answers on, from
 	// CONTROL_PLANE_HOST. Empty has a meaning that depends on the environment —
@@ -128,6 +131,7 @@ func New(db *pgxpool.Pool, deps Deps) *Service {
 		tenantChanged:     deps.TenantChanged,
 		warningsFrom:      deps.Warnings,
 		catalogStatusFrom: deps.CatalogStatus,
+		syncCatalogFn:     deps.SyncCatalog,
 		platformVersion:   deps.PlatformVersion,
 		host:              normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
 	}

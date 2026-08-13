@@ -328,6 +328,21 @@ CP-1 бусдынх нь урьдчилсан нөхцөл; CP-4 нь Үе ша�
    тэмдэглэ), сүүлийн restore test огноог гараар бүртгэх талбар.
 5. Каталог: синкийн төлөв, хувилбарын тархалт, kill switch (CP-3-ын flag).
 
+**CP-4б — Нүүлгэлт (үндсэн платформоос CP руу):**
+
+`docs/CONTROL_PLANE_PLAN.md`-ийн §6-гийн хүснэгтээр:
+
+1. А ангилал: `/admin/store/sync|status|overview` гурвыг CP-ийн каталог
+   хэсэг рүү нүүлгэж, тенантын аппад deprecated тэмдэгтэй (нэг release)
+   үлдээгээд дараа нь хас. Тенантын store install/upgrade/enable/disable
+   хэвээр үлдэнэ.
+2. Б ангилал: email-verify service төлөв, платформын анхдагч AI prompt,
+   integration provider-ийн OAuth client төлөв, eSign rail-уудын төлөв,
+   платформ эзэмшдэг OAuth2 client-уудыг CP-д шинэ дэлгэцээр гарга;
+   тенант талын дэлгэцүүдээс deployment-түвшний мэдээллийг хас.
+3. В ангилал: mock горимууд + DEMO_MODE-ийн төлөвийг CP нүүрэнд нэг
+   мөр болгон нэм (production дээр mock асаалттай бол улаан анхааруулга).
+
 **CP-5 — Metering:**
 
 1. `usage_events` (tenant_id, metric, value, day, RLS-тэй) — өдөр тутмын

@@ -280,6 +280,11 @@ export const cp = {
   usageCSVURL: (tenantID: string) => `${BASE}/tenants/${tenantID}/usage.csv`,
 
   health: () => request<Overview>("/health"),
+  catalogStatus: () => request<Overview["catalog"]>("/catalog/status"),
+  catalogOverview: () => request<{ catalog: Overview["catalog"]; platform: Overview["version"] }>("/catalog/overview"),
+  syncCatalog: (reason: string) =>
+    request<{ status: string; changed: boolean }>("/catalog/sync",
+      { method: "POST", body: JSON.stringify({ reason }) }),
   deploy: (ref: string, reason: string) =>
     request<{ status: string; url: string }>("/deploy",
       { method: "POST", body: JSON.stringify({ ref, reason }) }),

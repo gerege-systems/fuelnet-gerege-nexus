@@ -22,6 +22,7 @@ import {
   Boxes,
   DatabaseBackup,
   ExternalLink,
+  RefreshCw,
   Rocket,
   Server,
 } from "lucide-react";
@@ -295,6 +296,21 @@ function Health() {
                 </div>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() =>
+                action.run({
+                  title: t("cp.action.sync_catalog"),
+                  detail: t("cp.hint.sync_catalog"),
+                  perform: (reason) => cp.syncCatalog(reason),
+                  onDone: load,
+                })
+              }
+              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {t("cp.action.sync_catalog")}
+            </button>
           </div>
         </Card>
       </div>

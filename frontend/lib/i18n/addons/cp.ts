@@ -220,6 +220,7 @@ export const cp = {
   "cp.action.deploy": { mn: "Deploy эхлүүлэх", en: "Start a deployment" },
   "cp.action.open_grafana": { mn: "Grafana", en: "Grafana" },
   "cp.action.record_restore_test": { mn: "Сэргээлт туршсанаа бүртгэх", en: "Record a restore test" },
+  "cp.action.sync_catalog": { mn: "Каталог синк хийх", en: "Sync catalog" },
 
   "cp.hint.deploy": {
     mn: "GitHub Actions-ийн deploy workflow-г main дээр өдөөнө. Серверт юу ч гүйцэтгэхгүй, env хөндөхгүй — явцыг GitHub дээр хараарай.",
@@ -228,6 +229,10 @@ export const cp = {
   "cp.hint.restore_test": {
     mn: "Туршаагүй нөөцлөлт бол нөөцлөлт биш. Сэргээлтийг бодитоор туршиж үзсэн бол огноог нь эндээс бүртгэнэ.",
     en: "An untested backup is not a backup. Record the date when a restore has actually been tried.",
+  },
+  "cp.hint.sync_catalog": {
+    mn: "Регистрээс шинэ аппын каталогийг татаж платформыг шинэчилнэ.",
+    en: "Fetches the latest app catalogue from the registry and updates the deployment.",
   },
   "cp.message.no_monitoring": {
     mn: "Энэ суулгацад PROMETHEUS_URL тохируулаагүй тул хэмжүүрийн хэсэг хоосон байна. docs/CONTROL_PLANE.md §4з-г үз.",

@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/time/rate"
 )
 
@@ -132,6 +134,10 @@ func (s *Service) Routes(r chi.Router) {
 
 		// The front page, and the operations behind it.
 		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/health", s.handleHealth)
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/catalog/status", s.handleCatalogStatusRoute)
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/catalog/overview", s.handleCatalogOverviewRoute)
+		signedIn.With(s.RequireCapability(CapSettingsWrite), s.RequireStepUp).
+			Post("/catalog/sync", s.handleCatalogSyncRoute)
 		signedIn.With(s.RequireCapability(CapDeploy), s.RequireStepUp).
 			Post("/deploy", s.handleDeploy)
 		signedIn.With(s.RequireCapability(CapSettingsWrite)).
@@ -705,4 +711,49 @@ func (s *Service) handleUsageCSV(w http.ResponseWriter, r *http.Request) {
 		// operator sees a short file.
 		slog.Error("control plane: could not write the usage export", "error", err)
 	}
+}
+
+func (s *Service) handleCatalogStatusRoute(w http.ResponseWriter, r *http.Request) {
+	status := s.catalogStatus(r.Context())
+	httpx.JSON(w, http.StatusOK, status)
+}
+
+func (s *Service) handleCatalogOverviewRoute(w http.ResponseWriter, r *http.Request) {
+	status := s.catalogStatus(r.Context())
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"catalog":  status,
+		"platform": s.version(r.Context()),
+	})
+}
+
+func (s *Service) handleCatalogSyncRoute(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if s.syncCatalogFn == nil {
+		httpx.Error(w, http.StatusNotImplemented, "this deployment reads its app catalog from a file; there is no registry to sync with")
+		return
+	}
+	var changed bool
+	err := s.Do(r.Context(), sess, Change{
+		Action:     "catalog.sync",
+		TargetType: "platform",
+		TargetID:   "catalog",
+		Reason:     body.Reason,
+	}, func(ctx context.Context, tx pgx.Tx) error {
+		var syncErr error
+		changed, syncErr = s.syncCatalogFn(ctx)
+		return syncErr
+	})
+	if err != nil {
+		fail(w, err, "could not sync the catalog")
+		return
+	}
+	status := "unchanged"
+	if changed {
+		status = "updated"
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"status": status, "changed": changed})
 }

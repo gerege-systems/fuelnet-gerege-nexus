@@ -177,7 +177,50 @@ CP-2, CP-3, CP-5 нь хоорондоо хамааралгүй тул CP-1-ий
 явж болно. Мониторингийн Үе шат 1-2 (хэмжүүр + стек) нь CP-4-ийн урьдчилсан
 нөхцөл тул эхэлж хийгдсэн байх нь зүйтэй.
 
-## 6. Эх сурвалж
+## 6. Үндсэн платформоос Control Plane руу нүүх feature-ууд
+
+Одоогийн кодод (`server.go`-гийн route-ууд) "тенантын админ" эрхээр
+хамгаалагдсан ч үнэндээ **deployment бүхэлд нь** нөлөөлдөг хэд хэдэн
+feature бий. CP нэмэгдмэгц эдгээр гурван ангилалд хуваагдана:
+
+### А. Бүрэн CP руу нүүх (тенантын аппаас хасагдана)
+
+| Одоогийн байрлал | Юу вэ | Яагаад |
+| --- | --- | --- |
+| `POST /admin/store/sync` | Registry-ээс каталог татах | Кодын өөрийнх нь comment-оор: "changes what every tenant on it is offered" — нэг тенантын админ бүх тенантад нөлөөлдөг үйлдэл хийж байна |
+| `GET /admin/store/status` | Каталогийн эх сурвалж, сүүлийн синкийн төлөв | Registry-ийн нэр, алдаа — deployment-ийн мэдээлэл |
+| `GET /admin/store/overview` | Бинари/каталог/суулгалтын хувилбарын зөрүү | Мөн адил — платформ бүхэлд нь харах ёстой харагдац (CP-4-ийн каталог хэсэгт очно) |
+
+### Б. Хуваагдах (тенантын хэсэг үлдэж, платформын хэсэг CP руу)
+
+| Feature | Тенантад үлдэх | CP руу очих |
+| --- | --- | --- |
+| И-мэйл баталгаажуулалт (`/admin/email-verification/overview`) | Өөрийн тенантын баталгаажуулалтын түүх | Hosted service-ийн төлөв, API key байгаа эсэх, платформ даяарх квот/алдаа |
+| AI (`/admin/ai/prompts`, `ai_prompts` хүснэгт) | Тенантын өөрийн prompt override, мэдлэгийн сан | Платформын анхдагч prompt-ууд (одоо миграцын seed-ээр л солигддог), Gemini model/квотын тохиргоо |
+| Integrations (`/integrations`) | Тенантын өөрийн connector-ууд | Google/Dropbox OAuth client (compose-д "clients belong to whoever operates this deployment" гэж бичсэн — одоо env-ээр), `INTEGRATION_ALLOW_PRIVATE_TARGETS`, encryption key-ийн төлөв |
+| eSign | Тенантын гарын үсгийн policy дэлгэц (`/settings/policy`) | Rail-уудын deployment төлөв: ESIGN_TOKEN байгаа/mock эсэх, eID stamp fallback cert-ийн төлөв — "mock горимд SIGNED тэмдэглэгддэг" осол дахин гарахаас сэргийлэх харагдац |
+| OAuth2 clients | Developer portal-аар тенантын бүртгэсэн client-ууд | Платформ эзэмшдэг client-ууд (SSO default, developer console) — жагсаалт, secret rotate |
+
+### В. CP-д давхар (нэмэлт) харагдац үүсэх — тенантаас юу ч хасагдахгүй
+
+- **Mock горимуудын төлөв** (EID/DAN/XYP/ESIGN) — одоогоор env-д тарсан;
+  CP нүүрэнд нэг мөрөнд: аль нь mock, production-д зөрчилтэй эсэх.
+- **DEMO_MODE / demo seeder-ийн төлөв** — public showcase эсэх нь нэг
+  харцаар харагдана.
+- **Төхөөрөмжүүд** (`/admin/devices` — киоск/POS) — тенант админ өөрийнхөө
+  fleet-ийг удирдсан хэвээр; CP-д бүх тенантын төхөөрөмжийн нэгдсэн тоо,
+  enrollment-ийн идэвх.
+- **Login lockout / session** — тенант доторх удирдлага хэвээр; CP support
+  багц (CP-2) нь тенант дамнасан хайлт, тайлах эрхтэй.
+
+Нүүлгэлтийн дүрэм: А ангиллын endpoint-уудыг CP бэлэн болмогц
+`requireAdmin`-аас `operator`-т шилжүүлж, тенантын UI-гаас цэсийг нь
+хасна; Б ангилалд эхлээд CP талын шинэ дэлгэц нэмэгдэж, дараа нь тенант
+талын дэлгэцээс платформын мэдээлэл алга болно. Хоёр алхмын хооронд
+хуучин endpoint-ууд deprecated тэмдэгтэй ажиллана — native клиентүүд
+шинэчлэгдэх хугацаа өгнө.
+
+## 7. Эх сурвалж
 
 - [NCSC — Protect your administration interfaces](https://www.ncsc.gov.uk/collection/secure-system-administration/protect-your-administration-interfaces)
 - [AWS — Manage tenants on a single control plane](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/manage-tenants-across-multiple-saas-products-on-a-single-control-plane.html)
