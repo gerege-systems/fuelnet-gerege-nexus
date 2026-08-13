@@ -15,6 +15,15 @@ public struct NativeLoginView: View {
         GeometryReader { geometry in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    // The brand mark the web app uses, at the size their login
+                    // screen gives it. Not tinted: the mark carries its own
+                    // colour and flattening it would lose what identifies it.
+                    Image("brand", bundle: .module)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
                     Text("GEREGE / NEXUS")
                         .font(.caption.weight(.bold)).tracking(2)
                         .foregroundStyle(WalletTheme.Brand.hi)

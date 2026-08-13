@@ -6,6 +6,7 @@
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>GeregeNexusNativeWin</AssemblyName>
     <RootNamespace>GeregeNexusNativeWin</RootNamespace>
@@ -15,6 +16,11 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(FormFactor)' == 'Kiosk'"><DefineConstants>$(DefineConstants);KIOSK</DefineConstants></PropertyGroup>
   <PropertyGroup Condition="'$(FormFactor)' == 'POS'"><DefineConstants>$(DefineConstants);POS</DefineConstants></PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\brand.png" />
+    <Resource Include="Resources\app.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="GeregeShell.Core\GeregeShell.Core.csproj" />

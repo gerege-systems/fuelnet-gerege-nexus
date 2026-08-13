@@ -6,6 +6,7 @@
         Height="820" Width="1280"
         MinHeight="680" MinWidth="1024"
         WindowStartupLocation="CenterScreen"
+        Icon="Resources/app.ico"
         Background="#0F172A">
     <Grid>
         <Grid.RowDefinitions>
@@ -119,6 +120,8 @@
                                               Direction="270" Opacity="0.12" Color="Black"/>
                         </Border.Effect>
                         <StackPanel>
+                            <Image Source="Resources/brand.png" Width="56" Height="56"
+                                   HorizontalAlignment="Left" Margin="0,0,0,14"/>
                             <TextBlock Text="Нэвтрэх" Style="{StaticResource CardTitleTextBlock}"/>
                             <TextBlock Text="eID Mongolia апп-аар нэвтрэх"
                                        Style="{StaticResource LabelTextBlock}" Margin="0,4,0,16"/>

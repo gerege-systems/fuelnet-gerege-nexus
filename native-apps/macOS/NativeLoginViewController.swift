@@ -485,9 +485,28 @@ private final class HeroPanel: NSView {
                                    endCenter: centre, endRadius: radius, options: [])
     }
 
+    /// The mark, loaded from beside the executable. Nil when it is not there,
+    /// which the panel treats as "draw without it" rather than as a failure.
+    static func brandMark() -> NSImage? {
+        let beside = Bundle.main.bundleURL.appendingPathComponent("brand.png")
+        return NSImage(contentsOf: beside) ?? NSImage(contentsOfFile: "brand.png")
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard subviews.isEmpty else { return }
+
+        let mark = NSImageView()
+        mark.image = HeroPanel.brandMark()
+        mark.imageScaling = .scaleProportionallyUpOrDown
+        mark.wantsLayer = true
+        mark.layer?.cornerRadius = 22
+        mark.layer?.cornerCurve = .continuous
+        mark.layer?.masksToBounds = true
+        mark.translatesAutoresizingMaskIntoConstraints = false
+        mark.widthAnchor.constraint(equalToConstant: 88).isActive = true
+        mark.heightAnchor.constraint(equalToConstant: 88).isActive = true
+        mark.isHidden = mark.image == nil
 
         let title = NSTextField(labelWithString: "Gerege Nexus")
         title.font = .systemFont(ofSize: 34, weight: .bold)
@@ -498,10 +517,11 @@ private final class HeroPanel: NSView {
         subtitle.alignment = .center
         subtitle.maximumNumberOfLines = 2
 
-        let centre = NSStackView(views: [title, subtitle])
+        let centre = NSStackView(views: [mark, title, subtitle])
         centre.orientation = .vertical
         centre.alignment = .centerX
         centre.spacing = 6
+        centre.setCustomSpacing(22, after: mark)
         centre.translatesAutoresizingMaskIntoConstraints = false
         addSubview(centre)
 

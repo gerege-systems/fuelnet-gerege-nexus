@@ -32,6 +32,11 @@ swiftc \
   "${SCRIPT_DIR}/main.swift" \
   -o "${OUTPUT_BIN}"
 
+# No copy step for brand.png: the build writes the binary into this same
+# directory, so the mark is already beside it. The app loads it from there and
+# draws without it if it is missing, which is what happens when the binary is
+# moved somewhere on its own.
+
 echo "[2/2] Native binary compiled successfully at:"
 echo "      ${OUTPUT_BIN}"
 
