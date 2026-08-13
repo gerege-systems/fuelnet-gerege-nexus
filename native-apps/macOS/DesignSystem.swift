@@ -159,15 +159,15 @@ extension NSColor {
 
 // MARK: - Brand mark
 
-/// The brand mark, loaded from beside the executable.
+/// The brand mark, loaded from logo.jpg beside the executable.
 ///
 /// build.sh emits a bare binary rather than an .app, so there is no bundle to
-/// carry a resource: the PNG travels next to it and is read from there. Nil
+/// carry a resource: logo.jpg travels next to it and is read from there. Nil
 /// when it is not there, which every caller treats as "carry on without it"
 /// rather than as a failure — a missing logo is not worth a crash.
 func brandMark() -> NSImage? {
-    let beside = Bundle.main.bundleURL.appendingPathComponent("brand.png")
-    return NSImage(contentsOf: beside) ?? NSImage(contentsOfFile: "brand.png")
+    let beside = Bundle.main.bundleURL.appendingPathComponent("logo.jpg")
+    return NSImage(contentsOf: beside) ?? NSImage(contentsOfFile: "logo.jpg") ?? NSImage(contentsOfFile: "brand.png")
 }
 
 // MARK: - AppCard

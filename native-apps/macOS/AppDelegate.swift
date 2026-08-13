@@ -13,14 +13,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     public var mainWindowController: MainWindowController?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        // The Dock icon, set at runtime.
+        // The Dock icon, set at runtime from logo.jpg.
         //
         // build.sh emits a bare executable rather than an .app, and a bare
-        // executable has no Info.plist for the Dock to read an icon out of —
-        // it gets the blank generic tile. Assigning the image here is the only
-        // thing that reaches the product this build actually ships. The .app
-        // built from the Xcode project takes its icon the ordinary way, from
-        // AppIcon.icns named in Info.plist.
+        // executable has no Info.plist bundle icon file to read an icon out of —
+        // assigning logo.jpg via brandMark() here sets the application icon.
         if let mark = brandMark() {
             NSApplication.shared.applicationIconImage = mark
         }
