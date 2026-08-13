@@ -1,6 +1,6 @@
 {
-  "id": "io.gerege.nexus.developer_portal",
-  "name": "Developer Portal & OAuth2 SSO",
+  "id": "io.gerege.nexus.sso_clients",
+  "name": "SSO Clients",
   "version": "2.0.0",
   "platform": ">=0.1.0 <2.0.0",
   "publisher": "gerege",
@@ -20,22 +20,21 @@
   "dependencies": [],
   "permissions": [
     {
-      "code": "developer.read",
-      "name": "Read Developer Apps",
+      "code": "sso_clients.read",
+      "name": "Read SSO Clients",
       "description": "Allows viewing registered OAuth2 client applications"
     },
     {
-      "code": "developer.manage",
-      "name": "Manage Developer Apps",
+      "code": "sso_clients.manage",
+      "name": "Manage SSO Clients",
       "description": "Allows registering and configuring OAuth2 client applications"
     }
   ],
   "menus": [
     {
-      "id": "developer_apps",
-      "parent_id": "platform_tools",
-      "label": "Developer Apps",
-      "path": "/developer/apps",
+      "id": "sso_clients_apps",
+      "label": "SSO clients",
+      "path": "/sso-clients",
       "icon": "code",
       "order": 60
     }

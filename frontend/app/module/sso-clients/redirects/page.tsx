@@ -37,7 +37,7 @@ export default function RedirectPoliciesPage() {
   useEffect(() => {
     void (async () => {
       try {
-        setClients((await api.getDeveloperApps()) || []);
+        setClients((await api.getSSOClients()) || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : t("base.message.error"));
       } finally {
@@ -56,22 +56,22 @@ export default function RedirectPoliciesPage() {
   const machineOnly = clients.filter((c) => c.redirect_uris.length === 0);
 
   const rules = [
-    { icon: <ShieldCheck className="w-4 h-4" />, text: t("developer.redirects.rule_exact") },
-    { icon: <Globe className="w-4 h-4" />, text: t("developer.redirects.rule_https") },
-    { icon: <Route className="w-4 h-4" />, text: t("developer.redirects.rule_fragment") },
-    { icon: <Smartphone className="w-4 h-4" />, text: t("developer.redirects.rule_custom") },
+    { icon: <ShieldCheck className="w-4 h-4" />, text: t("sso_clients.redirects.rule_exact") },
+    { icon: <Globe className="w-4 h-4" />, text: t("sso_clients.redirects.rule_https") },
+    { icon: <Route className="w-4 h-4" />, text: t("sso_clients.redirects.rule_fragment") },
+    { icon: <Smartphone className="w-4 h-4" />, text: t("sso_clients.redirects.rule_custom") },
   ];
 
   return (
     <Screen
       icon={<Route className="w-5 h-5" />}
-      title={t("developer.redirects.title")}
-      subtitle={t("developer.redirects.subtitle")}
+      title={t("sso_clients.redirects.title")}
+      subtitle={t("sso_clients.redirects.subtitle")}
     >
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Panel className="p-5">
-        <h2 className="text-sm font-bold text-slate-900 mb-3">{t("developer.redirects.rules_title")}</h2>
+        <h2 className="text-sm font-bold text-slate-900 mb-3">{t("sso_clients.redirects.rules_title")}</h2>
         <ul className="space-y-2.5">
           {rules.map((rule, index) => (
             <li key={index} className="flex items-start gap-2.5 text-xs text-slate-600">
@@ -83,16 +83,16 @@ export default function RedirectPoliciesPage() {
       </Panel>
 
       {loading ? (
-        <Loading label={t("developer.message.loading")} />
+        <Loading label={t("sso_clients.message.loading")} />
       ) : entries.length === 0 ? (
-        <Empty icon={<Route className="w-9 h-9 mx-auto" />}>{t("developer.redirects.none")}</Empty>
+        <Empty icon={<Route className="w-9 h-9 mx-auto" />}>{t("sso_clients.redirects.none")}</Empty>
       ) : (
         <Panel className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200 text-left">
                 <tr className="text-[11px] uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-2.5 font-semibold">{t("developer.field.name")}</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("sso_clients.field.name")}</th>
                   <th className="px-4 py-2.5 font-semibold">redirect_uri</th>
                   <th className="px-4 py-2.5 font-semibold">{t("base.field.type")}</th>
                 </tr>
@@ -119,7 +119,7 @@ export default function RedirectPoliciesPage() {
                       {kind === "loopback" && (
                         <span className="inline-flex items-center gap-1">
                           <Laptop className="w-3.5 h-3.5 text-amber-600" />
-                          <Chip tone="amber">{t("developer.redirects.loopback")}</Chip>
+                          <Chip tone="amber">{t("sso_clients.redirects.loopback")}</Chip>
                         </span>
                       )}
                       {kind === "custom" && <Chip tone="blue">custom scheme</Chip>}
@@ -135,7 +135,7 @@ export default function RedirectPoliciesPage() {
       {machineOnly.length > 0 && (
         <Panel className="p-4">
           <p className="text-[11px] font-semibold text-slate-500 mb-2">
-            {t("developer.redirects.no_redirect_needed")}
+            {t("sso_clients.redirects.no_redirect_needed")}
           </p>
           <div className="flex flex-wrap gap-1">
             {machineOnly.map((client) => <Chip key={client.client_id}>{client.client_name}</Chip>)}

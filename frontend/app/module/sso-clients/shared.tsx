@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Developer-portal screens re-export the shared module kit, and add the one
+ * The SSO-client screens re-export the shared module kit, and add the one
  * piece only they need.
  *
  * Not a route: only page.tsx and route.ts are routable in the app router.
@@ -27,9 +27,9 @@ export function SecretDialog({ clientID, secret, onClose }: {
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <KeyRound className="w-5 h-5 text-amber-600" />
-          {t("developer.message.secret_once_title")}
+          {t("sso_clients.message.secret_once_title")}
         </h2>
-        <p className="text-sm text-slate-600">{t("developer.message.secret_once_body")}</p>
+        <p className="text-sm text-slate-600">{t("sso_clients.message.secret_once_body")}</p>
         {[["client_id", clientID], ["client_secret", secret]].map(([label, value], index) => (
           <div
             key={label}
@@ -42,7 +42,7 @@ export function SecretDialog({ clientID, secret, onClose }: {
         ))}
         <div className="flex justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold">
-            {t("developer.action.done")}
+            {t("sso_clients.action.done")}
           </button>
         </div>
       </div>

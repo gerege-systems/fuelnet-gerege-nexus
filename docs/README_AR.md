@@ -78,7 +78,7 @@ PostgreSQL أي التطبيقات مفعَّلة لكل مستأجر — فصل
 ### ١. نواة معيارية أحادية عالية الأداء
 
 - **وحدات Go مُجمَّعة وقت البناء** — `contacts` و `products` و `inventory` و
-  `billing` و `documents` و `developer_portal` تُجمَّع في ملف تنفيذي واحد
+  `billing` و `documents` و `sso_clients` تُجمَّع في ملف تنفيذي واحد
   وتُستدعى داخل العملية نفسها.
 - **متجر تطبيقات لكل مستأجر** — صلاحيات التطبيقات والقوائم و RBAC تُدار من
   PostgreSQL (`app_installations`).
@@ -142,7 +142,7 @@ PostgreSQL أي التطبيقات مفعَّلة لكل مستأجر — فصل
 | ٤ | المخزون | `io.gerege.nexus.inventory` | `/inventory` | المستودعات ومستويات المخزون وسجل الحركة |
 | ٥ | الفوترة و e-Barimt | `io.gerege.nexus.billing` | `/billing` | إصدار الفواتير، ضريبة ١٠٪، إيصالات e-Barimt |
 | ٦ | المستندات الرقمية والتوقيع الإلكتروني | `io.gerege.nexus.documents` | `/documents` | توجيه المستندات والتوقيعات والموافقات |
-| ٧ | بوابة المطوِّرين و SSO عبر OAuth2 | `io.gerege.nexus.developer_portal` | `/developer/apps` | تسجيل عملاء OAuth2 |
+| ٧ | عملاء SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | تسجيل عملاء OAuth2 للأنظمة التي تُسجّل دخول المستخدمين عبر هذه المنصة |
 
 <div dir="rtl">
 

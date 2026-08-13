@@ -71,7 +71,7 @@ d'exploitation des microservices.
 ### 1. Monolithe modulaire haute performance
 
 - **Modules Go compilés** — `contacts`, `products`, `inventory`, `billing`,
-  `documents` et `developer_portal` sont compilés dans un binaire unique et
+  `documents` et `sso_clients` sont compilés dans un binaire unique et
   appelés en processus.
 - **Magasin d'applications par locataire** — droits applicatifs, menus et RBAC
   sont pilotés depuis PostgreSQL (`app_installations`).
@@ -133,7 +133,7 @@ d'exploitation des microservices.
 | 4 | Stocks | `io.gerege.nexus.inventory` | `/inventory` | Entrepôts, niveaux de stock, journal des mouvements |
 | 5 | Facturation & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturation, TVA 10 %, reçus e-Barimt |
 | 6 | Documents & signature électronique | `io.gerege.nexus.documents` | `/documents` | Circulation des documents, signatures, approbations |
-| 7 | Portail développeur & SSO OAuth2 | `io.gerege.nexus.developer_portal` | `/developer/apps` | Enregistrement des clients OAuth2 |
+| 7 | Clients SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clients OAuth2 des systèmes qui connectent des personnes via cette plateforme |
 
 Les routes ne s'ouvrent qu'une fois l'application installée et activée pour le
 locataire ; sinon le contrôle renvoie `403 Forbidden`.

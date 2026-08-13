@@ -138,7 +138,7 @@ func appRequestPermission(appID, method, path string) string {
 	prefixes := map[string]string{
 		"io.gerege.nexus.contacts": "contacts", "io.gerege.nexus.products": "products",
 		"io.gerege.nexus.inventory": "inventory", "io.gerege.nexus.billing": "billing",
-		"io.gerege.nexus.developer_portal": "developer",
+		"io.gerege.nexus.sso_clients": "sso_clients",
 	}
 	prefix := prefixes[appID]
 	if prefix == "" {

@@ -14,7 +14,7 @@ import { billing } from "./addons/billing";
 import { contacts } from "./addons/contacts";
 import { cp } from "./addons/cp";
 import { core } from "./addons/core";
-import { developer } from "./addons/developer";
+import { sso_clients } from "./addons/sso_clients";
 import { modules } from "./addons/modules";
 import { documents } from "./addons/documents";
 import { emailverify } from "./addons/emailverify";
@@ -90,7 +90,7 @@ const dictionary = {
   ...contacts,
   ...cp,
   ...core,
-  ...developer,
+  ...sso_clients,
   ...modules,
   ...documents,
   ...emailverify,

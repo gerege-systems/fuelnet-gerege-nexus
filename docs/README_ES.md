@@ -70,7 +70,7 @@ los microservicios.
 ### 1. Monolito modular de alto rendimiento
 
 - **Módulos Go compilados** — `contacts`, `products`, `inventory`, `billing`,
-  `documents` y `developer_portal` se compilan en un solo binario y se invocan
+  `documents` y `sso_clients` se compilan en un solo binario y se invocan
   dentro del proceso.
 - **Tienda de aplicaciones por inquilino** — los permisos de aplicación, los
   menús y el RBAC se gobiernan desde PostgreSQL (`app_installations`).
@@ -131,7 +131,7 @@ los microservicios.
 | 4 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
 | 5 | Facturación y e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
 | 6 | Documentos digitales y firma electrónica | `io.gerege.nexus.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
-| 7 | Portal de desarrolladores y SSO OAuth2 | `io.gerege.nexus.developer_portal` | `/developer/apps` | Registro de clientes OAuth2 |
+| 7 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
 
 Las rutas solo se abren una vez que la aplicación está instalada y habilitada
 para el inquilino; de lo contrario el control devuelve `403 Forbidden`.

@@ -90,7 +90,7 @@ var blueprints = map[string]blueprint{
 				"mn": "Гарын үсгийн бодлого", "ar": "سياسات التوقيع", "zh": "签署策略", "fr": "Politiques de signature", "ru": "Политики подписания", "es": "Políticas de firma"}},
 		}},
 
-	"io.gerege.nexus.developer_portal": {Slug: "developer",
+	"io.gerege.nexus.sso_clients": {Slug: "sso-clients",
 		Modules: []futureMenu{
 			// API, OAuth and Webhook are product vocabulary, not prose. They stay
 			// Latin even in the scripts that would otherwise transliterate them.

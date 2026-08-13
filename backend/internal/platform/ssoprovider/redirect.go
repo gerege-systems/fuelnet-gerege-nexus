@@ -21,7 +21,7 @@ import (
 // Unchanged from where it used to live at the top of ssoprovider.go; it moved
 // here when that file became the authorization server rather than a client map.
 // It is the deployment-wide floor, applied on top of the per-client exact match
-// that developer_portal.validateRedirectURI enforces at registration and
+// that sso_clients.validateRedirectURI enforces at registration and
 // HandleAuthorize enforces again on every request.
 func ValidateRedirectURI(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))

@@ -23,7 +23,7 @@ export default function ApiKeysPage() {
   const { copied, copy } = useCopy();
   // Every mutation below maps to developer.manage in the gate middleware, so
   // the screen asks the same question before offering the control.
-  const { allowed: canManage } = useAccess("developer.manage");
+  const { allowed: canManage } = useAccess("sso_clients.manage");
   const [clients, setClients] = useState<OAuth2Client[]>([]);
   const [scopes, setScopes] = useState<OAuth2Scope[]>([]);
   const [endpoints, setEndpoints] = useState<Record<string, string>>({});
@@ -38,9 +38,9 @@ export default function ApiKeysPage() {
     setError("");
     try {
       const [apps, vocabulary, urls] = await Promise.all([
-        api.getDeveloperApps(),
-        api.getDeveloperScopes(),
-        api.getDeveloperEndpoints(),
+        api.getSSOClients(),
+        api.getSSOClientScopes(),
+        api.getSSOClientEndpoints(),
       ]);
       setClients(apps || []);
       setScopes(vocabulary.scopes || []);
@@ -54,7 +54,7 @@ export default function ApiKeysPage() {
   useEffect(() => { void load(); }, []);
 
   // A machine credential is exactly a confidential client that can run the
-  // client_credentials grant; interactive apps live on the Developer apps screen.
+  // client_credentials grant; interactive apps live on the SSO clients screen.
   const keys = useMemo(
     () => clients.filter((c) => c.client_type === "confidential" && c.grant_types.includes("client_credentials")),
     [clients],
@@ -69,7 +69,7 @@ export default function ApiKeysPage() {
   async function create(name: string, chosen: string[]) {
     setError("");
     try {
-      const created = await api.createDeveloperApp({
+      const created = await api.createSSOClient({
         client_name: name,
         client_type: "confidential",
         redirect_uris: [],
@@ -90,8 +90,8 @@ export default function ApiKeysPage() {
     setConfirming(null);
     setError("");
     try {
-      if (action === "delete") await api.deleteDeveloperApp(client.client_id);
-      else setRevealed(await api.rotateDeveloperAppSecret(client.client_id));
+      if (action === "delete") await api.deleteSSOClient(client.client_id);
+      else setRevealed(await api.rotateSSOClientSecret(client.client_id));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("base.message.error"));
@@ -101,28 +101,28 @@ export default function ApiKeysPage() {
   return (
     <Screen
       icon={<KeyRound className="w-5 h-5" />}
-      title={t("developer.keys.title")}
-      subtitle={t("developer.keys.subtitle")}
+      title={t("sso_clients.keys.title")}
+      subtitle={t("sso_clients.keys.subtitle")}
       action={canManage && (
         <button
           onClick={() => setCreating(true)}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm"
         >
-          <Plus className="w-4 h-4" /> {t("developer.keys.create")}
+          <Plus className="w-4 h-4" /> {t("sso_clients.keys.create")}
         </button>
       )}
     >
       <Panel className="p-4 bg-slate-50 border-slate-200">
-        <p className="text-xs text-slate-600 leading-relaxed">{t("developer.keys.explainer")}</p>
+        <p className="text-xs text-slate-600 leading-relaxed">{t("sso_clients.keys.explainer")}</p>
       </Panel>
 
-      {!canManage && <ReadOnlyNote permission="developer.manage" />}
+      {!canManage && <ReadOnlyNote permission="sso_clients.manage" />}
       {error && <ErrorNote>{error}</ErrorNote>}
 
       {loading ? (
-        <Loading label={t("developer.message.loading")} />
+        <Loading label={t("sso_clients.message.loading")} />
       ) : keys.length === 0 ? (
-        <Empty icon={<KeyRound className="w-9 h-9 mx-auto" />}>{t("developer.keys.empty")}</Empty>
+        <Empty icon={<KeyRound className="w-9 h-9 mx-auto" />}>{t("sso_clients.keys.empty")}</Empty>
       ) : (
         <div className="space-y-3">
           {keys.map((key) => (
@@ -131,15 +131,15 @@ export default function ApiKeysPage() {
                 <div className="min-w-0">
                   <h3 className="font-bold text-slate-900 flex items-center gap-2">
                     {key.client_name}
-                    {key.disabled && <Chip tone="rose">{t("developer.message.disabled")}</Chip>}
+                    {key.disabled && <Chip tone="rose">{t("sso_clients.message.disabled")}</Chip>}
                   </h3>
                   <div className="flex items-center gap-2 mt-1 text-xs font-mono text-slate-500">
                     {key.client_id}
                     <CopyButton value={key.client_id} id={key.client_id} copied={copied} onCopy={copy} />
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    {t("developer.field.last_used")}:{" "}
-                    {relativeDate(key.last_used_at, t("developer.message.never_used"), locale)}
+                    {t("sso_clients.field.last_used")}:{" "}
+                    {relativeDate(key.last_used_at, t("sso_clients.message.never_used"), locale)}
                   </p>
                 </div>
                 <div className={`flex gap-1 ${canManage ? "" : "hidden"}`}>
@@ -147,7 +147,7 @@ export default function ApiKeysPage() {
                     onClick={() => setConfirming({ client: key, action: "rotate" })}
                     className="text-xs font-semibold text-amber-700 hover:bg-amber-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" /> {t("developer.action.rotate")}
+                    <RefreshCw className="w-3.5 h-3.5" /> {t("sso_clients.action.rotate")}
                   </button>
                   <button
                     onClick={() => setConfirming({ client: key, action: "delete" })}
@@ -169,7 +169,7 @@ export default function ApiKeysPage() {
               {endpoints.token_endpoint && (
                 <details className="mt-3 group">
                   <summary className="text-[11px] font-semibold text-slate-500 cursor-pointer flex items-center gap-1.5">
-                    <Terminal className="w-3.5 h-3.5" /> {t("developer.keys.curl")}
+                    <Terminal className="w-3.5 h-3.5" /> {t("sso_clients.keys.curl")}
                   </summary>
                   <pre className="mt-2 text-[11px] bg-slate-900 text-slate-200 rounded-lg p-3 overflow-x-auto">
 {`curl -X POST ${endpoints.token_endpoint} \\
@@ -192,8 +192,8 @@ export default function ApiKeysPage() {
       {confirming && (
         <ConfirmDialog
           title={confirming.client.client_name}
-          body={confirming.action === "delete" ? t("developer.message.delete_warning") : t("developer.message.rotate_warning")}
-          confirmLabel={confirming.action === "delete" ? t("base.action.delete") : t("developer.action.rotate")}
+          body={confirming.action === "delete" ? t("sso_clients.message.delete_warning") : t("sso_clients.message.rotate_warning")}
+          confirmLabel={confirming.action === "delete" ? t("base.action.delete") : t("sso_clients.action.rotate")}
           danger={confirming.action === "delete"}
           onCancel={() => setConfirming(null)}
           onConfirm={runConfirmed}
@@ -216,10 +216,10 @@ function CreateKeyDialog({ scopes, onCancel, onCreate }: {
         onSubmit={(e) => { e.preventDefault(); onCreate(name, chosen); }}
         className="space-y-4"
       >
-        <h2 className="text-lg font-bold text-slate-900">{t("developer.keys.create")}</h2>
+        <h2 className="text-lg font-bold text-slate-900">{t("sso_clients.keys.create")}</h2>
 
         <label className="block">
-          <span className="text-xs font-semibold text-slate-700">{t("developer.field.name")} *</span>
+          <span className="text-xs font-semibold text-slate-700">{t("sso_clients.field.name")} *</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -230,7 +230,7 @@ function CreateKeyDialog({ scopes, onCancel, onCreate }: {
         </label>
 
         <fieldset>
-          <legend className="text-xs font-semibold text-slate-700 mb-1">{t("developer.field.scopes")}</legend>
+          <legend className="text-xs font-semibold text-slate-700 mb-1">{t("sso_clients.field.scopes")}</legend>
           <div className="space-y-1.5">
             {scopes.map((scope) => (
               <label key={scope.name} className="flex items-start gap-2 text-xs cursor-pointer">

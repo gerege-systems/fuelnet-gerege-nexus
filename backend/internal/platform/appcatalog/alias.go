@@ -26,7 +26,8 @@ package appcatalog
 //
 // DEPRECATED: remove in vNEXT.
 var renamedIDs = map[string]string{
-	"io.gerege.nexus.core": "io.gerege.nexus.organisation",
+	"io.gerege.nexus.core":             "io.gerege.nexus.organisation",
+	"io.gerege.nexus.developer_portal": "io.gerege.nexus.sso_clients",
 }
 
 // renamedSlugs maps a retired slug to the one it is now. Kept beside the ids
@@ -35,7 +36,8 @@ var renamedIDs = map[string]string{
 //
 // DEPRECATED: remove in vNEXT.
 var renamedSlugs = map[string]string{
-	"core": "organisation",
+	"core":             "organisation",
+	"developer_portal": "sso-clients",
 }
 
 // ResolveAppID answers with the current id for an app, which for everything

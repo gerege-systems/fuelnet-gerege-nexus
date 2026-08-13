@@ -1301,40 +1301,41 @@ export const api = {
   sendEmailVerification: (data: { email: string; redirect_url?: string; purpose?: string }) =>
     fetcher<EmailVerification>("/verify/send", { method: "POST", body: JSON.stringify(data) }),
 
-  // Developer Portal & OAuth2 SSO Apps
+  // SSO clients — the OAuth2 / OIDC applications registered against this
+  // platform's own provider.
   //
   // client_secret comes back only from create and rotate-secret; every other
   // read omits it, because the server keeps a digest and cannot reproduce it.
-  getDeveloperApps: () => fetcher<OAuth2Client[]>("/developer/apps"),
-  getDeveloperApp: (clientID: string) =>
-    fetcher<OAuth2Client>(`/developer/apps/${encodeURIComponent(clientID)}`),
-  createDeveloperApp: (app: OAuth2ClientDraft) =>
-    fetcher<OAuth2Client>("/developer/apps", { method: "POST", body: JSON.stringify(app) }),
-  updateDeveloperApp: (clientID: string, app: OAuth2ClientDraft) =>
-    fetcher<OAuth2Client>(`/developer/apps/${encodeURIComponent(clientID)}`, {
+  getSSOClients: () => fetcher<OAuth2Client[]>("/sso-clients/apps"),
+  getSSOClient: (clientID: string) =>
+    fetcher<OAuth2Client>(`/sso-clients/apps/${encodeURIComponent(clientID)}`),
+  createSSOClient: (app: OAuth2ClientDraft) =>
+    fetcher<OAuth2Client>("/sso-clients/apps", { method: "POST", body: JSON.stringify(app) }),
+  updateSSOClient: (clientID: string, app: OAuth2ClientDraft) =>
+    fetcher<OAuth2Client>(`/sso-clients/apps/${encodeURIComponent(clientID)}`, {
       method: "PUT",
       body: JSON.stringify(app),
     }),
-  deleteDeveloperApp: (clientID: string) =>
-    fetcher<void>(`/developer/apps/${encodeURIComponent(clientID)}`, { method: "DELETE" }),
-  rotateDeveloperAppSecret: (clientID: string) =>
-    fetcher<OAuth2Client>(`/developer/apps/${encodeURIComponent(clientID)}/rotate-secret`, {
+  deleteSSOClient: (clientID: string) =>
+    fetcher<void>(`/sso-clients/apps/${encodeURIComponent(clientID)}`, { method: "DELETE" }),
+  rotateSSOClientSecret: (clientID: string) =>
+    fetcher<OAuth2Client>(`/sso-clients/apps/${encodeURIComponent(clientID)}/rotate-secret`, {
       method: "POST",
     }),
-  getDeveloperScopes: () =>
-    fetcher<{ scopes: OAuth2Scope[]; grant_types: string[] }>("/developer/scopes"),
-  getDeveloperEndpoints: () => fetcher<Record<string, string>>("/developer/endpoints"),
-  getDeveloperSigningKeys: () =>
-    fetcher<{ keys: SigningKey[]; jwks_uri: string }>("/developer/signing-keys"),
-  getDeveloperAudit: () =>
-    fetcher<{ clients: ClientActivity[]; consents: ConsentRecord[] }>("/developer/audit"),
-  revokeDeveloperAppTokens: (clientID: string) =>
-    fetcher<{ revoked: number }>(`/developer/apps/${encodeURIComponent(clientID)}/tokens`, {
+  getSSOClientScopes: () =>
+    fetcher<{ scopes: OAuth2Scope[]; grant_types: string[] }>("/sso-clients/scopes"),
+  getSSOClientEndpoints: () => fetcher<Record<string, string>>("/sso-clients/endpoints"),
+  getSSOSigningKeys: () =>
+    fetcher<{ keys: SigningKey[]; jwks_uri: string }>("/sso-clients/signing-keys"),
+  getSSOClientAudit: () =>
+    fetcher<{ clients: ClientActivity[]; consents: ConsentRecord[] }>("/sso-clients/audit"),
+  revokeSSOClientTokens: (clientID: string) =>
+    fetcher<{ revoked: number }>(`/sso-clients/apps/${encodeURIComponent(clientID)}/tokens`, {
       method: "DELETE",
     }),
-  withdrawDeveloperConsent: (clientID: string, userID: string) =>
+  withdrawSSOClientConsent: (clientID: string, userID: string) =>
     fetcher<void>(
-      `/developer/apps/${encodeURIComponent(clientID)}/consents/${encodeURIComponent(userID)}`,
+      `/sso-clients/apps/${encodeURIComponent(clientID)}/consents/${encodeURIComponent(userID)}`,
       { method: "DELETE" },
     ),
 

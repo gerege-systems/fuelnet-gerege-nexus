@@ -9,7 +9,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/developer_portal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
@@ -18,6 +17,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/publisher_studio"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/store_review"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
@@ -51,7 +51,7 @@ func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmo
 	billing.New(db)
 	documents.New(db)
 	gov_services.New(db, integrations)
-	developer_portal.NewDeveloperPortalModule(sso)
+	sso_clients.New(sso)
 	// The App Store's own registry. Present in every build and dormant in
 	// almost all of them: without a signing key it publishes no catalogue, and
 	// without the app installed its routes are unreachable anyway.

@@ -26,7 +26,7 @@ export default function SigningKeysPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const data = await api.getDeveloperSigningKeys();
+        const data = await api.getSSOSigningKeys();
         setKeys(data.keys || []);
         setJwksURI(data.jwks_uri || "");
       } catch (err) {
@@ -40,13 +40,13 @@ export default function SigningKeysPage() {
   return (
     <Screen
       icon={<KeySquare className="w-5 h-5" />}
-      title={t("developer.signing.title")}
-      subtitle={t("developer.signing.subtitle")}
+      title={t("sso_clients.signing.title")}
+      subtitle={t("sso_clients.signing.subtitle")}
     >
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Panel className="p-4 bg-slate-50">
-        <p className="text-xs text-slate-600 leading-relaxed">{t("developer.signing.explainer")}</p>
+        <p className="text-xs text-slate-600 leading-relaxed">{t("sso_clients.signing.explainer")}</p>
         {jwksURI && (
           <div className="flex items-center gap-2 mt-3 bg-white border border-slate-200 rounded-lg px-3 py-2">
             <span className="text-[11px] font-semibold text-slate-500 shrink-0">jwks_uri</span>
@@ -57,9 +57,9 @@ export default function SigningKeysPage() {
       </Panel>
 
       {loading ? (
-        <Loading label={t("developer.message.loading")} />
+        <Loading label={t("sso_clients.message.loading")} />
       ) : keys.length === 0 ? (
-        <Empty icon={<KeySquare className="w-9 h-9 mx-auto" />}>{t("developer.signing.none")}</Empty>
+        <Empty icon={<KeySquare className="w-9 h-9 mx-auto" />}>{t("sso_clients.signing.none")}</Empty>
       ) : (
         <div className="space-y-3">
           {keys.map((key) => (
@@ -72,17 +72,17 @@ export default function SigningKeysPage() {
                 <div className="flex items-center gap-1.5">
                   <Chip mono>{key.algorithm}</Chip>
                   {key.active
-                    ? <Chip tone="emerald">{t("developer.signing.active")}</Chip>
-                    : <Chip tone="slate">{t("developer.signing.retired")}</Chip>}
+                    ? <Chip tone="emerald">{t("sso_clients.signing.active")}</Chip>
+                    : <Chip tone="slate">{t("sso_clients.signing.retired")}</Chip>}
                 </div>
               </div>
               <p className="text-[11px] text-slate-400 mt-2">
-                {t("developer.field.created")}: {new Date(key.created_at).toLocaleString()}
+                {t("sso_clients.field.created")}: {new Date(key.created_at).toLocaleString()}
                 {key.retired_at && ` · ${new Date(key.retired_at).toLocaleString()}`}
               </p>
             </Panel>
           ))}
-          <p className="text-[11px] text-slate-400">{t("developer.signing.retired_note")}</p>
+          <p className="text-[11px] text-slate-400">{t("sso_clients.signing.retired_note")}</p>
         </div>
       )}
     </Screen>

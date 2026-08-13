@@ -96,7 +96,7 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 ### 1. Өндөр бүтээмжтэй модуль монолит архитектур
 
 - **Compile-time Go апп модулиуд** — модулиуд (`contacts`, `products`,
-  `inventory`, `billing`, `documents`, `developer_portal`) нэг бинарид
+  `inventory`, `billing`, `documents`, `sso_clients`) нэг бинарид
   компиллогдож, процесс дотроо дуудагдана.
 - **Тенант бүрийн апп стор** — тенант тус бүрийн апп эрх, меню, RBAC тохиргоо
   PostgreSQL (`app_installations`) дээр динамикаар удирдагдана.
@@ -160,7 +160,7 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
 | 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
 | 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
-| 7 | Developer Portal & OAuth2 SSO | `io.gerege.nexus.developer_portal` | `/developer/apps` | OAuth2 client апп бүртгэл |
+| 7 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | Энэ платформоор дамжуулан нэвтрэх системүүдийн OAuth2 клиент бүртгэл |
 | 8 | State Services | `io.gerege.nexus.gov_services` | `/gov-services` | Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, баталгаажуулалт, цаг захиалга |
 | 9 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
 

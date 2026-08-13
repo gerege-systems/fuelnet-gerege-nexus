@@ -65,7 +65,7 @@
 ### 1. 高性能模块化单体架构
 
 - **编译期 Go 应用模块** —— `contacts`、`products`、`inventory`、`billing`、
-  `documents`、`developer_portal` 编译进同一个二进制，进程内直接调用。
+  `documents`、`sso_clients` 编译进同一个二进制，进程内直接调用。
 - **租户级应用商店** —— 应用权限、菜单与 RBAC 由 PostgreSQL
   （`app_installations`）动态驱动。
 - **依赖解析引擎** —— 基于有向无环图（DAG）的递归解析，支持环检测与 semver
@@ -118,7 +118,7 @@
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | 仓库、库存与出入库流水 |
 | 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | 开票、10% 增值税与 e-Barimt 税务凭证 |
 | 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | 文档流转、签名与审批 |
-| 7 | Developer Portal & OAuth2 SSO | `io.gerege.nexus.developer_portal` | `/developer/apps` | OAuth2 客户端注册 |
+| 7 | SSO 客户端 | `io.gerege.nexus.sso_clients` | `/sso-clients` | 通过本平台登录用户的系统所用的 OAuth2 客户端注册 |
 
 只有当应用在该租户下安装并启用后路由才会开放，否则网关返回 `403 Forbidden`。
 

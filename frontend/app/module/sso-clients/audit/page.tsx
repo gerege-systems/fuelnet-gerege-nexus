@@ -24,7 +24,7 @@ type Pending =
 export default function AccessAuditPage() {
   const { t, locale } = useI18n();
   // Revoking a token and withdrawing a consent are both mutations.
-  const { allowed: canManage } = useAccess("developer.manage");
+  const { allowed: canManage } = useAccess("sso_clients.manage");
   const [clients, setClients] = useState<ClientActivity[]>([]);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ export default function AccessAuditPage() {
     setLoading(true);
     setError("");
     try {
-      const data = await api.getDeveloperAudit();
+      const data = await api.getSSOClientAudit();
       setClients(data.clients || []);
       setConsents(data.consents || []);
     } catch (err) {
@@ -54,11 +54,11 @@ export default function AccessAuditPage() {
     setError("");
     try {
       if (target.kind === "tokens") {
-        const { revoked } = await api.revokeDeveloperAppTokens(target.client.client_id);
-        setNotice(t("developer.audit.revoked_count", { n: revoked }));
+        const { revoked } = await api.revokeSSOClientTokens(target.client.client_id);
+        setNotice(t("sso_clients.audit.revoked_count", { n: revoked }));
         setTimeout(() => setNotice(""), 4000);
       } else {
-        await api.withdrawDeveloperConsent(target.consent.client_id, target.consent.user_id);
+        await api.withdrawSSOClientConsent(target.consent.client_id, target.consent.user_id);
       }
       await load();
     } catch (err) {
@@ -69,10 +69,10 @@ export default function AccessAuditPage() {
   return (
     <Screen
       icon={<ScrollText className="w-5 h-5" />}
-      title={t("developer.audit.title")}
-      subtitle={t("developer.audit.subtitle")}
+      title={t("sso_clients.audit.title")}
+      subtitle={t("sso_clients.audit.subtitle")}
     >
-      {!canManage && <ReadOnlyNote permission="developer.manage" />}
+      {!canManage && <ReadOnlyNote permission="sso_clients.manage" />}
       {error && <ErrorNote>{error}</ErrorNote>}
       {notice && (
         <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
@@ -81,20 +81,20 @@ export default function AccessAuditPage() {
       )}
 
       {loading ? (
-        <Loading label={t("developer.message.loading")} />
+        <Loading label={t("sso_clients.message.loading")} />
       ) : clients.length === 0 ? (
-        <Empty icon={<ScrollText className="w-9 h-9 mx-auto" />}>{t("developer.audit.no_activity")}</Empty>
+        <Empty icon={<ScrollText className="w-9 h-9 mx-auto" />}>{t("sso_clients.audit.no_activity")}</Empty>
       ) : (
         <Panel className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200 text-left">
                 <tr className="text-[11px] uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-2.5 font-semibold">{t("developer.field.name")}</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">{t("developer.audit.active_access")}</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">{t("developer.audit.active_refresh")}</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">{t("developer.audit.consented")}</th>
-                  <th className="px-4 py-2.5 font-semibold">{t("developer.field.last_used")}</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("sso_clients.field.name")}</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">{t("sso_clients.audit.active_access")}</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">{t("sso_clients.audit.active_refresh")}</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">{t("sso_clients.audit.consented")}</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("sso_clients.field.last_used")}</th>
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -106,7 +106,7 @@ export default function AccessAuditPage() {
                       <td className="px-4 py-3">
                         <div className="font-semibold text-slate-900 flex items-center gap-2">
                           {client.client_name}
-                          {client.disabled && <Chip tone="rose">{t("developer.message.disabled")}</Chip>}
+                          {client.disabled && <Chip tone="rose">{t("sso_clients.message.disabled")}</Chip>}
                         </div>
                         <div className="text-[11px] font-mono text-slate-400">{client.client_id}</div>
                       </td>
@@ -118,7 +118,7 @@ export default function AccessAuditPage() {
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-600">{client.consented_users}</td>
                       <td className="px-4 py-3 text-slate-500 text-xs">
-                        {relativeDate(client.last_used_at, t("developer.message.never_used"), locale)}
+                        {relativeDate(client.last_used_at, t("sso_clients.message.never_used"), locale)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
@@ -127,7 +127,7 @@ export default function AccessAuditPage() {
                           hidden={!canManage}
                           className="text-xs font-semibold text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-30 disabled:hover:bg-transparent"
                         >
-                          <ShieldOff className="w-3.5 h-3.5" /> {t("developer.audit.revoke_tokens")}
+                          <ShieldOff className="w-3.5 h-3.5" /> {t("sso_clients.audit.revoke_tokens")}
                         </button>
                       </td>
                     </tr>
@@ -141,10 +141,10 @@ export default function AccessAuditPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-          <Users className="w-4 h-4 text-slate-400" /> {t("developer.audit.consents_title")}
+          <Users className="w-4 h-4 text-slate-400" /> {t("sso_clients.audit.consents_title")}
         </h2>
         {loading ? null : consents.length === 0 ? (
-          <Empty icon={<Users className="w-9 h-9 mx-auto" />}>{t("developer.audit.no_consents")}</Empty>
+          <Empty icon={<Users className="w-9 h-9 mx-auto" />}>{t("sso_clients.audit.no_consents")}</Empty>
         ) : (
           <Panel className="divide-y divide-slate-100">
             {consents.map((consent) => (
@@ -167,7 +167,7 @@ export default function AccessAuditPage() {
                   hidden={!canManage}
                   className="text-xs font-semibold text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
                 >
-                  <UserMinus className="w-3.5 h-3.5" /> {t("developer.audit.withdraw")}
+                  <UserMinus className="w-3.5 h-3.5" /> {t("sso_clients.audit.withdraw")}
                 </button>
               </div>
             ))}
@@ -179,8 +179,8 @@ export default function AccessAuditPage() {
         <ConfirmDialog
           danger
           title={pending.kind === "tokens" ? pending.client.client_name : pending.consent.user_email}
-          body={pending.kind === "tokens" ? t("developer.audit.revoke_warning") : t("developer.audit.withdraw_warning")}
-          confirmLabel={pending.kind === "tokens" ? t("developer.audit.revoke_tokens") : t("developer.audit.withdraw")}
+          body={pending.kind === "tokens" ? t("sso_clients.audit.revoke_warning") : t("sso_clients.audit.withdraw_warning")}
+          confirmLabel={pending.kind === "tokens" ? t("sso_clients.audit.revoke_tokens") : t("sso_clients.audit.withdraw")}
           onCancel={() => setPending(null)}
           onConfirm={runPending}
         />

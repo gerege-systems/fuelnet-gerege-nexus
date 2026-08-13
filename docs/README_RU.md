@@ -69,7 +69,7 @@ PostgreSQL определяет, какие приложения активны 
 ### 1. Высокопроизводительный модульный монолит
 
 - **Go-модули времени компиляции** — `contacts`, `products`, `inventory`,
-  `billing`, `documents` и `developer_portal` собираются в один бинарный файл и
+  `billing`, `documents` и `sso_clients` собираются в один бинарный файл и
   вызываются внутри процесса.
 - **Магазин приложений на уровне арендатора** — права на приложения, меню и RBAC
   управляются через PostgreSQL (`app_installations`).
@@ -129,7 +129,7 @@ PostgreSQL определяет, какие приложения активны 
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Склады, остатки, журнал движений |
 | 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Счета, НДС 10%, налоговые чеки e-Barimt |
 | 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Маршрутизация документов, подписи, согласования |
-| 7 | Developer Portal & OAuth2 SSO | `io.gerege.nexus.developer_portal` | `/developer/apps` | Регистрация OAuth2-клиентов |
+| 7 | SSO-клиенты | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2-клиенты систем, которые выполняют вход пользователей через эту платформу |
 
 Маршруты открываются только после установки и включения приложения для
 арендатора, иначе шлюз возвращает `403 Forbidden`.

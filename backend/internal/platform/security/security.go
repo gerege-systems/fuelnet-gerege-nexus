@@ -28,8 +28,10 @@ func HeadersMiddleware(next http.Handler) http.Handler {
 
 // IsValidSlug prevents path traversal attacks by requiring lowercase
 // alphanumerics, hyphens and underscores only. Underscores are permitted
-// because catalog slugs such as "developer_portal" use them — rejecting them
-// made those apps impossible to install.
+// because catalog slugs used them — rejecting them made those apps impossible
+// to install. None of the platform's own slugs carries one any more, but the
+// allowance stays: a slug is a third party's to choose, and narrowing this
+// would make an app in somebody's registry uninstallable without warning.
 func IsValidSlug(slug string) bool {
 	if slug == "" || len(slug) > 64 {
 		return false

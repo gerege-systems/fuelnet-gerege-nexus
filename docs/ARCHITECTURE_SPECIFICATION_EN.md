@@ -22,7 +22,7 @@ organizations, wired directly into Mongolia's national digital infrastructure.
 ### 1.1 High-performance modular monolith
 
 - **Zero-latency execution** — business modules (`contacts`, `products`,
-  `inventory`, `billing`, `documents`, `developer_portal`) implement the Go
+  `inventory`, `billing`, `documents`, `sso_clients`) implement the Go
   `Module` contract and compile into a single binary.
 - **Tenant app store** — whether a module is active for a tenant is decided
   dynamically from PostgreSQL (`app_installations`).

@@ -93,8 +93,8 @@ func appReadPermission(appID string) string {
 		return "billing.read"
 	case "io.gerege.nexus.documents":
 		return "documents.read"
-	case "io.gerege.nexus.developer_portal":
-		return "developer.read"
+	case "io.gerege.nexus.sso_clients":
+		return "sso_clients.read"
 	case "io.gerege.nexus.gov_services":
 		return "gov.read"
 	default:

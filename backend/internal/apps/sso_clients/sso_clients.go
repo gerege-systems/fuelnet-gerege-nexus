@@ -3,12 +3,20 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package developer_portal implements the Developer Apps & OAuth2 SSO client
- * portal (io.gerege.nexus.developer_portal): the tenant-facing management surface
- * for the OAuth2 clients that platform.ssoprovider then authenticates.
+ * Package sso_clients is where a tenant registers the systems that sign people
+ * in through this platform (io.gerege.nexus.sso_clients): the management
+ * surface for the OAuth2 clients that platform.ssoprovider then authenticates.
+ *
+ * It was called `developer_portal`, which named the wrong thing twice. There is
+ * a real developer portal in this ecosystem — developer.gerege.mn, backed by
+ * apps/publisher_studio — where a third party submits an app to the store; an
+ * administrator who wanted that and found this instead had no way to tell from
+ * the name that they were in the wrong product. And what this actually is has
+ * nothing to do with developers: it is CRUD over OAuth2 clients, done by
+ * whoever runs the organisation's integrations.
  */
 
-package developer_portal
+package sso_clients
 
 import (
 	"encoding/json"
@@ -28,42 +36,67 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type DeveloperPortalModule struct {
+type SSOClientsModule struct {
 	sso *ssoprovider.SSOProvider
 }
 
-// NewDeveloperPortalModule builds the module and registers it in the
-// compile-time app registry.
-func NewDeveloperPortalModule(sso *ssoprovider.SSOProvider) *DeveloperPortalModule {
-	m := &DeveloperPortalModule{sso: sso}
+// ID is the catalogue identifier.
+const ID = "io.gerege.nexus.sso_clients"
+
+// LegacyID is what this app was called before the rename. appcatalog resolves
+// it to ID, so a registry that has not republished and an installation written
+// before the migration both keep working.
+//
+// DEPRECATED: remove in vNEXT.
+const LegacyID = "io.gerege.nexus.developer_portal"
+
+// New builds the module and registers it in the compile-time app registry.
+func New(sso *ssoprovider.SSOProvider) *SSOClientsModule {
+	m := &SSOClientsModule{sso: sso}
 	appregistry.Register(m)
 	return m
 }
 
-func (m *DeveloperPortalModule) ID() string      { return "io.gerege.nexus.developer_portal" }
-func (m *DeveloperPortalModule) Name() string    { return "Developer Portal & OAuth2 SSO" }
-func (m *DeveloperPortalModule) Version() string { return "2.0.0" }
+func (m *SSOClientsModule) ID() string      { return ID }
+func (m *SSOClientsModule) Name() string    { return "SSO Clients" }
+func (m *SSOClientsModule) Version() string { return "2.0.0" }
 
-func (m *DeveloperPortalModule) Dependencies() []internal.Dependency { return nil }
+func (m *SSOClientsModule) Dependencies() []internal.Dependency { return nil }
 
-func (m *DeveloperPortalModule) Permissions() []internal.PermissionDefinition {
+func (m *SSOClientsModule) Permissions() []internal.PermissionDefinition {
 	return []internal.PermissionDefinition{
-		{Code: "developer.read", Name: "Read Developer Apps", Description: "View registered OAuth2 client applications"},
-		{Code: "developer.manage", Name: "Manage Developer Apps", Description: "Register, configure and revoke OAuth2 client applications"},
+		{Code: "sso_clients.read", Name: "Read SSO Clients", Description: "View registered OAuth2 client applications"},
+		{Code: "sso_clients.manage", Name: "Manage SSO Clients", Description: "Register, configure and revoke OAuth2 client applications"},
 	}
 }
 
-func (m *DeveloperPortalModule) Menus() []internal.MenuDefinition {
+func (m *SSOClientsModule) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
-		{ID: "developer_apps", ParentID: "platform_tools", Label: "Developer Apps", Path: "/developer/apps", Icon: "code", Order: 10, Labels: map[string]string{"mn": "Хөгжүүлэгчийн аппууд", "ar": "تطبيقات المطورين", "zh": "开发者应用", "fr": "Applications développeur", "ru": "Приложения разработчика", "es": "Aplicaciones de desarrollador"}},
+		{ID: "sso_clients_apps", Label: "SSO clients", Path: "/sso-clients", Icon: "code", Order: 10, Labels: map[string]string{"mn": "SSO клиентүүд", "ar": "عملاء SSO", "zh": "SSO 客户端", "fr": "Clients SSO", "ru": "SSO-клиенты", "es": "Clientes SSO"}},
 	}
 }
 
-// RegisterRoutes mounts the portal API. The gate middleware carries both the
-// app installation check and the developer.read / developer.manage permission
-// split, which platform.appRequestPermission derives from the HTTP method.
-func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
-	r.Route("/api/v1/developer", func(dr chi.Router) {
+// RegisterRoutes mounts the API twice: once at the app's own name, and once at
+// the name it used to have.
+//
+// A dual mount rather than a redirect, which is what the organisation rename
+// used: nothing here moved between the platform and the app, so both trees are
+// the same handlers behind the same gate, and mounting twice states that more
+// plainly than a table of rewrites would. The gate middleware carries both the
+// app installation check and the sso_clients.read / sso_clients.manage split,
+// which platform.appRequestPermission derives from the HTTP method.
+//
+// The old tree stays for a release because an OAuth2 client is somebody else's
+// integration: whoever registered it is not necessarily reachable, and a 404 on
+// the screen where they would fix it is a poor way to tell them.
+func (m *SSOClientsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
+	r.Route("/api/v1/sso-clients", m.routes(tenantAuthMiddleware))
+	// DEPRECATED: remove in vNEXT.
+	r.Route("/api/v1/developer", m.routes(tenantAuthMiddleware))
+}
+
+func (m *SSOClientsModule) routes(tenantAuthMiddleware func(http.Handler) http.Handler) func(chi.Router) {
+	return func(dr chi.Router) {
 		dr.Use(tenantAuthMiddleware)
 
 		dr.Get("/scopes", m.handleListScopes)
@@ -80,11 +113,11 @@ func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddlewar
 			ar.Delete("/{clientID}", m.handleDeleteApp)
 			ar.Post("/{clientID}/rotate-secret", m.handleRotateSecret)
 			// Revocation is a mutation, so the gate middleware maps it to
-			// developer.manage the same way a delete is.
+			// sso_clients.manage the same way a delete is.
 			ar.Delete("/{clientID}/tokens", m.handleRevokeTokens)
 			ar.Delete("/{clientID}/consents/{userID}", m.handleWithdrawConsent)
 		})
-	})
+	}
 }
 
 // handleListApps returns the clients belonging to the caller's tenant.
@@ -92,7 +125,7 @@ func (m *DeveloperPortalModule) RegisterRoutes(r chi.Router, tenantAuthMiddlewar
 // The previous implementation read the tenant out of the context, threw it
 // away, and then called a provider method that returned every client on the
 // platform — so any tenant could enumerate every other tenant's integrations.
-func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleListApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -107,7 +140,7 @@ func (m *DeveloperPortalModule) handleListApps(w http.ResponseWriter, r *http.Re
 	httpx.JSON(w, http.StatusOK, clients)
 }
 
-func (m *DeveloperPortalModule) handleGetApp(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleGetApp(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -141,7 +174,7 @@ type appRequest struct {
 	Disabled               bool     `json:"disabled"`
 }
 
-func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -195,7 +228,7 @@ func (m *DeveloperPortalModule) handleCreateApp(w http.ResponseWriter, r *http.R
 	httpx.JSON(w, http.StatusCreated, created)
 }
 
-func (m *DeveloperPortalModule) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -245,7 +278,7 @@ func (m *DeveloperPortalModule) handleUpdateApp(w http.ResponseWriter, r *http.R
 	httpx.JSON(w, http.StatusOK, updated)
 }
 
-func (m *DeveloperPortalModule) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -266,7 +299,7 @@ func (m *DeveloperPortalModule) handleDeleteApp(w http.ResponseWriter, r *http.R
 // handleRotateSecret issues a fresh secret and invalidates the old one. There
 // was no way to do this before: a leaked secret meant deleting the integration
 // and re-registering it under a new client_id.
-func (m *DeveloperPortalModule) handleRotateSecret(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleRotateSecret(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -304,7 +337,7 @@ func (m *DeveloperPortalModule) handleRotateSecret(w http.ResponseWriter, r *htt
 // A credential nobody has used in months is the one worth deleting, and a
 // consent nobody remembers granting is the one worth withdrawing; neither was
 // visible anywhere before.
-func (m *DeveloperPortalModule) handleAudit(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleAudit(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -329,7 +362,7 @@ func (m *DeveloperPortalModule) handleAudit(w http.ResponseWriter, r *http.Reque
 // handleRevokeTokens invalidates every live token a client holds without
 // deleting the registration, so a suspected leak can be contained while the
 // integration keeps its client_id.
-func (m *DeveloperPortalModule) handleRevokeTokens(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleRevokeTokens(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -351,7 +384,7 @@ func (m *DeveloperPortalModule) handleRevokeTokens(w http.ResponseWriter, r *htt
 }
 
 // handleWithdrawConsent removes one user's standing grant to a client.
-func (m *DeveloperPortalModule) handleWithdrawConsent(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleWithdrawConsent(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -374,7 +407,7 @@ func (m *DeveloperPortalModule) handleWithdrawConsent(w http.ResponseWriter, r *
 // handleSigningKeys lists the keys the JWKS publishes, so an integrator can see
 // which kid their library should be pinning and when it appeared. Only public
 // metadata: the query never selects the private half.
-func (m *DeveloperPortalModule) handleSigningKeys(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleSigningKeys(w http.ResponseWriter, r *http.Request) {
 	if _, ok := tenant.Require(w, r); !ok {
 		return
 	}
@@ -393,7 +426,7 @@ func (m *DeveloperPortalModule) handleSigningKeys(w http.ResponseWriter, r *http
 
 // handleListScopes gives the portal's scope picker the same vocabulary the
 // consent screen renders, so the two cannot drift.
-func (m *DeveloperPortalModule) handleListScopes(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleListScopes(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"scopes":      ssoprovider.SupportedScopes,
 		"grant_types": ssoprovider.SupportedGrantTypes,
@@ -402,7 +435,7 @@ func (m *DeveloperPortalModule) handleListScopes(w http.ResponseWriter, r *http.
 
 // handleEndpoints hands the portal the exact URLs an integrator has to paste
 // into their client library, rather than making them assemble the origin.
-func (m *DeveloperPortalModule) handleEndpoints(w http.ResponseWriter, r *http.Request) {
+func (m *SSOClientsModule) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 	issuer := m.sso.Issuer()
 	httpx.JSON(w, http.StatusOK, map[string]string{
 		"issuer":                 issuer,

@@ -34,7 +34,7 @@ const iconMap: Record<string, React.ReactNode> = {
   // that copies it. Without this such an app's menu entry fell back to a
   // box, which is the icon for "we did not recognise yours".
   "share-2":<Share2 className="w-5 h-5"/>,
-  // core
+  // organisation
   "building-2":<Building2 className="w-5 h-5"/>, network:<Network className="w-5 h-5"/>,
   // esign
   "scroll-text":<ScrollText className="w-5 h-5"/>, layers:<Layers className="w-5 h-5"/>,
@@ -56,7 +56,7 @@ const iconMap: Record<string, React.ReactNode> = {
   // documents
   "list-checks":<ListChecks className="w-5 h-5"/>, files:<Files className="w-5 h-5"/>,
   workflow:<Workflow className="w-5 h-5"/>, archive:<Archive className="w-5 h-5"/>,
-  // developer portal
+  // sso clients
   "key-round":<KeyRound className="w-5 h-5"/>, "key-square":<KeySquare className="w-5 h-5"/>, webhook:<Webhook className="w-5 h-5"/>,
   // gov services
   inbox:<Inbox className="w-5 h-5"/>, "calendar-clock":<CalendarClock className="w-5 h-5"/>, timer:<Timer className="w-5 h-5"/>,
@@ -103,7 +103,7 @@ function currentPath(pathname:string,paths:string[]){
   return best;
 }
 
-const APP_ORDER=["io.gerege.nexus.organisation","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.developer_portal","io.gerege.nexus.gov_services"];
+const APP_ORDER=["io.gerege.nexus.organisation","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.sso_clients","io.gerege.nexus.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);

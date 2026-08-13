@@ -75,7 +75,7 @@ from **Settings → Appearance**. See the
 ### 1. High-performance modular monolith
 
 - **Compile-time Go app modules** — `contacts`, `products`, `inventory`,
-  `billing`, `documents` and `developer_portal` compile into one binary and are
+  `billing`, `documents` and `sso_clients` compile into one binary and are
   invoked in-process.
 - **Per-tenant app store** — application entitlements, menus and RBAC are driven
   from PostgreSQL (`app_installations`).
@@ -133,7 +133,7 @@ from **Settings → Appearance**. See the
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
 | 5 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
 | 6 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Document routing, signatures, approvals |
-| 7 | Developer Portal & OAuth2 SSO | `io.gerege.nexus.developer_portal` | `/developer/apps` | OAuth2 client registration |
+| 7 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for the systems that sign people in through this platform |
 
 Routes only open once the app is installed and enabled for the tenant; otherwise
 the gate returns `403 Forbidden`.

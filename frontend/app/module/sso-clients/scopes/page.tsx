@@ -24,7 +24,7 @@ export default function OAuthScopesPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [vocabulary, apps] = await Promise.all([api.getDeveloperScopes(), api.getDeveloperApps()]);
+        const [vocabulary, apps] = await Promise.all([api.getSSOClientScopes(), api.getSSOClients()]);
         setScopes(vocabulary.scopes || []);
         setClients(apps || []);
       } catch (err) {
@@ -48,17 +48,17 @@ export default function OAuthScopesPage() {
   return (
     <Screen
       icon={<ShieldCheck className="w-5 h-5" />}
-      title={t("developer.scopes.title")}
-      subtitle={t("developer.scopes.subtitle")}
+      title={t("sso_clients.scopes.title")}
+      subtitle={t("sso_clients.scopes.subtitle")}
     >
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Panel className="p-4 bg-slate-50">
-        <p className="text-xs text-slate-600">{t("developer.scopes.sensitive_note")}</p>
+        <p className="text-xs text-slate-600">{t("sso_clients.scopes.sensitive_note")}</p>
       </Panel>
 
       {loading ? (
-        <Loading label={t("developer.message.loading")} />
+        <Loading label={t("sso_clients.message.loading")} />
       ) : scopes.length === 0 ? (
         <Empty icon={<ShieldCheck className="w-9 h-9 mx-auto" />}>{t("base.message.error")}</Empty>
       ) : (
@@ -72,17 +72,17 @@ export default function OAuthScopesPage() {
                   {scope.sensitive && <Chip tone="amber">{t("oauth.consent.sensitive")}</Chip>}
                 </div>
 
-                <p className="text-xs text-slate-400 mt-2">{t("developer.scopes.consent_preview")}</p>
+                <p className="text-xs text-slate-400 mt-2">{t("sso_clients.scopes.consent_preview")}</p>
                 <p className="text-sm text-slate-700 border-l-2 border-slate-200 pl-3 mt-1">
                   {locale === "mn" ? scope.description_mn : scope.description}
                 </p>
 
                 <div className="mt-3 pt-3 border-t border-slate-100">
                   <span className="text-[11px] font-semibold text-slate-500">
-                    {t("developer.scopes.used_by")}
+                    {t("sso_clients.scopes.used_by")}
                   </span>
                   {users.length === 0 ? (
-                    <p className="text-[11px] text-slate-400 italic mt-1">{t("developer.scopes.unused")}</p>
+                    <p className="text-[11px] text-slate-400 italic mt-1">{t("sso_clients.scopes.unused")}</p>
                   ) : (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {users.map((client) => (

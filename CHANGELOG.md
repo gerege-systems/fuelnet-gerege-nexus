@@ -15,6 +15,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `developer_portal` becomes `sso_clients`
+
+The second of the three naming corrections. `developer_portal` named the wrong
+thing twice: there is a real developer portal in this ecosystem —
+developer.gerege.mn, backed by `apps/publisher_studio`, where a third party
+submits an app to the store — and an administrator looking for that and landing
+here had nothing in the name to tell them they were in the wrong product. What
+this app actually is has no developers in it: CRUD over the OAuth2 clients
+registered against this platform's own OIDC provider, run by whoever looks after
+an organisation's integrations.
+
+- **`io.gerege.nexus.developer_portal` → `io.gerege.nexus.sso_clients`**, slug
+  `developer_portal` → `sso-clients`, package `internal/apps/developer_portal` →
+  `internal/apps/sso_clients`, type `DeveloperPortalModule` → `SSOClientsModule`.
+  Name "Developer Portal & OAuth2 SSO" → "SSO Clients" / "SSO клиентүүд".
+- **Permissions `developer.read` / `developer.manage` → `sso_clients.read` /
+  `sso_clients.manage`.**
+- **Routes `/api/v1/developer/*` → `/api/v1/sso-clients/*`.** Screens moved with
+  them: `/developer/apps` → `/sso-clients`, and the blueprint screens from
+  `/module/developer/*` to `/module/sso-clients/*`.
+- The `developer.*` i18n namespace became `sso_clients.*` across the base
+  dictionary and all five generated overlays.
+- Migration `00056_sso_clients_rename.sql`, with a `down`. It touches nothing in
+  `oauth2_clients`: the clients this app manages are keyed by their own
+  client_id and never carried the app's id, so renaming the screen renames
+  nobody's integration.
+
+#### Deprecated — to be removed in the next release
+
+- `io.gerege.nexus.developer_portal` as a catalogue id and `developer_portal` as
+  a catalogue slug, both resolved by `appcatalog/alias.go`.
+- `sso_clients.LegacyID`.
+- The `/api/v1/developer/*` route tree, still mounted alongside
+  `/api/v1/sso-clients/*`. A dual mount rather than the redirect used for the
+  organisation rename: nothing moved between the platform and the app here, so
+  both trees are the same handlers behind the same gate.
+
 ### Changed — `core` becomes `organisation`, and stops being undeletable
 
 The first of three naming corrections made before the platform is published as

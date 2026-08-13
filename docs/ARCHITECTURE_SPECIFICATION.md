@@ -22,7 +22,7 @@
 ### 1.1 Өндөр бүтээмжтэй модуль монолит
 
 - **Zero-latency execution** — бизнес модулиуд (`contacts`, `products`,
-  `inventory`, `billing`, `documents`, `developer_portal`) нь Go хэлний `Module`
+  `inventory`, `billing`, `documents`, `sso_clients`) нь Go хэлний `Module`
   контрактыг хэрэгжүүлж, нэг бинарид компиллогдоно.
 - **Тенант бүрийн апп стор** — модуль тус бүр тенантад идэвхтэй эсэхийг
   PostgreSQL (`app_installations`) динамикаар шийднэ.
