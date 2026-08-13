@@ -21,6 +21,7 @@
 package platform
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -33,6 +34,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
+	"github.com/jackc/pgx/v5"
 )
 
 // googleLoginEnabled reports whether this deployment offers the Google button.
@@ -243,7 +245,7 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := s.resolveOrProvisionSSOUser(r.Context(), s.googleLogin.Config(), identity)
+	userID, tenantID, err := s.resolveGoogleUser(r.Context(), s.googleLogin.Config(), identity)
 	if err != nil {
 		// Checked before the refusal below, and never treated as one. This
 		// account is known and this Google identity is already theirs; what is
@@ -269,7 +271,11 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			slog.Info("a first Google sign-in is waiting on eID", "email", identity.Email)
-			http.Redirect(w, r, config.WebOrigin()+"/login/bind?b="+url.QueryEscape(token), http.StatusFound)
+			targetURL := config.WebOrigin() + "/login/bind?b=" + url.QueryEscape(token)
+			if flow.Next != "" {
+				targetURL += "&next=" + url.QueryEscape(flow.Next)
+			}
+			http.Redirect(w, r, targetURL, http.StatusFound)
 			return
 		}
 		slog.Error("could not link a verified Google identity to an account", "error", err)
@@ -325,3 +331,34 @@ func domainOf(email string) string {
 	}
 	return ""
 }
+
+// resolveGoogleUser maps a verified Google identity onto a local account.
+//
+// Unlike federated SSO, Google sign-in does not auto-link by email or
+// auto-provision users without eID. Accounts on this platform are held by
+// national identity verified via eID.
+//
+// If the Google identity (issuer, subject) is already bound to a user account,
+// it logs them in directly. Otherwise, it returns a signInError so the caller
+// can park the identity and require a one-time eID binding.
+func (s *Server) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
+	issuer := cfg.Issuer
+
+	err = s.db.QueryRow(ctx,
+		`SELECT user_id::text FROM user_sso_identities WHERE issuer = $1 AND subject = $2`,
+		issuer, identity.Subject).Scan(&userID)
+	if err == nil {
+		s.touchSSOIdentity(ctx, issuer, identity)
+		tenantID, err = s.firstTenantFor(ctx, userID)
+		if err != nil {
+			return "", "", err
+		}
+		return userID, tenantID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", "", err
+	}
+
+	return "", "", signInError{"Google account is not bound to any user"}
+}
+

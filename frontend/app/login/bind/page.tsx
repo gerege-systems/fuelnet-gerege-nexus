@@ -26,6 +26,8 @@ export default function BindPage(){const {t}=useI18n();
 
   async function agree(){try{await api.bindingConsent(binding);setConsented(true)}catch(e:any){setError(e?.message||t("auth.bind.expired"))}}
 
+  const next = typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("next") || "/") : "/";
+
   // Провайдерийн хэлснийг тайлбарлахын оронд шууд үзүүлнэ: хуваалцахыг
   // зөвшөөрч буй хүн тэр зүйлээ харах эрхтэй.
   const shared=info?[["Нэр",info.name],["И-мэйл",info.email]].filter(([,v])=>v):[];
@@ -63,7 +65,7 @@ export default function BindPage(){const {t}=useI18n();
         {info&&consented&&<>
           <div><h1 className="signin-card__title">{t("auth.bind.verify_title")}</h1>
             <p className="signin-card__lede">{t("auth.bind.verify_lede")}</p></div>
-          <EIDLogin next="/profile" variant="signin" binding={binding}/>
+          <EIDLogin next={next} variant="signin" binding={binding}/>
         </>}
       </div>
     </section>
