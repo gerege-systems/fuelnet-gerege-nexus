@@ -7,13 +7,14 @@
 // from over there, so they arrive as pieces here too rather than as properties
 // pasted into each screen.
 //
-// BrandWordmark is not among them: it paints a drawable this client does not
-// ship. The screens that would have used one use type instead.
+// BrandWordmark paints the brand mark the web app uses, converted into a
+// drawable for this client.
 
 package mn.gerege.nexus.ui.brand
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,10 +39,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import mn.gerege.nexus.ui.theme.LocalGw
@@ -196,6 +200,22 @@ fun LoadingPrimaryButton(
             }
         }
     }
+}
+
+/**
+ * The brand mark, at the size their login screen gives it.
+ *
+ * Not tinted: the mark carries its own colour — a silver medallion on the
+ * brand blue — and flattening it to a single tint would throw away the thing
+ * that makes it recognisable.
+ */
+@Composable
+fun BrandWordmark(size: Dp = 56.dp, modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(id = mn.gerege.nexus.R.drawable.brand),
+        contentDescription = "Gerege Nexus",
+        modifier = modifier.size(size).clip(RoundedCornerShape(14.dp)),
+    )
 }
 
 /** The quiet line at the foot of an auth screen. */

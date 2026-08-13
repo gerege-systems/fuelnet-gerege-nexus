@@ -19,6 +19,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import mn.gerege.nexus.ui.brand.BrandScreen
 import mn.gerege.nexus.ui.brand.BrandSectionLabel
+import mn.gerege.nexus.ui.brand.BrandWordmark
 import mn.gerege.nexus.ui.brand.BrandSecurityFooter
 import mn.gerege.nexus.ui.brand.LoadingPrimaryButton
 import mn.gerege.nexus.ui.theme.GeregeNexusTheme
@@ -121,6 +122,7 @@ private fun NativeLogin(auth: AuthStateMachine, deviceToken: String?) {
     BrandScreen {
       Box(Modifier.fillMaxSize().padding(Space.xl), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = if (BuildConfig.FORM_FACTOR == "tablet") 520.dp else 420.dp), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            BrandWordmark()
             BrandSectionLabel("GEREGE / NEXUS")
             Text("Таны баталгаатай\nажлын орчин", color = gw.fg1, fontSize = 34.sp, lineHeight = 38.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(Space.md))
