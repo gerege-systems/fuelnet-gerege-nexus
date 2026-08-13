@@ -277,6 +277,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   // доторх навигаци бөгөөд аль апп идэвхтэй, ямар эрхтэй, ямар хэлээр гэдгийг
   // web тал аль хэдийн мэддэг.
   if(workAreaOnly)return <div className="gerege-shell gerege-workarea h-screen flex flex-col overflow-hidden">
+    <ImpersonationBanner active={!!user?.impersonated}/>
     <RibbonBar selected={selected} brandTitle={brandTitle} user={user} setShellSearchOpen={setShellSearchOpen} iconMap={iconMap} t={t} onLogout={logout} />
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <div className="gerege-sidebar bottom-0 left-0 z-40 flex overflow-hidden is-desktop-open">
@@ -309,6 +310,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   </div>;
 
   return <div className="gerege-shell min-h-screen flex flex-col">
+    <ImpersonationBanner active={!!user?.impersonated}/>
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
       <TenantSwitcher current={user?.tenant_id} currentName={user?.tenant_name}>
         {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege Nexus" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
@@ -537,3 +539,25 @@ function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];
   return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
   ?<NavLink key={item.id} href={item.path} active={item.path===here} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>
   :<ExternalNavLink key={item.id} href={item.external_url!} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
+
+/**
+ * The banner an operator's borrowed session wears.
+ *
+ * Rendered above everything, in a colour nothing else on this platform uses,
+ * with no way to dismiss it. That is the whole specification: the person whose
+ * account this is — and anybody standing behind them — must be able to see at
+ * a glance that what is on the screen is not an ordinary session. It is drawn
+ * from `impersonated` on /me, which comes from the session row itself, so no
+ * client-side state can turn it off.
+ */
+function ImpersonationBanner({active}:{active:boolean}){
+  // Its own useI18n rather than the translate function passed down: the type of
+  // `t` is the dictionary's key union, and threading it through a prop turns
+  // every call site into a cast.
+  const {t}=useI18n();
+  if(!active) return null;
+  return <div role="status" className="w-full bg-amber-500 text-amber-950 text-sm font-medium px-4 py-2 flex items-center gap-2 shadow-inner">
+    <ShieldCheck className="w-4 h-4 shrink-0"/>
+    <span>{t("web.message.impersonated")}</span>
+  </div>;
+}

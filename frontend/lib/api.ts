@@ -440,7 +440,7 @@ export const api = {
 
   // permissions carries the effective grant of every role the member holds; it
   // is empty for administrators, who bypass the check.
-  getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[] }>("/auth/me"),
+  getMe: () => fetcher<{ id: string; tenant_id: string; tenant_name: string; name: string; email: string; is_admin: boolean; permissions?: string[]; impersonated?: boolean }>("/auth/me"),
 
   // The organisations the signed-in person may act for. A membership in one is
   // the common case, so callers should expect a list of one rather than treat

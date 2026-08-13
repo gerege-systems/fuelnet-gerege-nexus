@@ -107,7 +107,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "password")
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
+		reportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -401,9 +401,35 @@ func newPollLimiter() *security.IPRateLimiter {
 }
 
 // issueSession creates a persisted session bound to the caller's IP and agent.
+// issueSession is the one funnel every way of signing in passes through —
+// password, eID, ДАН, Google, a federated provider, a staff PIN — which is why
+// the suspension check lives here rather than in each of them. An organisation
+// the control plane has closed cannot be signed in to by any route, including
+// one added next year by somebody who never read this file.
 func (s *Server) issueSession(r *http.Request, userID, tenantID, method string) (string, time.Time, error) {
+	if suspended, reason := s.tenantSuspended(r.Context(), tenantID); suspended {
+		if reason != "" {
+			return "", time.Time{}, fmt.Errorf("%w: %s", ErrTenantSuspended, reason)
+		}
+		return "", time.Time{}, ErrTenantSuspended
+	}
 	return s.sessions.Create(r.Context(), userID, tenantID, method,
 		r.UserAgent(), security.ClientIP(r))
+}
+
+// reportSessionFailure answers a sign-in that could not produce a session.
+//
+// A suspended organisation is the caller's to know about — they will otherwise
+// try the same password all afternoon — and everything else is ours. 403
+// rather than 401 for the same reason authMiddleware uses it: signing in again
+// is not the remedy.
+func reportSessionFailure(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrTenantSuspended) {
+		httpx.Error(w, http.StatusForbidden, err.Error())
+		return
+	}
+	slog.Error("could not establish a session", "error", err)
+	httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
 }
 
 // signInError carries a reason that is meant for the person signing in. Account
@@ -557,6 +583,12 @@ func (s *Server) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.EI
 		syntheticEmail, passwordHash, name).Scan(&userID); err != nil {
 		return "", "", err
 	}
+	// See the same check in sso_client_handlers.go: provisioning somebody on
+	// their first eID sign-in is exactly the path by which an organisation
+	// grows without anybody choosing to add a person.
+	if err = s.checkUserQuota(ctx, tenantID); err != nil {
+		return "", "", signInError{"Энэ байгууллага хэрэглэгчийн тооны хязгаартаа хүрсэн байна"}
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO memberships(tenant_id,user_id) VALUES($1,$2) ON CONFLICT(tenant_id,user_id) DO NOTHING`, tenantID, userID); err != nil {
 		return "", "", err
 	}
@@ -600,5 +632,10 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"email":       email,
 		"is_admin":    claims.IsAdmin,
 		"permissions": granted,
+		// Whether a platform operator is inside this account right now. The
+		// shell draws a banner from it that cannot be dismissed — the person
+		// whose screen this is has a right to know, and so does anybody
+		// looking over their shoulder.
+		"impersonated": claims.Impersonated,
 	})
 }

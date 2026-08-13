@@ -3,6 +3,10 @@
  * menu falls back to before its screen exists.
  */
 export const web = {
+  "web.message.impersonated": {
+    mn: "Энэ бол платформын операторын түр хандалт. Таны бүртгэлээр хийгдэж буй үйлдлүүд байгууллагын бүртгэлд «операторын» тэмдэгтэйгээр үлдэнэ.",
+    en: "A platform operator is working in this account. Everything done here is marked as theirs in your organisation's audit trail.",
+  },
   "web.menu.app_store": { mn: "Апп Дэлгүүр", en: "App Store" },
   "web.menu.installed_apps": { mn: "Суулгасан аппууд", en: "Installed Apps" },
   "web.menu.integrations": { mn: "Интеграцууд", en: "Integrations" },

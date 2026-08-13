@@ -35,21 +35,71 @@ const (
 	// CapOperatorRead is the roster of operators. Who can reach this platform
 	// is itself a thing to be able to check.
 	CapOperatorRead Capability = "operator.read"
+
+	// CapTenantCreate opens an organisation on this deployment.
+	CapTenantCreate Capability = "tenant.create"
+	// CapTenantSuspend closes one, and opens it again. Reversible, so it is
+	// day-to-day work rather than a two-person action.
+	CapTenantSuspend Capability = "tenant.suspend"
+	// CapTenantDelete asks for an organisation to be deleted. Asking is all it
+	// does: the deletion needs a second superadmin's approval, then thirty
+	// days, and either can stop it.
+	CapTenantDelete Capability = "tenant.delete"
+	// CapApprove answers somebody else's request. Held only by superadmin, and
+	// never by the operator who made the request — the database enforces that
+	// half (migration 00050).
+	CapApprove Capability = "approval.decide"
+	// CapQuotaWrite sets an organisation's limits.
+	CapQuotaWrite Capability = "quota.write"
+	// CapSupport is the help-desk work: find a person, unlock them, end their
+	// sessions, send them a way back in. None of it reveals anything they
+	// keep on the platform.
+	CapSupport Capability = "support.act"
+	// CapImpersonate is looking at the platform as somebody else.
+	//
+	// Deliberately not held by `operator`. That role's remit is the platform —
+	// tenants, settings, deployments — and §2.2 draws the line at seeing what
+	// an organisation keeps. Support has to cross it to do their job, with a
+	// reason, a time limit and a banner; operators do not.
+	CapImpersonate Capability = "user.impersonate"
 )
 
 // capabilities is the whole authorization model, in one readable place.
 //
-// CP-1 grants little because CP-1 does little: everything here is read-only.
-// The phases after it add their own rows — tenant.suspend, tenant.delete,
-// user.impersonate, settings.write, deploy.trigger — and the reason to write
-// the table now, with three entries, is that they will be added by editing
-// this map rather than by scattering `if role == "superadmin"` through
-// handlers, which is where privilege bugs live.
+// Every question of the form "may this role do that" is answered by reading
+// this table, and adding a capability is editing it — never an `if role ==
+// "superadmin"` inside a handler, which is where privilege bugs live and where
+// nobody can see the whole picture at once.
+//
+// The shape follows §2.2 of the plan. Three things are worth saying out loud,
+// because they are the ones a reader would otherwise assume wrong:
+//
+//   - The four roles are not a ladder. `operator` can create an organisation
+//     and `support` cannot; `support` can look inside one and `operator`
+//     cannot. Neither is "more" than the other.
+//   - `auditor` reads everything and can do nothing. That is the point of it:
+//     somebody who checks the platform without being able to change it.
+//   - Deletion is a superadmin's request and a *different* superadmin's
+//     approval. One person holding both roles is not two people, so the check
+//     is on the identity rather than on the capability (see approvals.go).
 var capabilities = map[Role]map[Capability]bool{
-	RoleSuperadmin: {CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true},
-	RoleOperator:   {CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true},
-	RoleSupport:    {CapTenantRead: true, CapAuditRead: true, CapOperatorRead: false},
-	RoleAuditor:    {CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true},
+	RoleSuperadmin: {
+		CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true,
+		CapTenantCreate: true, CapTenantSuspend: true, CapTenantDelete: true,
+		CapApprove: true, CapQuotaWrite: true, CapSupport: true, CapImpersonate: true,
+	},
+	RoleOperator: {
+		CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true,
+		CapTenantCreate: true, CapTenantSuspend: true, CapQuotaWrite: true,
+		CapSupport: true,
+	},
+	RoleSupport: {
+		CapTenantRead: true, CapAuditRead: true,
+		CapSupport: true, CapImpersonate: true,
+	},
+	RoleAuditor: {
+		CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true,
+	},
 }
 
 // Can reports whether this role holds a capability. An unknown role holds

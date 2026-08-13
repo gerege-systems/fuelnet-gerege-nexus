@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -50,6 +51,334 @@ func (s *Service) Routes(r chi.Router) {
 		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/tenants/{id}", s.handleGetTenant)
 		signedIn.With(s.RequireCapability(CapAuditRead)).Get("/audit", s.handleListAudit)
 		signedIn.With(s.RequireCapability(CapOperatorRead)).Get("/operators", s.handleListOperators)
+
+		// The organisation's life. Suspension is reversible and needs one
+		// operator; deletion is not and needs two, which is why it goes
+		// through the approvals below rather than having a route of its own
+		// that does the deed.
+		signedIn.With(s.RequireCapability(CapTenantCreate)).
+			Post("/tenants", s.handleCreateTenant)
+		signedIn.With(s.RequireCapability(CapTenantSuspend), s.RequireStepUp).
+			Post("/tenants/{id}/suspend", s.handleSuspendTenant)
+		signedIn.With(s.RequireCapability(CapTenantSuspend), s.RequireStepUp).
+			Post("/tenants/{id}/resume", s.handleResumeTenant)
+		signedIn.With(s.RequireCapability(CapTenantDelete), s.RequireStepUp).
+			Post("/tenants/{id}/deletion", s.handleRequestDeletion)
+		// Cancelling a deletion needs neither a second person nor a second
+		// factor. It is the safe direction: the asymmetry is the point of a
+		// grace period, and a recovery that is harder than the mistake is a
+		// recovery nobody manages in time.
+		signedIn.With(s.RequireCapability(CapTenantSuspend)).
+			Delete("/tenants/{id}/deletion", s.handleCancelDeletion)
+		// The export reads the organisation's actual data, so it is gated like
+		// the deletion it usually precedes rather than like a read: the same
+		// capability, and a second factor. See export.go for why this one
+		// action is allowed to leave the console's usual boundary.
+		signedIn.With(s.RequireCapability(CapTenantDelete), s.RequireStepUp).
+			Get("/tenants/{id}/export", s.handleExportTenant)
+		signedIn.With(s.RequireCapability(CapQuotaWrite), s.RequireStepUp).
+			Put("/tenants/{id}/quota", s.handleSetQuota)
+
+		// What is counting down. On its own route rather than inside the
+		// organisation list, because it is the one screen an operator should
+		// look at without being asked to.
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/deletions", s.handleListDeletions)
+
+		signedIn.With(s.RequireCapability(CapApprove)).Get("/approvals", s.handleListApprovals)
+		signedIn.With(s.RequireCapability(CapApprove), s.RequireStepUp).
+			Post("/approvals/{id}/approve", s.handleApprove)
+		signedIn.With(s.RequireCapability(CapApprove)).
+			Post("/approvals/{id}/reject", s.handleReject)
+
+		// The help desk.
+		signedIn.With(s.RequireCapability(CapSupport)).Get("/people", s.handleFindPeople)
+		signedIn.With(s.RequireCapability(CapSupport), s.RequireStepUp).
+			Post("/people/{id}/unlock", s.handleUnlock)
+		signedIn.With(s.RequireCapability(CapSupport), s.RequireStepUp).
+			Post("/people/{id}/sessions/revoke", s.handleRevokeSessions)
+		signedIn.With(s.RequireCapability(CapSupport), s.RequireStepUp).
+			Post("/people/{id}/credential-link", s.handleCredentialLink)
+
+		signedIn.With(s.RequireCapability(CapImpersonate), s.RequireStepUp).
+			Post("/tenants/{id}/impersonate", s.handleImpersonate)
+	})
+}
+
+// reasoned is the body every write on this console carries. A reason is not
+// optional and not defaulted: Do refuses without one, so a handler that forgot
+// to read it fails on the first attempt rather than filling the audit trail
+// with empty strings.
+type reasoned struct {
+	Reason string `json:"reason"`
+}
+
+// decode reads a JSON body, bounded. Returns false having already answered.
+func decode(w http.ResponseWriter, r *http.Request, into any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxWriteBody)
+	if err := json.NewDecoder(r.Body).Decode(into); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "the request body could not be read")
+		return false
+	}
+	return true
+}
+
+// maxWriteBody bounds a console write. Generous for a form, small enough that
+// nothing here is a way to make the process allocate.
+const maxWriteBody = 32 << 10
+
+// fail turns the package's sentinel errors into the answers they deserve, so
+// that every handler below is three lines rather than fifteen.
+func fail(w http.ResponseWriter, err error, doing string) {
+	switch {
+	case errors.Is(err, ErrTenantNotFound), errors.Is(err, ErrUserNotFound),
+		errors.Is(err, ErrApprovalNotFound):
+		httpx.Error(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, ErrReasonRequired), errors.Is(err, ErrInvalidSlug),
+		errors.Is(err, ErrSlugTaken), errors.Is(err, ErrNotSuspended),
+		errors.Is(err, ErrNotScheduled), errors.Is(err, ErrAlreadyScheduled),
+		errors.Is(err, ErrNotAMember), errors.Is(err, ErrTenantSuspended),
+		errors.Is(err, ErrUnknownEnforcement), errors.Is(err, ErrMailNotConfigured):
+		// Refusals the operator can act on, in words they can act on. These
+		// are the platform's own sentinels, never a database error's text —
+		// see the default.
+		httpx.Error(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrSelfApproval):
+		httpx.Error(w, http.StatusForbidden, err.Error())
+	default:
+		// Anything else is logged in full and answered vaguely: an error from
+		// PostgreSQL describes the schema, and the console is not the place to
+		// publish it.
+		slog.Error("control plane: "+doing, "error", err)
+		httpx.Error(w, http.StatusInternalServerError, "that could not be completed")
+	}
+}
+
+func (s *Service) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var params NewTenant
+	if !decode(w, r, &params) {
+		return
+	}
+	created, err := s.CreateTenant(r.Context(), sess, params)
+	if err != nil {
+		fail(w, err, "could not create the organisation")
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, created)
+}
+
+func (s *Service) handleSuspendTenant(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.Suspend(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not suspend the organisation")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "suspended"})
+}
+
+func (s *Service) handleResumeTenant(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.Resume(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not resume the organisation")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "active"})
+}
+
+func (s *Service) handleRequestDeletion(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	approvalID, err := s.RequestDeletion(r.Context(), sess, chi.URLParam(r, "id"), body.Reason)
+	if err != nil {
+		fail(w, err, "could not ask for the organisation to be deleted")
+		return
+	}
+	// Deliberately explicit about what has and has not happened: the operator
+	// pressed "delete" and nothing has been deleted.
+	httpx.JSON(w, http.StatusAccepted, map[string]any{
+		"status":      "awaiting a second superadmin",
+		"approval_id": approvalID,
+		"grace_days":  int(DeletionGrace.Hours() / 24),
+	})
+}
+
+func (s *Service) handleCancelDeletion(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.CancelDeletion(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not cancel the deletion")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deletion cancelled"})
+}
+
+func (s *Service) handleExportTenant(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	bundle, err := s.ExportTenant(r.Context(), sess, chi.URLParam(r, "id"))
+	if err != nil {
+		fail(w, err, "could not export the organisation")
+		return
+	}
+	w.Header().Set("Content-Disposition",
+		`attachment; filename="`+bundle.Tenant.Slug+`-export.json"`)
+	httpx.JSON(w, http.StatusOK, bundle)
+}
+
+func (s *Service) handleSetQuota(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		Quota
+		Reason string `json:"reason"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.SetQuota(r.Context(), sess, chi.URLParam(r, "id"), body.Quota, body.Reason); err != nil {
+		fail(w, err, "could not set the limits")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+func (s *Service) handleListDeletions(w http.ResponseWriter, r *http.Request) {
+	pending, err := s.TenantsAwaitingDeletion(r.Context())
+	if err != nil {
+		fail(w, err, "could not list the organisations awaiting deletion")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"tenants": pending})
+}
+
+func (s *Service) handleListApprovals(w http.ResponseWriter, r *http.Request) {
+	approvals, err := s.ListApprovals(r.Context())
+	if err != nil {
+		fail(w, err, "could not list the open requests")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"approvals": approvals})
+}
+
+func (s *Service) handleApprove(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.Approve(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not approve the request")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}
+
+func (s *Service) handleReject(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.Reject(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not reject the request")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "rejected"})
+}
+
+func (s *Service) handleFindPeople(w http.ResponseWriter, r *http.Request) {
+	people, err := s.FindPeople(r.Context(), r.URL.Query().Get("q"))
+	if err != nil {
+		fail(w, err, "could not search for people")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"people": people})
+}
+
+func (s *Service) handleUnlock(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.Unlock(r.Context(), sess, chi.URLParam(r, "id"), body.Reason); err != nil {
+		fail(w, err, "could not unlock the account")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "unlocked"})
+}
+
+func (s *Service) handleRevokeSessions(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body reasoned
+	if !decode(w, r, &body) {
+		return
+	}
+	ended, err := s.RevokeSessions(r.Context(), sess, chi.URLParam(r, "id"), body.Reason)
+	if err != nil {
+		fail(w, err, "could not end the sessions")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"status": "revoked", "sessions": ended})
+}
+
+func (s *Service) handleCredentialLink(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		// TenantID is which organisation the mail is sent on behalf of. The
+		// verification service counts its quota per organisation, so the
+		// answer cannot be "none" — the console sends the one the operator was
+		// looking at.
+		TenantID string `json:"tenant_id"`
+		Purpose  string `json:"purpose"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if body.Purpose == "" {
+		body.Purpose = "reset"
+	}
+	if err := s.SendCredentialLink(r.Context(), sess, chi.URLParam(r, "id"),
+		body.TenantID, body.Purpose, body.Reason); err != nil {
+		fail(w, err, "could not send the link")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+func (s *Service) handleImpersonate(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		UserID string `json:"user_id"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	link, err := s.BeginImpersonation(r.Context(), sess, chi.URLParam(r, "id"), body.UserID, body.Reason)
+	if err != nil {
+		fail(w, err, "could not start the session")
+		return
+	}
+	// The link is returned rather than redirected to: the console is on
+	// another hostname, and the operator's browser has to make the journey
+	// itself for the cookie to land where it belongs.
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"url":     link,
+		"minutes": int(ImpersonationWindow.Minutes()),
 	})
 }
 

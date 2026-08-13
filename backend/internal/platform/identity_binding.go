@@ -296,7 +296,7 @@ func (s *Server) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 
 	token, expiresAt, err := s.issueSession(r, userID, tenantID, "bind-eid")
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
+		reportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)

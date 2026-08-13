@@ -39,6 +39,71 @@ export interface TenantSummary {
   user_count: number;
   app_count: number;
   last_activity_at: string | null;
+  suspended_at: string | null;
+  suspension_reason: string;
+  deletion_scheduled_at: string | null;
+}
+
+export interface Quota {
+  tenant_id: string;
+  max_users: number | null;
+  max_storage_mb: number | null;
+  max_ai_calls_monthly: number | null;
+  enforcement: "soft" | "hard";
+  users: number;
+  /** Which limits this build actually applies; the rest are recorded only. */
+  enforced: string[];
+}
+
+export interface Impersonation {
+  id: string;
+  operator_email: string;
+  user_email: string;
+  reason: string;
+  redeemed_at: string | null;
+  ends_at: string;
+  created_at: string;
+}
+
+export interface Approval {
+  id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  target_name: string;
+  requested_by: string;
+  requested_by_name: string;
+  requested_reason: string;
+  requested_at: string;
+  expires_at: string;
+}
+
+export interface PersonMembership {
+  tenant_id: string;
+  tenant_name: string;
+  tenant_slug: string;
+  roles: string[];
+  suspended: boolean;
+}
+
+export interface Person {
+  id: string;
+  email: string;
+  name: string;
+  locked_until: string | null;
+  failed_logins: number;
+  sessions: number;
+  memberships: PersonMembership[];
+}
+
+export interface CreatedTenant {
+  id: string;
+  slug: string;
+  name: string;
+  installed: string[];
+  failed: string[];
+  invited: boolean;
+  invite_error?: string;
 }
 
 export interface TenantApp {
@@ -85,6 +150,8 @@ export interface TenantDetail extends TenantSummary {
   members: TenantMember[];
   activity: TenantActivity[];
   operator_actions: AuditEntry[];
+  quota: Quota;
+  impersonations: Impersonation[];
 }
 
 /**
@@ -166,4 +233,45 @@ export const cp = {
   },
 
   operators: () => request<{ operators: (Operator & { disabled_at: string | null; last_login_at: string | null; created_at: string })[] }>("/operators"),
+
+  createTenant: (body: {
+    name: string; slug: string; legal_name?: string; registration_number?: string;
+    apps?: string[]; admin_email: string; admin_name?: string; reason: string;
+  }) => request<CreatedTenant>("/tenants", { method: "POST", body: JSON.stringify(body) }),
+
+  suspend: (id: string, reason: string) =>
+    request<{ status: string }>(`/tenants/${id}/suspend`, { method: "POST", body: JSON.stringify({ reason }) }),
+  resume: (id: string, reason: string) =>
+    request<{ status: string }>(`/tenants/${id}/resume`, { method: "POST", body: JSON.stringify({ reason }) }),
+  requestDeletion: (id: string, reason: string) =>
+    request<{ status: string; approval_id: string; grace_days: number }>(
+      `/tenants/${id}/deletion`, { method: "POST", body: JSON.stringify({ reason }) }),
+  cancelDeletion: (id: string, reason: string) =>
+    request<{ status: string }>(`/tenants/${id}/deletion`, { method: "DELETE", body: JSON.stringify({ reason }) }),
+  deletions: () => request<{ tenants: TenantSummary[] }>("/deletions"),
+
+  setQuota: (id: string, body: Partial<Quota> & { reason: string }) =>
+    request<{ status: string }>(`/tenants/${id}/quota`, { method: "PUT", body: JSON.stringify(body) }),
+
+  approvals: () => request<{ approvals: Approval[] }>("/approvals"),
+  approve: (id: string, reason: string) =>
+    request<{ status: string }>(`/approvals/${id}/approve`, { method: "POST", body: JSON.stringify({ reason }) }),
+  reject: (id: string, reason: string) =>
+    request<{ status: string }>(`/approvals/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+
+  people: (query: string) => request<{ people: Person[] }>(`/people?q=${encodeURIComponent(query)}`),
+  unlock: (id: string, reason: string) =>
+    request<{ status: string }>(`/people/${id}/unlock`, { method: "POST", body: JSON.stringify({ reason }) }),
+  revokeSessions: (id: string, reason: string) =>
+    request<{ status: string; sessions: number }>(`/people/${id}/sessions/revoke`,
+      { method: "POST", body: JSON.stringify({ reason }) }),
+  credentialLink: (id: string, body: { tenant_id: string; purpose: "invite" | "reset"; reason: string }) =>
+    request<{ status: string }>(`/people/${id}/credential-link`, { method: "POST", body: JSON.stringify(body) }),
+
+  impersonate: (tenantID: string, userID: string, reason: string) =>
+    request<{ url: string; minutes: number }>(`/tenants/${tenantID}/impersonate`,
+      { method: "POST", body: JSON.stringify({ user_id: userID, reason }) }),
+
+  /** The export is a download rather than a fetch: it is a file. */
+  exportURL: (id: string) => `${BASE}/tenants/${id}/export`,
 };

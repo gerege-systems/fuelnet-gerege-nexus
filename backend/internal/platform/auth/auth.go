@@ -28,6 +28,20 @@ type UserClaims struct {
 	// role held in one organisation, and holding it in the parent says nothing
 	// about the subsidiary.
 	AllowedTenantIDs []string `json:"allowed_tenant_ids,omitempty"`
+	// Impersonated says this session belongs to a platform operator acting as
+	// this person rather than to the person themselves.
+	//
+	// It travels with the claims rather than being looked up where it is
+	// needed, because three separate things depend on it — the banner the
+	// shell shows, the mark on every audit row, and the fact that /me reports
+	// it — and a fact three consumers each fetch for themselves is a fact they
+	// can disagree about.
+	Impersonated bool `json:"impersonated,omitempty"`
+	// ImpersonatedBy is the operator's id. Never their address: this reaches
+	// the browser of somebody whose organisation is being looked at, and who
+	// is looking is answered by the organisation's own audit trail, in full,
+	// rather than by a claim in a JSON body.
+	ImpersonatedBy string `json:"-"`
 }
 
 func HashPassword(password string) (string, error) {

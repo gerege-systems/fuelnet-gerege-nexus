@@ -323,6 +323,13 @@ func (s *Server) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, ide
 		 RETURNING id::text`, email, passwordHash, name).Scan(&userID); err != nil {
 		return "", "", err
 	}
+	// The organisation's limit, checked before it grows. A provider that
+	// authenticates the whole of a company would otherwise walk an
+	// organisation past whatever the console set for it, one sign-in at a
+	// time, with nobody deciding to.
+	if err = s.checkUserQuota(ctx, tenantID); err != nil {
+		return "", "", signInError{"this organisation has reached the number of people it may have"}
+	}
 	if _, err = tx.Exec(ctx,
 		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1,$2)
 		 ON CONFLICT (tenant_id, user_id) DO NOTHING`, tenantID, userID); err != nil {

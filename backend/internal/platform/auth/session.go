@@ -84,6 +84,17 @@ func NewSessionStore(db *pgxpool.Pool, ttl time.Duration) *SessionStore {
 	return &SessionStore{db: db, ttl: ttl, idle: IdleTimeoutFromEnv()}
 }
 
+// HashSessionToken is the digest a session row is found by.
+//
+// Exported because the control plane's impersonation writes a session row of
+// its own — with an expiry and an operator id this store knows nothing about —
+// and it must produce exactly the digest Resolve looks for. A second hashing
+// helper elsewhere would be a second place for the two to drift apart.
+func HashSessionToken(token string) string { return hashToken(token) }
+
+// NewSessionToken mints a token in the same shape as this package's own.
+func NewSessionToken() (string, error) { return newToken() }
+
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
@@ -155,6 +166,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		)
 		SELECT s.user_id::text, s.tenant_id::text, u.email,
 		        ARRAY(SELECT a::text FROM unnest(s.allowed_tenant_ids) a) AS allowed,
+		        COALESCE(s.impersonated_by::text, '') AS impersonated_by,
 		        EXISTS (
 		            SELECT 1 FROM memberships m
 		            JOIN membership_roles mr ON mr.membership_id=m.id
@@ -167,7 +179,8 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		   JOIN users u ON u.id = s.user_id
 		   JOIN memberships sm ON sm.tenant_id=s.tenant_id AND sm.user_id=s.user_id`,
 		hashToken(token), nullableTime(idleCutoff), touchInterval.String()).
-		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.AllowedTenantIDs, &claims.IsAdmin)
+		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.AllowedTenantIDs,
+			&claims.ImpersonatedBy, &claims.IsAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return UserClaims{}, ErrSessionInvalid
@@ -175,6 +188,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		return UserClaims{}, fmt.Errorf("resolve session: %w", err)
 	}
 
+	claims.Impersonated = claims.ImpersonatedBy != ""
 	return claims, nil
 }
 

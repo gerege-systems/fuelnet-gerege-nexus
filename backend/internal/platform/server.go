@@ -99,6 +99,10 @@ type Server struct {
 	integrationMgr *integration.Manager
 	permissions    *rbac.SQLPermissionStore
 	appGate        *memo.Cache[bool]
+	// suspended answers "is this organisation closed" without a query per
+	// request. Registered on the invalidation bus, so resuming one takes
+	// effect everywhere rather than after every replica's own TTL.
+	suspended      *memo.Cache[bool]
 	bus            *cache.Bus
 	sharedLogin    *security.SharedLimiter
 	sharedPoll     *security.SharedLimiter
@@ -259,6 +263,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 		integrationMgr: integrationMgr,
 		permissions:    rbac.NewSQLPermissionStore(db),
 		appGate:        memo.New[bool](appGateTTL),
+		suspended:      memo.New[bool](suspendedTTL),
 		bus:            bus,
 		backgroundApps: appRuntime.Background,
 		eidMN:          eidMN,
@@ -296,6 +301,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// message can arrive as soon as the subscriber connects.
 	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
 	s.bus.Register(appGateCacheName, s.appGate)
+	s.bus.Register(suspendedCacheName, s.suspended)
 
 	// Deployment-wide budgets for the endpoints where a per-replica one is not
 	// a budget at all. Each is nil without Redis, and a nil one allows.
@@ -305,7 +311,13 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	s.sharedAI = security.NewSharedLimiter(client, "ai", aiRatePerMinute, time.Minute)
 	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
 
-	s.cp = controlplane.New(db)
+	// The console borrows two of the platform's own services: the installer,
+	// so a new organisation's apps are installed by the same code path the
+	// store uses, and the mail rail, so its first administrator can be
+	// invited. Nothing else of the platform is reachable from it.
+	s.cp = controlplane.New(db, controlplane.Deps{
+		Installer: s, Mail: s.emailVerify, TenantChanged: s.forgetSuspension,
+	})
 
 	s.setupRoutes()
 	return s, nil
@@ -378,8 +390,24 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.eidMN.StartHousekeeping(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
-	// The console's sessions are a separate table with the same problem.
+	// The console's sessions are a separate table with the same problem, and
+	// the organisations whose grace period has ended are removed by the same
+	// call.
 	s.cp.StartHousekeeping(ctx)
+	// An impersonation whose session has expired is over; the row that says so
+	// is what both the console and the organisation read.
+	async.Go("impersonation-sweep", func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			s.endImpersonations(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	})
 	// Abandoned identity bindings hold verified claims about somebody, so they
 	// do not get to sit in the table after they stop being redeemable.
 	async.Go("identity-binding-sweep", func() {
@@ -628,6 +656,21 @@ func (s *Server) setupRoutes() {
 
 	// Platform API
 	r.Route("/api/v1", func(api chi.Router) {
+		// The two journeys that begin in the operator console and finish here,
+		// on the hostname the person actually uses. Both are unauthenticated
+		// by necessity — somebody choosing a password has no session, and an
+		// operator's console session means nothing on this host — and both
+		// are single-use tokens with short lives (see access_recovery.go).
+		//
+		// Rate limited with the sign-in budget: they are credential
+		// endpoints, and a token that can be guessed quickly is a token that
+		// can be guessed.
+		api.Group(func(recovery chi.Router) {
+			recovery.Use(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin))
+			recovery.Get("/auth/credential", s.handleCredentialCheck)
+			recovery.Post("/auth/credential/redeem", s.handleCredentialRedeem)
+			recovery.Post("/auth/impersonation/redeem", s.handleImpersonationRedeem)
+		})
 		// Auth with rate limiting
 		// Every path by which this deployment establishes an identity of its
 		// own. On a deployment that federates, requireLocalLogin closes all of

@@ -3,6 +3,29 @@
  * fallback.
  */
 export const auth = {
+  "auth.view.set_password_invite": { mn: "Нууц үгээ тохируулах", en: "Choose your password" },
+  "auth.view.set_password_reset": { mn: "Нууц үгээ шинэчлэх", en: "Set a new password" },
+  "auth.field.new_password": { mn: "Шинэ нууц үг", en: "New password" },
+  "auth.field.repeat_password": { mn: "Дахин бичих", en: "Repeat it" },
+  "auth.action.save_password": { mn: "Хадгалах", en: "Save" },
+  "auth.hint.password_length": {
+    mn: "Дор хаяж 10 тэмдэгт. Урт нь нарийн төвөгтэйгээс илүү чухал.",
+    en: "At least 10 characters. Length matters more than punctuation.",
+  },
+  "auth.message.password_mismatch": { mn: "Хоёр нууц үг тохирохгүй байна.", en: "The two passwords are not the same." },
+  "auth.message.password_failed": { mn: "Хадгалж чадсангүй.", en: "That could not be saved." },
+  "auth.message.password_saved": {
+    mn: "Хадгаллаа. Нэвтрэх дэлгэц рүү шилжиж байна…",
+    en: "Saved. Taking you to the sign-in screen…",
+  },
+  "auth.message.link_dead": {
+    mn: "Энэ холбоос хэрэглэгдсэн эсвэл хугацаа нь дууссан байна. Шинийг хүсэлт гаргана уу.",
+    en: "That link has already been used or has expired. Ask for a new one.",
+  },
+  "auth.message.impersonation_starting": {
+    mn: "Байгууллага руу орж байна…",
+    en: "Stepping into the organisation…",
+  },
   "auth.view.eyebrow": { mn: "ҮНДЭСНИЙ ЦАХИМ ТАНИЛТ", en: "NATIONAL DIGITAL IDENTITY" },
   // The headline highlights its middle phrase, so it is stored in parts
   // rather than as markup inside a translation.

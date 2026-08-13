@@ -50,6 +50,12 @@ type TenantSummary struct {
 	UserCount      int        `json:"user_count"`
 	AppCount       int        `json:"app_count"`
 	LastActivityAt *time.Time `json:"last_activity_at"`
+	// The lifecycle, in the list as well as on the detail page: an operator
+	// scanning for "which of these is suspended" should not have to open
+	// twenty pages to find out.
+	SuspendedAt         *time.Time `json:"suspended_at"`
+	SuspensionReason    string     `json:"suspension_reason"`
+	DeletionScheduledAt *time.Time `json:"deletion_scheduled_at"`
 }
 
 // ListTenants answers the console's main screen.
@@ -72,7 +78,8 @@ func (s *Service) ListTenants(ctx context.Context, search string) ([]TenantSumma
 		        (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id),
 		        (SELECT count(*) FROM app_installations i
 		          WHERE i.tenant_id = t.id AND i.enabled AND i.status = 'installed'),
-		        (SELECT max(s.last_seen_at) FROM sessions s WHERE s.tenant_id = t.id)
+		        (SELECT max(s.last_seen_at) FROM sessions s WHERE s.tenant_id = t.id),
+		        t.suspended_at, t.suspension_reason, t.deletion_scheduled_at
 		   FROM tenants t
 		   LEFT JOIN tenant_profiles p ON p.tenant_id = t.id
 		  WHERE $1 = ''
@@ -90,7 +97,8 @@ func (s *Service) ListTenants(ctx context.Context, search string) ([]TenantSumma
 	for rows.Next() {
 		var row TenantSummary
 		if err := rows.Scan(&row.ID, &row.Slug, &row.Name, &row.RegistrationNumber,
-			&row.CreatedAt, &row.UserCount, &row.AppCount, &row.LastActivityAt); err != nil {
+			&row.CreatedAt, &row.UserCount, &row.AppCount, &row.LastActivityAt,
+			&row.SuspendedAt, &row.SuspensionReason, &row.DeletionScheduledAt); err != nil {
 			return nil, fmt.Errorf("control plane: read an organisation: %w", err)
 		}
 		summaries = append(summaries, row)
@@ -150,6 +158,13 @@ type TenantDetail struct {
 	// belong to the same story, and separating them is how "who suspended this
 	// tenant" becomes a question somebody has to know where to ask.
 	OperatorActions []AuditEntry `json:"operator_actions"`
+	// Quota is the limits and where they stand, so the page that can change
+	// them does not need a second request to show them.
+	Quota Quota `json:"quota"`
+	// Impersonations is who has been inside this organisation, most recent
+	// first. On the operator's page as well as the organisation's own, because
+	// an operator about to go in should see who was there this morning.
+	Impersonations []Impersonation `json:"impersonations"`
 }
 
 // activityPageSize bounds the recent-activity list on the detail page.
@@ -172,13 +187,15 @@ func (s *Service) GetTenant(ctx context.Context, tenantID string) (TenantDetail,
 		        (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id),
 		        (SELECT count(*) FROM app_installations i
 		          WHERE i.tenant_id = t.id AND i.enabled AND i.status = 'installed'),
-		        (SELECT max(s.last_seen_at) FROM sessions s WHERE s.tenant_id = t.id)
+		        (SELECT max(s.last_seen_at) FROM sessions s WHERE s.tenant_id = t.id),
+		        t.suspended_at, t.suspension_reason, t.deletion_scheduled_at
 		   FROM tenants t
 		   LEFT JOIN tenant_profiles p ON p.tenant_id = t.id
 		  WHERE t.id = $1::uuid`, tenantID).
 		Scan(&detail.ID, &detail.Slug, &detail.Name, &detail.RegistrationNumber,
 			&detail.LegalName, &detail.TaxNumber, &detail.CreatedAt,
-			&detail.UserCount, &detail.AppCount, &detail.LastActivityAt)
+			&detail.UserCount, &detail.AppCount, &detail.LastActivityAt,
+			&detail.SuspendedAt, &detail.SuspensionReason, &detail.DeletionScheduledAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TenantDetail{}, ErrTenantNotFound
 	}
@@ -196,6 +213,12 @@ func (s *Service) GetTenant(ctx context.Context, tenantID string) (TenantDetail,
 		return TenantDetail{}, err
 	}
 	if detail.OperatorActions, err = s.ListAudit(ctx, "", "tenant", tenantID); err != nil {
+		return TenantDetail{}, err
+	}
+	if detail.Quota, err = s.GetQuota(ctx, tenantID); err != nil {
+		return TenantDetail{}, err
+	}
+	if detail.Impersonations, err = s.ListImpersonations(ctx, tenantID); err != nil {
 		return TenantDetail{}, err
 	}
 	return detail, nil

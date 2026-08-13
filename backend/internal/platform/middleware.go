@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
@@ -33,7 +34,24 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// A suspended organisation is one nobody may act in, including the
+		// people already signed in to it. Suspending revokes their sessions in
+		// the same transaction, so this is the belt to that braces: a client
+		// holding a token issued a moment before, or a replica whose cache is
+		// a few seconds behind, is refused here.
+		if s.refuseIfSuspended(w, r, claims.TenantID) {
+			return
+		}
+
 		ctx := auth.WithUserContext(r.Context(), claims)
+		if claims.Impersonated {
+			// Everything this request records is marked as ours. It is done
+			// here, once, rather than in the handlers that write audit rows:
+			// there are dozens of them, in every module, and a mark that each
+			// of them has to remember is a mark that is missing from whichever
+			// one somebody writes next.
+			ctx = audit.MarkImpersonated(ctx, claims.ImpersonatedBy)
+		}
 		ctx = tenant.WithTenantID(ctx, claims.TenantID)
 		// The organisations this session reads across, straight from the
 		// session row. dbguard turns it into the policy's array; almost every

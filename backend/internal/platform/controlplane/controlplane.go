@@ -42,13 +42,50 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Installer puts an app into an organisation, the way the store does.
+//
+// An interface rather than the concrete installer because the console must not
+// be able to reach the rest of it: this is the whole of what CP-2 asks the
+// platform to do on its behalf, and a narrower dependency is a narrower blast
+// radius when somebody adds a handler here in a hurry.
+type Installer interface {
+	InstallAppForTenant(ctx context.Context, tenantID, appSlug, userID string) error
+}
+
+// Mailer is the platform's one rail for sending somebody a link. It is
+// satisfied by *emailverify.Service.
+type Mailer interface {
+	Send(ctx context.Context, tenantID string, req emailverify.Request) (*emailverify.Verification, error)
+}
+
+// Deps are the platform's own services the console borrows. All may be nil:
+// a deployment with no mail configured still runs a console, it just cannot
+// invite anybody, and it says so on the screen rather than in the log.
+type Deps struct {
+	Installer Installer
+	Mail      Mailer
+	// TenantChanged is called after the console changes an organisation's
+	// lifecycle, so the platform can drop what it has cached about it — on
+	// every replica, through the invalidation bus, rather than after each of
+	// them has waited out its own copy.
+	//
+	// A callback rather than the console reaching into the platform's caches:
+	// this package must not know that those caches exist, and the platform
+	// must not have to expose them.
+	TenantChanged func(tenantID string)
+}
+
 // Service holds what every control-plane request needs.
 type Service struct {
-	db       *pgxpool.Pool
-	sessions *SessionStore
+	db            *pgxpool.Pool
+	sessions      *SessionStore
+	installer     Installer
+	mail          Mailer
+	tenantChanged func(tenantID string)
 	// host is the only hostname the console answers on, from
 	// CONTROL_PLANE_HOST. Empty has a meaning that depends on the environment —
 	// see hostGate.
@@ -57,16 +94,31 @@ type Service struct {
 
 // New builds the console. It performs no I/O: a deployment without the
 // migrations still constructs, and its routes refuse at the door.
-func New(db *pgxpool.Pool) *Service {
+func New(db *pgxpool.Pool, deps Deps) *Service {
 	return &Service{
-		db:       db,
-		sessions: NewSessionStore(db),
-		host:     normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
+		db:            db,
+		sessions:      NewSessionStore(db),
+		installer:     deps.Installer,
+		mail:          deps.Mail,
+		tenantChanged: deps.TenantChanged,
+		host:          normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
 	}
 }
 
-// StartHousekeeping purges operator sessions that can no longer be used.
-func (s *Service) StartHousekeeping(ctx context.Context) { s.sessions.StartHousekeeping(ctx) }
+// StartHousekeeping runs the console's background work: purging operator
+// sessions that can no longer be used, and removing the organisations whose
+// grace period has run out.
+func (s *Service) StartHousekeeping(ctx context.Context) {
+	s.sessions.StartHousekeeping(ctx)
+	s.StartDeletionSweep(ctx)
+}
+
+// changed tells the platform that an organisation's lifecycle moved.
+func (s *Service) changed(tenantID string) {
+	if s.tenantChanged != nil {
+		s.tenantChanged(tenantID)
+	}
+}
 
 // scoped puts a context on the operator's database role.
 //

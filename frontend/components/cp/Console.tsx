@@ -86,6 +86,11 @@ export default function Console({ children }: { children: React.ReactNode }) {
             <ShieldCheck className="w-5 h-5 text-amber-400" />
             {t("cp.view.title")}
           </Link>
+          <nav className="flex items-center gap-1 text-sm">
+            <ConsoleLink href="/cp" label={t("cp.section.tenants")} />
+            <ConsoleLink href="/cp/support" label={t("cp.section.support")} />
+            <ConsoleLink href="/cp/approvals" label={t("cp.section.approvals")} />
+          </nav>
           <div className="flex-1" />
           <span className="text-sm text-slate-300">
             {operator.name} · {t(`cp.role.${operator.role}`)}
@@ -101,6 +106,14 @@ export default function Console({ children }: { children: React.ReactNode }) {
       </header>
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">{children}</main>
     </ConsoleContext.Provider>
+  );
+}
+
+function ConsoleLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="rounded-lg px-3 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800 transition">
+      {label}
+    </Link>
   );
 }
 

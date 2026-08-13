@@ -15,6 +15,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Operating an organisation from the console, without being able to take it
+
+CP-2 gives the console the buttons CP-1 deliberately withheld: creating an
+organisation, closing one, deleting one, helping somebody back into their
+account, and — with a reason and a banner — looking at the platform as they see
+it. Everything in it is shaped by one rule: an operator should be able to do
+their job without being able to do quiet damage.
+
+- **Nothing is sudden.** Suspension is reversible and ends every live session in
+  the same transaction. Deletion is not a button: one superadmin asks, a
+  *different* one agrees — the database refuses a self-approval with a CHECK
+  constraint, not just the Go code — and only then does a thirty-day countdown
+  start, cancellable throughout. The console holds no DELETE privilege on any
+  table; a sweep on the platform path removes the rows when the time comes.
+- **The console cannot change a password.** It sends a link. Migration `00050`
+  grants it UPDATE on exactly two columns of `users` — the lockout counter and
+  its expiry — so a support handler that tried to write a password hash is
+  refused by PostgreSQL. The platform had no password-reset flow at all before
+  this; invitations and resets now share one single-use, 24-hour token, sent
+  through the mail rail the platform already had.
+- **Impersonation, made impossible to do quietly.** A typed reason, the second
+  factor again, thirty minutes, an amber banner the session itself drives, and
+  two audit trails — ours and the organisation's own, which their
+  administrators can read. A single-use sixty-second handover carries it across
+  the hostname boundary, because a cookie cannot. A suspended organisation
+  cannot be entered this way.
+- **Limits.** `tenant_quotas` records people, storage and AI calls per
+  organisation, soft (warns) or hard (refuses). Only the user count is enforced
+  today, because it is the only one this platform can count; the screen says so
+  rather than implying otherwise, and CP-5's metering is what switches the
+  other two on.
+- Creating an organisation installs its apps through the platform's own
+  installer — the same path the store uses, with its dependency resolution —
+  and reports which ones did not land instead of throwing the organisation
+  away. Its first administrator gets an invitation, never a password an
+  operator chose.
+- The four operator roles are not a ladder: `operator` can open an organisation
+  and cannot look inside one; `support` is the other way round. The whole
+  authorization model is one map in `operator.go`.
+
 ### Added — A console for operating the platform, kept away from the platform
 
 Somebody has to be able to see which organisations exist, which apps they run
