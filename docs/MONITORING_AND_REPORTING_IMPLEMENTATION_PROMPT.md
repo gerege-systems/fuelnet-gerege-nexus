@@ -13,6 +13,8 @@
 
 - `docs/MONITORING_AND_REPORTING_PROPOSAL.md` — энэ ажлын дизайн баримт.
   Бүх шийдвэр энэ баримтад тулгуурлана; зөрчилдвөл энэ баримт нь эх сурвалж.
+- `docs/CONTROL_PLANE_PLAN.md` — Үе шат 5 (Control Plane)-ийн дизайн
+  баримт; мөн адил эх сурвалжийн статустай.
 - `docs/ARCHITECTURE_SPECIFICATION.md`, `docs/MODULE_AUTHORING_GUIDE.md`
 - `backend/internal/platform/observability/metrics.go`,
   `backend/internal/platform/audit/audit.go`,
@@ -21,7 +23,7 @@
 - Миграцийн дугаарлалт: `backend/db/migrations/` доторх сүүлийн дугаараас
   үргэлжлүүлнэ.
 
-Дараах 5 үе шатыг **дэс дарааллаар** нь хэрэгжүүл. Үе шат бүрийн төгсгөлд
+Дараах үе шатуудыг **дэс дарааллаар** нь хэрэгжүүл. Үе шат бүрийн төгсгөлд
 шалгалтуудыг ажиллуулж, ногоон болсны дараа тухайн үе шатыг тусдаа commit
 болгож байж дараагийнх руу шилж.
 
@@ -216,6 +218,129 @@ counterparty scope, түүхий мөр биш үр дүн, хоёр талын 
 5. **Тест**: grant-гүй үед юу ч харагдахгүй, цуцалсны дараа шууд хаагдана,
    counterparty scope өөр уурхайн мөрийг оруулдаггүй, audit хоёр талд
    бичигддэг — эдгээр 4 integration тест заавал.
+
+---
+
+### Үе шат 5 — Control Plane (cp.nexus.gerege.mn)
+
+`docs/CONTROL_PLANE_PLAN.md`-ийн дизайнаар, доторх CP-1 … CP-5 дарааллаар.
+CP-1 бусдынх нь урьдчилсан нөхцөл; CP-4 нь Үе шат 2 (мониторингийн стек)
+хийгдсэн байхыг шаардана. Үе шат бүр тусдаа commit.
+
+**CP-1 — Суурь, нэвтрэлт, audit:**
+
+1. **Хост тусгаарлалт**: nginx-д `cp.nexus.gerege.mn` virtual host
+   (`deploy/nginx/`-д config + IP allowlist-ийн жишээ snippet, allowlist
+   нь env/include файлаар солигддог). Backend-д `/cp/api/*` route бүлэг —
+   зөвхөн cp хостоос ирсэн (nginx-ийн тавьсан толгойгоор, TRUST_PROXY
+   зарчмаар) хүсэлтэд нээгдэнэ. Frontend-д `app/cp/` route бүлэг, cp
+   хостоос бусад дээр 404.
+2. **Миграцууд**: `operator_accounts` (id, email, name, role
+   `superadmin|operator|support|auditor`, totp_secret, webauthn
+   credentials, disabled_at, created_at), `operator_sessions` (богино
+   хугацаатай, SHA-256 хэш — одоогийн sessions загвараар),
+   `operator_audit` (operator_id, action, target_type, target_id, reason,
+   before jsonb, after jsonb, ip, created_at) — **append-only**: app
+   role-оос UPDATE/DELETE REVOKE хийсэн байх. Эдгээр нь платформ-түвшний
+   хүснэгт тул tenant RLS үл хамаарна — comment-оор тэмдэглэ.
+3. **Нэвтрэлт**: нууц үг + TOTP заавал (WebAuthn боломжтой бол нэм,
+   үгүй бол TOTP-оор эхэл); анхны superadmin-ийг CLI-гаар үүсгэнэ
+   (`cmd/api`-д subcommand эсвэл тусдаа `cmd/operator-bootstrap`) — вэб
+   бүртгэл байхгүй. Session idle 30 мин. Амжилтгүй оролдлого хэмжигдэж
+   (`cp_login_attempts_total`), lockout үйлчилнэ.
+4. **Step-up механизм**: аюултай үйлдлийн өмнө TOTP дахин асуудаг
+   middleware — дараагийн үе шатууд үүнийг ашиглана.
+5. **CP audit дүрэм**: `/cp/api`-ийн бичих үйлдэл бүр `operator_audit`-д
+   бичигдээгүй бол огт хэрэгжихгүй гэсэн зарчмаар — handler-т биш, дундын
+   давхаргад шийд (audit бичилт + үйлдэл нэг transaction-д).
+6. **Тенантын жагсаалт/дэлгэрэнгүй (зөвхөн унших)**: хайлт, шүүлт; дэлгэрэнгүйд
+   суусан аппууд, хэрэглэгчид, сүүлийн идэвх. Query бүр dbguard-ын тусдаа
+   operator горимоор — RLS-ийг бүхэлд нь унтраахгүй, зориулалтын query
+   бүр explicit байна.
+
+**CP-2 — Тенантын амьдралын мөчлөг + support:**
+
+1. Тенант үүсгэх (нэр/slug/байгууллагын мэдээлэл + аппын багц + эхний
+   админд урилга — одоогийн email verify урсгалаар), түдгэлзүүлэх
+   (шалтгаантай; түдгэлзсэн тенантын нэвтрэлт, API бүгд 403),
+   устгал: `deletion_scheduled_at` + 30 хоног grace, энэ хугацаанд
+   сэргээх товч, export (тенантын өгөгдлийг JSON/CSV багцаар), хугацаа
+   дуусахад цэвэрлэх job. Устгал товч нь step-up + хоёр дахь superadmin-ий
+   батламж (`pending_approvals` хүснэгт) шаардана.
+2. Quota: `tenant_quotas` (хэрэглэгчийн тоо, хадгалалт MB, AI дуудлага/сар),
+   зөөлөн/хатуу горим; шалгалт нь холбогдох handler-уудад.
+3. Support: хэрэглэгч хайх, нууц үг reset илгээх, session-ууд хүчингүй
+   болгох, lockout тайлах — бүгд step-up + audit.
+4. **Impersonation**: шалтгаан заавал, 30 минутын хугацаатай тусгай
+   session; тенантын UI-д улбар шар banner (frontend-д session төрлөөс
+   мэдэрнэ); бичих үйлдэл бүр тенантын audit-д давхар "impersonated"
+   тэмдэгтэй; тенантын админд мэдэгдэл. Зөвхөн support+ эрх, step-up-тай.
+
+**CP-3 — Динамик тохиргоо + feature flags:**
+
+0. **Нэвтрэлтийн горим `platform.access_mode`** (`public|private`,
+   анхдагч `private`) — platform_settings-ийн эхний бөгөөд жишиг тохиргоо:
+   - Auth давхаргад нэг л шалгалт: бүртгэл ҮҮСГЭДЭГ бүх зам — email
+     signup, eID/ДАН-ы JIT provisioning, `SSO_CLIENT_TENANT`-ийн JIT,
+     `EID_JIT_TENANT_SLUG` — private үед хаагдана. Байгаа бүртгэлтэй
+     хэрэглэгчийн нэвтрэлтэд горим нөлөөлөхгүй.
+   - Тенантын админы урилгын урсгал private үед хэвээр ажиллана (урилга =
+     урьдчилан бүртгэл). Урилгаар account үүсэх нь JIT-д тооцогдохгүй.
+   - Private үед бүртгэлгүй хүн нэвтрэх гэвэл 403 + i18n-тэй ойлгомжтой
+     мессеж ("Энэ платформ хаалттай горимд байна...");
+     frontend нэвтрэх дэлгэц горимоо public config endpoint-оос уншиж
+     бүртгүүлэх товч/холбоосыг нуана.
+   - `DEMO_MODE=true` үед demo seeder ажиллахын тулд горим нь public
+     байхыг шаардана — зөрчилтэй тохиргоог boot үед лог + CP нүүрэнд
+     анхааруулга болго.
+   - Тест: private үед signup 403, eID mock-оор шинэ хүн JIT үүсэхгүй,
+     урилгаар үүснэ, public руу шилжмэгц (restart-гүй) signup нээгдэнэ —
+     4 integration тест.
+1. `platform_settings`: түлхүүр бүр төрөл/validation/тайлбартай registry
+   Go кодод; утга DB-д; өөрчлөлт бүр түүхтэй (`platform_settings_history`),
+   нэг товчоор rollback; backend Redis invalidation-оор (эсвэл 30 сек TTL)
+   restart-гүй шинэчилнэ. Эхний нүүдэл: SESSION_IDLE_TIMEOUT,
+   CATALOG_SYNC_INTERVAL, GEMINI_MODEL зэрэг аюулгүй env-үүд (env нь
+   fallback хэвээр — DB утга байвал давуу). **Нууц утга registry-д
+   бүртгэгдэхийг Go типийн түвшинд боломжгүй болго** (secret төрөл байхгүй).
+2. `feature_flags`: нэр, тайлбар, эзэмшигч, төрөл (`release|kill_switch|
+   experiment`), төлөв, тенант бүрийн override, хувиар rollout
+   (tenant_id-ийн hash-аар тогтвортой), `expires_at` — хугацаа хэтэрсэн
+   flag CP нүүрэнд сануулга болж гарна. Go-д `flags.Enabled(ctx, "key")`
+   helper. Модулийн kill switch нь app gating-тэй уялдана.
+3. Maintenance mode (платформ/тенант түвшин, banner + зөвхөн унших) ба
+   зарлал broadcast (banner, сонголтоор и-мэйл).
+
+**CP-4 — Ажиглалтын тойм + operations:**
+
+1. Нүүр: API error rate/latency, гадаад системүүдийн төлөв гэрэл
+   (Prometheus-ын API-гаас query хийж эсвэл backend-ийн өөрийн хэмжүүрээс),
+   идэвхтэй alert-ууд (Alertmanager API), диск/DB/Redis. Гүнзгий линкүүд
+   Grafana руу.
+2. Тенант бүрийн алдааны түвшин, background ажлын төлөв (товлосон
+   тайлан, каталог синк), миграцийн түүх, ажиллаж буй image tag/sha.
+3. **Deploy товч**: GitHub Actions workflow_dispatch API (`GITHUB_DEPLOY_
+   TOKEN` env, зөвхөн энэ workflow-д эрхтэй fine-grained token) — tag
+   сонгож өдөөнө, явцын линк харуулна. Step-up шаардана. Серверт exec,
+   env засвар ОГТ хийхгүй.
+4. Backup төлөв: сүүлийн backup цаг/хэмжээ (одоогийн backup механизмаас
+   уншина; байхгүй бол эхлээд энгийн pg_dump cron + status файл нэмж
+   тэмдэглэ), сүүлийн restore test огноог гараар бүртгэх талбар.
+5. Каталог: синкийн төлөв, хувилбарын тархалт, kill switch (CP-3-ын flag).
+
+**CP-5 — Metering:**
+
+1. `usage_events` (tenant_id, metric, value, day, RLS-тэй) — өдөр тутмын
+   aggregation job: идэвхтэй хэрэглэгч, хадгалалт, API дуудлага (одоогийн
+   http хэмжүүрээс биш — DB-д тоолж), AI дуудлага, илгээсэн тайлан.
+2. CP дээр тенант бүрийн хэрэглээний график (Recharts), quota-тай
+   харьцуулсан харагдац, CSV export. Quota-гийн шалгалт (CP-2) энэ
+   өгөгдлөөс уншдаг болгож нэгтгэ.
+
+**Тест (Үе шат 5 нийтдээ)**: cp route-ууд энгийн хостоос 404/403; operator
+auth + step-up урсгал; audit-гүйгээр бичих үйлдэл үл хэрэгжих; түдгэлзсэн
+тенант 403; grace устгал сэргээгдэх; flag rollout hash тогтвортой;
+impersonation banner/audit — эдгээрт integration тест заавал.
 
 ---
 

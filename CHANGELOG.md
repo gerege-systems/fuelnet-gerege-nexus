@@ -15,6 +15,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A console for operating the platform, kept away from the platform
+
+Somebody has to be able to see which organisations exist, which apps they run
+and what has been done to them — and until now that somebody used `psql`. This
+is the first phase of the operator console described in
+[`docs/CONTROL_PLANE_PLAN.md`](docs/CONTROL_PLANE_PLAN.md): the foundation, on
+which suspension, support and configuration are built next. Guide in
+[`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md).
+
+- **One binary, nothing else shared.** The console is `/cp/api` on the same Go
+  process and `/cp` on the same Next.js build, because a second service would
+  double the deployment and the monitoring for a console two people use. It
+  shares nothing else: its own hostname, accounts, sessions, cookie, database
+  role and audit table. A tenant administrator's account being taken reaches
+  none of it.
+- **Three layers to reach it, none trusting another.** nginx serves
+  `cp.nexus.gerege.mn` behind an address allowlist that ships denying everyone;
+  the API and the frontend both answer **404** — not 403, which would confirm
+  something is there — to a request on any other hostname; and sign-in needs a
+  password *and* an authenticator code. `CONTROL_PLANE_HOST` unset in
+  production means the console does not exist, which is the safe reading of a
+  variable nobody set.
+- **The console cannot write.** Migration `00049` gives it a database role of
+  its own with SELECT on ten named tables and read-only policies to match — so
+  "the operator sees every organisation" is a list of permissions rather than a
+  switch that turns row-level security off. A table nobody granted is a table
+  the console cannot read, and a new one does not become visible by existing.
+- **A write that was not recorded did not happen.** Every console write goes
+  through one function that puts the change and its `operator_audit` row in the
+  *same transaction*, and the middleware above it withholds the response —
+  headers, cookies and all — from any write that answered successfully without
+  an audit row. The table refuses UPDATE and DELETE at the database, by trigger,
+  including from the role that owns it.
+- **A code works once.** The time step of every accepted TOTP is stored and must
+  strictly increase, so a code read over somebody's shoulder within its thirty
+  seconds is already spent. Verified against RFC 6238's own test vectors.
+- **No sign-up screen, ever.** The first operator is created by
+  `operator-bootstrap` on the host, by somebody who already holds the database
+  credentials — no default password, no first-run page, no environment variable
+  left behind. The account cannot sign in until a code from its authenticator is
+  confirmed, so an interrupted setup leaves a locked door rather than a
+  password-only one.
+- Sessions last 8 hours and end after 30 minutes idle, against the platform's
+  12 and 90; step-up re-confirms the second factor for five minutes before a
+  dangerous action, and is mounted on nothing yet because nothing dangerous
+  exists yet.
+- `cp_login_attempts_total{result}` counts sign-in attempts by outcome, apart
+  from `logins_total`: platform sign-ins fail all day because people mistype
+  passwords, while a dozen failures against the console in an hour is somebody
+  trying.
+
+### Fixed
+
+- The CSRF middleware defended the tenant session cookie and would not have
+  defended the console's, which was introduced in the same change. Both are
+  named in one place now, so the next cookie-authenticated surface is a line
+  there rather than a hole.
+
 ### Added — One organisation seeing another's report, with their permission
 
 A coal mine contracts a hundred transport companies. Each keeps its trips in its

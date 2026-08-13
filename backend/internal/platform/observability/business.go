@@ -46,6 +46,27 @@ var (
 		[]string{"rail", "result"},
 	)
 
+	// CPLoginAttemptsTotal counts attempts to sign in to the operator console,
+	// by how they ended: success, unknown, bad_password, bad_code, locked,
+	// disabled, no_second_factor, step_up, bad_step_up.
+	//
+	// Kept apart from LoginsTotal rather than given a method label, because the
+	// two answer different questions and one of them needs an alert. Sign-ins
+	// to the platform fail all day — people mistype passwords. Sign-ins to the
+	// control plane are a handful of people a week, so a dozen failures in an
+	// hour is not noise, it is somebody trying.
+	//
+	// The result is a closed set and there is no operator identity in the
+	// label. Both matter: an address as a label value would be an unbounded
+	// series driven by whoever is guessing.
+	CPLoginAttemptsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cp_login_attempts_total",
+			Help: "Operator console sign-in attempts by outcome",
+		},
+		[]string{"result"},
+	)
+
 	// AIRequestsTotal counts calls into the copilot, by what was asked of it.
 	// kind: copilot|chat|stt|tts|translate|forecast.
 	AIRequestsTotal = prometheus.NewCounterVec(
@@ -71,12 +92,18 @@ const (
 )
 
 func init() {
-	prometheus.MustRegister(LoginsTotal, InvoicesCreatedTotal, DocumentsSignedTotal, AIRequestsTotal)
+	prometheus.MustRegister(LoginsTotal, CPLoginAttemptsTotal, InvoicesCreatedTotal,
+		DocumentsSignedTotal, AIRequestsTotal)
 }
 
 // RecordLogin counts one sign-in attempt.
 func RecordLogin(method string, ok bool) {
 	LoginsTotal.WithLabelValues(method, resultLabel(ok)).Inc()
+}
+
+// RecordControlPlaneLogin counts one attempt to reach the operator console.
+func RecordControlPlaneLogin(result string) {
+	CPLoginAttemptsTotal.WithLabelValues(result).Inc()
 }
 
 // RecordInvoiceCreated counts one issued invoice.

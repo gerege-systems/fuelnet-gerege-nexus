@@ -69,7 +69,13 @@ const PUBLIC_ROUTES=["/","/login","/auth/eid/callback","/oauth/consent","/kiosk"
 // дэлгэц гарч ирэхийг ОРЛОХЫН тулд байгаа тул session байхгүй үед ч зогсох
 // ёстой — эс бөгөөс дахин /login руу түлхэж, шийдэх гэсэн асуудлаа өөрөө
 // үүсгэнэ.
-const isPublicPath=(path:string)=>PUBLIC_ROUTES.includes(path)||path.startsWith("/line/");
+// `/cp` is chromeless for a different reason from the rest: it is not public at
+// all, it is the operator console, and it authenticates with its own session
+// against its own API. Left out of this list it would have been given the
+// tenant shell — which asks /api/v1/me on mount, gets a 401 because an operator
+// holds no tenant session, and redirects the console to the platform's login
+// screen before it can draw its own.
+const isPublicPath=(path:string)=>PUBLIC_ROUTES.includes(path)||path.startsWith("/line/")||path==="/cp"||path.startsWith("/cp/");
 // The platform groups are the only ones not backed by a server menu row, so
 // they need ids of their own. Not the translated title: the collapsed set is
 // remembered across sessions and a Mongolian operator who switches to English

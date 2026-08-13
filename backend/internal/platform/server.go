@@ -26,6 +26,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
@@ -105,6 +106,11 @@ type Server struct {
 	sharedVerify   *security.SharedLimiter
 	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
+	// cp is the operator console. It is a field on this server rather than a
+	// process of its own for the reason the plan gives: one binary. What keeps
+	// it separate is everything else — its own hostname, accounts, sessions,
+	// cookie, database role and audit table.
+	cp *controlplane.Service
 
 	// The last thing the catalogue sync did. An administrator pressing "check
 	// for updates" gets an answer; the hourly one leaves only a log line, and a
@@ -299,6 +305,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	s.sharedAI = security.NewSharedLimiter(client, "ai", aiRatePerMinute, time.Minute)
 	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
 
+	s.cp = controlplane.New(db)
+
 	s.setupRoutes()
 	return s, nil
 }
@@ -370,6 +378,8 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.eidMN.StartHousekeeping(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
+	// The console's sessions are a separate table with the same problem.
+	s.cp.StartHousekeeping(ctx)
 	// Abandoned identity bindings hold verified claims about somebody, so they
 	// do not get to sit in the table after they stop being redeemable.
 	async.Go("identity-binding-sweep", func() {
@@ -583,6 +593,16 @@ func (s *Server) setupRoutes() {
 
 	// Prometheus Metrics Endpoint
 	r.Handle("/metrics", observability.MetricsHandler())
+
+	// The operator console (docs/CONTROL_PLANE_PLAN.md).
+	//
+	// Mounted unconditionally, and closed by its own first middleware rather
+	// than by leaving the routes off: a route table that changes shape with the
+	// environment is one where "is the console reachable" has a different
+	// answer in production from the one the tests exercise. HostGate answers
+	// 404 for every request that did not arrive on the console's hostname,
+	// which on this deployment is every request that is not an operator's.
+	r.Route("/cp/api", s.cp.Routes)
 
 	// OpenID Connect Provider & OAuth2 Authorization Server.
 	//

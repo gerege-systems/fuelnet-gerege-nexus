@@ -329,6 +329,7 @@ npm run dev
 | `APP_CATALOG_PATH` | `catalog/apps.json` | Апп сторын каталогийн зам |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS зөвшөөрөгдсөн эх сурвалж |
 | `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
+| `CONTROL_PLANE_HOST` | — | Операторын консолын хост. Production дээр хоосон бол консол огт байхгүй ([`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)) |
 | `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх |
 | `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
 | `SSO_CLIENT_ISSUER` / `SSO_CLIENT_ID` | — | Тохируулбал энэ суулгац нэрлэсэн провайдерийн клиент болно: эндэх нэвтрэлт хаагдаж, гарах нь провайдер дээр дуусна |

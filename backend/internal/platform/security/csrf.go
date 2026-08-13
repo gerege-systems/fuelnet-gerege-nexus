@@ -25,6 +25,30 @@ import (
 // with neither Origin nor Sec-Fetch-Site went through, and so did Sec-Fetch-Site:
 // same-site, which on this deployment means a different product under
 // gerege.mn rather than a different page of this one.
+// ControlPlaneSessionCookie is the cookie the operator console authenticates
+// with. Its name lives here rather than in the console's own package so that
+// this middleware can name it without importing the console — and, more to the
+// point, so that adding a second cookie-authenticated surface to this platform
+// is a change to the file that decides which cookies need defending.
+const ControlPlaneSessionCookie = "cp_session"
+
+// hasAmbientCredential reports whether the browser would have attached a
+// credential to this request on its own.
+//
+// Both cookies count. The console's was overlooked in the first draft of this
+// change, and the consequence would have been precise: every state-changing
+// call an operator's browser could be made to issue — from any page on the
+// internet they happened to open — would have gone through unchecked, while
+// the tenant side beside it was defended.
+func hasAmbientCredential(r *http.Request) bool {
+	for _, name := range []string{auth.SessionCookieName, ControlPlaneSessionCookie} {
+		if _, err := r.Cookie(name); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func CSRFMiddleware(next http.Handler) http.Handler {
 	allowed := make(map[string]struct{})
 	for _, raw := range SafeCORSOrigins() {
@@ -37,7 +61,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if _, err := r.Cookie(auth.SessionCookieName); err != nil {
+		if !hasAmbientCredential(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

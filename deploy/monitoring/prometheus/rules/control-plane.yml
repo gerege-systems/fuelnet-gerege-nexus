@@ -1,0 +1,63 @@
+# Операторын консол.
+#
+# Энэ дүрмүүд бусдаасаа нэг зүйлээр ялгаатай: хэмжигдэж буй зүйл нь ачаалал
+# биш, хүн юм. Консол руу долоо хоногт хэдхэн удаа нэвтэрдэг тул "хэвийн"
+# гэдэг нь маш нам түвшин бөгөөд ямар ч өсөлт нь анзаарагдах ёстой. Платформын
+# нэвтрэлт өдөржин амжилтгүй болдог (хүмүүс нууц үгээ андуурдаг) — консолынх
+# тэгдэггүй.
+#
+# Хэмжүүр: cp_login_attempts_total{result}. Тенант, оператор, и-мэйл гэсэн
+# label байхгүй — тааварлаж буй хүн label-ийн утга үүсгэж чадах ёсгүй.
+
+groups:
+  - name: nexus_control_plane
+    rules:
+      - alert: NexusControlPlaneLoginFailures
+        # Амжилтгүй бүх шалтгаан нэгдэж: буруу нууц үг, буруу код, түгжигдсэн,
+        # идэвхгүй, байхгүй бүртгэл. 15 минутын дотор 5-аас олон.
+        expr: >-
+          sum(increase(cp_login_attempts_total{result!~"success|step_up"}[15m])) > 5
+        for: 0m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Операторын консол руу нэвтрэх оролдлого олноор амжилтгүй болж байна"
+          description: >-
+            15 минутын дотор 5-аас олон удаа амжилтгүй болов. Консол нь nginx-ийн
+            хаягийн жагсаалтын ард байдаг тул эдгээр оролдлого нь зөвшөөрөгдсөн
+            сүлжээнээс ирж байна — өөрөөр хэлбэл дотоод хаягнаас.
+          runbook: "docs/RUNBOOKS.md#nexuscontrolplaneloginfailures"
+
+      - alert: NexusControlPlaneLockout
+        # Түгжигдсэн бүртгэл рүү үргэлжилсэн оролдлого. Дээрхээс тусад нь:
+        # энэ нь "нэг хүн андуурлаа" биш, "хэн нэгэн үргэлжлүүлж байна".
+        expr: sum(increase(cp_login_attempts_total{result="locked"}[30m])) > 3
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: "Түгжигдсэн операторын бүртгэл рүү оролдлого үргэлжилж байна"
+          description: >-
+            Аль хэдийн түгжигдсэн бүртгэл рүү 30 минутын дотор 3-аас олон удаа
+            оролдов. Түгжээ ажиллаж байгаа ч оролдлого зогсоогүй нь халдлагын
+            шинж — сэрээх шалтгаан нь энэ.
+          runbook: "docs/RUNBOOKS.md#nexuscontrolplanelockout"
+
+      - alert: NexusControlPlaneUnrecordedWrite
+        # RequireAudit нь audit-гүй бичилтийн хариуг барьж, 500 буцаадаг. Тэр
+        # нь ажиллав гэдэг нь консолын код дотор Do-г тойрсон handler байна
+        # гэсэн үг — өгөгдлийн санд ул мөргүй өөрчлөлт орсон байж болзошгүй.
+        # Энэ нь хэрэглэгчийн алдаа биш, кодын алдаа тул ticket.
+        expr: >-
+          sum(increase(http_requests_total{path=~"/cp/api.*",status="500"}[15m])) > 0
+        for: 0m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Операторын консолын хүсэлт 500 буцаалаа"
+          description: >-
+            Консол нь алдаа буцаах ёсгүй — унших query-үүд нь энгийн бөгөөд
+            бичилт бүр transaction дотор явдаг. 500 гарсан нь audit-гүй бичилт
+            баригдсан (лог дотор "answered successfully without an audit
+            record") эсвэл operator role-ын эрх дутсан гэсэн үг.
+          runbook: "docs/RUNBOOKS.md#nexuscontrolplaneunrecordedwrite"
