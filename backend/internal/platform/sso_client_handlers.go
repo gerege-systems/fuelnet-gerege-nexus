@@ -23,6 +23,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -328,11 +329,13 @@ func (s *Server) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, ide
 		return "", "", err
 	}
 	if _, err = tx.Exec(ctx,
-		`INSERT INTO user_sso_identities (user_id, issuer, subject, email, name, last_seen_at)
-		 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),NOW())
+		`INSERT INTO user_sso_identities (user_id, issuer, subject, email, name, claims, last_seen_at)
+		 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,NOW())
 		 ON CONFLICT (issuer, subject) DO UPDATE SET
-		     email = EXCLUDED.email, name = EXCLUDED.name, last_seen_at = NOW()`,
-		userID, issuer, identity.Subject, identity.Email, identity.Name); err != nil {
+		     email = EXCLUDED.email, name = EXCLUDED.name,
+		     claims = EXCLUDED.claims, last_seen_at = NOW()`,
+		userID, issuer, identity.Subject, identity.Email, identity.Name,
+		claimsJSON(identity.Claims)); err != nil {
 		return "", "", err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -344,6 +347,23 @@ func (s *Server) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, ide
 	return userID, tenantID, nil
 }
 
+// claimsJSON renders a provider's claims for the jsonb column.
+//
+// An unmarshallable payload becomes an empty object rather than failing the
+// sign-in: the claims are a record to read later, and losing them is not worth
+// refusing somebody who has just proved who they are.
+func claimsJSON(claims map[string]any) []byte {
+	if len(claims) == 0 {
+		return []byte("{}")
+	}
+	encoded, err := json.Marshal(claims)
+	if err != nil {
+		slog.Warn("could not record the claims a provider returned", "error", err)
+		return []byte("{}")
+	}
+	return encoded
+}
+
 // linkSSOIdentity records that a local account is this provider subject.
 //
 // Best effort, like the eID linking next door: the sign-in has already
@@ -352,12 +372,13 @@ func (s *Server) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, ide
 // the next sign-in matches on the address again.
 func (s *Server) linkSSOIdentity(ctx context.Context, userID, issuer string, identity *ssoclient.Identity) {
 	if _, err := s.db.Exec(ctx,
-		`INSERT INTO user_sso_identities (user_id, issuer, subject, email, name, last_seen_at)
-		 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),NOW())
+		`INSERT INTO user_sso_identities (user_id, issuer, subject, email, name, claims, last_seen_at)
+		 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,NOW())
 		 ON CONFLICT (issuer, subject) DO UPDATE SET
 		     user_id = EXCLUDED.user_id, email = EXCLUDED.email,
-		     name = EXCLUDED.name, last_seen_at = NOW()`,
-		userID, issuer, identity.Subject, identity.Email, identity.Name); err != nil {
+		     name = EXCLUDED.name, claims = EXCLUDED.claims, last_seen_at = NOW()`,
+		userID, issuer, identity.Subject, identity.Email, identity.Name,
+		claimsJSON(identity.Claims)); err != nil {
 		slog.Warn("could not link a federated identity to the platform account",
 			"user_id", userID, "issuer", issuer, "error", err)
 	}
@@ -370,9 +391,11 @@ func (s *Server) touchSSOIdentity(ctx context.Context, issuer string, identity *
 		`UPDATE user_sso_identities
 		    SET email = COALESCE(NULLIF($3,''), email),
 		        name = COALESCE(NULLIF($4,''), name),
+		        claims = $5,
 		        last_seen_at = NOW()
 		  WHERE issuer = $1 AND subject = $2`,
-		issuer, identity.Subject, identity.Email, identity.Name); err != nil {
+		issuer, identity.Subject, identity.Email, identity.Name,
+		claimsJSON(identity.Claims)); err != nil {
 		slog.Warn("could not record a federated sign-in", "issuer", issuer, "error", err)
 	}
 }

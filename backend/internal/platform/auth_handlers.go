@@ -463,19 +463,28 @@ func (s *Server) linkEIDIdentity(ctx context.Context, userID string, identity *e
 	// The conflict target is person_etsi as well as user_id: one eID citizen
 	// resolves to one platform account, and a second account claiming the same
 	// identifier would silently split that person's signing history in two.
+	// The whole identity as eID returned it, beside the columns the sign-in
+	// path reads. A person is entitled to see what was handed over about them,
+	// and eID adds fields faster than this schema would follow.
+	claims, err := json.Marshal(identity)
+	if err != nil {
+		slog.Warn("could not record what eID returned", "error", err)
+		claims = []byte("{}")
+	}
 	if _, err := s.db.Exec(ctx,
 		`INSERT INTO user_eid_identities
-		     (user_id, civil_id, reg_number, person_etsi, given_name, surname, last_seen_at)
-		 VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, NULLIF($5,''), NULLIF($6,''), NOW())
+		     (user_id, civil_id, reg_number, person_etsi, given_name, surname, claims, last_seen_at)
+		 VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, NULLIF($5,''), NULLIF($6,''), $7, NOW())
 		 ON CONFLICT (user_id) DO UPDATE SET
 		     civil_id     = COALESCE(EXCLUDED.civil_id, user_eid_identities.civil_id),
 		     reg_number   = COALESCE(EXCLUDED.reg_number, user_eid_identities.reg_number),
 		     person_etsi  = EXCLUDED.person_etsi,
 		     given_name   = COALESCE(EXCLUDED.given_name, user_eid_identities.given_name),
 		     surname      = COALESCE(EXCLUDED.surname, user_eid_identities.surname),
+		     claims       = EXCLUDED.claims,
 		     last_seen_at = NOW()`,
 		userID, identity.CivilID, identity.RegNumber, personEtsi,
-		identity.FirstName, identity.LastName); err != nil {
+		identity.FirstName, identity.LastName, claims); err != nil {
 		slog.Warn("could not link the eID identity to the platform account",
 			"user_id", userID, "error", err)
 	}
