@@ -353,6 +353,7 @@ func (s *Server) handleUpgradeApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSyncCatalog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Deprecation", "true")
 	w.Header().Set("Link", `</cp/api/catalog/sync>; rel="successor-version"`)
+	w.Header().Set("Sunset", "Sat, 01 Mar 2026 00:00:00 GMT")
 
 	if !s.catalogSource.Remote() {
 		httpx.Error(w, http.StatusNotImplemented,
@@ -443,6 +444,7 @@ func (s *Server) handleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCatalogStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Deprecation", "true")
 	w.Header().Set("Link", `</cp/api/catalog/status>; rel="successor-version"`)
+	w.Header().Set("Sunset", "Sat, 01 Feb 2027 00:00:00 GMT")
 
 	s.syncMu.RLock()
 	at, ok, failure := s.lastSyncAt, s.lastSyncOK, s.lastSyncErr

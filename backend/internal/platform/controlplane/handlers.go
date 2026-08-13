@@ -1,7 +1,6 @@
 package controlplane
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -10,7 +9,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/time/rate"
 )
 
@@ -732,23 +730,29 @@ func (s *Service) handleCatalogSyncRoute(w http.ResponseWriter, r *http.Request)
 	if !decode(w, r, &body) {
 		return
 	}
+	if len(body.Reason) > 500 {
+		httpx.Error(w, http.StatusBadRequest, "reason must be 500 characters or less")
+		return
+	}
 	if s.syncCatalogFn == nil {
 		httpx.Error(w, http.StatusNotImplemented, "this deployment reads its app catalog from a file; there is no registry to sync with")
 		return
 	}
-	var changed bool
-	err := s.Do(r.Context(), sess, Change{
+	changed, err := s.syncCatalogFn(r.Context())
+	if err != nil {
+		fail(w, err, "could not sync the catalog")
+		return
+	}
+	// Record the audit trail outside the sync transaction: the catalog sync
+	// writes to the platform database, while the audit record belongs in the
+	// operator database. They are separate concerns and must not share a tx.
+	if err := s.Do(r.Context(), sess, Change{
 		Action:     "catalog.sync",
 		TargetType: "platform",
 		TargetID:   "catalog",
 		Reason:     body.Reason,
-	}, func(ctx context.Context, tx pgx.Tx) error {
-		var syncErr error
-		changed, syncErr = s.syncCatalogFn(ctx)
-		return syncErr
-	})
-	if err != nil {
-		fail(w, err, "could not sync the catalog")
+	}, nil); err != nil {
+		fail(w, err, "could not record the audit trail")
 		return
 	}
 	status := "unchanged"

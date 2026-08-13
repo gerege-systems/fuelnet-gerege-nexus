@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Control Plane Catalog Management & Migration Deprecation (CP-46)
+
+- **Control Plane Catalog Endpoints** (`/cp/api/catalog/sync`, `/cp/api/catalog/status`, `/cp/api/catalog/overview`): Operators can now monitor app catalog status and trigger catalog sync on demand with step-up & audit logging.
+- **Store Admin Deprecation**: Added `Deprecation: true` and `Link` headers to tenant-level store admin endpoints (`/admin/store/sync`, `/admin/store/status`) to initiate graceful client migration.
+- **Native macOS App Icon**: Updated macOS native AppKit app to load `logo.jpg` dynamically at runtime.
+- **Asset Optimization**: Compressed `login_landing_bg.jpg` (~65% reduction, 1.0MB -> 360KB).
+- **Code & Doc Audit**: Full codebase verification, removing obsolete files and unused imports.
+
 ### Added — The break-glass account, and the storage limit that refuses
 
 The last two things the design document asked for and the phases had not
