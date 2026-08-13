@@ -361,4 +361,3 @@ func (s *Server) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, id
 
 	return "", "", signInError{"Google account is not bound to any user"}
 }
-
