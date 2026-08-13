@@ -68,6 +68,17 @@ const PAGES = [
 
   {src: "docs/GOV_SERVICES_WORKFLOW.md", slug: "gov-services", title: "Төрийн үйлчилгээний урсгал", group: "Модулиуд"},
   {src: "docs/DOCUMENTS_SIGNING.md", slug: "documents-signing", title: "Цахим гарын үсэг", group: "Модулиуд"},
+  {src: "docs/REPORTS.md", slug: "reports", title: "Тайлангийн хөдөлгүүр", group: "Модулиуд"},
+  {src: "docs/REPORT_SHARING.md", slug: "report-sharing", title: "Тенант дамнасан тайлан", group: "Модулиуд"},
+
+  // Operations. MONITORING and RUNBOOKS are read at different moments — one
+  // when setting the stack up, the other at three in the morning — so they are
+  // two entries rather than one long page. The proposal is here because both
+  // link to it for the reasoning behind what they describe, and a link from a
+  // published page to an unpublished one leaves the site.
+  {src: "docs/MONITORING.md", slug: "monitoring", title: "Мониторинг", group: "Ажиллагаа"},
+  {src: "docs/RUNBOOKS.md", slug: "runbooks", title: "Runbook-ууд", group: "Ажиллагаа"},
+  {src: "docs/MONITORING_AND_REPORTING_PROPOSAL.md", slug: "monitoring-proposal", title: "Ажиглалт ба тайлангийн санал", group: "Ажиллагаа"},
 
   {src: "docs/SHELL_CONTRACT.md", slug: "shell-contract", title: "Bridge гэрээ", group: "Native клиентүүд"},
   {src: "docs/NATIVE_LOGIN_SPEC.md", slug: "native-login", title: "Native нэвтрэлт", group: "Native клиентүүд"},

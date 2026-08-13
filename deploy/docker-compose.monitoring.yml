@@ -203,7 +203,12 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - gerege_nexus_monitoring_grafana:/var/lib/grafana
     ports:
-      - "127.0.0.1:3009:3000"
+      # A variable rather than a constant, because 3009 is not free everywhere.
+      # This host runs three products side by side and a sibling stack's
+      # frontend already had it, so the first rollout failed on "port is
+      # already allocated" — after every other container had started, which is
+      # the least helpful moment to find out.
+      - "127.0.0.1:${GRAFANA_PORT:-3009}:3000"
     networks:
       - monitoring
     depends_on:
