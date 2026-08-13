@@ -15,8 +15,7 @@ import { Check, X } from "lucide-react";
 
 import Console from "@/components/cp/Console";
 import { useAction } from "@/components/cp/Action";
-import { Card } from "@/app/cp/tenants/[id]/page";
-import { formatMoment } from "@/app/cp/page";
+import { Card, formatMoment } from "@/components/cp/ui";
 import { cp, type Approval } from "@/lib/cp";
 import { useI18n } from "@/lib/i18n";
 

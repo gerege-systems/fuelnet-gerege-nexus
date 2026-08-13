@@ -70,6 +70,14 @@ const (
 	CapFlagsWrite Capability = "flags.write"
 	// CapAnnounce tells everybody something.
 	CapAnnounce Capability = "announce"
+
+	// CapDeploy asks GitHub to run the deployment workflow.
+	//
+	// Superadmin only, and with a second factor. Not because the action is
+	// dangerous in itself — the workflow is the same one a merge runs — but
+	// because a console that can deploy is a console that can put any tag into
+	// production, and that is the whole supply chain in one button.
+	CapDeploy Capability = "deploy.trigger"
 )
 
 // capabilities is the whole authorization model, in one readable place.
@@ -96,6 +104,7 @@ var capabilities = map[Role]map[Capability]bool{
 		CapTenantCreate: true, CapTenantSuspend: true, CapTenantDelete: true,
 		CapApprove: true, CapQuotaWrite: true, CapSupport: true, CapImpersonate: true,
 		CapSettingsWrite: true, CapFlagsWrite: true, CapAnnounce: true,
+		CapDeploy: true,
 	},
 	RoleOperator: {
 		CapTenantRead: true, CapAuditRead: true, CapOperatorRead: true,

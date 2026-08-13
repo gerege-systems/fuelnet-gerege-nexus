@@ -276,6 +276,14 @@ export const cp = {
   /** The export is a download rather than a fetch: it is a file. */
   exportURL: (id: string) => `${BASE}/tenants/${id}/export`,
 
+  health: () => request<Overview>("/health"),
+  deploy: (ref: string, reason: string) =>
+    request<{ status: string; url: string }>("/deploy",
+      { method: "POST", body: JSON.stringify({ ref, reason }) }),
+  recordRestoreTest: (detail: string, reason: string) =>
+    request<{ status: string }>("/backups/restore-test",
+      { method: "POST", body: JSON.stringify({ detail, reason }) }),
+
   settings: () => request<{ settings: Setting[]; warnings: string[] }>("/settings"),
   settingHistory: (key: string) =>
     request<{ changes: SettingChange[] }>(`/settings/history?key=${encodeURIComponent(key)}`),
@@ -352,4 +360,35 @@ export interface Announcement {
   starts_at: string;
   ends_at: string | null;
   created_at: string;
+}
+
+export interface Overview {
+  /** False when this deployment has no Prometheus: the screen says so. */
+  monitoring: boolean;
+  grafana_url: string;
+  api: { requests_per_second: number; error_rate: number; p95_seconds: number; read: boolean };
+  external: Array<{ system: string; error_rate: number; p95_seconds: number; state: string }>;
+  infra: Array<{ name: string; value: number; unit: string; warning: number; state: string }>;
+  alerts: Array<{
+    name: string; severity: string; summary: string;
+    starts_at: string; runbook: string; silenced: boolean;
+  }>;
+  background: Array<{ name: string; last_run: string | null; ok: boolean; detail: string; pending: number }>;
+  tenant_trouble: Array<{ tenant_id: string; name: string; failures: number; sample: string }>;
+  backups: {
+    configured: boolean;
+    last_backup_at: string | null;
+    last_size_mb: number;
+    last_ok: boolean;
+    last_detail: string;
+    last_restore_test_at: string | null;
+  };
+  catalog: {
+    last_sync_at: string | null;
+    ok: boolean;
+    detail: string;
+    apps: Array<{ app_id: string; name: string; versions: Record<string, number>; total: number }>;
+  };
+  version: { platform: string; release: string; migration: number; migration_applied_at: string | null };
+  warnings: string[];
 }

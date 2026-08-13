@@ -89,18 +89,26 @@ type Deps struct {
 	// because the answer lives in the platform package, which imports this one:
 	// the console asks rather than reaching.
 	Warnings func() []string
+	// CatalogStatus is when the app catalogue was last fetched, whether it
+	// worked, and why not. The platform holds it in memory; the console shows
+	// it. A callback for the same reason as Warnings.
+	CatalogStatus func() (at time.Time, ok bool, detail string)
+	// PlatformVersion is the semver this binary claims, stamped at build time.
+	PlatformVersion string
 }
 
 // Service holds what every control-plane request needs.
 type Service struct {
-	db            *pgxpool.Pool
-	sessions      *SessionStore
-	installer     Installer
-	mail          Mailer
-	settings      *settings.Store
-	flags         *flags.Store
-	tenantChanged func(tenantID string)
-	warningsFrom  func() []string
+	db                *pgxpool.Pool
+	sessions          *SessionStore
+	installer         Installer
+	mail              Mailer
+	settings          *settings.Store
+	flags             *flags.Store
+	tenantChanged     func(tenantID string)
+	warningsFrom      func() []string
+	catalogStatusFrom func() (time.Time, bool, string)
+	platformVersion   string
 	// host is the only hostname the console answers on, from
 	// CONTROL_PLANE_HOST. Empty has a meaning that depends on the environment —
 	// see hostGate.
@@ -111,15 +119,17 @@ type Service struct {
 // migrations still constructs, and its routes refuse at the door.
 func New(db *pgxpool.Pool, deps Deps) *Service {
 	return &Service{
-		db:            db,
-		sessions:      NewSessionStore(db),
-		installer:     deps.Installer,
-		mail:          deps.Mail,
-		settings:      deps.Settings,
-		flags:         deps.Flags,
-		tenantChanged: deps.TenantChanged,
-		warningsFrom:  deps.Warnings,
-		host:          normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
+		db:                db,
+		sessions:          NewSessionStore(db),
+		installer:         deps.Installer,
+		mail:              deps.Mail,
+		settings:          deps.Settings,
+		flags:             deps.Flags,
+		tenantChanged:     deps.TenantChanged,
+		warningsFrom:      deps.Warnings,
+		catalogStatusFrom: deps.CatalogStatus,
+		platformVersion:   deps.PlatformVersion,
+		host:              normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
 	}
 }
 

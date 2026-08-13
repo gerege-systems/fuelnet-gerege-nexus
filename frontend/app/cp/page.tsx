@@ -1,320 +1,376 @@
 "use client";
 
 /**
- * The console's front page: every organisation on the deployment.
+ * The console's front page: is the platform well?
  *
- * Read-only, and it says so. CP-1 is the foundation — accounts, sessions,
- * audit, isolation — and the buttons that change anything arrive in CP-2 on top
- * of it. A console that grew its actions before its audit trail would have to
- * be trusted rather than checked.
+ * A summary and not a dashboard. Everything on it is either a number somebody
+ * would want in the first five seconds — requests, errors, latency, the
+ * government systems, what is alerting — or a fact about this deployment that
+ * has no other home: what version is running, when the last backup was, which
+ * background jobs have quietly stopped.
+ *
+ * Every panel that has a deeper version links into Grafana. This screen is
+ * deliberately never the place an investigation happens, because a summary
+ * that grows into a dashboard becomes a dashboard nobody maintains.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Plus, Search } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Boxes,
+  DatabaseBackup,
+  ExternalLink,
+  Rocket,
+  Server,
+} from "lucide-react";
 
 import Console, { useConsole } from "@/components/cp/Console";
-import { cp, type TenantSummary } from "@/lib/cp";
+import { useAction } from "@/components/cp/Action";
+import { Badge, Card, formatMoment, Table, type Tone } from "@/components/cp/ui";
+import { cp, type Overview } from "@/lib/cp";
 import { useI18n } from "@/lib/i18n";
-import { Modal } from "@/components/ui";
 
-export default function ControlPlanePage() {
+export default function ControlPlaneHomePage() {
   return (
     <Console>
-      <Tenants />
+      <Health />
     </Console>
   );
 }
 
-function Tenants() {
+function Health() {
   const { t, locale } = useI18n();
   const { operator } = useConsole();
-  const [creating, setCreating] = useState(false);
-  const [search, setSearch] = useState("");
-  const [tenants, setTenants] = useState<TenantSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const action = useAction();
+  const [health, setHealth] = useState<Overview | null>(null);
   const [failure, setFailure] = useState("");
 
-  const load = useCallback(async (query: string) => {
-    setLoading(true);
+  const load = useCallback(async () => {
     try {
-      const result = await cp.tenants(query);
-      setTenants(result.tenants);
+      setHealth(await cp.health());
       setFailure("");
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    // Debounced, so typing a registration number is one query rather than
-    // eleven.
-    const timer = setTimeout(() => void load(search), 250);
-    return () => clearTimeout(timer);
-  }, [search, load]);
+    void load();
+    // A minute. The alerting stack is what wakes anybody up; this screen is
+    // what somebody watches while they work, and a page that re-renders every
+    // few seconds is one that cannot be read.
+    const timer = setInterval(() => void load(), 60_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  if (failure) {
+    return <p className="text-sm rounded-lg bg-red-50 text-red-700 border border-red-200 px-3 py-2">{failure}</p>;
+  }
+  if (!health) return <div className="text-slate-500">…</div>;
+
+  const grafana = (path: string) =>
+    health.grafana_url ? `${health.grafana_url}${path}` : "";
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-slate-900">{t("cp.section.tenants")}</h1>
-          <p className="mt-1 text-sm text-slate-500">{t("cp.view.subtitle")}</p>
+          <h1 className="text-2xl font-semibold text-slate-900">{t("cp.section.health")}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {health.version.platform}
+            {health.version.release ? ` · ${health.version.release}` : ""}
+            {health.version.migration ? ` · db ${health.version.migration}` : ""}
+          </p>
         </div>
-        {(operator.role === "superadmin" || operator.role === "operator") && (
+        {operator.role === "superadmin" && (
           <button
             type="button"
-            onClick={() => setCreating(true)}
+            onClick={() =>
+              action.run({
+                title: t("cp.action.deploy"),
+                detail: t("cp.hint.deploy"),
+                danger: true,
+                perform: async (reason) => {
+                  const { url } = await cp.deploy("main", reason);
+                  window.open(url, "_blank", "noopener");
+                },
+              })
+            }
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
-            <Plus className="w-4 h-4" />
-            {t("cp.action.new_tenant")}
+            <Rocket className="w-4 h-4" />
+            {t("cp.action.deploy")}
           </button>
         )}
       </div>
 
-      <p className="text-sm rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3">
-        {t("cp.message.read_only")}
-      </p>
+      {health.warnings.map((warning) => (
+        <p key={warning} className="text-sm rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3">
+          {warning}
+        </p>
+      ))}
 
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("cp.field.search")}
-          className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-        />
-      </div>
-
-      {failure && (
-        <p className="text-sm rounded-lg bg-red-50 text-red-700 border border-red-200 px-3 py-2">
-          {t("cp.message.load_failed")}
+      {!health.monitoring && (
+        <p className="text-sm rounded-xl bg-slate-100 border border-slate-200 text-slate-700 px-4 py-3">
+          {t("cp.message.no_monitoring")}
         </p>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="text-left font-medium px-4 py-3">{t("cp.field.organisation")}</th>
-                <th className="text-left font-medium px-4 py-3">{t("cp.field.registration")}</th>
-                <th className="text-right font-medium px-4 py-3">{t("cp.field.users")}</th>
-                <th className="text-right font-medium px-4 py-3">{t("cp.field.apps")}</th>
-                <th className="text-left font-medium px-4 py-3">{t("cp.field.last_activity")}</th>
-                <th className="text-left font-medium px-4 py-3">{t("cp.field.state")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {tenants.map((tenant) => (
-                <tr key={tenant.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/cp/tenants/${tenant.id}`}
-                      className="flex items-center gap-2 font-medium text-slate-900 hover:underline"
-                    >
-                      <Building2 className="w-4 h-4 text-slate-400" />
-                      {tenant.name}
-                    </Link>
-                    <span className="text-xs text-slate-400">{tenant.slug}</span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{tenant.registration_number || "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{tenant.user_count}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{tenant.app_count}</td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {formatMoment(tenant.last_activity_at, locale) || t("cp.message.never")}
-                  </td>
-                  <td className="px-4 py-3">
-                    {tenant.deletion_scheduled_at ? (
-                      <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-red-100 text-red-800">
-                        {t("cp.state.deleting")}
-                      </span>
-                    ) : tenant.suspended_at ? (
-                      <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-amber-100 text-amber-900">
-                        {t("cp.state.suspended")}
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800">
-                        {t("cp.state.active")}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {!loading && tenants.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    {t("cp.message.no_tenants")}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {health.monitoring && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Stat
+            label={t("cp.stat.rps")}
+            value={health.api.read ? health.api.requests_per_second.toFixed(1) : "—"}
+            icon={<Activity className="w-4 h-4" />}
+          />
+          <Stat
+            label={t("cp.stat.errors")}
+            value={health.api.read ? `${(health.api.error_rate * 100).toFixed(2)}%` : "—"}
+            tone={health.api.error_rate > 0.01 ? "red" : "emerald"}
+            icon={<AlertTriangle className="w-4 h-4" />}
+          />
+          <Stat
+            label={t("cp.stat.p95")}
+            value={health.api.read ? `${(health.api.p95_seconds * 1000).toFixed(0)} ms` : "—"}
+            icon={<Server className="w-4 h-4" />}
+          />
         </div>
-      </div>
-      {creating && (
-        <NewTenantDialog
-          onClose={() => setCreating(false)}
-          onCreated={() => {
-            setCreating(false);
-            void load(search);
-          }}
-        />
       )}
+
+      {health.alerts.length > 0 && (
+        <Card title={t("cp.section.alerts")}>
+          <Table
+            head={[t("cp.field.alert"), t("cp.field.severity"), t("cp.field.when"), ""]}
+            rows={health.alerts.map((alert) => [
+              <span key="n">
+                <strong className="text-slate-900">{alert.name}</strong>
+                <span className="block text-xs text-slate-500">{alert.summary}</span>
+              </span>,
+              <Badge key="s" tone={alert.severity === "page" ? "red" : "amber"}>
+                {alert.severity}
+              </Badge>,
+              formatMoment(alert.starts_at, locale),
+              alert.silenced ? <Badge key="q" tone="slate">{t("cp.state.silenced")}</Badge> : "",
+            ])}
+            empty={t("cp.message.no_alerts")}
+          />
+        </Card>
+      )}
+
+      {health.external.length > 0 && (
+        <Card
+          title={t("cp.section.external")}
+          action={grafana("/d/nexus-external") ? <DeepLink href={grafana("/d/nexus-external")} /> : undefined}
+        >
+          <div className="p-4 flex flex-wrap gap-3">
+            {health.external.map((system) => (
+              <div key={system.system} className="rounded-xl border border-slate-200 px-3 py-2 min-w-[9rem]">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${dot(system.state)}`} />
+                  <strong className="text-sm text-slate-900">{system.system}</strong>
+                </div>
+                <p className="mt-1 text-xs text-slate-500 tabular-nums">
+                  {(system.error_rate * 100).toFixed(1)}% · {(system.p95_seconds * 1000).toFixed(0)} ms
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {health.infra.length > 0 && (
+        <Card
+          title={t("cp.section.infra")}
+          action={grafana("/d/nexus-infra") ? <DeepLink href={grafana("/d/nexus-infra")} /> : undefined}
+        >
+          <div className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {health.infra.map((gauge) => (
+              <div key={gauge.name} className="rounded-xl border border-slate-200 px-3 py-2">
+                <p className="text-xs uppercase tracking-wide text-slate-400">{gauge.name}</p>
+                <p className={`mt-1 text-lg tabular-nums ${textFor(gauge.state)}`}>
+                  {gauge.value.toFixed(1)}
+                  {gauge.unit}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card title={t("cp.section.background")}>
+        <Table
+          head={[t("cp.field.job"), t("cp.field.last_run"), t("cp.field.state"), ""]}
+          rows={health.background.map((job) => [
+            // The job's own name when the dictionary has one; its key
+            // otherwise, so a job added later shows up rather than rendering
+            // an empty cell.
+            jobName(job.name, t),
+            formatMoment(job.last_run, locale) || "—",
+            <Badge key="s" tone={job.ok ? "emerald" : "red"}>
+              {job.ok ? t("cp.state.ok") : t("cp.state.failing")}
+            </Badge>,
+            <span key="d" className="text-xs text-slate-500">
+              {job.detail}
+              {job.pending > 0 ? ` · ${job.pending}` : ""}
+            </span>,
+          ])}
+          empty={t("cp.message.no_activity")}
+        />
+      </Card>
+
+      {health.tenant_trouble.length > 0 && (
+        <Card title={t("cp.section.tenant_trouble")}>
+          <Table
+            head={[t("cp.field.organisation"), t("cp.field.failures"), t("cp.field.action")]}
+            rows={health.tenant_trouble.map((row) => [
+              <Link key="t" href={`/cp/tenants/${row.tenant_id}`} className="hover:underline text-slate-900">
+                {row.name || row.tenant_id}
+              </Link>,
+              <span key="c" className="tabular-nums">{row.failures}</span>,
+              <span key="s" className="text-xs text-slate-500 font-mono">{row.sample}</span>,
+            ])}
+            empty={t("cp.message.no_activity")}
+          />
+        </Card>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title={t("cp.section.backups")}>
+          <div className="p-4 space-y-2 text-sm">
+            {!health.backups.configured ? (
+              <p className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">
+                {t("cp.message.no_backups")}
+              </p>
+            ) : (
+              <>
+                <Row
+                  label={t("cp.field.last_backup")}
+                  value={`${formatMoment(health.backups.last_backup_at, locale)} · ${health.backups.last_size_mb.toFixed(1)} MB`}
+                  tone={health.backups.last_ok ? undefined : "red"}
+                />
+                <Row
+                  label={t("cp.field.last_restore_test")}
+                  value={formatMoment(health.backups.last_restore_test_at, locale) || t("cp.message.never_tested")}
+                  tone={health.backups.last_restore_test_at ? undefined : "amber"}
+                />
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                action.run({
+                  title: t("cp.action.record_restore_test"),
+                  detail: t("cp.hint.restore_test"),
+                  perform: (reason) => cp.recordRestoreTest(reason, reason),
+                  onDone: load,
+                })
+              }
+              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              <DatabaseBackup className="w-4 h-4" />
+              {t("cp.action.record_restore_test")}
+            </button>
+          </div>
+        </Card>
+
+        <Card title={t("cp.section.catalog")}>
+          <div className="p-4 space-y-2 text-sm">
+            <Row
+              label={t("cp.field.last_sync")}
+              value={formatMoment(health.catalog.last_sync_at, locale) || health.catalog.detail || "—"}
+              tone={health.catalog.ok ? undefined : "red"}
+            />
+            <div className="pt-2 space-y-1">
+              {health.catalog.apps.map((app) => (
+                <div key={app.app_id} className="flex items-center gap-2 text-xs">
+                  <Boxes className="w-3 h-3 text-slate-400" />
+                  <span className="flex-1 truncate text-slate-700">{app.name}</span>
+                  <span className="text-slate-500 font-mono">
+                    {Object.entries(app.versions)
+                      .map(([version, count]) => `${version}×${count}`)
+                      .join("  ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {action.dialog}
     </div>
   );
 }
 
-/**
- * Opening an organisation.
- *
- * The apps are a comma-separated list of catalogue slugs rather than a picker,
- * because the catalogue a deployment carries is its own and a hard-coded set of
- * checkboxes here would be wrong on the first deployment that adds a module.
- * The first administrator gets an invitation, never a password: see
- * lifecycle.go for why an operator must not be able to choose one.
- */
-function NewTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const { t } = useI18n();
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [registration, setRegistration] = useState("");
-  const [apps, setApps] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [reason, setReason] = useState("");
-  const [failure, setFailure] = useState("");
-  const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setFailure("");
-    try {
-      const created = await cp.createTenant({
-        name,
-        slug,
-        registration_number: registration,
-        apps: apps.split(",").map((app) => app.trim()).filter(Boolean),
-        admin_email: adminEmail,
-        reason,
-      });
-      // An organisation created with an app that would not install, or an
-      // invitation that could not be sent, is still an organisation — and the
-      // operator has to be told which parts did not land rather than finding
-      // out when the customer calls.
-      if (created.failed.length || !created.invited) {
-        setNotice(
-          [
-            created.failed.length ? `${t("cp.field.apps")}: ${created.failed.join(", ")}` : "",
-            created.invited ? "" : created.invite_error || "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        );
-        return;
-      }
-      onCreated();
-    } catch (error) {
-      setFailure(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal label={t("cp.action.new_tenant")}>
-      <form onSubmit={submit} className="p-5 space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">{t("cp.action.new_tenant")}</h2>
-
-        {failure && (
-          <p className="text-sm rounded-lg bg-red-50 text-red-700 border border-red-200 px-3 py-2">{failure}</p>
-        )}
-        {notice && (
-          <div className="space-y-2">
-            <p className="text-sm rounded-lg bg-amber-50 text-amber-900 border border-amber-200 px-3 py-2">
-              {notice}
-            </p>
-            <button
-              type="button"
-              onClick={onCreated}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              {t("cp.action.back")}
-            </button>
-          </div>
-        )}
-
-        {!notice && (
-          <>
-            <TextField label={t("cp.field.name")} value={name} onChange={setName} required />
-            <TextField label={t("cp.field.slug")} value={slug} onChange={(value) => setSlug(value.toLowerCase())} required />
-            <TextField label={t("cp.field.registration")} value={registration} onChange={setRegistration} />
-            <TextField label={t("cp.field.install_apps")} value={apps} onChange={setApps} />
-            <TextField label={t("cp.field.admin_email")} value={adminEmail} onChange={setAdminEmail} required type="email" />
-            <TextField label={t("cp.field.reason")} value={reason} onChange={setReason} required />
-
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">
-                {t("cp.action.cancel")}
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-              >
-                {t("cp.action.create")}
-              </button>
-            </div>
-          </>
-        )}
-      </form>
-    </Modal>
-  );
-}
-
-function TextField({
+function Stat({
   label,
   value,
-  onChange,
-  required,
-  type = "text",
+  tone,
+  icon,
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
-  required?: boolean;
-  type?: string;
+  tone?: Tone;
+  icon: React.ReactNode;
 }) {
   return (
-    <label className="block text-sm">
-      <span className="text-slate-600">{label}</span>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-      />
-    </label>
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
+      <p className="text-xs uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
+        {icon}
+        {label}
+      </p>
+      <p className={`mt-1 text-2xl tabular-nums ${tone === "red" ? "text-red-600" : "text-slate-900"}`}>{value}</p>
+    </div>
   );
 }
 
-/**
- * Timestamps are rendered in the reader's own locale and time zone.
- *
- * The API sends RFC 3339 with an offset, and the browser is the only party that
- * knows where the person reading it is sitting — the same reasoning the
- * monitoring alerts were changed to follow.
- */
-export function formatMoment(value: string | null | undefined, locale: string): string {
-  if (!value) return "";
-  const moment = new Date(value);
-  if (Number.isNaN(moment.getTime())) return "";
-  return moment.toLocaleString(locale === "mn" ? "mn-MN" : locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+function Row({ label, value, tone }: { label: string; value: string; tone?: Tone }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className="text-xs uppercase tracking-wide text-slate-400 w-40 shrink-0">{label}</span>
+      <span className={tone === "red" ? "text-red-700" : tone === "amber" ? "text-amber-700" : "text-slate-800"}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function DeepLink({ href }: { href: string }) {
+  const { t } = useI18n();
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+    >
+      {t("cp.action.open_grafana")}
+      <ExternalLink className="w-3 h-3" />
+    </a>
+  );
+}
+
+type Translate = ReturnType<typeof useI18n>["t"];
+
+function jobName(name: string, t: Translate): string {
+  switch (name) {
+    case "scheduled_reports":
+      return t("cp.job.scheduled_reports");
+    case "catalog_sync":
+      return t("cp.job.catalog_sync");
+    case "deletion_sweep":
+      return t("cp.job.deletion_sweep");
+    default:
+      return name;
+  }
+}
+
+function dot(state: string): string {
+  return state === "red" ? "bg-red-500" : state === "amber" ? "bg-amber-500" : "bg-emerald-500";
+}
+
+function textFor(state: string): string {
+  return state === "red" ? "text-red-600" : state === "amber" ? "text-amber-700" : "text-slate-900";
 }

@@ -87,7 +87,8 @@ export default function Console({ children }: { children: React.ReactNode }) {
             {t("cp.view.title")}
           </Link>
           <nav className="flex items-center gap-1 text-sm">
-            <ConsoleLink href="/cp" label={t("cp.section.tenants")} />
+            <ConsoleLink href="/cp" label={t("cp.section.health")} />
+            <ConsoleLink href="/cp/tenants" label={t("cp.section.tenants")} />
             <ConsoleLink href="/cp/support" label={t("cp.section.support")} />
             <ConsoleLink href="/cp/approvals" label={t("cp.section.approvals")} />
             <ConsoleLink href="/cp/config" label={t("cp.section.config")} />

@@ -28,7 +28,7 @@ import {
 
 import Console, { useConsole } from "@/components/cp/Console";
 import { useAction } from "@/components/cp/Action";
-import { formatMoment } from "@/app/cp/page";
+import { Badge, Card, formatMoment, Table } from "@/components/cp/ui";
 import { cp, type Quota, type TenantDetail } from "@/lib/cp";
 import { useI18n } from "@/lib/i18n";
 import { Modal } from "@/components/ui";
@@ -346,16 +346,6 @@ function StateBadge({ tenant }: { tenant: { suspended_at: string | null; deletio
   return <Badge tone="emerald">{t("cp.state.active")}</Badge>;
 }
 
-export function Badge({ tone, children }: { tone: "red" | "amber" | "emerald" | "slate"; children: React.ReactNode }) {
-  const tones = {
-    red: "bg-red-100 text-red-800",
-    amber: "bg-amber-100 text-amber-900",
-    emerald: "bg-emerald-100 text-emerald-800",
-    slate: "bg-slate-100 text-slate-700",
-  };
-  return <span className={`text-xs font-medium rounded-full px-2 py-0.5 ${tones[tone]}`}>{children}</span>;
-}
-
 function ActionButton({
   icon,
   label,
@@ -506,7 +496,7 @@ function Field({
 
 function BackLink({ label }: { label: string }) {
   return (
-    <Link href="/cp" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+    <Link href="/cp/tenants" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
       <ArrowLeft className="w-4 h-4" />
       {label}
     </Link>
@@ -518,51 +508,6 @@ function Fact({ label, value }: { label: string; value: string }) {
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
       <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="mt-1 text-sm text-slate-900">{value}</dd>
-    </div>
-  );
-}
-
-export function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <h2 className="px-4 py-3 border-b border-slate-100 font-medium text-slate-900">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-export function Table({ head, rows, empty }: { head: string[]; rows: React.ReactNode[][]; empty: string }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-600">
-          <tr>
-            {head.map((cell) => (
-              <th key={cell} className="text-left font-medium px-4 py-2.5">
-                {cell}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rows.map((row, index) => (
-            <tr key={index} className="hover:bg-slate-50">
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex} className="px-4 py-2.5 text-slate-700">
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={head.length} className="px-4 py-8 text-center text-slate-500">
-                {empty}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
     </div>
   );
 }

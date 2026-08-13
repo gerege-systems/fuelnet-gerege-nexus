@@ -124,6 +124,13 @@ func (s *Service) Routes(r chi.Router) {
 		signedIn.With(s.RequireCapability(CapSettingsWrite)).
 			Post("/tenants/{id}/maintenance", s.handleTenantMaintenance)
 
+		// The front page, and the operations behind it.
+		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/health", s.handleHealth)
+		signedIn.With(s.RequireCapability(CapDeploy), s.RequireStepUp).
+			Post("/deploy", s.handleDeploy)
+		signedIn.With(s.RequireCapability(CapSettingsWrite)).
+			Post("/backups/restore-test", s.handleRestoreTest)
+
 		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/announcements", s.handleListAnnouncements)
 		signedIn.With(s.RequireCapability(CapAnnounce)).Post("/announcements", s.handleAnnounce)
 		signedIn.With(s.RequireCapability(CapAnnounce)).
@@ -164,7 +171,10 @@ func fail(w http.ResponseWriter, err error, doing string) {
 		errors.Is(err, ErrSlugTaken), errors.Is(err, ErrNotSuspended),
 		errors.Is(err, ErrNotScheduled), errors.Is(err, ErrAlreadyScheduled),
 		errors.Is(err, ErrNotAMember), errors.Is(err, ErrTenantSuspended),
-		errors.Is(err, ErrUnknownEnforcement), errors.Is(err, ErrMailNotConfigured):
+		errors.Is(err, ErrUnknownEnforcement), errors.Is(err, ErrMailNotConfigured),
+		errors.Is(err, ErrDeployNotConfigured), errors.Is(err, ErrDeployRefused),
+		errors.Is(err, ErrHistoryNotFound), errors.Is(err, ErrNoSettingsStore),
+		errors.Is(err, ErrNoFlagStore):
 		// Refusals the operator can act on, in words they can act on. These
 		// are the platform's own sentinels, never a database error's text —
 		// see the default.
@@ -626,4 +636,46 @@ func (s *Service) handleWithdrawAnnouncement(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "withdrawn"})
+}
+
+// The front page and the operations behind it.
+
+func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
+	// No error path: Health degrades panel by panel and says which parts it
+	// could not read. A console that answers 500 because Prometheus is down is
+	// a console that is unavailable exactly when it is needed.
+	httpx.JSON(w, http.StatusOK, s.Health(r.Context()))
+}
+
+func (s *Service) handleDeploy(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		Ref string `json:"ref"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	link, err := s.TriggerDeploy(r.Context(), sess, body.Ref, body.Reason)
+	if err != nil {
+		fail(w, err, "could not trigger the deployment")
+		return
+	}
+	httpx.JSON(w, http.StatusAccepted, map[string]string{"status": "started", "url": link})
+}
+
+func (s *Service) handleRestoreTest(w http.ResponseWriter, r *http.Request) {
+	sess, _ := SessionFrom(r.Context())
+	var body struct {
+		reasoned
+		Detail string `json:"detail"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.RecordRestoreTest(r.Context(), sess, body.Detail, body.Reason); err != nil {
+		fail(w, err, "could not record the restore test")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "recorded"})
 }

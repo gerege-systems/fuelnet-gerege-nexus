@@ -18,8 +18,7 @@ import { KeyRound, LockOpen, LogOut, Search } from "lucide-react";
 
 import Console from "@/components/cp/Console";
 import { useAction } from "@/components/cp/Action";
-import { Badge, Card, Table } from "@/app/cp/tenants/[id]/page";
-import { formatMoment } from "@/app/cp/page";
+import { Badge, Card, formatMoment, Table } from "@/components/cp/ui";
 import { cp, type Person } from "@/lib/cp";
 import { useI18n } from "@/lib/i18n";
 

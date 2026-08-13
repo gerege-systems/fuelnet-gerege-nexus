@@ -15,6 +15,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A front page that answers "is the platform well", and the platform's first backup
+
+CP-4. The console's home screen is now the deployment's health — requests,
+errors, latency, the government systems' lights, what is alerting, the disk,
+which background jobs have quietly stopped, what version is running — and the
+organisation list moved to its own page. Every panel links into Grafana, and
+none of it tries to replace Grafana.
+
+- **This platform had no backups.** Not a gap in the console: a gap in the
+  platform. `deploy/scripts/backup.sh` takes a `pg_dump`, prunes what is older
+  than a fortnight, and — the part that matters — writes the outcome into
+  `platform_backups` whether it worked or not, because a cron job that fails
+  silently is discovered on the morning somebody needs it. The console shows
+  the last backup, its size, and the date of the last *restore test*, which is
+  recorded by hand: an untested backup is not a backup, and the only way to
+  know one has been tested is that somebody says so.
+- **The deploy button asks GitHub, and can do nothing else.** It dispatches the
+  workflow this repository already has, with a fine-grained token scoped to
+  that workflow, behind a superadmin capability and a second factor — and it
+  hands back the link to the run rather than polling somebody else's API for
+  ten minutes. No shell, no `docker exec`, no environment editing: the plan
+  lists all three among the things this console deliberately does not have.
+- **Per-organisation error rates come from the audit trail, not from
+  Prometheus**, because the very first phase decided that no metric would ever
+  carry a tenant label. That decision has a price and this is it — paid
+  deliberately, and arguably at a profit, since what an operator wants to know
+  is whose *work* is failing.
+- Every panel degrades on its own. A Prometheus that is down leaves the alerts,
+  the jobs, the backups and the versions intact, and a deployment with no
+  monitoring stack at all gets a page that says so rather than a page of zeroes
+  that reads as "everything is fine". NaN — what PromQL returns when it divides
+  by nothing — is read as zero rather than reaching a screen.
+
 ### Added — A platform that can be told to behave differently, without a deploy
 
 CP-3, and the setting it exists for: **this platform is private by default**.

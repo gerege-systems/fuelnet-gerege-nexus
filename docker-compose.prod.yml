@@ -68,6 +68,13 @@ services:
     image: ${IMAGE_BACKEND}:${IMAGE_TAG:-latest}
     container_name: gerege_nexus_backend
     restart: unless-stopped
+    # So the operator console can read the monitoring stack, which publishes on
+    # the host's loopback rather than on this compose network. Harmless when
+    # PROMETHEUS_URL is unset — it is a name that resolves and nothing asks for
+    # it — and it is the smallest arrangement that does not put the API on the
+    # monitoring network or the monitoring stack on this one.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     pull_policy: always
     environment:
       # The API switches into the unprivileged gerege_nexus_app role for the
@@ -179,6 +186,23 @@ services:
       # The hostname the operator console answers on. Empty means this
       # deployment has no console at all — see docs/CONTROL_PLANE.md.
       CONTROL_PLANE_HOST: ${CONTROL_PLANE_HOST:-}
+      # What the console's front page reads. All optional: without them the
+      # page shows the parts that come from this platform's own database and
+      # says the rest is not configured.
+      #
+      # The monitoring stack publishes on the host's loopback, so from inside
+      # this container the address is the host gateway — hence the extra_hosts
+      # entry below. A deployment that puts this service on the monitoring
+      # network instead can use the container names.
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-}
+      ALERTMANAGER_URL: ${ALERTMANAGER_URL:-}
+      GRAFANA_URL: ${GRAFANA_URL:-}
+      # The deploy button. The token is a fine-grained one with permission for
+      # the deploy workflow and nothing else; without it the button refuses and
+      # says why.
+      GITHUB_DEPLOY_TOKEN: ${GITHUB_DEPLOY_TOKEN:-}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-}
+      GITHUB_DEPLOY_WORKFLOW: ${GITHUB_DEPLOY_WORKFLOW:-deploy.yml}
       # Integration connectors. Without the key the server refuses to store a
       # credential rather than storing it in the clear, so Drive, Dropbox and
       # Meet simply cannot be saved — which is the visible failure, not a

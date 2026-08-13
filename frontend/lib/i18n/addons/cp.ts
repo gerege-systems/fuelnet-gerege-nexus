@@ -186,4 +186,57 @@ export const cp = {
   },
   "cp.message.no_flags": { mn: "Flag алга.", en: "No flags." },
   "cp.message.no_announcements": { mn: "Зарлал алга.", en: "No announcements." },
+
+  "cp.section.health": { mn: "Платформын эрүүл мэнд", en: "Platform health" },
+  "cp.section.alerts": { mn: "Идэвхтэй дохио", en: "Firing alerts" },
+  "cp.section.external": { mn: "Гадаад системүүд", en: "External systems" },
+  "cp.section.infra": { mn: "Дэд бүтэц", en: "Infrastructure" },
+  "cp.section.background": { mn: "Арын ажлууд", en: "Background jobs" },
+  "cp.section.tenant_trouble": { mn: "Асуудалтай байгууллагууд", en: "Organisations in trouble" },
+  "cp.section.backups": { mn: "Нөөцлөлт", en: "Backups" },
+  "cp.section.catalog": { mn: "Каталог", en: "Catalogue" },
+
+  "cp.stat.rps": { mn: "Хүсэлт/сек", en: "Requests/s" },
+  "cp.stat.errors": { mn: "Алдааны хувь", en: "Error rate" },
+  "cp.stat.p95": { mn: "p95 хугацаа", en: "p95 latency" },
+
+  "cp.field.alert": { mn: "Дохио", en: "Alert" },
+  "cp.field.severity": { mn: "Түвшин", en: "Severity" },
+  "cp.field.job": { mn: "Ажил", en: "Job" },
+  "cp.field.last_run": { mn: "Сүүлд ажилласан", en: "Last run" },
+  "cp.field.failures": { mn: "Алдаа", en: "Failures" },
+  "cp.field.last_backup": { mn: "Сүүлийн нөөцлөлт", en: "Last backup" },
+  "cp.field.last_restore_test": { mn: "Сүүлийн сэргээлтийн туршилт", en: "Last restore test" },
+  "cp.field.last_sync": { mn: "Сүүлийн синк", en: "Last sync" },
+
+  "cp.job.scheduled_reports": { mn: "Товлосон тайлан", en: "Scheduled reports" },
+  "cp.job.catalog_sync": { mn: "Каталогийн синк", en: "Catalogue sync" },
+  "cp.job.deletion_sweep": { mn: "Устгалын цэвэрлэгээ", en: "Deletion sweep" },
+
+  "cp.state.ok": { mn: "Хэвийн", en: "Healthy" },
+  "cp.state.failing": { mn: "Алдаатай", en: "Failing" },
+  "cp.state.silenced": { mn: "Чимээгүй болгосон", en: "Silenced" },
+
+  "cp.action.deploy": { mn: "Deploy эхлүүлэх", en: "Start a deployment" },
+  "cp.action.open_grafana": { mn: "Grafana", en: "Grafana" },
+  "cp.action.record_restore_test": { mn: "Сэргээлт туршсанаа бүртгэх", en: "Record a restore test" },
+
+  "cp.hint.deploy": {
+    mn: "GitHub Actions-ийн deploy workflow-г main дээр өдөөнө. Серверт юу ч гүйцэтгэхгүй, env хөндөхгүй — явцыг GitHub дээр хараарай.",
+    en: "Triggers the GitHub Actions deploy workflow on main. Nothing is executed on the server and no environment is touched — watch it on GitHub.",
+  },
+  "cp.hint.restore_test": {
+    mn: "Туршаагүй нөөцлөлт бол нөөцлөлт биш. Сэргээлтийг бодитоор туршиж үзсэн бол огноог нь эндээс бүртгэнэ.",
+    en: "An untested backup is not a backup. Record the date when a restore has actually been tried.",
+  },
+  "cp.message.no_monitoring": {
+    mn: "Энэ суулгацад PROMETHEUS_URL тохируулаагүй тул хэмжүүрийн хэсэг хоосон байна. docs/CONTROL_PLANE.md §4з-г үз.",
+    en: "PROMETHEUS_URL is not set on this deployment, so the metric panels are empty. See docs/CONTROL_PLANE.md §4з.",
+  },
+  "cp.message.no_alerts": { mn: "Идэвхтэй дохио алга.", en: "Nothing is alerting." },
+  "cp.message.no_backups": {
+    mn: "Нөөцлөлт хэзээ ч бүртгэгдээгүй байна. deploy/scripts/backup.sh-г cron-д тавина уу.",
+    en: "No backup has ever reported. Install deploy/scripts/backup.sh in cron.",
+  },
+  "cp.message.never_tested": { mn: "Хэзээ ч туршаагүй", en: "Never tested" },
 };

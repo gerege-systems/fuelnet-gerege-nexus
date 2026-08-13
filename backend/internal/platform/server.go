@@ -365,7 +365,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	s.cp = controlplane.New(db, controlplane.Deps{
 		Installer: s, Mail: s.emailVerify, TenantChanged: s.forgetSuspension,
 		Settings: s.settings, Flags: s.featureFlags,
-		Warnings: ConfigurationWarnings,
+		Warnings: ConfigurationWarnings, CatalogStatus: s.catalogSyncStatus,
+		PlatformVersion: PlatformVersion,
 	})
 
 	s.setupRoutes()
@@ -564,6 +565,19 @@ func (s *Server) catalogInterval() time.Duration {
 		interval = time.Minute
 	}
 	return interval
+}
+
+// catalogSyncStatus is what the console shows about the catalogue: when it was
+// last fetched, whether that worked, and why not.
+func (s *Server) catalogSyncStatus() (time.Time, bool, string) {
+	s.syncMu.RLock()
+	defer s.syncMu.RUnlock()
+	// A deployment in file mode has never synced and never will, which is not
+	// a failure — it is what "no registry configured" looks like.
+	if s.lastSyncAt.IsZero() && !s.catalogSource.Remote() {
+		return time.Time{}, true, "the catalogue comes from the bundled file"
+	}
+	return s.lastSyncAt, s.lastSyncOK, s.lastSyncErr
 }
 
 // recordSync remembers how the last attempt went.
