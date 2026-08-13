@@ -37,7 +37,7 @@ func TestACacheThatDoesNotMatchThisBuildIsNotUsed(t *testing.T) {
 
 	// What the platform passes as Verify: this build's own opinion of what a
 	// catalogue must contain.
-	required := "io.gerege.nexus.core"
+	required := "io.gerege.nexus.organisation"
 	verify := func(apps []appcatalog.CatalogApp) error {
 		for _, app := range apps {
 			if app.ID == required {

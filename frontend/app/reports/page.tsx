@@ -57,7 +57,7 @@ import {
 // than as a reverse-domain string. An app not in this list falls back to its
 // id, which is the right answer for a third party's module.
 const APP_NAMES: Record<string, { mn: string; en: string }> = {
-  "io.gerege.nexus.core": { mn: "Байгууллага", en: "Organisation" },
+  "io.gerege.nexus.organisation": { mn: "Байгууллага", en: "Organisation" },
   "io.gerege.nexus.billing": { mn: "Нэхэмжлэх", en: "Billing" },
   "io.gerege.nexus.inventory": { mn: "Агуулах", en: "Inventory" },
   "io.gerege.nexus.esign": { mn: "Цахим гарын үсэг", en: "E-signature" },

@@ -58,7 +58,7 @@ const GROUPS: Array<{ title: string; fields: Array<{ key: keyof Organisation; la
 
 export default function OrganisationPage() {
   const { t } = useI18n();
-  const { allowed: canManage } = useAccess("core.manage");
+  const { isAdmin: canManage } = useAccess();
   const [organisation, setOrganisation] = useState<Organisation | null>(null);
   // Only organisations this person belongs to can be offered: the server will
   // refuse any other, and a selector full of choices that all fail is worse
@@ -117,7 +117,7 @@ export default function OrganisationPage() {
       </div>
 
       {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}
-      {!canManage && <Banner tone="info" message={t("base.message.read_only") + " core.manage"} />}
+      {!canManage && <Banner tone="info" message={t("base.message.admin_only_edit")} />}
 
       <div className="grid gap-6 md:grid-cols-2">
         {GROUPS.map((group) => (

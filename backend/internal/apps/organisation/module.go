@@ -3,33 +3,45 @@
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
  *
- * Package core is the organisation and the people in it.
+ * Package organisation is the organisation and the people in it.
  *
- * It is the module every other module assumes. Odoo calls this `base` and never
- * lets you uninstall it, for the same reason: an ERP without an answer to "what
- * is this organisation and who works here" is a set of screens that cannot
- * name their own subject. A document has to print a registration number, an
- * approval has to name a department, a deadline has to be counted in some
- * timezone — and until now none of those had anywhere to come from.
+ * It was called `core` until the ecosystem split made the name a liability:
+ * "core" is what the platform underneath every app is called, and an app named
+ * after the floor it stands on cannot be told apart from it in a catalogue,
+ * a permission code or an import path. What this module actually holds is the
+ * organisation, its departments and its people — so that is what it is called.
+ *
+ * What is left here is the half that really is an app. The other half — the
+ * tenant's legal profile and the signed-in person's own preferences — moved to
+ * the platform (internal/platform/tenant_profile_handlers.go), because the
+ * control plane, the XYP rail and an SSO consent screen all read the
+ * organisation's registered name without caring which apps the tenant has, and
+ * a screen those depend on cannot be one an administrator is able to remove.
  *
  * The shape follows Odoo's, because the distinctions it draws are real:
  *
- *	res.company   → tenants + tenant_profiles   what the organisation is
- *	res.users     → users                       who the person is, anywhere
- *	hr.employee   → memberships                 who they are *here*
- *	hr.department → departments                 how the organisation is arranged
+ *	res.company   → tenants + tenant_profiles   what the organisation is  (platform)
+ *	res.users     → users                       who the person is, anywhere (platform)
+ *	hr.employee   → memberships                 who they are *here*         (here)
+ *	hr.department → departments                 how it is arranged          (here)
  *
  * The middle line is the one worth keeping straight. A language preference
  * belongs to a person and follows them between organisations; a job title does
  * not. The same person can be a director in one tenant and a clerk in another,
  * so the title lives on the membership and the language lives on the user.
  *
+ * Unlike Odoo's `base`, this one can be removed. Nothing imports it and no
+ * other module's foreign keys point at a department, so a deployment that has
+ * no use for an internal directory — a queue kiosk, a single-purpose portal —
+ * should not be made to carry one. It is installed by default and uninstalling
+ * it closes the gate without dropping a row.
+ *
  * What this module does not do is authorisation. Roles and permissions already
  * exist and are already good (rbac + Settings → Access control); this names the
  * people those roles are handed to.
  */
 
-package core
+package organisation
 
 import (
 	"net/http"
@@ -43,7 +55,15 @@ import (
 
 // ID is the catalogue identifier. It is referenced by the platform, which
 // installs this app for every tenant and refuses to disable it.
-const ID = "io.gerege.nexus.core"
+const ID = "io.gerege.nexus.organisation"
+
+// LegacyID is what this app was called before the rename. It is not a second
+// identity: appcatalog resolves it to ID when a catalogue or an installation
+// still carries it, so a deployment that has not yet run the migration and a
+// registry that has not yet republished both keep working.
+//
+// DEPRECATED: remove in vNEXT.
+const LegacyID = "io.gerege.nexus.core"
 
 type Module struct {
 	db    *pgxpool.Pool
@@ -72,8 +92,8 @@ func (m *Module) Dependencies() []internal.Dependency { return nil }
 // department can already put them anywhere in it.
 func (m *Module) Permissions() []internal.PermissionDefinition {
 	return []internal.PermissionDefinition{
-		{Code: "core.read", Name: "Read Organisation", Description: "View the organisation profile, its departments and its people"},
-		{Code: "core.manage", Name: "Manage Organisation", Description: "Edit the organisation profile, its departments and its people"},
+		{Code: "organisation.read", Name: "Read Organisation", Description: "View the organisation profile, its departments and its people"},
+		{Code: "organisation.manage", Name: "Manage Organisation", Description: "Edit the organisation profile, its departments and its people"},
 	}
 }
 
@@ -83,15 +103,7 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 func (m *Module) Menus() []internal.MenuDefinition {
 	return []internal.MenuDefinition{
 		{
-			ID: "core_organisation", Label: "Organisation",
-			Path: "/organisation", Icon: "building-2", Order: 5,
-			Labels: map[string]string{
-				"mn": "Байгууллага", "ar": "المؤسسة", "zh": "组织",
-				"fr": "Organisation", "ru": "Организация", "es": "Organización",
-			},
-		},
-		{
-			ID: "core_people", Label: "People",
+			ID: "organisation_people", Label: "People",
 			Path: "/organisation/people", Icon: "users", Order: 7,
 			Labels: map[string]string{
 				"mn": "Ажилтнууд", "ar": "الأشخاص", "zh": "人员",
@@ -99,7 +111,7 @@ func (m *Module) Menus() []internal.MenuDefinition {
 			},
 		},
 		{
-			ID: "core_departments", Label: "Departments",
+			ID: "organisation_departments", Label: "Departments",
 			Path: "/organisation/departments", Icon: "network", Order: 6,
 			Labels: map[string]string{
 				"mn": "Хэлтэс, нэгж", "ar": "الأقسام", "zh": "部门",
@@ -109,15 +121,19 @@ func (m *Module) Menus() []internal.MenuDefinition {
 	}
 }
 
+// RegisterRoutes mounts the app at its own name.
+//
+// The prefix is part of the rename: an app called `organisation` answering on
+// /api/v1/core would keep the old name in the one place clients copy it from.
+// The old prefix is still served for a release, but by the platform rather than
+// from here — see tenantLegacyRoutes in internal/platform, which redirects it.
+// It has to be the platform's, because half of what used to live under
+// /api/v1/core is now a platform route that outlives this app being removed.
 func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
-	r.Route("/api/v1/core", func(cr chi.Router) {
+	r.Route("/api/v1/organisation", func(cr chi.Router) {
 		cr.Use(tenantAuthMiddleware)
-		read := rbac.RequirePermission(m.perms, "core.read")
-		manage := rbac.RequirePermission(m.perms, "core.manage")
-
-		// The organisation itself.
-		cr.With(read).Get("/organisation", m.handleGetOrganisation)
-		cr.With(manage).Put("/organisation", m.handleUpdateOrganisation)
+		read := rbac.RequirePermission(m.perms, "organisation.read")
+		manage := rbac.RequirePermission(m.perms, "organisation.manage")
 
 		// How it is arranged.
 		cr.With(read).Get("/departments", m.handleListDepartments)
@@ -135,11 +151,5 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		cr.With(manage).Put("/people/{id}", m.handleUpdatePerson)
 		cr.With(manage).Post("/people/{id}/deactivate", m.handleDeactivatePerson)
 		cr.With(manage).Post("/people/{id}/reactivate", m.handleReactivatePerson)
-
-		// What the signed-in person prefers, wherever they are. No permission:
-		// these are the caller's own settings, and a person who cannot read
-		// their own language preference has nothing to be protected from.
-		cr.Get("/me/preferences", m.handleGetPreferences)
-		cr.Put("/me/preferences", m.handleUpdatePreferences)
 	})
 }

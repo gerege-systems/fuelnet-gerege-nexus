@@ -40,6 +40,11 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 	if err := json.Unmarshal(data, &rawCatalog); err != nil {
 		return nil, err
 	}
+	// Before the manifest paths are built from the slugs, so a catalogue file
+	// written under the old names still finds manifests/organisation.json.
+	//
+	// DEPRECATED: remove in vNEXT — see alias.go.
+	rawCatalog = applyRenames(rawCatalog)
 
 	catalogDir := filepath.Dir(path)
 	catalog := make([]CatalogApp, 0, len(rawCatalog))

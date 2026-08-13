@@ -6,7 +6,7 @@
  * The organisation's own reports: who is in it and what they have been doing.
  */
 
-package core
+package organisation
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func registerReports() {
 
 type userActivity struct{}
 
-func (userActivity) Key() string { return "core.user_activity" }
+func (userActivity) Key() string { return "organisation.user_activity" }
 func (userActivity) App() string { return ID }
 
 func (userActivity) Titles() map[string]string {
@@ -128,7 +128,7 @@ func (userActivity) Run(ctx context.Context, q reporting.Querier, p reporting.Pa
 
 type headcountByUnit struct{}
 
-func (headcountByUnit) Key() string { return "core.headcount_by_unit" }
+func (headcountByUnit) Key() string { return "organisation.headcount_by_unit" }
 func (headcountByUnit) App() string { return ID }
 
 func (headcountByUnit) Titles() map[string]string {

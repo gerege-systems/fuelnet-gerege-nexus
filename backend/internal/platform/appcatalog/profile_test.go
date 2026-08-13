@@ -31,7 +31,7 @@ func TestTheAppStoreProfileLoadsLikeAnyOtherCatalogue(t *testing.T) {
 	}
 
 	want := map[string]bool{
-		"io.gerege.nexus.core":              true,
+		"io.gerege.nexus.organisation":      true,
 		"io.gerege.nexus.appstore_registry": true,
 		"io.gerege.nexus.publisher_studio":  true,
 		"io.gerege.nexus.store_review":      true,
@@ -97,11 +97,11 @@ func TestBothCataloguesAgreeAboutCore(t *testing.T) {
 		return appcatalog.CatalogApp{}, false
 	}
 
-	here, ok := find(bundled, "io.gerege.nexus.core")
+	here, ok := find(bundled, "io.gerege.nexus.organisation")
 	if !ok {
 		t.Fatal("the bundled catalogue does not carry core")
 	}
-	there, ok := find(profile, "io.gerege.nexus.core")
+	there, ok := find(profile, "io.gerege.nexus.organisation")
 	if !ok {
 		t.Fatal("the App Store profile does not carry core")
 	}

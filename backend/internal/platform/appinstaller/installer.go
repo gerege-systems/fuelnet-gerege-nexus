@@ -19,27 +19,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// CoreApps are installed for every tenant and cannot be turned off.
+// DefaultApps are installed for every tenant that has never had them.
 //
-// An app is core when the platform stops making sense without it. Today that is
-// one: the organisation and the people in it, which every other module names —
-// a document prints the registration number, an approval names a department, a
-// deadline is counted in the organisation's timezone. Odoo draws the same line
-// around `base` and for the same reason.
+// "Default" and not "core": the platform is what runs underneath, and it now
+// owns everything a deployment cannot do without — sign-in, the tenant and its
+// legal profile, settings, the store itself. What is left in this list is an
+// app a new organisation almost certainly wants on day one and can remove on
+// day two. A queue kiosk has no use for an internal staff directory, and being
+// unable to say so is what stopped this platform from booting with no apps at
+// all.
+//
+// Uninstalling one is a gate, not a deletion: DisableApp leaves the
+// installation row in place, which is also what keeps EnsureDefaultApps from
+// putting back what somebody has just removed.
 //
 // It is a list in the platform rather than a flag in the manifest, because a
-// third party publishing an app that declares itself uninstallable is not a
-// thing this store should be able to express.
-var CoreApps = []string{"io.gerege.nexus.core"}
+// third party publishing an app that installs itself everywhere is not a thing
+// this store should be able to express.
+var DefaultApps = []string{"io.gerege.nexus.organisation"}
 
-// IsCoreApp reports whether an app belongs to the platform itself.
-func IsCoreApp(appID string) bool {
-	return slices.Contains(CoreApps, appID)
+// IsDefaultApp reports whether an app is installed for new tenants without
+// anybody asking. It does not mean the app is permanent — nothing is.
+func IsDefaultApp(appID string) bool {
+	return slices.Contains(DefaultApps, appID)
 }
-
-// ErrCoreApp is returned when somebody tries to remove the floor they are
-// standing on.
-var ErrCoreApp = errors.New("this app is part of the platform and cannot be disabled")
 
 // ErrAppNotFound is returned when a slug names no app in the catalogue.
 //
@@ -97,18 +100,33 @@ func (ai *AppInstaller) GetCatalog() []appcatalog.CatalogApp {
 	return ai.catalog
 }
 
+// GetAppBySlug also answers to the slug an app used to have.
+//
+// The slug is what a store URL carries — /store/apps/{slug}/install — so a
+// script or a bookmark written before a rename would otherwise get a 404 that
+// reads as "this deployment does not have that app".
+//
+// DEPRECATED: the fallback, not the method — remove in vNEXT with appcatalog's
+// rename table.
 func (ai *AppInstaller) GetAppBySlug(slug string) (appcatalog.CatalogApp, bool) {
+	current := appcatalog.ResolveAppSlug(slug)
 	for _, app := range ai.GetCatalog() {
-		if app.Slug == slug {
+		if app.Slug == current {
 			return app, true
 		}
 	}
 	return appcatalog.CatalogApp{}, false
 }
 
+// GetAppByID also answers to the id an app used to have — an installation row
+// written before the migration ran, or a manifest from a registry that has not
+// republished.
+//
+// DEPRECATED: the fallback, not the method — remove in vNEXT.
 func (ai *AppInstaller) GetAppByID(id string) (appcatalog.CatalogApp, bool) {
+	current := appcatalog.ResolveAppID(id)
 	for _, app := range ai.GetCatalog() {
-		if app.ID == id {
+		if app.ID == current {
 			return app, true
 		}
 	}
@@ -411,9 +429,6 @@ func (ai *AppInstaller) DisableApp(ctx context.Context, tenantID, appSlug, userI
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
 	}
-	if IsCoreApp(targetApp.ID) {
-		return fmt.Errorf("%w: %s", ErrCoreApp, appSlug)
-	}
 
 	now := time.Now()
 	res, err := ai.db.Exec(ctx,
@@ -563,20 +578,24 @@ func (ai *AppInstaller) GetInstallationsForTenant(ctx context.Context, tenantID 
 	return states, rows.Err()
 }
 
-// EnsureCoreApps installs the platform's own apps for every tenant missing one.
+// EnsureDefaultApps installs the platform's default apps for every tenant that
+// has no record of them.
 //
-// A tenant created before an app became core, or created by a path that installs
-// nothing — the seeder, an eID sign-in that makes a membership on the spot —
-// would otherwise have a platform with no organisation screen and no way to
-// reach one, because installing is a store action and the store is behind the
-// very app that is missing.
-func (ai *AppInstaller) EnsureCoreApps(ctx context.Context) error {
-	for _, appID := range CoreApps {
+// A tenant created by a path that installs nothing — the seeder, an eID sign-in
+// that makes a membership on the spot — would otherwise start with an empty
+// sidebar.
+//
+// The NOT EXISTS is doing two jobs, and the second one is the important one: a
+// tenant that installed the app and then removed it still has its row, with
+// enabled = FALSE, so this sweep passes it over. Without that, "uninstall"
+// would last until the next catalogue refresh.
+func (ai *AppInstaller) EnsureDefaultApps(ctx context.Context) error {
+	for _, appID := range DefaultApps {
 		app, known := ai.GetAppByID(appID)
 		if !known {
-			// A catalogue that does not carry a core app is a deployment fault,
-			// not something to install around.
-			slog.Warn("core app is missing from the catalogue", "app_id", appID)
+			// A catalogue that does not carry a default app is a deployment
+			// fault, not something to install around.
+			slog.Warn("default app is missing from the catalogue", "app_id", appID)
 			continue
 		}
 
@@ -604,11 +623,11 @@ func (ai *AppInstaller) EnsureCoreApps(ctx context.Context) error {
 		for _, tenantID := range tenants {
 			if err := ai.installOrUpgrade(ctx, tenantID, app.Slug, SystemActor); err != nil {
 				// One tenant's failure is not the sweep's.
-				slog.Error("could not install a core app for a tenant",
+				slog.Error("could not install a default app for a tenant",
 					"error", err, "app_id", appID, "tenant_id", tenantID)
 				continue
 			}
-			slog.Info("installed a core app", "app_id", appID, "tenant_id", tenantID)
+			slog.Info("installed a default app", "app_id", appID, "tenant_id", tenantID)
 		}
 	}
 	return nil

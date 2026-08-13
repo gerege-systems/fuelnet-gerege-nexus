@@ -23,7 +23,7 @@ type Node = Department & { children: Node[] };
  */
 export default function DepartmentsPage() {
   const { t } = useI18n();
-  const { allowed: canManage } = useAccess("core.manage");
+  const { allowed: canManage } = useAccess("organisation.manage");
   const [departments, setDepartments] = useState<Department[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [draft, setDraft] = useState({ code: "", name: "", parent_id: "" });

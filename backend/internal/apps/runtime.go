@@ -9,12 +9,12 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/core"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/developer_portal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/publisher_studio"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
@@ -41,10 +41,10 @@ type InstalledApps = reports.InstalledApps
 
 func Bootstrap(db *pgxpool.Pool, integrations *integration.Manager, eidMN *eidmongolia.Service,
 	sso *ssoprovider.SSOProvider, installedApps InstalledApps) Runtime {
-	// First, and not merely in order: core is what the others assume. It is the
+	// First, and not merely in order: organisation is what the others assume. It is the
 	// organisation, the people in it and how it is arranged — the module Odoo
 	// calls base and never lets you uninstall.
-	core.New(db)
+	organisation.New(db)
 	contacts.New(db)
 	products.New(db)
 	inventory.New(db, false)

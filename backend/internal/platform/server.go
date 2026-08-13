@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -412,18 +413,22 @@ func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
 		}
 	}
 
-	// A catalogue without the platform's own apps is not a catalogue this build
-	// should run on — it is one that predates it. The version check above
-	// cannot see that: it skips ids with no compiled module, and after a rename
-	// every renamed app looks exactly like a third party's, so an entire stale
-	// catalogue passes without a word.
+	// A catalogue without the platform's own default apps is not a catalogue
+	// this build should run on — it is one that predates it. The version check
+	// above cannot see that: it skips ids with no compiled module, and after a
+	// rename every renamed app looks exactly like a third party's, so an entire
+	// stale catalogue passes without a word.
 	//
 	// That is not hypothetical. A cache written before the ids were renamed was
-	// accepted whole, the core app was absent from it, no tenant got the
-	// screens, and every app in the store offered an install that failed on a
-	// foreign key. The bundled file always matches the binary, so refusing here
-	// is what reaches it.
-	for _, appID := range appinstaller.CoreApps {
+	// accepted whole, the organisation app was absent from it, no tenant got
+	// the screens, and every app in the store offered an install that failed on
+	// a foreign key. The bundled file always matches the binary, so refusing
+	// here is what reaches it.
+	//
+	// This is a staleness check, not a claim that the app is mandatory: a
+	// tenant may remove it, and that removal is a row in app_installations
+	// rather than an absence from the catalogue.
+	for _, appID := range appinstaller.DefaultApps {
 		if !present[appID] {
 			return fmt.Errorf("catalog does not carry the platform's own app %s", appID)
 		}
@@ -638,8 +643,8 @@ func (s *Server) applyCatalogToInstallations(ctx context.Context) {
 	// The platform's own apps first: a tenant without them has no organisation
 	// screen, and no way to install one — the store is behind the app that is
 	// missing.
-	if err := s.installer.EnsureCoreApps(ctx); err != nil {
-		slog.Error("catalog: could not install the core apps", "error", err)
+	if err := s.installer.EnsureDefaultApps(ctx); err != nil {
+		slog.Error("catalog: could not install the default apps", "error", err)
 	}
 
 	swept, err := s.installer.AutoUpdate(ctx)
@@ -861,6 +866,23 @@ func (s *Server) setupRoutes() {
 			// group and answering only for the caller — see profile_handlers.go.
 			pr.Get("/profile", s.handleProfile)
 			pr.Post("/profile/identities/unlink", s.handleUnlinkIdentity)
+			// What the signed-in person prefers, wherever they are. No
+			// permission: these are the caller's own settings, and a person who
+			// cannot read their own language preference has nothing to be
+			// protected from. It used to be an endpoint of the organisation
+			// app, which made a person's language something their employer
+			// could uninstall.
+			pr.Get("/profile/preferences", s.handleGetPreferences)
+			pr.Put("/profile/preferences", s.handleUpdatePreferences)
+
+			// The organisation's own legal identity. A platform route rather
+			// than an app one: the control plane, the XYP rail and the SSO
+			// consent screen all read it, and none of them has an opinion about
+			// which apps this tenant installed. Reading is open to any member —
+			// the name is on the sidebar already; writing is administrative,
+			// because these fields print on documents.
+			pr.Get("/tenant/profile", s.handleGetTenantProfile)
+			pr.With(s.requireAdmin).Put("/tenant/profile", s.handleUpdateTenantProfile)
 			// Ending the session in front of you needs no proof beyond the
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.
@@ -991,6 +1013,63 @@ func (s *Server) registerAppModuleRoutes() {
 	for _, module := range appregistry.List() {
 		module.RegisterRoutes(s.router, s.appGateMiddleware(module.ID()))
 	}
+	s.registerRenamedRouteAliases()
+}
+
+// registerRenamedRouteAliases keeps the pre-rename URLs answering for one
+// release.
+//
+// /api/v1/core was the organisation app before it was called that, and the tree
+// under it has since been split in two: the legal profile and a person's
+// preferences became platform routes, and departments and people stayed in the
+// app. A redirect rather than a second mount, because the two halves now live
+// behind different middleware and duplicating the route table would mean
+// duplicating that decision as well — and getting it wrong here is how a
+// deprecated path quietly becomes the one without the permission check.
+//
+// 308 and not 302: the method and body survive it, so a PUT stays a PUT.
+//
+// This is registered on the root router rather than inside the /api/v1 group
+// because the app modules mount there too, and a subrouter mounted at
+// /api/v1/core has to be the one thing chi routes that prefix to.
+//
+// DEPRECATED: remove in vNEXT, together with the redirects themselves.
+func (s *Server) registerRenamedRouteAliases() {
+	s.router.Route("/api/v1/core", func(cr chi.Router) {
+		// Authenticated even though the body is only a Location header. A
+		// redirect that answers a stranger tells them which paths this
+		// deployment serves, and it would be the one route on the platform that
+		// replies to no session at all.
+		cr.Use(s.authMiddleware)
+		cr.Handle("/organisation", movedTo("/api/v1/tenant/profile"))
+		cr.Handle("/me/preferences", movedTo("/api/v1/profile/preferences"))
+		for _, path := range []string{"/departments", "/people"} {
+			cr.Handle(path, movedUnder("/api/v1/core", "/api/v1/organisation"))
+			cr.Handle(path+"/*", movedUnder("/api/v1/core", "/api/v1/organisation"))
+		}
+	})
+}
+
+// movedTo redirects one exact path to another, query string included.
+func movedTo(target string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, withQuery(target, r), http.StatusPermanentRedirect)
+	}
+}
+
+// movedUnder redirects a whole subtree by swapping its prefix.
+func movedUnder(from, to string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, withQuery(to+strings.TrimPrefix(r.URL.Path, from), r),
+			http.StatusPermanentRedirect)
+	}
+}
+
+func withQuery(path string, r *http.Request) string {
+	if r.URL.RawQuery == "" {
+		return path
+	}
+	return path + "?" + r.URL.RawQuery
 }
 
 // Handlers

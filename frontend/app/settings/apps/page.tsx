@@ -281,14 +281,11 @@ export default function InstalledAppsSettingsPage() {
                           : t("app_store.action.update")}
                       </button>
                     )}
-                    {/* A core app is the floor the rest of the screens stand
-                        on, and the server refuses to disable it. Saying so is
-                        the honest control; a red button that returns 400 is
-                        not. */}
-                    {app.core ? (
-                      <span className="text-xs text-slate-500">{t("app_store.state.core")}</span>
-                    ) : (
-                      <button
+                    {/* Every app can be turned off, including the ones a new
+                        organisation starts with: the platform underneath —
+                        sign-in, the organisation's own profile, settings —
+                        is not an app and does not appear in this list. */}
+                    <button
                         onClick={() => handleToggle(app)}
                         disabled={actionLoading === app.slug}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
@@ -298,8 +295,7 @@ export default function InstalledAppsSettingsPage() {
                         }`}
                       >
                         {app.enabled ? t("app_store.action.disable") : t("app_store.action.enable")}
-                      </button>
-                    )}
+                    </button>
                   </td>
                 </tr>
               ))}

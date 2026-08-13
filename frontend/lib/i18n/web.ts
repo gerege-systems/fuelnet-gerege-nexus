@@ -11,6 +11,7 @@ export const web = {
   "web.menu.installed_apps": { mn: "Суулгасан аппууд", en: "Installed Apps" },
   "web.menu.integrations": { mn: "Интеграцууд", en: "Integrations" },
   "web.menu.settings": { mn: "Тохиргоо", en: "Settings" },
+  "web.menu.organisation": { mn: "Байгууллага", en: "Organisation" },
   "web.menu.appearance": { mn: "Харагдац", en: "Appearance" },
   "web.menu.preferences": { mn: "Тохиргоо", en: "Preferences" },
   "web.menu.ai_settings": { mn: "AI тохиргоо", en: "AI settings" },

@@ -51,7 +51,7 @@ func TestTheShippedExternalManifestIsAcceptedAsOne(t *testing.T) {
 	}
 	// And no compiled module is expected of it. This is the check that made
 	// every external app uninstallable until it learned about them.
-	if err := verifyCatalogVersions(withCoreApp(app)); err != nil {
+	if err := verifyCatalogVersions(withDefaultApp(app)); err != nil {
 		t.Fatalf("expected an external app to need no compiled module: %v", err)
 	}
 }

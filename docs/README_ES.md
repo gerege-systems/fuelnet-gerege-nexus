@@ -125,7 +125,7 @@ los microservicios.
 
 | # | Aplicación | ID | Ruta | Descripción |
 | --- | --- | --- | --- | --- |
-| 1 | Organización y personas | `io.gerege.nexus.core` | `/organisation` | La identidad legal de la organización, sus departamentos y sus personas — app base, no se puede desactivar |
+| 1 | Organización y personas | `io.gerege.nexus.organisation` | `/organisation` | Los departamentos y las personas que trabajan en ellos. Instalada por defecto para un inquilino nuevo y desinstalable; la identidad legal de la organización no es una app, sino parte de la plataforma |
 | 2 | Contactos | `io.gerege.nexus.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
 | 3 | Productos | `io.gerege.nexus.products` | `/products` | Catálogo, precios y SKU por inquilino |
 | 4 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |

@@ -127,7 +127,7 @@ from **Settings → Appearance**. See the
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation & People | `io.gerege.nexus.core` | `/organisation` | The organisation's legal identity, its departments and its people — a core app, which cannot be disabled |
+| 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Departments and the people in them. Installed by default for a new tenant and removable; the organisation's legal profile is not an app but part of the platform |
 | 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
 | 3 | Products | `io.gerege.nexus.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |

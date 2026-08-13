@@ -103,7 +103,7 @@ function currentPath(pathname:string,paths:string[]){
   return best;
 }
 
-const APP_ORDER=["io.gerege.nexus.core","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.developer_portal","io.gerege.nexus.gov_services"];
+const APP_ORDER=["io.gerege.nexus.organisation","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.developer_portal","io.gerege.nexus.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);
@@ -257,6 +257,11 @@ export default function Layout({children}:{children:React.ReactNode}){
   const platformMenus=<><MenuGroup id={PLATFORM_GROUPS.modules} title={t("web.group.modules")} closed={closedGroups.includes(PLATFORM_GROUPS.modules)} onToggle={toggleGroup}>
     <NavLink href="/apps" active={pathname==="/apps"} icon={<LayoutGrid className="w-5 h-5"/>} label={t("web.menu.app_store")}/><NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("web.menu.installed_apps")}/>
   </MenuGroup><MenuGroup id={PLATFORM_GROUPS.settings} title={t("web.group.settings")} closed={closedGroups.includes(PLATFORM_GROUPS.settings)} onToggle={toggleGroup}>
+    {/* The organisation's own legal identity. A platform screen rather than a
+        menu entry the organisation app contributes: it is read by the control
+        plane, by the state registry rail and by an SSO consent screen, so it
+        has to stay reachable on a tenant that has removed every app. */}
+    <NavLink href="/organisation" active={pathname==="/organisation"} icon={<Building2 className="w-5 h-5"/>} label={t("web.menu.organisation")}/>
     <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("web.menu.appearance")}/>
     {/* Both of these are administrator-only on the server, so they are
         hidden the way Access control already was. The pages still explain

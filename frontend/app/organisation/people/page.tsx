@@ -19,7 +19,7 @@ type Department = Awaited<ReturnType<typeof api.getDepartments>>[number];
  */
 export default function PeoplePage() {
   const { t } = useI18n();
-  const { allowed: canManage } = useAccess("core.manage");
+  const { allowed: canManage } = useAccess("organisation.manage");
   const [people, setPeople] = useState<Person[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [busy, setBusy] = useState<string | null>(null);

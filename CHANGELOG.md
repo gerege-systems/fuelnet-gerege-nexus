@@ -15,6 +15,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `core` becomes `organisation`, and stops being undeletable
+
+The first of three naming corrections made before the platform is published as
+an SDK, where a name becomes part of an import path and stops being cheap to
+change. `core` was the name of the app holding departments and people *and* the
+name of the platform underneath every app; one of the two had to give it up, and
+it is not the platform.
+
+- **`io.gerege.nexus.core` → `io.gerege.nexus.organisation`**, slug `core` →
+  `organisation`, package `internal/apps/core` → `internal/apps/organisation`.
+  Permissions `core.read` / `core.manage` → `organisation.read` /
+  `organisation.manage`, and the two reports it registers move with them
+  (`core.user_activity`, `core.headcount_by_unit`).
+- **The tenant's legal profile is no longer part of an app.** The registered
+  name, registration number, address, logo and parent organisation moved to the
+  platform (`GET/PUT /api/v1/tenant/profile`), and so did a person's own
+  preferences (`GET/PUT /api/v1/profile/preferences`). The control plane, the
+  XYP rail and the SSO consent screen all read the organisation's registered
+  name without caring which apps a tenant has, and none of that could depend on
+  a screen an administrator is able to remove.
+- **Editing the legal profile now requires the tenant administrator role**,
+  where it previously accepted `core.manage` — which the manager role also held.
+  These fields print on documents and are what a state-registry lookup is
+  checked against.
+- **The organisation app can be uninstalled.** `CoreApps` became `DefaultApps`:
+  the list still installs the app for every new tenant, but nothing on the
+  platform refuses to remove it any more, and the sweep that installs it no
+  longer puts back what somebody has taken away. Nothing imports the app and no
+  other module's foreign keys point at a department, so a deployment with no use
+  for an internal directory — a queue kiosk, a single-purpose portal — is no
+  longer made to carry one. Uninstalling closes the gate and drops no rows.
+- Migration `00055_organisation_rename.sql` moves the id, the slug, the stored
+  manifests, the permission codes, the report keys and the module kill-switch
+  flag, and has a `down`. Grants survive: `role_permissions` joins on the
+  permission id, which does not move.
+
+#### Deprecated — to be removed in the next release
+
+Each of these is marked `// DEPRECATED: remove in vNEXT` at its definition.
+
+- `io.gerege.nexus.core` as a catalogue id, and `core` as a catalogue slug.
+  A catalogue published by a registry that has not caught up is rewritten into
+  the new names as it is parsed (`appcatalog/alias.go`), and
+  `/api/v1/store/apps/core/...` still resolves.
+- `appcatalog.ResolveAppID`, `appcatalog.ResolveAppSlug` and the rename tables
+  behind them.
+- `organisation.LegacyID`.
+- The whole `/api/v1/core/*` route tree, which now answers `308` pointing at
+  `/api/v1/organisation/*`, `/api/v1/tenant/profile` and
+  `/api/v1/profile/preferences`.
+- The `core` field on the installed-apps response is gone already, since no app
+  is undeletable for it to describe.
+
 ### Added — Control Plane Catalog Management & Migration Deprecation (CP-46)
 
 - **Control Plane Catalog Endpoints** (`/cp/api/catalog/sync`, `/cp/api/catalog/status`, `/cp/api/catalog/overview`): Operators can now monitor app catalog status and trigger catalog sync on demand with step-up & audit logging.

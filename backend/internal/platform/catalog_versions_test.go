@@ -72,12 +72,12 @@ func TestAnAppWithNoCompiledModuleIsAccepted(t *testing.T) {
 		},
 	}}
 
-	if err := verifyCatalogVersions(withCoreApp(catalog...)); err != nil {
+	if err := verifyCatalogVersions(withDefaultApp(catalog...)); err != nil {
 		t.Fatalf("expected an app with no compiled module to pass; got %v", err)
 	}
 }
 
-// And the refusal itself: a catalogue with no core app is one this build must
+// And the refusal itself: a catalogue with no default app is one this build must
 // not run on, whatever else it carries.
 func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 	err := verifyCatalogVersions([]appcatalog.CatalogApp{{
@@ -85,24 +85,24 @@ func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 		Manifest: appcatalog.Manifest{ID: "mn.example.hrms", Name: "HRMS", Version: "2026.8.0"},
 	}})
 	if err == nil {
-		t.Fatal("expected a catalogue without the core app to be refused")
+		t.Fatal("expected a catalogue without the default app to be refused")
 	}
-	if !strings.Contains(err.Error(), appinstaller.CoreApps[0]) {
+	if !strings.Contains(err.Error(), appinstaller.DefaultApps[0]) {
 		t.Fatalf("the refusal should name the app it is missing; got %v", err)
 	}
 }
 
-// withCoreApp puts the platform's own app beside a fixture.
+// withDefaultApp puts the platform's own app beside a fixture.
 //
 // Every real catalogue carries it, and a catalogue without it is now refused as
 // one that predates this build — so a fixture testing anything else has to
 // carry it as well, or it is testing that refusal by accident.
-func withCoreApp(apps ...appcatalog.CatalogApp) []appcatalog.CatalogApp {
-	core := appcatalog.CatalogApp{
-		ID: appinstaller.CoreApps[0], Slug: "core", Version: "1.0.0",
+func withDefaultApp(apps ...appcatalog.CatalogApp) []appcatalog.CatalogApp {
+	defaultApp := appcatalog.CatalogApp{
+		ID: appinstaller.DefaultApps[0], Slug: "organisation", Version: "1.0.0",
 		Manifest: appcatalog.Manifest{
-			ID: appinstaller.CoreApps[0], Name: "Organisation & People", Version: "1.0.0",
+			ID: appinstaller.DefaultApps[0], Name: "Organisation & People", Version: "1.0.0",
 		},
 	}
-	return append([]appcatalog.CatalogApp{core}, apps...)
+	return append([]appcatalog.CatalogApp{defaultApp}, apps...)
 }

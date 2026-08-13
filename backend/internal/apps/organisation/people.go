@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package core
+package organisation
 
 import (
 	"encoding/json"

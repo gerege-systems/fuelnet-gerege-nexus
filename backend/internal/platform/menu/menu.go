@@ -41,9 +41,9 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		// A module with no blueprint still has screens: the ones it registers
 		// itself. Skipping it outright is how an app ships with three working
 		// pages and nothing in the sidebar pointing at them, which is exactly
-		// what happened to core — a blueprint lists the entries still to be
-		// built, so having none of those is an ordinary state, not a reason to
-		// go unlisted.
+		// what happened to the organisation app — a blueprint lists the entries
+		// still to be built, so having none of those is an ordinary state, not
+		// a reason to go unlisted.
 		bp, ok := blueprints[mod.ID()]
 		if !ok {
 			bp = blueprint{Slug: routeSlug(mod.ID())}
@@ -56,7 +56,7 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		for _, item := range mod.Menus() {
 			// The parent is the platform's to decide; the order is the
 			// module's. It used to be overwritten with 10 for every entry,
-			// which left core's three screens — organisation, departments,
+			// which left the organisation app's screens — departments and
 			// people — sorting equal and coming out in whatever order the sort
 			// happened to leave them, changing between builds.
 			item.AppID, item.AppName, item.ParentID = mod.ID(), mod.Name(), modulesID
@@ -106,7 +106,7 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 	return menus, nil
 }
 
-// routeSlug is the last segment of an app id — io.gerege.nexus.core -> core — which
+// routeSlug is the last segment of an app id — io.gerege.nexus.organisation -> organisation — which
 // is the convention every blueprint slug already follows.
 func routeSlug(appID string) string {
 	slug := appID

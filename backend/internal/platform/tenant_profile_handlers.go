@@ -2,9 +2,27 @@
  * Gerege Nexus
  * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
  * Distributed under the Apache 2.0 License.
+ *
+ * What the organisation legally is, and what the person using it prefers.
+ *
+ * Both used to live in the organisation app, and neither belonged there. An app
+ * is installed per tenant and an administrator can remove it; these two are
+ * read by things that have no opinion about which apps a tenant has:
+ *
+ *	the control plane names an organisation when it creates or suspends one;
+ *	the XYP rail proves a legal entity against its registration number;
+ *	an SSO consent screen shows whose account the caller is about to hand over;
+ *	every document and invoice prints the registered name and address.
+ *
+ * A tenant whose only installed app has been removed still has a legal name, and
+ * a person with no apps at all still has a language. So the legal profile is a
+ * property of the tenant and the preference is a property of the person, and
+ * both are served here — on the platform path, behind authentication and
+ * nothing else. What stays an app is the part that really is one: departments
+ * and the people in them (see internal/apps/organisation).
  */
 
-package core
+package platform
 
 import (
 	"encoding/json"
@@ -19,12 +37,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Organisation is what the tenant is, as opposed to what it is called.
+// TenantProfile is what the tenant is, as opposed to what it is called.
 //
 // The name on the sidebar is in `tenants`; everything here is the version a
 // document, an invoice or a government request has to carry — a legal name, a
 // registration number, an address somebody could deliver to.
-type Organisation struct {
+type TenantProfile struct {
 	TenantID           string `json:"tenant_id"`
 	Slug               string `json:"slug"`
 	Name               string `json:"name"`
@@ -51,7 +69,7 @@ type Organisation struct {
 	ParentName     string `json:"parent_name,omitempty"`
 }
 
-const organisationColumns = `SELECT t.id::text, t.slug, t.name,
+const tenantProfileColumns = `SELECT t.id::text, t.slug, t.name,
 	p.legal_name, p.registration_number, p.tax_number, p.country_code,
 	p.province, p.district, p.khoroo, p.address_line, p.postal_code,
 	p.phone, p.email, p.website, p.logo_url, p.timezone, p.locale, p.currency,
@@ -61,14 +79,17 @@ const organisationColumns = `SELECT t.id::text, t.slug, t.name,
 	LEFT JOIN tenants parent ON parent.id = p.parent_tenant_id
 	WHERE t.id = $1`
 
-func (m *Module) handleGetOrganisation(w http.ResponseWriter, r *http.Request) {
+// handleGetTenantProfile answers for any member of the organisation. It used to
+// require the organisation app's read permission, which every role held anyway
+// — and the name it returns is already on the sidebar of every screen.
+func (s *Server) handleGetTenantProfile(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 
-	var o Organisation
-	err := m.db.QueryRow(r.Context(), organisationColumns, tenantID).Scan(
+	var o TenantProfile
+	err := s.db.QueryRow(r.Context(), tenantProfileColumns, tenantID).Scan(
 		&o.TenantID, &o.Slug, &o.Name, &o.LegalName, &o.RegistrationNumber, &o.TaxNumber,
 		&o.CountryCode, &o.Province, &o.District, &o.Khoroo, &o.AddressLine, &o.PostalCode,
 		&o.Phone, &o.Email, &o.Website, &o.LogoURL, &o.Timezone, &o.Locale, &o.Currency,
@@ -76,14 +97,21 @@ func (m *Module) handleGetOrganisation(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// The profile row is created with the tenant and by the migration, so
 		// its absence is a broken invariant rather than a missing page.
-		slog.Error("core: could not read the organisation", "error", err, "tenant_id", tenantID)
+		slog.Error("tenant: could not read the profile", "error", err, "tenant_id", tenantID)
 		httpx.Error(w, http.StatusInternalServerError, "could not load the organisation")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, o)
 }
 
-func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request) {
+// handleUpdateTenantProfile is mounted behind requireAdmin.
+//
+// It was behind the organisation app's manage permission, which the manager role
+// also held. Tightening it to the tenant administrator is deliberate: the fields
+// here are the organisation's legal identity, they print on documents and they
+// are what the XYP rail checks a registration number against, and this is now a
+// platform setting rather than a screen inside an app somebody chose to install.
+func (s *Server) handleUpdateTenantProfile(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -124,14 +152,14 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 	// transaction that has already changed the profile.
 	var parent *string
 	if body.ParentTenantID != nil {
-		resolved, ok := m.resolveParent(w, r, tenantID, strings.TrimSpace(*body.ParentTenantID))
+		resolved, ok := s.resolveParentTenant(w, r, tenantID, strings.TrimSpace(*body.ParentTenantID))
 		if !ok {
 			return
 		}
 		parent = resolved
 	}
 
-	tx, err := m.db.Begin(r.Context())
+	tx, err := s.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 		return
@@ -145,7 +173,7 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		}
 		if _, err := tx.Exec(r.Context(),
 			`UPDATE tenants SET name = $1 WHERE id = $2`, strings.TrimSpace(*body.Name), tenantID); err != nil {
-			slog.Error("core: could not rename the organisation", "error", err, "tenant_id", tenantID)
+			slog.Error("tenant: could not rename the organisation", "error", err, "tenant_id", tenantID)
 			httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 			return
 		}
@@ -155,7 +183,7 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		if _, err := tx.Exec(r.Context(),
 			`UPDATE tenant_profiles SET parent_tenant_id = $2::uuid, updated_at = NOW()
 			 WHERE tenant_id = $1`, tenantID, parent); err != nil {
-			slog.Error("core: could not set the parent organisation", "error", err, "tenant_id", tenantID)
+			slog.Error("tenant: could not set the parent organisation", "error", err, "tenant_id", tenantID)
 			httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 			return
 		}
@@ -185,7 +213,7 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		body.Province, body.District, body.Khoroo, body.AddressLine, body.PostalCode,
 		body.Phone, body.Email, body.Website, body.LogoURL, body.Timezone, body.Locale,
 		body.Currency); err != nil {
-		slog.Error("core: could not save the organisation", "error", err, "tenant_id", tenantID)
+		slog.Error("tenant: could not save the profile", "error", err, "tenant_id", tenantID)
 		httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 		return
 	}
@@ -194,10 +222,10 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 		httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 		return
 	}
-	m.handleGetOrganisation(w, r)
+	s.handleGetTenantProfile(w, r)
 }
 
-// resolveParent decides whether this organisation may be recorded as a
+// resolveParentTenant decides whether this organisation may be recorded as a
 // subsidiary of the one named, and answers the caller itself when it may not.
 //
 // Three refusals, and each is a different kind of wrong:
@@ -214,7 +242,7 @@ func (m *Module) handleUpdateOrganisation(w http.ResponseWriter, r *http.Request
 //	  print on documents. Membership of the parent is the smallest honest
 //	  proof of a relationship this platform can check, and it is the same
 //	  proof the tenant switcher already trusts.
-func (m *Module) resolveParent(w http.ResponseWriter, r *http.Request, tenantID, parentID string) (*string, bool) {
+func (s *Server) resolveParentTenant(w http.ResponseWriter, r *http.Request, tenantID, parentID string) (*string, bool) {
 	if parentID == "" {
 		return nil, true // "no parent" is a value, not an omission
 	}
@@ -235,11 +263,11 @@ func (m *Module) resolveParent(w http.ResponseWriter, r *http.Request, tenantID,
 	ctx := tenant.Without(r.Context())
 
 	var member bool
-	if err := m.db.QueryRow(ctx,
+	if err := s.db.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM memberships
 		                 WHERE tenant_id = $1::uuid AND user_id = $2 AND active)`,
 		parentID, claims.UserID).Scan(&member); err != nil {
-		slog.Error("core: could not check the parent organisation", "error", err, "parent", parentID)
+		slog.Error("tenant: could not check the parent organisation", "error", err, "parent", parentID)
 		httpx.Error(w, http.StatusInternalServerError, "could not check that organisation")
 		return nil, false
 	}
@@ -263,13 +291,13 @@ func (m *Module) resolveParent(w http.ResponseWriter, r *http.Request, tenantID,
 			return nil, false
 		}
 		var next string
-		if err := m.db.QueryRow(ctx,
+		if err := s.db.QueryRow(ctx,
 			`SELECT COALESCE(parent_tenant_id::text, '') FROM tenant_profiles WHERE tenant_id = $1::uuid`,
 			cursor).Scan(&next); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				break
 			}
-			slog.Error("core: could not walk the organisation chain", "error", err, "at", cursor)
+			slog.Error("tenant: could not walk the organisation chain", "error", err, "at", cursor)
 			httpx.Error(w, http.StatusInternalServerError, "could not check that organisation")
 			return nil, false
 		}
@@ -294,7 +322,7 @@ type Preferences struct {
 	OrganisationTimezone string `json:"organisation_timezone"`
 }
 
-func (m *Module) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -306,20 +334,20 @@ func (m *Module) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var p Preferences
-	if err := m.db.QueryRow(r.Context(),
+	if err := s.db.QueryRow(r.Context(),
 		`SELECT u.name, u.email, u.phone, u.locale, u.timezone, tp.locale, tp.timezone
 		   FROM users u, tenant_profiles tp
 		  WHERE u.id = $1 AND tp.tenant_id = $2`, claims.UserID, tenantID).
 		Scan(&p.Name, &p.Email, &p.Phone, &p.Locale, &p.Timezone,
 			&p.OrganisationLocale, &p.OrganisationTimezone); err != nil {
-		slog.Error("core: could not read preferences", "error", err, "user_id", claims.UserID)
+		slog.Error("tenant: could not read preferences", "error", err, "user_id", claims.UserID)
 		httpx.Error(w, http.StatusInternalServerError, "could not load your preferences")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, p)
 }
 
-func (m *Module) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
@@ -343,7 +371,7 @@ func (m *Module) handleUpdatePreferences(w http.ResponseWriter, r *http.Request)
 	// The email is deliberately not editable here. It is the login and the
 	// address a verification link goes to, so changing it is a proof-of-address
 	// flow rather than a text field — see emailverify.
-	if _, err := m.db.Exec(r.Context(),
+	if _, err := s.db.Exec(r.Context(),
 		`UPDATE users SET
 		     name     = COALESCE($2, name),
 		     phone    = COALESCE($3, phone),
@@ -351,9 +379,9 @@ func (m *Module) handleUpdatePreferences(w http.ResponseWriter, r *http.Request)
 		     timezone = COALESCE($5, timezone)
 		 WHERE id = $1`,
 		claims.UserID, body.Name, body.Phone, body.Locale, body.Timezone); err != nil {
-		slog.Error("core: could not save preferences", "error", err, "user_id", claims.UserID)
+		slog.Error("tenant: could not save preferences", "error", err, "user_id", claims.UserID)
 		httpx.Error(w, http.StatusInternalServerError, "could not save your preferences")
 		return
 	}
-	m.handleGetPreferences(w, r)
+	s.handleGetPreferences(w, r)
 }

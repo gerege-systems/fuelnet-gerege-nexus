@@ -127,7 +127,7 @@ d'exploitation des microservices.
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation et personnes | `io.gerege.nexus.core` | `/organisation` | L'identité légale de l'organisation, ses départements et ses collaborateurs — application socle, non désactivable |
+| 1 | Organisation et personnes | `io.gerege.nexus.organisation` | `/organisation` | Les départements et les personnes qui y travaillent. Installée par défaut pour un nouveau locataire et désinstallable ; l'identité légale de l'organisation n'est pas une application mais une partie de la plateforme |
 | 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Répertoire clients et fournisseurs avec préremplissage XYP |
 | 3 | Produits | `io.gerege.nexus.products` | `/products` | Catalogue, tarifs et SKU par locataire |
 | 4 | Stocks | `io.gerege.nexus.inventory` | `/inventory` | Entrepôts, niveaux de stock, journal des mouvements |

@@ -154,7 +154,7 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 | # | Апп | ID | Зам | Тайлбар |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation & People | `io.gerege.nexus.core` | `/organisation` | Байгууллагын хуулийн мэдээлэл, хэлтэс нэгж, ажилтнууд — платформын үндсэн апп, устгах боломжгүй |
+| 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Хэлтэс нэгж, ажилтнуудын бүртгэл. Шинэ тенантад default-оор суух ч устгаж болно; байгууллагын хуулийн профайл нь апп биш, платформын хэсэг |
 | 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
 | 3 | Products | `io.gerege.nexus.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |

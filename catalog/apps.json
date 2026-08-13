@@ -1,10 +1,10 @@
 [
   {
-    "id": "io.gerege.nexus.core",
-    "slug": "core",
+    "id": "io.gerege.nexus.organisation",
+    "slug": "organisation",
     "name": "Organisation & People",
     "description": "The organisation itself: its legal identity, its departments, and the people who work in it.",
-    "icon_url": "/icons/core.png",
+    "icon_url": "/icons/organisation.png",
     "category": "Platform",
     "visibility": "public",
     "version": "1.0.0",

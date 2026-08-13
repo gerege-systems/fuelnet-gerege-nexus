@@ -112,7 +112,7 @@
 
 | # | 应用 | ID | 路由 | 说明 |
 | --- | --- | --- | --- | --- |
-| 1 | 组织与人员 | `io.gerege.nexus.core` | `/organisation` | 组织的法律信息、部门结构与人员名录 — 平台核心应用，无法停用 |
+| 1 | 组织与人员 | `io.gerege.nexus.organisation` | `/organisation` | 部门结构与人员名录。新租户默认安装，可以卸载；组织的法律信息不是应用，而是平台的一部分 |
 | 2 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | 客户与供应商目录，支持 XYP 自动填充 |
 | 3 | Products | `io.gerege.nexus.products` | `/products` | 商品目录、定价与租户级 SKU |
 | 4 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | 仓库、库存与出入库流水 |

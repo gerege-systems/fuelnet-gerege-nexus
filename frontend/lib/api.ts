@@ -677,12 +677,12 @@ export const api = {
       // The organisation this one is a subsidiary of. A branch or an office is
       // a department; this is another legal entity, and so another tenant.
       parent_tenant_id?: string; parent_name?: string;
-    }>("/core/organisation"),
+    }>("/tenant/profile"),
 
   // Partial by design: a form that sends the fields it changed must not blank
   // the ones it did not mention.
   updateOrganisation: (patch: Record<string, string>) =>
-    fetcher("/core/organisation", { method: "PUT", body: JSON.stringify(patch) }),
+    fetcher("/tenant/profile", { method: "PUT", body: JSON.stringify(patch) }),
 
   getDepartments: () =>
     fetcher<Array<{
@@ -690,26 +690,26 @@ export const api = {
       manager_membership_id?: string; manager_name?: string;
       active: boolean; people_count: number;
       tenant_id: string; tenant_name: string;
-    }>>("/core/departments"),
+    }>>("/organisation/departments"),
 
   createDepartment: (body: { code: string; name: string; parent_id?: string; manager_membership_id?: string }) =>
-    fetcher<{ id: string }>("/core/departments", { method: "POST", body: JSON.stringify(body) }),
+    fetcher<{ id: string }>("/organisation/departments", { method: "POST", body: JSON.stringify(body) }),
 
   updateDepartment: (id: string, body: { name: string; parent_id?: string; manager_membership_id?: string }) =>
-    fetcher(`/core/departments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    fetcher(`/organisation/departments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 
   // Archiving keeps the row, because people and documents point at it.
   archiveDepartment: (id: string) =>
-    fetcher(`/core/departments/${id}/archive`, { method: "POST" }),
+    fetcher(`/organisation/departments/${id}/archive`, { method: "POST" }),
 
   // Deleting removes it, and the server refuses the moment anything does point
   // at it — this is for the unit created by mistake, not the one that was used.
-  deleteDepartment: (id: string) => fetcher(`/core/departments/${id}`, { method: "DELETE" }),
+  deleteDepartment: (id: string) => fetcher(`/organisation/departments/${id}`, { method: "DELETE" }),
 
   // The other half of archiving. It is reversible by design, so the screen that
   // lists what it archived can put one back.
   restoreDepartment: (id: string) =>
-    fetcher(`/core/departments/${id}/restore`, { method: "POST" }),
+    fetcher(`/organisation/departments/${id}/restore`, { method: "POST" }),
 
   getPeople: () =>
     fetcher<Array<{
@@ -721,22 +721,22 @@ export const api = {
       // organisation the session is reading across, so a row can belong to one
       // other than the one being acted in.
       tenant_id: string; tenant_name: string;
-    }>>("/core/people"),
+    }>>("/organisation/people"),
 
   updatePerson: (id: string, body: { job_title?: string; department_id?: string }) =>
-    fetcher(`/core/people/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    fetcher(`/organisation/people/${id}`, { method: "PUT", body: JSON.stringify(body) }),
 
   setPersonActive: (id: string, active: boolean) =>
-    fetcher(`/core/people/${id}/${active ? "reactivate" : "deactivate"}`, { method: "POST" }),
+    fetcher(`/organisation/people/${id}/${active ? "reactivate" : "deactivate"}`, { method: "POST" }),
 
   getPreferences: () =>
     fetcher<{
       name: string; email: string; phone: string; locale: string; timezone: string;
       organisation_locale: string; organisation_timezone: string;
-    }>("/core/me/preferences"),
+    }>("/profile/preferences"),
 
   updatePreferences: (patch: { name?: string; phone?: string; locale?: string; timezone?: string }) =>
-    fetcher("/core/me/preferences", { method: "PUT", body: JSON.stringify(patch) }),
+    fetcher("/profile/preferences", { method: "PUT", body: JSON.stringify(patch) }),
 
   // Contacts App
   getContacts: () =>

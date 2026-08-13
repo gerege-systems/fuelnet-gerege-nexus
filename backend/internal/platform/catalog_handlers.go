@@ -206,10 +206,6 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		// button to press — see appinstaller.AutoUpdate.
 		HeldFor    []string `json:"held_for,omitempty"`
 		HeldReason string   `json:"held_reason,omitempty"`
-		// Core says this app is part of the platform. It is sent so the screen
-		// can say so, rather than offering a Disable button whose only outcome
-		// is the refusal in DisableApp.
-		Core bool `json:"core"`
 	}
 
 	locale := config.LocaleFromRequest(r)
@@ -231,7 +227,6 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		// Documents & Signatures" here and "Баримт ба цахим гарын үсэг" in the menu
 		// beside it — the same app under two names, which reads as an app that is
 		// installed and yet missing from the menu.
-		item.Core = appinstaller.IsCoreApp(item.AppID)
 		if catalogApp, ok := s.installer.GetAppBySlug(item.Slug); ok {
 			if localized := catalogApp.Localized(locale).Name; localized != "" {
 				item.Name = localized
@@ -486,13 +481,6 @@ func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.DisableApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		if errors.Is(err, appinstaller.ErrCoreApp) {
-			// 409 rather than 403: the caller is an administrator and has every
-			// right to ask — it is the app that cannot be turned off.
-			httpx.Error(w, http.StatusConflict,
-				"this app is part of the platform and cannot be disabled")
-			return
-		}
 		if errors.Is(err, appinstaller.ErrAppNotFound) {
 			httpx.Error(w, http.StatusNotFound, "app not found")
 			return

@@ -370,6 +370,13 @@ func (p *Provider) parseSigned(body []byte) ([]CatalogApp, error) {
 	if err := json.Unmarshal(doc.Apps, &apps); err != nil {
 		return nil, fmt.Errorf("unmarshal catalog apps: %w", err)
 	}
+	// Before validation, not after: a registry that has not republished since a
+	// platform app was renamed is signing a document that is correct about
+	// everything except the name, and validation is where the old name would
+	// otherwise be met as an app this build does not have.
+	//
+	// DEPRECATED: remove in vNEXT — see alias.go.
+	apps = applyRenames(apps)
 	if err := ValidateCatalog(apps, p.cfg.PlatformVersion); err != nil {
 		return nil, err
 	}
