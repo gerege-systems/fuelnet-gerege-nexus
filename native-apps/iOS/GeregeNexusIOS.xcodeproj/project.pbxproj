@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		2A3300F72A26A356BBF5DBBC /* GeregeShellKit in Frameworks */ = {isa = PBXBuildFile; productRef = A4BDE0480E7FAC5779318131 /* GeregeShellKit */; };
 		53E6A17DDC7763F1CF1555AB /* GeregeShellUI in Frameworks */ = {isa = PBXBuildFile; productRef = 8B82310018D3C4DE6B3F5E82 /* GeregeShellUI */; };
+		C893880CF22BECAF590E97CA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2CAFBBCBBBE91C8ED75F080 /* Assets.xcassets */; };
 		F2907D9410C70BB1F651EE59 /* GeregeNexusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F66D7C86AECD3C7252CDF8A /* GeregeNexusApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		6F66D7C86AECD3C7252CDF8A /* GeregeNexusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeregeNexusApp.swift; sourceTree = "<group>"; };
+		A2CAFBBCBBBE91C8ED75F080 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EC36E039FD86202797D46B02 /* iOS */ = {isa = PBXFileReference; lastKnownFileType = folder; name = iOS; path = .; sourceTree = SOURCE_ROOT; };
 		F13B18EE3117D5EFC3F7FF2F /* GeregeNexusIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GeregeNexusIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -34,6 +36,7 @@
 		01D0D03451DBDD72D7326AD2 = {
 			isa = PBXGroup;
 			children = (
+				A2CAFBBCBBBE91C8ED75F080 /* Assets.xcassets */,
 				A3F6A4BC1F7AADA2F719F68A /* Examples */,
 				44884C3F40719D7543DC25F4 /* Packages */,
 				BCF6B2014BB18C5AC2816004 /* Products */,
@@ -72,6 +75,7 @@
 			buildConfigurationList = C9E92248F943F056D7A2530F /* Build configuration list for PBXNativeTarget "GeregeNexusIOS" */;
 			buildPhases = (
 				C3BC2FC6574BA0629AFA5EDA /* Sources */,
+				22B587A6C339B3FDD94D8CB5 /* Resources */,
 				9CB6E630462EFC36549CB59A /* Frameworks */,
 			);
 			buildRules = (
@@ -123,6 +127,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		22B587A6C339B3FDD94D8CB5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C893880CF22BECAF590E97CA /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C3BC2FC6574BA0629AFA5EDA /* Sources */ = {

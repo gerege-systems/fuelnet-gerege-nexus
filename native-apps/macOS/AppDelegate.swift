@@ -13,6 +13,18 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     public var mainWindowController: MainWindowController?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        // The Dock icon, set at runtime.
+        //
+        // build.sh emits a bare executable rather than an .app, and a bare
+        // executable has no Info.plist for the Dock to read an icon out of —
+        // it gets the blank generic tile. Assigning the image here is the only
+        // thing that reaches the product this build actually ships. The .app
+        // built from the Xcode project takes its icon the ordinary way, from
+        // AppIcon.icns named in Info.plist.
+        if let mark = brandMark() {
+            NSApplication.shared.applicationIconImage = mark
+        }
+
         setupNativeMenuBar()
 
         mainWindowController = MainWindowController()
