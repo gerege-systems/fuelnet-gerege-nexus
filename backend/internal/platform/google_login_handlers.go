@@ -24,6 +24,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
@@ -133,8 +134,19 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var refusal signInError
 		if errors.As(err, &refusal) {
-			slog.Info("refused a verified Google identity", "reason", refusal.Error())
-			s.failGoogle(w, r, "no_account")
+			// Not a refusal any more. Google has said which Google account this
+			// is; it cannot say who the person is, and that is what this
+			// platform's accounts are held by. So the identity is parked and
+			// they are asked to prove themselves once with eID — see
+			// identity_binding.go.
+			token, bindErr := s.startIdentityBinding(r.Context(), s.googleLogin.Config().Issuer, identity)
+			if bindErr != nil {
+				slog.Error("could not start an identity binding", "error", bindErr)
+				s.failGoogle(w, r, "no_account")
+				return
+			}
+			slog.Info("a first Google sign-in is waiting on eID", "email", identity.Email)
+			http.Redirect(w, r, config.WebOrigin()+"/login/bind?b="+url.QueryEscape(token), http.StatusFound)
 			return
 		}
 		slog.Error("could not link a verified Google identity to an account", "error", err)

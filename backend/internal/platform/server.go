@@ -370,6 +370,20 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	s.eidMN.StartHousekeeping(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
+	// Abandoned identity bindings hold verified claims about somebody, so they
+	// do not get to sit in the table after they stop being redeemable.
+	async.Go("identity-binding-sweep", func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		for {
+			s.sweepExpiredBindings(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	})
 	// Abandoned connect attempts and the delivery log are the two integration
 	// tables that only ever grow.
 	s.integrationMgr.StartHousekeeping(ctx)
@@ -637,6 +651,17 @@ func (s *Server) setupRoutes() {
 		// pair above and public for the same reasons.
 		api.Get("/auth/google/start", s.handleGoogleStart)
 		api.Get("/auth/google/callback", s.handleGoogleCallback)
+
+		// Completing a first sign-in from an external provider by proving a
+		// national identity. Unauthenticated for the same reason the rest of
+		// this group is — nobody is signed in yet — and the binding token in
+		// the request is the authority. The eID pair is budgeted like the
+		// ordinary eID pair: starting pushes a notification at somebody's
+		// phone, polling waits for them to reach it.
+		api.Get("/auth/bind/session", s.handleBindingSession)
+		api.Post("/auth/bind/consent", s.handleBindingConsent)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/bind/eid/start", s.handleBindingEIDStart)
+		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/bind/eid/poll", s.handleBindingEIDPoll)
 		api.Get("/auth/sso/start", s.handleSSOStart)
 		api.Get("/auth/sso/callback", s.handleSSOCallback)
 		// Device enrollment is the bootstrap: the one-time code is its authority,

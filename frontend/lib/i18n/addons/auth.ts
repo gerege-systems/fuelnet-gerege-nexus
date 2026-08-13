@@ -108,6 +108,29 @@ export const auth = {
     mn: "Энэ и-мэйлийн домэйнд нэвтрэх эрх нээгээгүй байна.",
     en: "Sign-in is not open to that email domain.",
   },
+  // Гадны провайдераар анх ирсэн хүнийг eID-ээр баталгаажуулах урсгал.
+  "auth.bind.title": { mn: "Бүртгэл үүсгэх", en: "Set up your account" },
+  "auth.bind.subtitle": {
+    mn: "{provider}-ээр таныг баталгаажууллаа. Үлдсэн нэг алхам.",
+    en: "{provider} has confirmed you. One step remains.",
+  },
+  "auth.bind.from_provider": { mn: "{provider}-ээс ирсэн", en: "From {provider}" },
+  "auth.bind.from_eid": { mn: "eID Mongolia-гаас авах", en: "From eID Mongolia" },
+  "auth.bind.consent_body": {
+    mn: "Эдгээр мэдээллийг Gerege Nexus-д хадгалж, таны профайл дээр харуулна. Хэн болохыг тань eID баталгаажуулна — энэ нь зөвхөн нэг удаа.",
+    en: "This is stored in Gerege Nexus and shown on your profile. eID confirms who you are — once only.",
+  },
+  "auth.bind.agree": { mn: "Зөвшөөрч, үргэлжлүүлэх", en: "Agree and continue" },
+  "auth.bind.verify_title": { mn: "eID-ээр баталгаажуулах", en: "Confirm with eID" },
+  "auth.bind.verify_lede": {
+    mn: "Регистрийн дугаараа оруулах эсвэл QR уншуулна уу. Дараагийн удаад шууд нэвтэрнэ.",
+    en: "Enter your registration number or scan the QR. Next time you will go straight in.",
+  },
+  "auth.bind.expired": {
+    mn: "Энэ хүсэлтийн хугацаа дууссан байна. Дахин нэвтэрнэ үү.",
+    en: "That attempt has expired. Please sign in again.",
+  },
+
   "auth.sso.error_no_account": {
     mn: "Таныг баталгаажууллаа, гэхдээ энэ систем дээр танд бүртгэл алга. Байгууллагынхаа админд хандана уу.",
     en: "You are verified, but this deployment has no account for you. Ask your administrator.",
