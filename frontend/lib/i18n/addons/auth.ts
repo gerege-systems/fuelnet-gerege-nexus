@@ -108,6 +108,24 @@ export const auth = {
     mn: "Энэ и-мэйлийн домэйнд нэвтрэх эрх нээгээгүй байна.",
     en: "Sign-in is not open to that email domain.",
   },
+  // Хувийн профайл.
+  "profile.loading": { mn: "Ачаалж байна…", en: "Loading…" },
+  "profile.stat.organisations": { mn: "Байгууллага", en: "Organisations" },
+  "profile.stat.identities": { mn: "Таних тэмдэг", en: "Identities" },
+  "profile.stat.sessions": { mn: "Нээлттэй session", en: "Open sessions" },
+  "profile.stat.since": { mn: "Бүртгүүлсэн", en: "Member since" },
+  "profile.identities": { mn: "Таны таних тэмдгүүд", en: "Your identities" },
+  "profile.identities_lede": {
+    mn: "Эдгээрээр та энэ платформд нэвтэрдэг. Провайдер бүрийн юу хэлснийг доор нь харж болно.",
+    en: "These are how you sign in here. What each provider said is below it.",
+  },
+  "profile.linked_at": { mn: "Холбогдсон", en: "Linked" },
+  "profile.last_seen": { mn: "Сүүлд", en: "Last used" },
+  "profile.show_claims": { mn: "{count} мэдээллийг харах", en: "Show {count} fields" },
+  "profile.hide_claims": { mn: "Нуух", en: "Hide" },
+  "profile.no_identities": { mn: "Холбогдсон таних тэмдэг алга.", en: "No identities are linked yet." },
+  "profile.organisations": { mn: "Харьяалагдах байгууллага", en: "Your organisations" },
+
   // Гадны провайдераар анх ирсэн хүнийг eID-ээр баталгаажуулах урсгал.
   "auth.bind.title": { mn: "Бүртгэл үүсгэх", en: "Set up your account" },
   "auth.bind.subtitle": {

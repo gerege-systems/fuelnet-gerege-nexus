@@ -375,6 +375,21 @@ export const api = {
   // its own, and returns the person to this deployment afterwards.
   logout: () => fetcher<{ status: string; end_session_url?: string }>("/auth/logout", { method: "POST" }),
 
+  // The caller's own record. There is no id parameter: the session decides
+  // whose profile is read, so this cannot be pointed at somebody else.
+  profile: () =>
+    fetcher<{
+      id: string; name: string; email: string; created_at: string; is_admin: boolean;
+      organisations: Array<{ id: string; name: string; slug: string }>;
+      identities: Array<{
+        kind: string; provider: string; subject: string;
+        email?: string; name?: string; surname?: string;
+        linked_at: string; last_seen_at: string;
+        claims?: Record<string, unknown>;
+      }>;
+      active_sessions: number;
+    }>("/profile"),
+
   // A first sign-in from an external provider, waiting on eID. The binding
   // token names it; nobody is signed in yet, so it is the whole authority.
   bindingSession: (binding: string) =>
