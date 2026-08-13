@@ -42,6 +42,10 @@ type NewOperator struct {
 	Name     string
 	Role     Role
 	Password string
+	// BreakGlass marks this as the emergency account (§2.4): the one whose
+	// password lives in a safe and whose use pages everybody. It grants
+	// nothing extra — see migration 00054.
+	BreakGlass bool
 }
 
 // Enrolment is what the person has to put into their authenticator. It is
@@ -100,9 +104,9 @@ func CreateOperator(ctx context.Context, db *pgxpool.Pool, params NewOperator) (
 
 	operator := Operator{Email: email, Name: name, Role: params.Role}
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO operator_accounts (email, name, role, password_hash, totp_secret)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING id::text`,
-		email, name, string(params.Role), hash, secret).Scan(&operator.ID); err != nil {
+		`INSERT INTO operator_accounts (email, name, role, password_hash, totp_secret, break_glass)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id::text`,
+		email, name, string(params.Role), hash, secret, params.BreakGlass).Scan(&operator.ID); err != nil {
 		return Operator{}, Enrolment{}, fmt.Errorf("create the operator: %w", err)
 	}
 

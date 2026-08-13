@@ -111,7 +111,10 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
             <hr/>
             <button className="admin-disclosure" onClick={()=>setAdmin(v=>!v)}><Lock/> {t("auth.action.admin_disclosure")} <ChevronDown className={admin?"rotate-180":""}/></button>
             {admin&&<form className="admin-login" onSubmit={passwordLogin}>{error&&<p>{error}</p>}<label><Mail/> <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label><Lock/> <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button>{t("auth.action.admin_sign_in")}</button></form>}
-            <a className="signin-footer__help" href="/"><HelpCircle size={15}/> {t("auth.signin.help")}</a>
+            {/* Link rather than an anchor: this points at a page of this
+                application, and a full page load here throws away the sign-in
+                state the screen is holding. */}
+            <Link className="signin-footer__help" href="/"><HelpCircle size={15}/> {t("auth.signin.help")}</Link>
           </div>
         </>}
       </div>

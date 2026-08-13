@@ -43,6 +43,22 @@ groups:
             шинж — сэрээх шалтгаан нь энэ.
           runbook: "docs/RUNBOOKS.md#nexuscontrolplanelockout"
 
+      - alert: NexusBreakGlassUsed
+        # Ердийн үед хэзээ ч дуугардаггүй дохио. Дуугарвал энэ нь "хэн нэгэн
+        # сейфэн доторх нууц үгээр консол руу орлоо" гэсэн үг — төлөвлөсөн ч
+        # бай, үгүй ч бай бүх оператор мэдэх ёстой.
+        expr: increase(cp_login_attempts_total{result="break_glass"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: "Break-glass бүртгэлээр консол руу нэвтэрлээ"
+          description: >-
+            Онцгой байдлын операторын бүртгэл ашиглагдав. Хэрэв энэ нь
+            төлөвлөгөөт биш бол платформын хамгийн эрхтэй интерфэйс рүү
+            зөвшөөрөлгүй хандалт болсон гэж үзэж ажиллана уу.
+          runbook: "docs/RUNBOOKS.md#nexusbreakglassused"
+
       - alert: NexusControlPlaneUnrecordedWrite
         # RequireAudit нь audit-гүй бичилтийн хариуг барьж, 500 буцаадаг. Тэр
         # нь ажиллав гэдэг нь консолын код дотор Do-г тойрсон handler байна

@@ -15,6 +15,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — The break-glass account, and the storage limit that refuses
+
+The last two things the design document asked for and the phases had not
+delivered.
+
+- **Break-glass** (§2.4 of the plan): one emergency operator account whose
+  password lives in a safe. It grants nothing extra — the same password and the
+  same authenticator as everybody — and the whole of it is what happens when it
+  is used: an ERROR log line naming who and from where, a metric of its own, a
+  `severity: page` alert on that metric, and its own action in the operator
+  audit. A locked door with an alarm on it rather than a hidden one. The
+  database permits exactly one such account, because the second one becomes
+  somebody's ordinary login and the alarm starts crying wolf.
+- **The storage limit now refuses.** CP-2 recorded it and CP-5 measured it;
+  this is the check, at the one place on the platform where a file of any size
+  is kept. It compares against the last nightly measurement rather than summing
+  every blob on each upload — a storage quota is a commercial boundary, and the
+  disk alert is what protects the platform.
+- The metering query for storage now sums `esign_documents.byte_size`, a column
+  the upload already writes, rather than measuring the blobs themselves.
+
 ### Added — Counting what each organisation used, from the database rather than from the metrics
 
 CP-5, the last phase of the control plane. `usage_events` holds one row per

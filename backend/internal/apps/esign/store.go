@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/quota"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -98,6 +99,15 @@ func (s *store) getDocument(ctx context.Context, tenantID, id string) (*Document
 }
 
 func (s *store) createDocument(ctx context.Context, tenantID, uploadedBy, title, fileName, checksum string, pageCount uint, pdf []byte) (*Document, error) {
+	// The organisation's storage limit, where one is set and enforced. This is
+	// the only place on the platform where a file of any size is kept, so it is
+	// the only place the check belongs — and it is a check rather than a
+	// cleanup because refusing an upload is recoverable and deleting one is
+	// not.
+	if err := quota.Storage(ctx, s.db, tenantID, int64(len(pdf))); err != nil {
+		return nil, badRequest("storage_limit_reached",
+			"Байгууллагын хадгалалтын хязгаар дүүрсэн байна: "+err.Error())
+	}
 	// uploadedBy is nullable: a document can be created by a service token
 	// that has no user row behind it.
 	var uploader *string

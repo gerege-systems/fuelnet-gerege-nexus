@@ -29,6 +29,8 @@ func main() {
 	name := flag.String("name", "", "the operator's name")
 	role := flag.String("role", string(controlplane.RoleSuperadmin),
 		"superadmin, operator, support or auditor")
+	breakGlass := flag.Bool("break-glass", false,
+		"the emergency account: its use is logged at ERROR and pages the team")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -60,10 +62,11 @@ func main() {
 	}
 
 	operator, enrolment, err := controlplane.CreateOperator(ctx, db, controlplane.NewOperator{
-		Email:    *email,
-		Name:     *name,
-		Role:     controlplane.Role(*role),
-		Password: password,
+		Email:      *email,
+		Name:       *name,
+		Role:       controlplane.Role(*role),
+		Password:   password,
+		BreakGlass: *breakGlass,
 	})
 	if errors.Is(err, controlplane.ErrOperatorExists) {
 		fail("an operator with that address already exists")
@@ -73,6 +76,11 @@ func main() {
 	}
 
 	fmt.Printf("\nOperator created: %s (%s)\n\n", operator.Email, operator.Role)
+	if *breakGlass {
+		fmt.Println("This is the BREAK-GLASS account. Put its password in the safe, not in a")
+		fmt.Println("password manager anybody uses daily: signing in with it pages the team.")
+		fmt.Println()
+	}
 	fmt.Println("Add this to an authenticator application — 1Password, Aegis, Google Authenticator:")
 	fmt.Printf("\n  secret: %s\n  uri:    %s\n\n", enrolment.Secret, enrolment.URI)
 	fmt.Println("The account cannot sign in until a code from it is confirmed below.")

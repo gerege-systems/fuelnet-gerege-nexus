@@ -794,6 +794,44 @@ docker compose -f deploy/docker-compose.monitoring.yml \
 үргэлжилсэн оролдлого бөгөөд аль хэдийн дотоод сүлжээнд байгаа хэн нэгнээс
 ирж байна.
 
+### NexusBreakGlassUsed
+
+**Юу болсон.** Онцгой байдлын (break-glass) операторын бүртгэлээр консол руу
+нэвтэрлээ. Энэ бүртгэлийн нууц үг офлайн сейфэнд байдаг бөгөөд ердийн үед
+хэзээ ч хэрэглэгддэггүй.
+
+**Эхний 5 минут.**
+
+1. **Хэн нээв?** Сейфийг хариуцагчаас утсаар асуу — мессежээр биш.
+2. Хаанаас:
+   ```bash
+   docker logs gerege_nexus_api 2>&1 | grep "BREAK GLASS"
+   ```
+   Мөр нь и-мэйл ба IP-г агуулна.
+3. Тэр session юу хийснийг:
+   ```sql
+   SELECT created_at, action, target_type, target_id, reason, ip
+     FROM operator_audit
+    WHERE operator_email = '<break-glass email>'
+    ORDER BY created_at DESC LIMIT 100;
+   ```
+
+**Засах.**
+
+- **Төлөвлөгөөт бол** (бүх superadmin-ий TOTP алдагдсан г.м.): ажил дууссаны
+  дараа нууц үгийг нь ЗААВАЛ солиж, сейфэнд шинээр хийнэ. Дараа нь энгийн
+  superadmin бүртгэлүүдийг сэргээ.
+- **Төлөвлөгөөт биш бол** — зөвшөөрөлгүй хандалт гэж үз:
+  ```sql
+  UPDATE operator_accounts SET disabled_at = NOW() WHERE break_glass;
+  UPDATE operator_sessions SET revoked_at = NOW() WHERE revoked_at IS NULL;
+  ```
+  Дараа нь `cp-allowlist.conf`-оос танихгүй хаягийг хас, nginx-ийг reload
+  хийж, `operator_audit`-ыг бүхэлд нь шалга.
+
+**Өргөжүүлэх.** Шууд, хэн нэгнийг сэрээж. Энэ бол платформын хамгийн эрхтэй
+хаалга бөгөөд дуут дохио нь зориудаар чанга.
+
 ### NexusControlPlaneUnrecordedWrite
 
 **Юу болсон.** Консолын хүсэлт 500 буцаалаа. Хамгийн магадлалтай шалтгаан нь

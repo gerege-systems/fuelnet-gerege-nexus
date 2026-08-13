@@ -50,6 +50,9 @@ type account struct {
 	totpLastStep  int64
 	locked        bool
 	disabled      bool
+	// breakGlass marks the emergency account. It grants nothing; it is the
+	// difference between a quiet sign-in and a loud one (migration 00054).
+	breakGlass bool
 }
 
 // HandleLogin signs an operator in.
@@ -125,8 +128,12 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		token     string
 		expiresAt time.Time
 	)
+	action := "operator.session.begin"
+	if acct.breakGlass {
+		action = "operator.session.break_glass"
+	}
 	err = s.do(ctx, sess, Change{
-		Action:     "operator.session.begin",
+		Action:     action,
 		TargetType: "operator",
 		TargetID:   acct.id,
 		After:      map[string]any{"role": string(acct.role)},
@@ -148,6 +155,15 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if acct.breakGlass {
+		// The whole point of the account. ERROR rather than WARN so it stands
+		// out in Loki at a glance; a metric of its own so the alert rule can
+		// page somebody; and the log line names who, from where, so the first
+		// question after the page — "was that us?" — is already answered.
+		slog.Error("BREAK GLASS: the emergency operator account was used",
+			"operator_email", acct.email, "ip", clientIPFrom(ctx))
+		observability.RecordControlPlaneLogin("break_glass")
+	}
 	observability.RecordControlPlaneLogin("success")
 	SetSessionCookie(w, token, expiresAt)
 	httpx.JSON(w, http.StatusOK, map[string]any{
@@ -164,11 +180,11 @@ func (s *Service) lookupAccount(ctx context.Context, email string) (account, boo
 		`SELECT id::text, email, name, role, password_hash, totp_secret,
 		        totp_confirmed_at IS NOT NULL, totp_last_step,
 		        (locked_until IS NOT NULL AND locked_until > NOW()),
-		        disabled_at IS NOT NULL
+		        disabled_at IS NOT NULL, break_glass
 		   FROM operator_accounts
 		  WHERE lower(email) = lower($1)`, email).
 		Scan(&acct.id, &acct.email, &acct.name, &role, &acct.passwordHash, &acct.totpSecret,
-			&acct.totpConfirmed, &acct.totpLastStep, &acct.locked, &acct.disabled)
+			&acct.totpConfirmed, &acct.totpLastStep, &acct.locked, &acct.disabled, &acct.breakGlass)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return account{}, false, nil
 	}

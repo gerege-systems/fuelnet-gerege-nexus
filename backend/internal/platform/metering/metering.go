@@ -168,18 +168,13 @@ var queries = map[string]string{
 	// what arrived that day. It is written against the day it was measured, so
 	// the series reads as "how much they were holding on the 3rd".
 	//
-	// The signed documents are where the bytes are on this platform — PDFs in
-	// BYTEA columns. octet_length is exact and cheap enough at this frequency;
-	// pg_total_relation_size would have been per table rather than per tenant.
+	// The signed documents are where the bytes are on this platform. The size
+	// is a column the upload already wrote (esign_documents.byte_size), so
+	// this is a sum over a number rather than over the blobs themselves —
+	// which matters on a table whose rows are megabytes each.
 	StorageMB: `
-		SELECT tenant_id,
-		       ceil(sum(bytes) / 1048576.0)::bigint
-		  FROM (
-		      SELECT tenant_id,
-		             octet_length(original_pdf) +
-		             COALESCE(octet_length(signed_pdf), 0) AS bytes
-		        FROM esign_documents
-		  ) AS files
+		SELECT tenant_id, ceil(sum(byte_size) / 1048576.0)::bigint
+		  FROM esign_documents
 		 GROUP BY tenant_id`,
 }
 
