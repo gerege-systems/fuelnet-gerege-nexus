@@ -693,6 +693,10 @@ func (s *Server) setupRoutes() {
 			pr.Use(s.authMiddleware)
 
 			pr.Get("/auth/me", s.handleMe)
+			// A person's own record: which identities are linked to this
+			// account and what each provider said. Inside the authenticated
+			// group and answering only for the caller — see profile_handlers.go.
+			pr.Get("/profile", s.handleProfile)
 			// Ending the session in front of you needs no proof beyond the
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.

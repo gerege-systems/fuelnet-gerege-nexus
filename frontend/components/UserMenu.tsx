@@ -1,5 +1,6 @@
 "use client";
 
+import { UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
@@ -105,6 +106,15 @@ export default function UserMenu({
           )}
 
           <div className="py-1.5 border-b border-slate-100">
+            <Link
+              href="/profile"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+              role="menuitem"
+            >
+              <UserRound className="w-4 h-4 text-slate-400" />
+              {t("profile.identities")}
+            </Link>
             <Link
               href="/settings/appearance"
               onClick={() => setOpen(false)}

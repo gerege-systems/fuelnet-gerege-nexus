@@ -1,0 +1,150 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * A person's own record of themselves.
+ *
+ * Everything here answers for the caller and only the caller. There is no id
+ * parameter anywhere in this file on purpose: the session decides whose record
+ * is read, so there is no version of these queries that can be pointed at
+ * somebody else. An administrator looking at another person belongs behind the
+ * access-control screens, which is a different question with a different
+ * answer.
+ *
+ * It is a platform screen rather than an installed app. Apps are installed per
+ * organisation and an administrator can remove one; a person's own record of
+ * which identities are linked to their account is not something their employer
+ * should be able to take away. And somebody who belongs to several
+ * organisations has one profile, not one per membership.
+ */
+
+package platform
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+)
+
+// linkedIdentity is one way the person can prove who they are.
+type linkedIdentity struct {
+	// Kind is "sso" or "eid" — which of the two tables it came from, and so
+	// which kind of thing it proves.
+	Kind string `json:"kind"`
+	// Issuer is the provider's own identifier. Provider is what to call it on
+	// screen; they differ because a URL is not a name.
+	Issuer   string    `json:"issuer"`
+	Provider string    `json:"provider"`
+	Subject  string    `json:"subject"`
+	Email    string    `json:"email,omitempty"`
+	Name     string    `json:"name,omitempty"`
+	Surname  string    `json:"surname,omitempty"`
+	LinkedAt time.Time `json:"linked_at"`
+	LastSeen time.Time `json:"last_seen_at"`
+	// Claims is what that provider actually said. It is the person's own, and
+	// this is the screen it exists for.
+	Claims map[string]any `json:"claims,omitempty"`
+}
+
+// handleProfile answers with the caller's own record.
+func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
+	claims, err := auth.UserFromContext(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	ctx := r.Context()
+
+	var name, email string
+	var createdAt time.Time
+	if err := s.db.QueryRow(ctx,
+		`SELECT name, email, created_at FROM users WHERE id = $1`, claims.UserID).
+		Scan(&name, &email, &createdAt); err != nil {
+		slog.Error("could not read a profile", "error", err, "user_id", claims.UserID)
+		httpx.Error(w, http.StatusInternalServerError, "could not load the profile")
+		return
+	}
+
+	// The organisations this person belongs to. Crosses tenants by definition,
+	// so it runs on the platform path — under the caller's own policies a
+	// membership elsewhere is not visible, and the list would be one long.
+	memberships, err := s.sessions.TenantsForUser(tenant.Without(ctx), claims.UserID)
+	if err != nil {
+		slog.Warn("could not list a person's organisations", "error", err)
+		memberships = nil
+	}
+
+	identities := s.linkedIdentities(ctx, claims.UserID)
+
+	// How many other places this account is signed in. Not the tokens — those
+	// are never readable — only that they exist, which is what somebody needs
+	// in order to decide whether to end them.
+	var activeSessions int
+	_ = s.db.QueryRow(ctx,
+		`SELECT count(*) FROM sessions
+		  WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+		claims.UserID).Scan(&activeSessions)
+
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"id":              claims.UserID,
+		"name":            name,
+		"email":           email,
+		"created_at":      createdAt,
+		"is_admin":        claims.IsAdmin,
+		"current_tenant":  claims.TenantID,
+		"organisations":   memberships,
+		"identities":      identities,
+		"active_sessions": activeSessions,
+	})
+}
+
+// linkedIdentities gathers both kinds into one list, newest link first.
+//
+// They live in two tables because they are two different things — one is a
+// national identity, the other an account at a provider — but to the person
+// they are one list of ways in, so that is how they arrive.
+func (s *Server) linkedIdentities(ctx context.Context, userID string) []linkedIdentity {
+	identities := make([]linkedIdentity, 0, 2)
+
+	rows, err := s.db.Query(ctx,
+		`SELECT issuer, subject, COALESCE(email,''), COALESCE(name,''), claims, linked_at, last_seen_at
+		   FROM user_sso_identities WHERE user_id = $1`, userID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it linkedIdentity
+			var raw []byte
+			if err := rows.Scan(&it.Issuer, &it.Subject, &it.Email, &it.Name,
+				&raw, &it.LinkedAt, &it.LastSeen); err != nil {
+				continue
+			}
+			it.Kind = "sso"
+			it.Provider = s.bindingProviderName(it.Issuer)
+			_ = json.Unmarshal(raw, &it.Claims)
+			identities = append(identities, it)
+		}
+	} else {
+		slog.Warn("could not read linked provider identities", "error", err)
+	}
+
+	var eid linkedIdentity
+	var raw []byte
+	if err := s.db.QueryRow(ctx,
+		`SELECT person_etsi, COALESCE(given_name,''), COALESCE(surname,''), claims, linked_at, last_seen_at
+		   FROM user_eid_identities WHERE user_id = $1`, userID).
+		Scan(&eid.Subject, &eid.Name, &eid.Surname, &raw, &eid.LinkedAt, &eid.LastSeen); err == nil {
+		eid.Kind = "eid"
+		eid.Provider = "eID Mongolia"
+		_ = json.Unmarshal(raw, &eid.Claims)
+		identities = append(identities, eid)
+	}
+
+	return identities
+}
