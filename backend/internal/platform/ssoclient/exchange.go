@@ -37,6 +37,13 @@ type Identity struct {
 	// IDToken is the raw token, kept so it can be presented back to the
 	// provider as an id_token_hint when this person signs out.
 	IDToken string
+
+	// Claims is everything the provider actually said, verified, before this
+	// struct picked the handful of fields a sign-in needs. It is kept because
+	// a person is entitled to see what was handed over about them, and because
+	// a provider that starts sending a new claim should not need a schema
+	// change here before anybody can see it.
+	Claims map[string]any
 }
 
 // ErrNoIDToken means the provider answered the token endpoint without one,
@@ -120,6 +127,7 @@ func (c *Client) Exchange(ctx context.Context, code, codeVerifier, nonce string)
 	}
 
 	identity := &Identity{
+		Claims:        claims,
 		Subject:       stringClaim(claims, "sub"),
 		Email:         stringClaim(claims, "email"),
 		EmailVerified: boolClaim(claims, "email_verified"),
@@ -174,6 +182,11 @@ func (c *Client) fillFromUserInfo(ctx context.Context, meta *Metadata, accessTok
 	// is that it says nothing about the person who just signed in.
 	if stringClaim(claims, "sub") != identity.Subject {
 		return
+	}
+	// Merged under a key of its own: these came from a different endpoint and
+	// flattening them together would lose which of the two said what.
+	if identity.Claims != nil {
+		identity.Claims["userinfo"] = claims
 	}
 	if identity.Email == "" {
 		identity.Email = stringClaim(claims, "email")
