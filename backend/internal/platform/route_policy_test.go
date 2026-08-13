@@ -88,6 +88,13 @@ var publicRoutes = []string{
 	// session yet, and the state cookie is what makes the callback answerable.
 	"/api/v1/auth/google/start",
 	"/api/v1/auth/google/callback",
+	// Finishing a first external sign-in with eID. No session exists yet by
+	// definition; the binding token is what carries the authority, and the
+	// account it will create does not exist until eID has answered.
+	"/api/v1/auth/bind/session",
+	"/api/v1/auth/bind/consent",
+	"/api/v1/auth/bind/eid/start",
+	"/api/v1/auth/bind/eid/poll",
 
 	// The App Store registry, when this instance is the one publishing a
 	// catalogue. Public because a catalogue is read by an instance that holds

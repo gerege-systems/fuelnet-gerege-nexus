@@ -375,6 +375,30 @@ export const api = {
   // its own, and returns the person to this deployment afterwards.
   logout: () => fetcher<{ status: string; end_session_url?: string }>("/auth/logout", { method: "POST" }),
 
+  // A first sign-in from an external provider, waiting on eID. The binding
+  // token names it; nobody is signed in yet, so it is the whole authority.
+  bindingSession: (binding: string) =>
+    fetcher<{
+      provider: string; email: string; name: string; consented: boolean;
+      claims: Record<string, unknown>; eid_claims: string[];
+    }>(`/auth/bind/session?b=${encodeURIComponent(binding)}`),
+
+  bindingConsent: (binding: string) =>
+    fetcher<{ consented: boolean }>("/auth/bind/consent", {
+      method: "POST", body: JSON.stringify({ binding }),
+    }),
+
+  bindingEIDStart: (binding: string, nationalId?: string) =>
+    fetcher<{session_id:string;device_link_url?:string;verification_code:string;expires_at?:string}>(
+      "/auth/bind/eid/start",
+      { method: "POST", body: JSON.stringify({ binding, national_id: nationalId }) },
+    ),
+
+  bindingEIDPoll: (binding: string, sessionId: string, signal?: AbortSignal) =>
+    fetcher<{state:string;expires_at?:string;bound?:boolean}>("/auth/bind/eid/poll", {
+      method: "POST", body: JSON.stringify({ binding, session_id: sessionId }), signal,
+    }),
+
   // Who is asking, for the sign-in screen to name while nobody is signed in.
   // Resolved by the server rather than read out of the URL: a name taken from a
   // query parameter is a name anybody can write, which is how a convincing

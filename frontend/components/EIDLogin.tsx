@@ -38,7 +38,7 @@ function clock(seconds:number){return `${Math.floor(seconds/60)}:${String(second
  * signin-card дээр аль хэдийн байгаа тул давхарлах нь утгагүй. Логик нь адилхан:
  * зөвхөн юу зурагдах нь өөр.
  */
-export default function EIDLogin({next="/apps",compact=false,variant="card"}:{next?:string;compact?:boolean;variant?:"card"|"signin"}){
+export default function EIDLogin({next="/apps",compact=false,variant="card",binding}:{next?:string;compact?:boolean;variant?:"card"|"signin";binding?:string}){
   const {t}=useI18n();
   const [method,setMethod]=useState<Method>("id"),[phase,setPhase]=useState<Phase>("idle"),[nationalId,setNationalId]=useState(""),[start,setStart]=useState<Start|null>(null),[error,setError]=useState(""),[left,setLeft]=useState(0);
   // Each attempt takes a ticket. Anything asynchronous compares its ticket
@@ -60,7 +60,7 @@ export default function EIDLogin({next="/apps",compact=false,variant="card"}:{ne
       const control=new AbortController();
       inflight.current=control;
       try{
-        const res=await api.pollEID(data.session_id,control.signal);
+        const res=binding?await api.bindingEIDPoll(binding,data.session_id,control.signal):await api.pollEID(data.session_id,control.signal);
         if(ticket.current!==mine)return;
         failures=0;
         if(res.state==="COMPLETE"){ticket.current++;setPhase("success");window.location.assign(next);return}
@@ -72,7 +72,7 @@ export default function EIDLogin({next="/apps",compact=false,variant="card"}:{ne
       }
       await sleep(GAP);
     }
-  },[next,stop,t]);
+  },[binding,next,stop,t]);
 
   const begin=useCallback(async(selected:Method)=>{
     stop();
@@ -80,7 +80,9 @@ export default function EIDLogin({next="/apps",compact=false,variant="card"}:{ne
     setError("");setStart(null);setPhase("starting");
     try{
       const cb=mobile()?callbackURL():"";
-      const data=selected==="qr"?await api.startEID(cb):await api.startEIDByNationalID(nationalId.trim().toUpperCase(),cb);
+      const data=binding
+        ?await api.bindingEIDStart(binding,selected==="qr"?undefined:nationalId.trim().toUpperCase())
+        :(selected==="qr"?await api.startEID(cb):await api.startEIDByNationalID(nationalId.trim().toUpperCase(),cb));
       if(ticket.current!==mine)return;
       if(selected==="qr"&&mobile())window.location.href=`geregesmartid://approve?sessionId=${encodeURIComponent(data.session_id)}`;
       void watch(data);
@@ -88,7 +90,7 @@ export default function EIDLogin({next="/apps",compact=false,variant="card"}:{ne
       if(ticket.current!==mine)return;
       setError(e?.message||t("auth.message.error_service"));setPhase("error");
     }
-  },[nationalId,stop,t,watch]);
+  },[binding,nationalId,stop,t,watch]);
 
   /* Runs down the backstop, and shows it only when eID actually gave a deadline
      to run down. A countdown the API made up is worse than none: it hurried the
