@@ -130,6 +130,25 @@ func CreateOperator(ctx context.Context, db *pgxpool.Pool, params NewOperator) (
 	return operator, Enrolment{Secret: secret, URI: uri}, nil
 }
 
+// PendingEnrolment finds an account whose authenticator was never confirmed.
+//
+// It exists because the bootstrap command's own error message promises it: an
+// interrupted enrolment leaves an account that cannot sign in and whose
+// address is taken, and "run the command again" has to mean something.
+func PendingEnrolment(ctx context.Context, db *pgxpool.Pool, email string) (string, error) {
+	var id string
+	err := db.QueryRow(ctx,
+		`SELECT id::text FROM operator_accounts
+		  WHERE lower(email) = lower($1) AND totp_confirmed_at IS NULL`, email).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errors.New("no such operator is waiting to confirm an authenticator")
+	}
+	if err != nil {
+		return "", fmt.Errorf("look for the operator: %w", err)
+	}
+	return id, nil
+}
+
 // ConfirmSecondFactor completes enrolment by checking a code the authenticator
 // has just produced.
 //

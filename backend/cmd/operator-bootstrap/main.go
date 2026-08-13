@@ -31,10 +31,12 @@ func main() {
 		"superadmin, operator, support or auditor")
 	breakGlass := flag.Bool("break-glass", false,
 		"the emergency account: its use is logged at ERROR and pages the team")
+	confirm := flag.Bool("confirm", false,
+		"only confirm the authenticator of an account whose enrolment was interrupted")
 	flag.Usage = usage
 	flag.Parse()
 
-	if *email == "" || *name == "" {
+	if *email == "" || (*name == "" && !*confirm) {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -54,6 +56,21 @@ func main() {
 	defer db.Close()
 	if err := db.Ping(ctx); err != nil {
 		fail("the database is not reachable: %v", err)
+	}
+
+	// Confirming an interrupted enrolment: the account and its secret already
+	// exist, so there is no password to ask for and nothing new to print. The
+	// person still holds the authenticator they enrolled — or they do not, in
+	// which case the row has to be removed and the command run again.
+	if *confirm {
+		id, err := controlplane.PendingEnrolment(ctx, db, *email)
+		if err != nil {
+			fail("%v", err)
+		}
+		if !confirmLoop(ctx, db, id, *email) {
+			fail("the authenticator was not confirmed")
+		}
+		return
 	}
 
 	password, err := readPassword()
@@ -85,10 +102,24 @@ func main() {
 	fmt.Printf("\n  secret: %s\n  uri:    %s\n\n", enrolment.Secret, enrolment.URI)
 	fmt.Println("The account cannot sign in until a code from it is confirmed below.")
 
-	// Looping rather than exiting on a wrong code: the alternative is an
-	// account that exists, cannot sign in, and cannot be created again because
-	// the address is taken — which is a support call on the day the console is
-	// first set up.
+	if confirmLoop(ctx, db, operator.ID, operator.Email) {
+		return
+	}
+
+	fail("the authenticator was not confirmed; the account exists but cannot sign in.\n"+
+		"Confirm it later without creating anything:\n"+
+		"  operator-bootstrap -confirm -email %s\n"+
+		"or remove the row and start over:\n"+
+		"  DELETE FROM operator_accounts WHERE lower(email) = lower('%s');",
+		operator.Email, operator.Email)
+}
+
+// confirmLoop asks for a code until one is right or three are not.
+//
+// Looping rather than exiting on a wrong code: the alternative is an account
+// that exists, cannot sign in, and cannot be created again because the address
+// is taken — a support call on the day the console is first set up.
+func confirmLoop(ctx context.Context, db *pgxpool.Pool, operatorID, email string) bool {
 	reader := bufio.NewReader(os.Stdin)
 	for attempt := 0; attempt < 3; attempt++ {
 		fmt.Print("Code from the authenticator: ")
@@ -96,18 +127,14 @@ func main() {
 		if err != nil {
 			fail("could not read the code: %v", err)
 		}
-		err = controlplane.ConfirmSecondFactor(ctx, db, operator.ID, strings.TrimSpace(code))
-		if err == nil {
-			fmt.Printf("\nDone. %s can sign in at the control plane.\n", operator.Email)
-			return
+		if err := controlplane.ConfirmSecondFactor(ctx, db, operatorID, strings.TrimSpace(code)); err == nil {
+			fmt.Printf("\nDone. %s can sign in at the control plane.\n", email)
+			return true
+		} else {
+			fmt.Fprintf(os.Stderr, "  %v\n", err)
 		}
-		fmt.Fprintf(os.Stderr, "  %v\n", err)
 	}
-
-	fail("the authenticator was not confirmed; the account exists but cannot sign in.\n"+
-		"Confirm it later by running this command again against the same address, "+
-		"or remove the row and start over:\n"+
-		"  DELETE FROM operator_accounts WHERE lower(email) = lower('%s');", operator.Email)
+	return false
 }
 
 // readPassword asks twice and never echoes.
@@ -152,6 +179,9 @@ Usage:
 
 In production, with the compose stack running:
   docker exec -it gerege_nexus_backend /app/operator-bootstrap -email ... -name "..."
+
+If the authenticator step was interrupted, finish it without creating anything:
+  docker exec -it gerege_nexus_backend /app/operator-bootstrap -confirm -email ...
 
 Roles: superadmin (everything), operator (daily work), support (people),
 auditor (read-only). See docs/CONTROL_PLANE.md.
