@@ -22,6 +22,7 @@ targets:
     platform: iOS
     sources:
       - path: Examples
+      - path: Assets.xcassets
     dependencies:
       - package: GeregeShellKit
         product: GeregeShellKit
@@ -29,6 +30,7 @@ targets:
         product: GeregeShellUI
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: mn.gerege.nexus.ios
         PRODUCT_NAME: Gerege Nexus
         CODE_SIGN_STYLE: Automatic

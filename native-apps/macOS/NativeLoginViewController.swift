@@ -485,19 +485,12 @@ private final class HeroPanel: NSView {
                                    endCenter: centre, endRadius: radius, options: [])
     }
 
-    /// The mark, loaded from beside the executable. Nil when it is not there,
-    /// which the panel treats as "draw without it" rather than as a failure.
-    static func brandMark() -> NSImage? {
-        let beside = Bundle.main.bundleURL.appendingPathComponent("brand.png")
-        return NSImage(contentsOf: beside) ?? NSImage(contentsOfFile: "brand.png")
-    }
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard subviews.isEmpty else { return }
 
         let mark = NSImageView()
-        mark.image = HeroPanel.brandMark()
+        mark.image = brandMark()
         mark.imageScaling = .scaleProportionallyUpOrDown
         mark.wantsLayer = true
         mark.layer?.cornerRadius = 22
