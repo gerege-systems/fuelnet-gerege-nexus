@@ -1,5 +1,3 @@
-import { apiBase } from "@/lib/apiBase";
-
 /**
  * Энэ суулгац апп стор мөн үү, мөн бол юу санал болгож байна вэ.
  *
@@ -37,14 +35,27 @@ export function localizedApp(app: StoreApp, locale: string): StoreApp {
 }
 
 /**
- * Нийтлэгдсэн аппуудыг татна, эсвэл энэ суулгац стор биш бол `null`.
+ * Мөн адил асуулт, гэхдээ серверийн зүгээс — хуудсыг зурахаас өмнө.
  *
- * Алдааг сурталчлахгүй: нүүр хуудас нь нэвтрээгүй зочны хардаг цорын ганц
- * дэлгэц бөгөөд стор биш суулгац дээр 404 нь алдаа биш, хариулт юм.
+ * Client талд асуувал эхний зураглал платформын хуудас, дараа нь каталог болж
+ * солигдоно: зочин буруу хуудсыг харж амжина, JS ажиллуулдаггүй хайлтын робот
+ * зөвхөн түүнийг л харна. Апп сторын хувьд сүүлийнх нь ноцтой — каталог бол
+ * хүмүүс хайж олох ёстой зүйл.
+ *
+ * Серверт origin гэж байхгүй тул хаягийг нь суулгац хэлж өгнө
+ * (`API_INTERNAL_URL`, compose-ийн дотоод сүлжээгээр). Энэ нь build-ийн
+ * тохиргоо биш ажиллуулах үеийн тохиргоо тул нэг образ бүх суулгацад
+ * үйлчилсээр байна. Тавиагүй бол хариу нь `null` — платформын хуудас, өөрөөр
+ * хэлбэл стор биш суулгацын зөв хариулт.
  */
-export async function fetchStorefront(): Promise<StoreApp[] | null> {
+export async function fetchStorefrontOnServer(): Promise<StoreApp[] | null> {
+  const base = process.env.API_INTERNAL_URL;
+  if (!base) return null;
   try {
-    const res = await fetch(`${apiBase()}/registry/apps`, { credentials: "omit" });
+    const res = await fetch(`${base.replace(/\/$/, "")}/registry/apps`, {
+      // Каталог нь нийтлэгчийн үйлдлээр өөрчлөгддөг тул минут тутам хангалттай.
+      next: { revalidate: 60 },
+    });
     if (!res.ok) return null;
     const apps = (await res.json()) as StoreApp[] | null;
     return Array.isArray(apps) && apps.length > 0 ? apps : null;
