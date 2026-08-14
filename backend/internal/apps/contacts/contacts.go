@@ -8,7 +8,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Contact struct {
@@ -24,11 +23,11 @@ type Contact struct {
 }
 
 type Module struct {
-	db *pgxpool.Pool
+	db nexus.DB
 }
 
-func New(db *pgxpool.Pool) *Module {
-	m := &Module{db: db}
+func New(p nexus.Platform) *Module {
+	m := &Module{db: p.DB()}
 	nexus.Register(m)
 	return m
 }

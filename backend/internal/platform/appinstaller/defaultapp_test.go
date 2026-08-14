@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
@@ -35,7 +38,7 @@ func newSweptTenant(t *testing.T) (*appinstaller.AppInstaller, string) {
 
 	// The module has to be registered for a module-type app to install at all;
 	// in the running server this is apps.Bootstrap.
-	organisation.New(pool)
+	organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
 
 	var tenantID string
 	if err := pool.QueryRow(ctx,

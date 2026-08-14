@@ -18,6 +18,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // scheduleLockKey is the advisory lock every replica contends for before
@@ -117,13 +118,36 @@ type dueSchedule struct {
 // replicas ticking in the same second do not both see the same row as unclaimed.
 // The lock is taken with pg_try_advisory_lock: a replica that cannot get it
 // does nothing this minute, which is correct — another one is already doing it.
+// connAcquirer is the one pool capability this file needs and nexus.DB does not
+// carry. See claimDue for why it is not on the module-facing handle.
+type connAcquirer interface {
+	Acquire(ctx context.Context) (*pgxpool.Conn, error)
+}
+
 func (s *Scheduler) claimDue(ctx context.Context, now time.Time) ([]dueSchedule, error) {
 	// The platform path: this sweep crosses every tenant deliberately, so it
 	// runs as the login role and outside the row-level policies, the way the
 	// other housekeeping sweeps do.
 	ctx = tenant.Without(ctx)
 
-	conn, err := s.engine.DB().Acquire(ctx)
+	// A pinned connection, because pg_try_advisory_lock is session-scoped: taken
+	// on one connection and released on another it would do nothing at all.
+	//
+	// Asked for by assertion rather than through nexus.DB, and deliberately.
+	// Pinning a connection out of the pool is a platform capability — this sweep
+	// crosses every tenant and holds a lock the whole deployment shares — and
+	// putting Acquire on the handle app modules are given would offer every
+	// module the ability to exhaust the pool. The reports app is where this
+	// happens to be started from; it is not the reports app's power.
+	pool, ok := s.engine.DB().(connAcquirer)
+	if !ok {
+		// Only a test double reaches this. Doing nothing is the correct sweep
+		// for a handle that cannot hold a lock: the alternative is running it
+		// unlocked on every replica at once.
+		slog.Warn("reports: the schedule sweep needs a connection pool; skipping")
+		return nil, nil
+	}
+	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("take a connection for the schedule sweep: %w", err)
 	}

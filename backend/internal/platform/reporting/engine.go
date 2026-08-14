@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // statementTimeout is the ceiling on one report's query.
@@ -41,15 +41,15 @@ const timeoutGrace = 5 * time.Second
 
 // Engine runs reports against a pool.
 type Engine struct {
-	db *pgxpool.Pool
+	db nexus.DB
 }
 
 // NewEngine builds the engine. One per process, held by the reports module.
-func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
+func NewEngine(db nexus.DB) *Engine { return &Engine{db: db} }
 
 // DB exposes the pool for the parts of the module that are not report
 // execution — schedules, grants, the option lists behind a parameter form.
-func (e *Engine) DB() *pgxpool.Pool { return e.db }
+func (e *Engine) DB() nexus.DB { return e.db }
 
 // Run executes one report in one tenant's context.
 //

@@ -15,13 +15,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // querier lets a helper run inside or outside a transaction. Both
-// *pgxpool.Pool and pgx.Tx satisfy it.
+// nexus.DB and pgx.Tx satisfy it.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
@@ -29,7 +30,7 @@ type querier interface {
 }
 
 type store struct {
-	db *pgxpool.Pool
+	db nexus.DB
 }
 
 // ─── Organisational units ────────────────────────────────────────────────────

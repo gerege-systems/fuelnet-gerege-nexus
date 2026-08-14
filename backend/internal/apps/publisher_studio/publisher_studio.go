@@ -30,7 +30,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // maxSubmission bounds a manifest. A megabyte is far more than any manifest
@@ -38,12 +37,13 @@ import (
 const maxSubmission = 1 << 20
 
 type Module struct {
-	db    *pgxpool.Pool
+	db    nexus.DB
 	store *appstore_registry.Store
 }
 
-func New(db *pgxpool.Pool) *Module {
-	m := &Module{db: db, store: appstore_registry.NewStore(db)}
+func New(p nexus.Platform) *Module {
+	db := p.DB()
+	m := &Module{db: p.DB(), store: appstore_registry.NewStore(db)}
 	nexus.Register(m)
 	return m
 }

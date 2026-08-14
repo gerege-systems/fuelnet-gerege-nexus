@@ -45,16 +45,19 @@ package invoices
 import (
     "net/http"
     "github.com/go-chi/chi/v5"
-    "github.com/jackc/pgx/v5/pgxpool"
     "github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 type Module struct {
-    db *pgxpool.Pool
+    db    nexus.DB
+    perms nexus.PermissionStore
 }
 
-func New(db *pgxpool.Pool) *Module {
-    m := &Module{db: db}
+// One argument, not one per service. The platform will lend modules more over
+// time, and a constructor that grew a parameter each time would be a signature
+// every distribution has to chase.
+func New(p nexus.Platform) *Module {
+    m := &Module{db: p.DB(), perms: p.Permissions()}
     nexus.Register(m)
     return m
 }
@@ -138,11 +141,15 @@ Email verification is one of these. Do not grow your own token table:
 
 ```go
 type Module struct {
-    db          *pgxpool.Pool
+    db          nexus.DB
     emailVerify *emailverify.Service
 }
 
-func New(db *pgxpool.Pool, emailVerify *emailverify.Service) *Module { /* … */ }
+// The platform first, then whatever this module in particular needs. Services
+// that only one or two apps use are passed like this rather than added to
+// nexus.Platform — a contract every distribution compiles against should carry
+// what every module needs, and nothing more.
+func New(p nexus.Platform, emailVerify *emailverify.Service) *Module { /* … */ }
 
 // Somewhere in a handler, with the tenant taken from the request context:
 _, err := m.emailVerify.Send(ctx, tenantID, emailverify.Request{

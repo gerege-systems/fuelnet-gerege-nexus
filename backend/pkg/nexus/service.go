@@ -245,6 +245,11 @@ type DB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Begin(ctx context.Context) (pgx.Tx, error)
+	// BeginTx is here for one option in particular: pgx.ReadOnly. A module that
+	// means "this cannot write" should be able to say so to the database rather
+	// than only to the compiler — the report engine opens every run this way,
+	// and a statement timeout needs a transaction to be SET LOCAL in anyway.
+	BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
 }
 
 // --------------------------------------------------------------- permissions
@@ -340,3 +345,22 @@ type Platform interface {
 	// Permissions answers what a person may do, for RequirePermission.
 	Permissions() PermissionStore
 }
+
+// NewPlatform assembles a Platform from its parts.
+//
+// Two callers have it: a test that builds one module without starting a server,
+// and a distribution's main.go that assembles its own runtime. Both would
+// otherwise have to declare a four-line type of their own, which is four lines
+// that stop compiling the day this interface grows a method — the exact churn
+// the single-argument constructor was meant to avoid.
+func NewPlatform(db DB, permissions PermissionStore) Platform {
+	return staticPlatform{db: db, permissions: permissions}
+}
+
+type staticPlatform struct {
+	db          DB
+	permissions PermissionStore
+}
+
+func (p staticPlatform) DB() DB                       { return p.db }
+func (p staticPlatform) Permissions() PermissionStore { return p.permissions }

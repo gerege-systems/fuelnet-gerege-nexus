@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
@@ -80,7 +82,7 @@ func newFixture(t *testing.T) *fixture {
 
 	// The module's own router, with the tenant and the caller already resolved:
 	// what is under test is the module, not the middleware in front of it.
-	module := organisation.New(pool)
+	module := organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

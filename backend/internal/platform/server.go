@@ -190,7 +190,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// the e-Government screen reports is what the platform actually holds.
 	geregeSvc, eidSvc, danSvc := gerege.NewGeregeService(), eid.NewEIDService(), dan.NewDANService()
 
-	appRuntime := apps.Bootstrap(db, integrationMgr, eidMN, ssoProvider, geregeSvc,
+	appRuntime := apps.Bootstrap(newModulePlatform(db), integrationMgr, eidMN, ssoProvider, geregeSvc,
 		// What this deployment is wired to. Read per call rather than captured
 		// as a snapshot, and assembled here because this is the only place all
 		// three clients are in scope — egov names the shape, the platform

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
@@ -86,7 +88,8 @@ func newFixture(t *testing.T) *fixture {
 	rails := func() []egov.Rail {
 		return []egov.Rail{{ID: "xyp", Name: "ХУР", Mode: "mock", Endpoint: "https://xyp.example.invalid"}}
 	}
-	module := egov.New(pool, gerege.NewGeregeService(), rails)
+	module := egov.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)),
+		gerege.NewGeregeService(), rails)
 
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
@@ -120,7 +123,9 @@ func (f *fixture) do(t *testing.T, method, target, body string) *httptest.Respon
 // any citizen by registration number, and nothing else in the suite would say
 // so.
 func TestTheRegistryLookupsAreNotHandedToEveryMember(t *testing.T) {
-	module := egov.New(nil, nil, nil)
+	// No database and no permission store: this test reads what the module
+	// declares, which it does before it is wired to anything.
+	module := egov.New(nexus.NewPlatform(nil, nil), nil, nil)
 
 	byCode := map[string]nexus.PermissionDefinition{}
 	for _, permission := range module.Permissions() {

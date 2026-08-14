@@ -43,10 +43,8 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ID is the catalogue identifier.
@@ -84,14 +82,14 @@ type Rail struct {
 type Rails func() []Rail
 
 type Module struct {
-	db    *pgxpool.Pool
+	db    nexus.DB
 	xyp   *gerege.GeregeService
 	rails Rails
 	perms nexus.PermissionStore
 }
 
-func New(db *pgxpool.Pool, xyp *gerege.GeregeService, rails Rails) *Module {
-	m := &Module{db: db, xyp: xyp, rails: rails, perms: rbac.NewSQLPermissionStore(db)}
+func New(p nexus.Platform, xyp *gerege.GeregeService, rails Rails) *Module {
+	m := &Module{db: p.DB(), xyp: xyp, rails: rails, perms: p.Permissions()}
 	nexus.Register(m)
 	return m
 }

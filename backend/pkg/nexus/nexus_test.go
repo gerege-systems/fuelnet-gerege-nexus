@@ -12,8 +12,11 @@
 package nexus_test
 
 import (
+	"context"
+	"encoding/json"
 	"go/build"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -152,4 +155,112 @@ func TestTheSDKDoesNotDependOnInternal(t *testing.T) {
 		}
 	}
 	walk(modulePrefix+"/pkg/nexus", "the test")
+}
+
+// A module written against the SDK alone can do the job, not merely declare it.
+//
+// The first test proved a third party can be *registered*. This one proves the
+// rest of the working day: name the organisation the request is for, name the
+// caller, refuse the request when a permission is missing, answer in JSON, and
+// leave an audit row. Every one of those used to require a package under
+// internal/, which is to say it required a fork.
+//
+// Nothing here imports anything but this package, chi and the standard library
+// — deliberately, and the import block is part of the assertion.
+type workingModule struct{ p nexus.Platform }
+
+func (workingModule) ID() string                       { return "mn.example.working" }
+func (workingModule) Name() string                     { return "Working" }
+func (workingModule) Version() string                  { return "1.0.0" }
+func (workingModule) Dependencies() []nexus.Dependency { return nil }
+func (workingModule) Menus() []nexus.MenuDefinition    { return nil }
+func (workingModule) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{{Code: "working.read", Name: "Read"}}
+}
+
+func (m workingModule) RegisterRoutes(r chi.Router, gate func(http.Handler) http.Handler) {
+	r.Route("/api/v1/working", func(wr chi.Router) {
+		wr.Use(gate)
+		wr.With(nexus.RequirePermission(m.p.Permissions(), "working.read")).Get("/", m.handle)
+	})
+}
+
+func (m workingModule) handle(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := nexus.RequireTenant(w, r)
+	if !ok {
+		return
+	}
+	claims, err := nexus.UserFromContext(r.Context())
+	if err != nil {
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "working.read", "working", nil)
+	nexus.JSON(w, http.StatusOK, map[string]string{"tenant": tenantID, "user": claims.UserID})
+}
+
+// grants is a PermissionStore a test can hold. That the interface is small
+// enough to implement in three lines is the point of it being an interface.
+type grants map[string]bool
+
+func (g grants) GetUserPermissions(context.Context, string, string) (map[string]bool, error) {
+	return g, nil
+}
+
+func TestAModuleWrittenAgainstTheSDKCanServeARequest(t *testing.T) {
+	var recorded []string
+	nexus.UseAuditSink(func(_ context.Context, tenantID, userID, action, _ string, _ map[string]any) {
+		recorded = append(recorded, action+" "+tenantID+" "+userID)
+	})
+	t.Cleanup(func() { nexus.UseAuditSink(nil) })
+
+	call := func(permissions grants) *httptest.ResponseRecorder {
+		module := workingModule{p: nexus.NewPlatform(nil, permissions)}
+		router := chi.NewRouter()
+		module.RegisterRoutes(router, func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := nexus.WithTenantID(r.Context(), "tenant-1")
+				ctx = nexus.WithUser(ctx, nexus.UserClaims{UserID: "user-1", TenantID: "tenant-1"})
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/working/", nil))
+		return rec
+	}
+
+	// Without the permission the module declared, the request is refused — by
+	// the SDK's own middleware, with the SDK's own JSON error shape.
+	refused := call(grants{})
+	if refused.Code != http.StatusForbidden {
+		t.Fatalf("a caller without the permission got %d", refused.Code)
+	}
+	var problem struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(refused.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("the refusal was not JSON: %v", err)
+	}
+	if !strings.Contains(problem.Error, "working.read") {
+		t.Fatalf("the refusal does not name the permission: %q", problem.Error)
+	}
+	if len(recorded) != 0 {
+		t.Fatalf("a refused request recorded an audit event: %v", recorded)
+	}
+
+	// With it, the handler runs, reads both halves of the context and answers.
+	allowed := call(grants{"working.read": true})
+	if allowed.Code != http.StatusOK {
+		t.Fatalf("a permitted caller got %d: %s", allowed.Code, allowed.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(allowed.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["tenant"] != "tenant-1" || body["user"] != "user-1" {
+		t.Fatalf("the handler could not see who was asking: %+v", body)
+	}
+	if len(recorded) != 1 || recorded[0] != "working.read tenant-1 user-1" {
+		t.Fatalf("the audit trail did not receive the event: %v", recorded)
+	}
 }

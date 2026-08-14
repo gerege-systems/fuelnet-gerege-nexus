@@ -46,10 +46,8 @@ package organisation
 import (
 	"net/http"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ID is the catalogue identifier. It is referenced by the platform, which
@@ -65,12 +63,12 @@ const ID = "io.gerege.nexus.organisation"
 const LegacyID = "io.gerege.nexus.core"
 
 type Module struct {
-	db    *pgxpool.Pool
+	db    nexus.DB
 	perms nexus.PermissionStore
 }
 
-func New(db *pgxpool.Pool) *Module {
-	m := &Module{db: db, perms: rbac.NewSQLPermissionStore(db)}
+func New(p nexus.Platform) *Module {
+	m := &Module{db: p.DB(), perms: p.Permissions()}
 	nexus.Register(m)
 	registerReports()
 	return m

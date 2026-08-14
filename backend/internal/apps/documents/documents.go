@@ -26,14 +26,12 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 )
 
@@ -127,7 +125,7 @@ type Document struct {
 }
 
 type DocumentsModule struct {
-	db     *pgxpool.Pool
+	db     nexus.DB
 	eidSvc *eid.EIDService
 	danSvc *dan.DANService
 	// The interface rather than the concrete store, so the route table can be
@@ -176,12 +174,13 @@ const (
 	signPushBurst         = maxChainSteps
 )
 
-func New(db *pgxpool.Pool) *DocumentsModule {
+func New(p nexus.Platform) *DocumentsModule {
+	db := p.DB()
 	m := &DocumentsModule{
 		db:          db,
 		eidSvc:      eid.NewEIDService(),
 		danSvc:      dan.NewDANService(),
-		perms:       rbac.NewSQLPermissionStore(db),
+		perms:       p.Permissions(),
 		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
 	}
 	nexus.Register(m)

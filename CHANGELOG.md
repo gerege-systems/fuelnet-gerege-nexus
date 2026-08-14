@@ -42,9 +42,41 @@ product for ever.
 
 Implementations stay in `internal/`. The SDK is a contract, and a contract that
 also carried the machinery would drag the machinery into the semver promise.
-What is not in it yet is the service half — the tenant-scoped database handle,
-HTTP helpers, RBAC, audit and the report registry — which the platform's modules
-still reach through `internal/platform/*`. That is the next piece of §6 step 1.
+
+**The service half followed**, and with it §6 step 1 is complete: a module in
+another repository can now be written, not merely declared.
+
+- `JSON` / `Error`; the tenant and caller context (`RequireTenant`, `TenantID`,
+  `UserClaims`, `UserFromContext`, and the setters the session middleware uses);
+  a `DB` handle; `PermissionStore` with `RequirePermission`; `Audit` and the
+  `AuditSink` the platform installs at startup.
+- **`Platform`, handed to every module's constructor.** All fourteen took a
+  `*pgxpool.Pool` and six built their own permission store with an internal
+  constructor no external module could call. They now take one argument —
+  `New(p nexus.Platform)` — which is also what stops the signature changing
+  every time the platform lends modules something new.
+- The permission store is now one per process rather than one per module. It
+  caches grants per tenant and is invalidated across replicas; fourteen of them
+  meant fourteen caches of the same rows.
+- `httpx`, `tenant`, `auth` and `rbac` forward to the SDK rather than
+  duplicating it. For the context packages that is not tidiness but correctness:
+  two packages each holding their own context key would write and read different
+  values, and the second would always be empty.
+- `DB` carries `BeginTx` so a module can open a read-only transaction — the
+  report engine opens every run that way. It does not carry `Acquire`: pinning a
+  connection is a platform capability, and offering it to every module would
+  offer every module the ability to exhaust the pool. The one place that needs
+  it asks by type assertion, in `internal/platform/reporting`.
+
+The surface was measured rather than designed. Across the fourteen modules the
+whole demand on the platform was: write a JSON response (420 call sites), name
+the organisation and the caller (94), refuse on a missing permission (24),
+record what happened (41), and query the database. The report engine (40
+symbols), the catalogue, the state rails and the SSO provider are each a
+subsystem or a specialised rail, and none belongs in the first version of a
+contract that cannot be narrowed later. `settings`, `flags` and `emailverify`
+are in `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.1's sketch of this package and are
+not here, because no module imports them.
 
 ### Added — `egov`, the front door to the state's systems
 

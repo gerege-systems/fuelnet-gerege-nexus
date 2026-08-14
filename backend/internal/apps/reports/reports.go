@@ -20,11 +20,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ID is the app id, in the catalogue and in every installation row.
@@ -52,10 +50,10 @@ type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, 
 
 // Module is the reports app.
 type Module struct {
-	db        *pgxpool.Pool
+	db        nexus.DB
 	engine    *reporting.Engine
 	scheduler *reporting.Scheduler
-	perms     *rbac.SQLPermissionStore
+	perms     nexus.PermissionStore
 	installed InstalledApps
 }
 
@@ -64,13 +62,14 @@ type Module struct {
 // installedApps is the platform's own gate, handed in: a tenant sees the
 // reports of the apps it has installed and no others, and "which apps" has
 // exactly one answer on this deployment.
-func New(db *pgxpool.Pool, installedApps InstalledApps) *Module {
+func New(p nexus.Platform, installedApps InstalledApps) *Module {
+	db := p.DB()
 	engine := reporting.NewEngine(db)
 	m := &Module{
 		db:        db,
 		engine:    engine,
 		scheduler: reporting.NewScheduler(engine, reporting.NewSMTPDeliverer()),
-		perms:     rbac.NewSQLPermissionStore(db),
+		perms:     p.Permissions(),
 		installed: installedApps,
 	}
 	nexus.Register(m)

@@ -17,13 +17,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/quota"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type store struct{ db *pgxpool.Pool }
+type store struct{ db nexus.DB }
 
 // documentColumns is the projection every document listing shares. Blob
 // columns are deliberately absent: a listing that selected original_pdf would

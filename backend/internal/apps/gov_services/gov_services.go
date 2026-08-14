@@ -26,11 +26,9 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Application lifecycle. A citizen may cancel until a decision is recorded;
@@ -137,17 +135,18 @@ type MeetingBooker interface {
 }
 
 type Module struct {
-	db       *pgxpool.Pool
+	db       nexus.DB
 	store    *store
-	perms    *rbac.SQLPermissionStore
+	perms    nexus.PermissionStore
 	meetings MeetingBooker
 }
 
-func New(db *pgxpool.Pool, meetings MeetingBooker) *Module {
+func New(p nexus.Platform, meetings MeetingBooker) *Module {
+	db := p.DB()
 	m := &Module{
 		db:       db,
 		store:    &store{db: db},
-		perms:    rbac.NewSQLPermissionStore(db),
+		perms:    p.Permissions(),
 		meetings: meetings,
 	}
 	nexus.Register(m)

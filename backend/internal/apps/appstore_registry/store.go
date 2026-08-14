@@ -23,9 +23,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Version statuses. A version is submitted for review, then published; a
@@ -47,14 +48,14 @@ var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("already exists")
 
 // Store is the registry's persistence.
-type Store struct{ db *pgxpool.Pool }
+type Store struct{ db nexus.DB }
 
-func NewStore(db *pgxpool.Pool) *Store { return &Store{db: db} }
+func NewStore(db nexus.DB) *Store { return &Store{db: db} }
 
 // DB exposes the pool for tests that assert on rows this package writes but no
 // caller reads — the snapshot cache in particular, whose whole contract is that
 // it stays small.
-func (s *Store) DB() *pgxpool.Pool { return s.db }
+func (s *Store) DB() nexus.DB { return s.db }
 
 // Publisher is an organisation that publishes apps.
 // Publisher is a tenant's publishing identity.

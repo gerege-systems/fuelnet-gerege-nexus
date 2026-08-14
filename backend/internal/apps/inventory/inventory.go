@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Warehouse struct {
@@ -42,12 +41,12 @@ type StockMovement struct {
 }
 
 type Module struct {
-	db                 *pgxpool.Pool
+	db                 nexus.DB
 	allowNegativeStock bool
 }
 
-func New(db *pgxpool.Pool, allowNegativeStock bool) *Module {
-	m := &Module{db: db, allowNegativeStock: allowNegativeStock}
+func New(p nexus.Platform, allowNegativeStock bool) *Module {
+	m := &Module{db: p.DB(), allowNegativeStock: allowNegativeStock}
 	nexus.Register(m)
 	registerReports()
 	return m

@@ -18,7 +18,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // VATRate is the Mongolian value added tax rate applied to e-Barimt invoices.
@@ -37,14 +36,14 @@ type Invoice struct {
 }
 
 type BillingModule struct {
-	db *pgxpool.Pool
+	db nexus.DB
 }
 
 // New builds the module and registers it in the compile-time app registry.
 // Without registration the app store refused to install io.gerege.nexus.billing
 // ("module is not present in binary registry") and its menu never appeared.
-func New(db *pgxpool.Pool) *BillingModule {
-	m := &BillingModule{db: db}
+func New(p nexus.Platform) *BillingModule {
+	m := &BillingModule{db: p.DB()}
 	nexus.Register(m)
 	registerReports()
 	return m

@@ -33,12 +33,11 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Module is the registry as the platform sees it.
 type Module struct {
-	db      *pgxpool.Pool
+	db      nexus.DB
 	store   *Store
 	catalog *CatalogService
 	// signer is nil when this deployment publishes no catalogue. That is the
@@ -56,8 +55,9 @@ type Module struct {
 // because it is a deployment secret and not a property of the app: two
 // instances running the same version of this module, one of them the App Store,
 // differ only in whether APPSTORE_SIGNING_KEY is set.
-func New(db *pgxpool.Pool) *Module {
-	m := &Module{db: db, store: NewStore(db)}
+func New(p nexus.Platform) *Module {
+	db := p.DB()
+	m := &Module{db: p.DB(), store: NewStore(db)}
 
 	if encoded := os.Getenv("APPSTORE_SIGNING_KEY"); encoded != "" {
 		signer, err := NewSigner(envOr("APPSTORE_SIGNING_KEY_ID", "appstore-2026"), encoded)

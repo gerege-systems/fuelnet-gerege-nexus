@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ErrExceeded is a hard limit refusing.
@@ -55,7 +55,7 @@ func (l Limit) Exceeded(adding int64) bool {
 // storage limit by whatever it uploads between two nightly measurements, and
 // that is the right trade: a storage quota is a commercial boundary, not a
 // safety one — the disk alert is what protects the platform.
-func Storage(ctx context.Context, db *pgxpool.Pool, tenantID string, adding int64) error {
+func Storage(ctx context.Context, db nexus.DB, tenantID string, adding int64) error {
 	limit, err := storageLimit(ctx, db, tenantID)
 	if err != nil {
 		// A check that cannot run allows. Refusing every upload because a
@@ -80,7 +80,7 @@ func Storage(ctx context.Context, db *pgxpool.Pool, tenantID string, adding int6
 }
 
 // storageLimit reads the ceiling and the latest measurement in one statement.
-func storageLimit(ctx context.Context, db *pgxpool.Pool, tenantID string) (Limit, error) {
+func storageLimit(ctx context.Context, db nexus.DB, tenantID string) (Limit, error) {
 	var maximum int
 	var enforcement string
 	var used int64

@@ -34,10 +34,8 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // FileExporter is the part of the integration manager this module needs: a way
@@ -52,21 +50,22 @@ type FileExporter interface {
 }
 
 type Module struct {
-	db      *pgxpool.Pool
+	db      nexus.DB
 	store   *store
 	hsm     *gerege.EsignService
 	eid     *eidmongolia.Service
-	perms   *rbac.SQLPermissionStore
+	perms   nexus.PermissionStore
 	exports FileExporter
 }
 
-func New(db *pgxpool.Pool, hsm *gerege.EsignService, eid *eidmongolia.Service, exports FileExporter) *Module {
+func New(p nexus.Platform, hsm *gerege.EsignService, eid *eidmongolia.Service, exports FileExporter) *Module {
+	db := p.DB()
 	m := &Module{
 		db:      db,
 		store:   &store{db: db},
 		hsm:     hsm,
 		eid:     eid,
-		perms:   rbac.NewSQLPermissionStore(db),
+		perms:   p.Permissions(),
 		exports: exports,
 	}
 	nexus.Register(m)
