@@ -27,13 +27,13 @@
     {
       "code": "egov.citizen.read",
       "name": "Query the citizen registry",
-      "description": "Look up authoritative citizen data through ХУР",
+      "description": "Look up authoritative citizen data through XYP",
       "admin_only": true
     },
     {
       "code": "egov.company.read",
       "name": "Query the company registry",
-      "description": "Look up authoritative legal-entity data through ХУР",
+      "description": "Look up authoritative legal-entity data through XYP",
       "admin_only": true
     }
   ],

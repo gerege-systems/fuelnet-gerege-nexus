@@ -45,7 +45,7 @@
     "id": "io.gerege.nexus.egov",
     "slug": "egov",
     "name": "e-Government Link",
-    "description": "This organisation's connection to the state's systems: registry lookups through ХУР, the eID and ДАН rails, and a record of what was asked.",
+    "description": "This organisation's connection to the state's systems: registry lookups through XYP, the eID and ДАН rails, and a record of what was asked.",
     "icon_url": "/icons/egov.png",
     "category": "Platform",
     "visibility": "public",

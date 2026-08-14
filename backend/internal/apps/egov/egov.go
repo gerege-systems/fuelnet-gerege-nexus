@@ -138,9 +138,9 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 		{Code: "egov.read", Name: "Read e-Government Link",
 			Description: "See how this organisation is connected to the state's systems, and what it has looked up"},
 		{Code: "egov.citizen.read", Name: "Query the citizen registry", AdminOnly: true,
-			Description: "Look up authoritative citizen data through ХУР"},
+			Description: "Look up authoritative citizen data through XYP"},
 		{Code: "egov.company.read", Name: "Query the company registry", AdminOnly: true,
-			Description: "Look up authoritative legal-entity data through ХУР"},
+			Description: "Look up authoritative legal-entity data through XYP"},
 	}
 }
 

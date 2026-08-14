@@ -6,7 +6,7 @@
  */
 export const egov = {
   "egov.view.title": { mn: "Лавлагаа", en: "Registry lookups" },
-  "egov.view.subtitle": { mn: "ХУР-аас иргэн, хуулийн этгээдийн албан ёсны мэдээлэл авах", en: "Authoritative citizen and legal-entity data from ХУР" },
+  "egov.view.subtitle": { mn: "ХУР-аас иргэн, хуулийн этгээдийн албан ёсны мэдээлэл авах", en: "Authoritative citizen and legal-entity data from XYP" },
   "egov.view.connections_title": { mn: "Холболтууд", en: "Connections" },
   "egov.view.connections_subtitle": { mn: "Энэ суулгац төрийн системүүдтэй хэрхэн холбогдсон бэ", en: "How this deployment reaches the state's systems" },
   "egov.view.history_title": { mn: "Лавлагааны түүх", en: "Lookup history" },
@@ -43,7 +43,7 @@ export const egov = {
   },
   "egov.message.identities_hint": {
     mn: "Өөрийн eID / ДАН холболтоо профайл хэсгээсээ харна. Тэр нь хүний өөрийнх тул энэ аппаас хамаардаггүй.",
-    en: "Your own eID and ДАН links live in your profile. They belong to you rather than to this organisation, so they do not depend on this app.",
+    en: "Your own eID and DAN links live in your profile. They belong to you rather than to this organisation, so they do not depend on this app.",
   },
   "egov.action.open_profile": { mn: "Профайл руу очих", en: "Open profile" },
 
