@@ -214,6 +214,9 @@ APPSTORE_SIGNING_KEY_ID=appstore-2026
 ### 6.3 Өгөгдөл шилжүүлэх
 
 Хэрэгслүүд image дотор байдаг — production хост дээр Go toolchain байхгүй.
+`appstore-import` нь апп сторын өөрийн хүснэгтүүд рүү бичдэг тул тэр
+бүтээгдэхүүнтэйгээ хамт [appstore-gerege-nexus](https://github.com/gerege-systems/appstore-gerege-nexus)
+руу нүүсэн бөгөөд түүний образ дотор байна.
 
 ```bash
 # Эхлээд юу болохыг харна — юу ч бичихгүй (өгөгдмөл).

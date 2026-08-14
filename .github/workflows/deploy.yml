@@ -77,8 +77,9 @@ concurrency:
   # logout` landed between the other's `docker rm -f` and its pull. The
   # platform spent several minutes serving 502 because its containers were gone
   # and the replacement pull was denied. That workflow left with the App Store
-  # (07ff4b5); deploy-appstore-instance.yml is a different stack on a different
-  # host and is deliberately not in this group.
+  # (07ff4b5), and the workflow that rolled out its Nexus instance left with the
+  # product itself — the App Store is its own repository now and deploys itself
+  # to its own host.
   group: production-host-rollout
   cancel-in-progress: false
 
