@@ -37,8 +37,10 @@ permissions:
 
 concurrency:
   # Shares the deploy's group so a prune can never run while images are being
-  # pushed or pulled.
-  group: production-deploy
+  # pushed or pulled. The name has to match deploy.yml's exactly — it was left
+  # behind at `production-deploy` when that workflow renamed its group, which
+  # bought nothing but the comment above.
+  group: production-host-rollout
   cancel-in-progress: false
 
 jobs:

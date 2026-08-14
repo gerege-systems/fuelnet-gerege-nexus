@@ -69,12 +69,16 @@ permissions:
   packages: write
 
 concurrency:
-  # Shared with deploy-appstore.yml, and named for the host rather than for
-  # either stack. Both roll out to the same machine as the same user, so they
-  # share one ~/.docker/config.json: when they overlapped, one workflow's
-  # `docker logout` landed between the other's `docker rm -f` and its pull, and
-  # the platform spent several minutes serving 502 because its containers were
-  # gone and the replacement pull was denied.
+  # Named for the host rather than for the stack, because anything else that
+  # touches this machine's registry credentials or its images belongs in the
+  # group too — today that is ghcr-retention.yml. The App Store rollout used to
+  # be here as well; it shared this host and this user, so it shared one
+  # ~/.docker/config.json, and when the two overlapped one workflow's `docker
+  # logout` landed between the other's `docker rm -f` and its pull. The
+  # platform spent several minutes serving 502 because its containers were gone
+  # and the replacement pull was denied. That workflow left with the App Store
+  # (07ff4b5); deploy-appstore-instance.yml is a different stack on a different
+  # host and is deliberately not in this group.
   group: production-host-rollout
   cancel-in-progress: false
 
@@ -293,7 +297,25 @@ jobs:
 
             echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
-            docker compose -f docker-compose.prod.yml pull
+            # GHCR answers a just-pushed private image with "denied" often
+            # enough to have failed a rollout of images this same run had
+            # published ninety seconds earlier and which pulled fine minutes
+            # later. A single-shot pull turns that into a deploy that has to be
+            # re-run by hand, so retry — logging in again each time, because an
+            # expired registry token is denied in exactly the same words and
+            # there is no way to tell the two apart from the message.
+            for attempt in 1 2 3 4 5; do
+              if docker compose -f docker-compose.prod.yml pull; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::registry pull still denied after $attempt attempts; the running containers are untouched"
+                exit 1
+              fi
+              echo "pull attempt $attempt failed; re-authenticating and retrying in $((attempt * 15))s"
+              sleep "$((attempt * 15))"
+              echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+            done
 
             # Nothing is torn down until the images that replace it are on this
             # host. The running containers are the only thing serving, and a
