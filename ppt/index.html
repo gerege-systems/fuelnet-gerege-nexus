@@ -266,6 +266,11 @@ h1.big span{color:var(--accent)}
   color:var(--muted); font-variant-numeric:tabular-nums;
 }
 /* fullscreen presentation mode */
+/* iPhone дээрх Safari element fullscreen API-г огт дэмждэггүй. Тэнд .pseudo-fs
+   нь хөтчийн мөрөөс бусад бүх зайг эзэлж, ойролцоо үр дүн өгнө: .fs-тэй хамт
+   ordog тул nav/counter нуугдаж, stage нь падгүйгээр дүүрэн сунана. */
+body.pseudo-fs{overflow:hidden}
+body.pseudo-fs .deck{height:100dvh}
 body.fs .deck{background:#000}
 body.fs .nav,body.fs .counter{opacity:0;pointer-events:none;transition:opacity .25s ease}
 body.fs.chrome .nav,body.fs.chrome .counter{opacity:1;pointer-events:auto}
@@ -689,21 +694,38 @@ body.fs.nocursor .stage{cursor:none}
   var i=0, N=slides.length;
   var counter=document.getElementById('counter');
   function fit(){
-    var pad=document.fullscreenElement?0:48;
+    var pad=isFS()?0:48;
     var s=Math.min((window.innerWidth-pad)/1280,(window.innerHeight-pad)/720);
     stage.style.transform='scale('+s+')';
   }
   window.addEventListener('resize',fit); fit();
   /* fullscreen presentation mode: only the slide is visible */
   var idleT=null;
-  function goFS(){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}
-  document.addEventListener('fullscreenchange',function(){
-    document.body.classList.toggle('fs',!!document.fullscreenElement);
+  /* Safari нь webkit- угтвартай хувилбарыг л мэднэ; iPhone дээр API огт
+     байхгүй тул тэнд .pseudo-fs рүү ухарна. */
+  function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||null}
+  function isFS(){return !!fsEl()||document.body.classList.contains('pseudo-fs')}
+  function goFS(){
+    var r=document.documentElement, body=document.body;
+    function fallback(){ body.classList.add('pseudo-fs'); onFSChange(); }
+    if(body.classList.contains('pseudo-fs')){ body.classList.remove('pseudo-fs'); onFSChange(); return; }
+    var exit=document.exitFullscreen||document.webkitExitFullscreen;
+    if(fsEl()){ if(exit) exit.call(document); return; }
+    var req=r.requestFullscreen||r.webkitRequestFullscreen;
+    if(!req){ fallback(); return; }
+    /* Хөтөч татгалзвал (iPad, permissions policy) чимээгүй унахгүй. */
+    try{ var p=req.call(r); if(p&&p.catch) p.catch(fallback); }
+    catch(err){ fallback(); }
+  }
+  function onFSChange(){
+    document.body.classList.toggle('fs',isFS());
     document.body.classList.remove('chrome','nocursor');
     clearTimeout(idleT); fit();
-  });
+  }
+  document.addEventListener('fullscreenchange',onFSChange);
+  document.addEventListener('webkitfullscreenchange',onFSChange);
   document.addEventListener('mousemove',function(){
-    if(!document.fullscreenElement) return;
+    if(!isFS()) return;
     document.body.classList.add('chrome');
     document.body.classList.remove('nocursor');
     clearTimeout(idleT);
@@ -743,6 +765,8 @@ body.fs.nocursor .stage{cursor:none}
     if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();show(i-1)}
     if(e.key==='Home'){show(0)} if(e.key==='End'){show(N-1)}
     if(e.key==='f'){goFS()}
+    /* Жинхэнэ fullscreen-ийг хөтөч өөрөө Esc-ээр гаргадаг; pseudo-г бид гаргана. */
+    if(e.key==='Escape'&&document.body.classList.contains('pseudo-fs')){goFS()}
     if(e.key==='d'){
       var r=document.documentElement;
       r.setAttribute('data-theme', r.getAttribute('data-theme')==='dark'?'light':'dark');
