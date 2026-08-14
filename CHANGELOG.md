@@ -15,6 +15,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-14
+
+### Added — `pkg/platform`, so a distribution can start the platform it compiles against
+
+The SDK let somebody write a module and gave them nowhere to run it: booting is
+`internal/platform.NewServer`, which the language closes to every other
+repository. `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.5 sketches a distribution's
+`main.go` as a call to `platform.Run()`; this is that function.
+
+- **`backend/pkg/platform.Run(Options)`** is the whole boot — configuration,
+  tracing, the pool with the isolation guard installed on it, the invalidation
+  bus, the server, the background sweeps, the listener, a graceful stop. It is
+  `cmd/api/main.go` moved, not reimplemented, and `cmd/api` is now three lines
+  calling it. That is deliberate: the platform's own binary is built the way
+  every distribution's is, so a boot path that works here works there.
+- **`Options.Modules`** registers a distribution's own modules with the same
+  `nexus.Platform` the built-in ones get, at the same moment — after the pool
+  exists and before any route is mounted. `NewServer` takes it as a variadic
+  option, so every existing caller and test kept compiling.
+- **A dead listener now unwinds through shutdown.** It used to call `os.Exit(1)`
+  from inside the goroutine, which skipped every deferred close on the way out —
+  the pool, the Redis client, the tracer's flush. It now hands the error back and
+  leaves by the same door a signal does.
+- **`cmd/migrate` accepts `MIGRATIONS_DIR` and `MIGRATIONS_TABLE`.** A
+  distribution has its own schema, and goose keeps one row per applied version
+  in one table, so its `00001` and the platform's `00001` were the same row.
+  Each history needs its own table. Defaults unchanged.
+
+
 ### Added — `pkg/catalog`, the app-store contract, and a clean appstore boundary
 
 Preparation for the first distribution split (`gerege-appstore`). The three

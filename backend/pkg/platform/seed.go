@@ -6,7 +6,7 @@
  * Idempotent demo data seeder for local development environments.
  */
 
-package main
+package platform
 
 import (
 	"context"

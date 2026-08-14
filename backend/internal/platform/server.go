@@ -68,7 +68,7 @@ import (
 // look compatible with every instance. The default stays 1.0.0, which is what an
 // unstamped build has always reported; whatever is injected must be valid
 // semver, because manifest validation parses it.
-var PlatformVersion = "1.0.0"
+var PlatformVersion = "1.1.0"
 
 type Server struct {
 	db        *pgxpool.Pool
@@ -166,7 +166,16 @@ func (s *Server) forgetGrants(tenantID string) {
 
 // NewServer builds the platform. bus may be a local-only one; nothing here
 // requires Redis to be present.
-func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, error) {
+// ExtraModules registers modules this binary carries beyond the platform's own.
+//
+// A distribution repository compiles its modules in and needs them constructed
+// with the same nexus.Platform the built-in ones get, at the same moment —
+// after the pool exists, before any route is mounted. It is a variadic option
+// rather than a parameter so every existing caller, and every test, keeps
+// compiling.
+type ExtraModules func(nexus.Platform)
+
+func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...ExtraModules) (*Server, error) {
 	// Instantiate compile-time Go modules once. Each constructor registers the
 	// module in the global app registry; calling them twice (here and again in
 	// registerAppModuleRoutes) built two instances per app.
@@ -192,7 +201,17 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus) (*Server, e
 	// the e-Government screen reports is what the platform actually holds.
 	geregeSvc, eidSvc, danSvc := gerege.NewGeregeService(), eid.NewEIDService(), dan.NewDANService()
 
-	appRuntime := apps.Bootstrap(newModulePlatform(db), integrationMgr, eidMN, ssoProvider, geregeSvc,
+	modulePlatform := newModulePlatform(db)
+	// A distribution's modules register themselves here, beside the platform's
+	// own, so appregistry sees one list and the store, the menu and the gate
+	// cannot tell the two apart — which is the point of the SDK.
+	for _, register := range extra {
+		if register != nil {
+			register(modulePlatform)
+		}
+	}
+
+	appRuntime := apps.Bootstrap(modulePlatform, integrationMgr, eidMN, ssoProvider, geregeSvc,
 		// What this deployment is wired to. Read per call rather than captured
 		// as a snapshot, and assembled here because this is the only place all
 		// three clients are in scope — egov names the shape, the platform

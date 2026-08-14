@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerege Nexus — Танилцуулга</title>
+<meta name="description" content="Gerege Nexus — үйлчилгээ, үйл ажиллагаа, системийн нэгдсэн платформ. 20 хуудас танилцуулга.">
+<style>
+  :root{
+    color-scheme: light;
+    --surface:#fcfcfb; --surface-2:#f2f1ee; --card:#ffffff;
+    --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#8a887f;
+    --brand:#0050b0; --brand-dark:#003a80;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s7:#4a3aa7;
+    --line:#e3e1db;
+    --good:#008300; --warn:#b25000;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+    background:var(--surface-2); color:var(--ink); overflow:hidden;
+  }
+  .deck{height:100vh;width:100vw;position:relative}
+  .slide{
+    position:absolute; inset:0; padding:56px 72px 72px;
+    display:flex; flex-direction:column; gap:20px;
+    background:var(--surface); opacity:0; visibility:hidden;
+    transform:translateX(24px); transition:opacity .32s ease, transform .32s ease, visibility .32s;
+  }
+  .slide.active{opacity:1;visibility:visible;transform:none}
+  .kicker{font-size:14px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
+  h1{font-size:56px;line-height:1.08;letter-spacing:-.02em}
+  h2{font-size:36px;line-height:1.15;letter-spacing:-.015em}
+  h3{font-size:19px}
+  p.lead{font-size:20px;color:var(--ink-2);max-width:60ch;line-height:1.55}
+  .grow{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+  .cols{display:grid;gap:18px}
+  .cols.c2{grid-template-columns:1fr 1fr}
+  .cols.c3{grid-template-columns:repeat(3,1fr)}
+  .cols.c4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+  .card h3{margin-bottom:8px}
+  .card p{font-size:15px;color:var(--ink-2);line-height:1.5}
+  .card .tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--brand);margin-bottom:8px;text-transform:uppercase}
+  .accent{border-top:4px solid var(--s1)}
+  .accent.o{border-top-color:var(--s2)} .accent.a{border-top-color:var(--s3)}
+  .accent.y{border-top-color:var(--s4)} .accent.m{border-top-color:var(--s5)} .accent.v{border-top-color:var(--s7)}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;text-align:left}
+  .stat .n{font-size:52px;font-weight:800;letter-spacing:-.03em;color:var(--brand);line-height:1;font-variant-numeric:tabular-nums}
+  .stat .l{font-size:15px;color:var(--ink-2);margin-top:8px;line-height:1.4}
+  .foot{position:absolute;left:72px;right:72px;bottom:24px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink-3)}
+  .foot b{color:var(--ink-2);font-weight:600}
+  code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  code{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:.85em}
+  ul.clean{list-style:none;display:flex;flex-direction:column;gap:12px}
+  ul.clean li{display:flex;gap:12px;font-size:17px;color:var(--ink-2);line-height:1.5}
+  ul.clean li::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--s1);margin-top:9px}
+  ul.clean.x li::before{background:var(--s2)}
+  ul.clean.g li::before{background:var(--s3)}
+  ul.clean li b{color:var(--ink)}
+  /* diagram primitives */
+  .dg{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:10px}
+  .layer{border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;border:1px solid var(--line)}
+  .layer .lt{font-weight:700;font-size:15px;min-width:190px}
+  .layer .ld{font-size:13.5px;color:var(--ink-2);line-height:1.35}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+  .chip.hl{border-color:var(--s1);color:var(--brand)}
+  .arrowrow{display:flex;justify-content:center;color:var(--ink-3);font-size:16px;line-height:1;margin:-2px 0}
+  .l-blue{background:#eef4fc;border-color:#c8dcf5}
+  .l-orange{background:#fdf0ea;border-color:#f6d3c2}
+  .l-aqua{background:#e9f7f1;border-color:#c2e8d9}
+  .l-yellow{background:#fdf6e6;border-color:#f3e0b3}
+  .l-violet{background:#efedfa;border-color:#d5d0f0}
+  .l-gray{background:var(--surface-2)}
+  .pill{font-size:11px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase}
+  .pill.b{background:#eef4fc;color:var(--brand)}
+  .pill.o{background:#fdf0ea;color:#a8430f}
+  .pill.g{background:#e9f7f1;color:#0b6e4c}
+  .pill.v{background:#efedfa;color:#3a2f85}
+  .nav{position:fixed;right:24px;bottom:20px;display:flex;gap:8px;align-items:center;z-index:10}
+  .nav button{border:1px solid var(--line);background:#fff;border-radius:10px;width:40px;height:40px;font-size:18px;cursor:pointer;color:var(--ink-2)}
+  .nav button:hover{border-color:var(--brand);color:var(--brand)}
+  .pageno{position:fixed;left:50%;transform:translateX(-50%);bottom:26px;font-size:13px;color:var(--ink-3);z-index:10;font-variant-numeric:tabular-nums}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--brand);z-index:20;transition:width .3s ease}
+  .split{display:grid;grid-template-columns:5fr 7fr;gap:32px;align-items:center}
+  .split.rev{grid-template-columns:7fr 5fr}
+  table.t{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden;border:1px solid var(--line);font-size:15px}
+  table.t th{background:var(--surface-2);text-align:left;padding:11px 16px;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)}
+  table.t td{padding:11px 16px;border-top:1px solid var(--line);color:var(--ink-2);line-height:1.45}
+  table.t td:first-child{font-weight:700;color:var(--ink);white-space:nowrap}
+  @media (max-width:1100px){
+    .slide{padding:32px 28px 64px} h1{font-size:38px} h2{font-size:27px}
+    .cols.c3,.cols.c4{grid-template-columns:1fr 1fr}
+    .split,.split.rev{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body data-palette="#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4,#008300,#4a3aa7,#e34948">
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+<!-- 1. Титул -->
+<section class="slide active">
+  <div class="grow" style="align-items:flex-start;gap:26px">
+    <div class="kicker">Gerege Ecosystem · Нээлттэй эх · Apache 2.0</div>
+    <h1>Gerege <span style="color:var(--brand)">Nexus</span></h1>
+    <p class="lead" style="font-size:24px;max-width:56ch">Үйлчилгээ, үйл ажиллагаа, системийн <b style="color:var(--ink)">нэгдсэн платформ</b> — төрийн болон хувийн хэвшлийн байгууллагыг нэг цэгт холбож, дээр нь зуу зуун платформ ургах суурь.</p>
+    <div class="chips" style="margin-top:6px">
+      <span class="chip hl">Монгол хэл эх сурвалж</span><span class="chip">ХУР · E-ID · ДАН · e-Barimt</span><span class="chip">Multi-tenant</span><span class="chip">Модуль монолит</span><span class="chip">Апп стор</span>
+    </div>
+  </div>
+  <div class="foot"><span><b>nexus.gerege.mn</b> · Gerege Systems Development Team</span><span>2026</span></div>
+</section>
+
+<!-- 2. Нэг харцаар -->
+<section class="slide">
+  <div class="kicker">Нэг харцаар</div>
+  <h2>Тоогоор илэрхийлбэл</h2>
+  <div class="grow"><div class="cols c4">
+    <div class="stat"><div class="n">9</div><div class="l">бэлэн бизнес аппликейшн — байгууллага, харилцагч, бараа, агуулах, нэхэмжлэх, баримт, гарын үсэг, төрийн үйлчилгээ</div></div>
+    <div class="stat"><div class="n">7</div><div class="l">хэл — монгол эх сурвалж + НҮБ-ын албан ёсны 6 хэл, баримт бичиг бүрэн орчуулгатай</div></div>
+    <div class="stat"><div class="n">1</div><div class="l">Go бинари — бүх модуль нэг процесст, сүлжээний хоцролт 0, микросервисийн зардалгүй</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">native бүрхүүл — macOS/iOS (Swift), Windows (C#), Android (Kotlin), Linux (PWA)</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">төрийн интеграц — ХУР, Үндэсний E-ID, ДАН, e-Barimt шууд холболттой</div></div>
+    <div class="stat"><div class="n">6</div><div class="l">төхөөрөмжийн шугам — вэб, desktop, гар утас, таблет, киоск, ПОС нэг цөмөөс</div></div>
+    <div class="stat"><div class="n">100%</div><div class="l">нээлттэй эх — Apache 2.0, олон нийтийн хяналтад, vendor lock-in байхгүй</div></div>
+    <div class="stat"><div class="n">100+</div><div class="l">платформын суурь болох экосистемийн зорилго — нэг цөм, зуун distribution</div></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Нэг харцаар</span><span>2 / 20</span></div>
+</section>
+
+<!-- 3. Асуудал -->
+<section class="slide">
+  <div class="kicker">Яагаад хэрэгтэй вэ</div>
+  <h2>Өнөөдрийн бодит асуудал</h2>
+  <div class="grow"><div class="cols c2" style="gap:22px">
+    <div class="card accent o"><h3>Систем бүр тусдаа арал</h3><p>Байгууллага бүр бүртгэл, агуулах, санхүү, баримтаа тус тусын системд хөтөлж, өгөгдөл нь хоорондоо огт ярьдаггүй. Нэг үйлчилгээ авахын тулд иргэн ижил мэдээллээ дахин дахин бөглөдөг.</p></div>
+    <div class="card accent o"><h3>Төрийн дэд бүтэцтэй холбогдоход хэцүү</h3><p>ХУР, E-ID, ДАН, e-Barimt-тай холбогдох нь байгууллага бүрт тусдаа хөгжүүлэлт, тусдаа гэрээ, тусдаа зардал. Жижиг байгууллагад бараг боломжгүй.</p></div>
+    <div class="card accent o"><h3>Монгол хэл хоёрдугаарт</h3><p>Гадаадын системүүд монгол хэлийг нэмэлт болгож үздэг. Нэр томьёо зөрдөг, баримтжуулалт англиар, дэмжлэг алс холоос ирдэг.</p></div>
+    <div class="card accent o"><h3>Өртөг ба хараат байдал</h3><p>Лицензийн төлбөр гадагш урсаж, эх код хаалттай тул байгууллага өөрийн өгөгдөл, өөрийн процессоо ч бүрэн эзэмшдэггүй — vendor lock-in.</p></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Асуудал</span><span>3 / 20</span></div>
+</section>
+
+<!-- 4. Шийдэл -->
+<section class="slide">
+  <div class="kicker">Шийдэл</div>
+  <h2>Нэг платформ — олон байгууллага — хэрэгтэй апп нь</h2>
+  <div class="grow"><div class="split">
+    <ul class="clean g">
+      <li><b>Multi-tenant:</b> нэг суулгац дотор хэдэн ч байгууллага, өгөгдөл нь мөр бүрийн түвшинд (RLS) тусгаарлагдсан.</li>
+      <li><b>Апп стор:</b> байгууллага бүр өөрт хэрэгтэй аппаа сонгож суулгана — Odoo-гоос санаа авсан, гэхдээ илүү хурдан загвар.</li>
+      <li><b>Төрийн холболт бэлэн:</b> ХУР лавлагаа, E-ID нэвтрэлт, тоон гарын үсэг, e-Barimt — платформын түвшинд нэг удаа хийгдсэн, апп бүр дахин хөгжүүлэхгүй.</li>
+      <li><b>Монгол хэл эх сурвалж:</b> нэр томьёо, баримт, дэмжлэг бүгд эхлээд монголоор төрдөг.</li>
+      <li><b>Нээлттэй эх:</b> Apache 2.0 — хэн ч шалгаж, хэн ч сайжруулж чадна.</li>
+    </ul>
+    <div class="dg">
+      <div class="layer l-blue"><div class="lt">Тенант А — Худалдааны компани</div><div class="chips"><span class="chip">Харилцагч</span><span class="chip">Бараа</span><span class="chip">Агуулах</span><span class="chip">Нэхэмжлэх</span></div></div>
+      <div class="layer l-blue"><div class="lt">Тенант Б — Төрийн байгууллага</div><div class="chips"><span class="chip">Төрийн үйлчилгээ</span><span class="chip">Баримт</span><span class="chip">Гарын үсэг</span></div></div>
+      <div class="layer l-blue"><div class="lt">Тенант В — Уурхай</div><div class="chips"><span class="chip">Тайлан</span><span class="chip">Гэрээ</span><span class="chip">Нэхэмжлэх</span></div></div>
+      <div class="arrowrow">▲ апп стороос сонгож суулгана ▲</div>
+      <div class="layer l-gray" style="justify-content:center"><div class="lt" style="min-width:0">Gerege Nexus — нэг цөм, нэг суулгац</div></div>
+    </div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Шийдэл</span><span>4 / 20</span></div>
+</section>
+
+<!-- 5. Архитектурын давхаргууд -->
+<section class="slide">
+  <div class="kicker">Архитектур</div>
+  <h2>Давхаргын зураг</h2>
+  <div class="grow"><div class="dg" style="gap:8px">
+    <div class="layer l-violet"><div class="lt">Хэрэглэгчийн давхарга</div><div class="chips"><span class="chip">macOS · iOS (Swift)</span><span class="chip">Windows (C#)</span><span class="chip">Android (Kotlin)</span><span class="chip">Хөтөч · PWA</span><span class="chip">Киоск · ПОС</span><span class="chip hl">Shell Contract v1</span></div></div>
+    <div class="arrowrow">▼</div>
+    <div class="layer l-blue"><div class="lt">Вэб клиент</div><div class="chips"><span class="chip">Next.js 16 App Router</span><span class="chip">Ажлын муж горим</span><span class="chip">7 хэлний i18n</span><span class="chip">AI Copilot UI</span></div></div>
+    <div class="arrowrow">▼ &nbsp;HTTPS · nginx&nbsp; ▼</div>
+    <div class="layer l-aqua" style="align-items:flex-start">
+      <div class="lt">Go 1.26 бинари<br><span style="font-weight:400;font-size:12.5px;color:var(--ink-2)">нэг процесс — бүх модуль</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1">
+        <div class="chips"><span class="chip hl">Платформын цөм:</span><span class="chip">Auth · SSO (OIDC provider)</span><span class="chip">Тенант · RBAC · RLS</span><span class="chip">Апп стор · DAG resolver</span><span class="chip">Resilience</span><span class="chip">Audit</span><span class="chip">Тайлангийн хөдөлгүүр</span><span class="chip">Control Plane</span></div>
+        <div class="chips"><span class="chip hl">Апп модулиуд:</span><span class="chip">Байгууллага</span><span class="chip">Харилцагч</span><span class="chip">Цахим засгийн холболт</span><span class="chip">Бараа</span><span class="chip">Агуулах</span><span class="chip">Нэхэмжлэх</span><span class="chip">Баримт</span><span class="chip">Гарын үсэг</span><span class="chip">Тайлан</span></div>
+      </div>
+    </div>
+    <div class="arrowrow">▼</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="layer l-yellow"><div class="lt">Өгөгдлийн давхарга</div><div class="chips"><span class="chip">PostgreSQL 16 · shared schema + RLS</span><span class="chip">Redis · invalidation, rate limit</span></div></div>
+      <div class="layer l-orange"><div class="lt">Төрийн дэд бүтэц</div><div class="chips"><span class="chip">ХУР (XYP)</span><span class="chip">Үндэсний E-ID</span><span class="chip">ДАН</span><span class="chip">e-Barimt</span><span class="chip">eSign HSM</span></div></div>
+    </div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Архитектур</span><span>5 / 20</span></div>
+</section>
+
+<!-- 6. Модуль монолит -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №1</div>
+  <h2>Өндөр бүтээмжтэй модуль монолит</h2>
+  <div class="grow"><div class="cols c3">
+    <div class="card accent"><div class="tag">Хурд</div><h3>Сүлжээний хоцролт — 0</h3><p>Модулиуд нэг бинарид компиллогдож процесс дотроо дууддаг. Микросервисийн хооронд явдаг мянга мянган сүлжээний дуудлага энд огт байхгүй — хамгийн хурдан RPC бол function call.</p></div>
+    <div class="card accent"><div class="tag">Уян хатан</div><h3>Тенант бүрийн апп стор</h3><p>Аль тенантад аль апп идэвхтэйг PostgreSQL шийднэ — бинари нэг ч, туршлага нь тенант бүрт өөр. Суулгаагүй аппын маршрут 403 хаалттай.</p></div>
+    <div class="card accent"><div class="tag">Найдвартай</div><h3>DAG хамаарал шийдвэрлэлт</h3><p>Модулийн хамаарлыг Directed Acyclic Graph дээр рекурсивээр шийдэж, мөчлөг илрүүлж, semver шалгана — Odoo-гийн загварыг Go-гийн хурдтай хослуулсан.</p></div>
+    <div class="card accent a"><div class="tag">Энгийн</div><h3>Ажиллагааны зардал бага</h3><p>Нэг контейнер, нэг DB — Kubernetes кластер, service mesh, олон deploy pipeline хэрэггүй. Жижиг баг том платформ ажиллуулж чадна.</p></div>
+    <div class="card accent a"><div class="tag">Цэвэр</div><h3>ORM-гүй, ил тод SQL</h3><p>pgx + гар бичмэл SQL — query бүр ил харагдана, далд N+1 байхгүй, гүйцэтгэл таамаглах боломжтой.</p></div>
+    <div class="card accent a"><div class="tag">Өргөтгөх</div><h3>Каталог — цорын ганц эх сурвалж</h3><p>catalog/apps.json-д апп нэмэхэд SQL гараар бичихгүй — систем өөрөө синк хийнэ. Шинэ модуль = Go interface хэрэгжүүлэх төдий.</p></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Модуль монолит</span><span>6 / 20</span></div>
+</section>
+
+<!-- 7. Апп стор -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №2</div>
+  <h2>Апп стор — аюулгүй түгээлтийн хөдөлгүүр</h2>
+  <div class="grow"><div class="split rev">
+    <div class="dg">
+      <div class="layer l-blue"><div class="lt">appstore.gerege.mn</div><div class="ld">Registry API + нээлттэй storefront — каталогийг <b>гарын үсэгтэйгээр</b> нийтэлнэ</div></div>
+      <div class="arrowrow">▼ гарын үсэгтэй каталог ▼</div>
+      <div class="layer l-aqua"><div class="lt">Nexus суулгац бүр</div><div class="ld">Каталогийг шалгаж татна · диск кэш · registry унасан ч сүүлийн каталогоороо ажиллана</div></div>
+      <div class="arrowrow">▼</div>
+      <div class="layer l-yellow"><div class="lt">Тенант бүр</div><div class="ld">Админ нь өөрийн байгууллагад апп суулгаж, идэвхжүүлж, auto-update-аа удирдана</div></div>
+    </div>
+    <ul class="clean">
+      <li><b>Гарын үсэгтэй түгээлт:</b> каталог бүр криптограф гарын үсэгтэй — дундаас нь өөрчлөх боломжгүй.</li>
+      <li><b>Гурван шатлалт fallback:</b> registry → диск кэш → образ доторх файл. Апп стор унасан ч платформ асна.</li>
+      <li><b>Хувилбарын түүх:</b> апп бүрийн өөрчлөлт chronicle-д бүртгэлтэй, тенант юу авснаа хардаг.</li>
+      <li><b>Хөгжүүлэгчийн консол:</b> developer.gerege.mn — гуравдагч хөгжүүлэгч аппаа бүртгэж, каталогт нийтлэх зам нээлттэй.</li>
+    </ul>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Апп стор</span><span>7 / 20</span></div>
+</section>
+
+<!-- 8. Төрийн интеграц -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №3</div>
+  <h2>Төрийн цахим дэд бүтэц — угсарсан бэлэн</h2>
+  <div class="grow"><div class="cols c2" style="gap:20px">
+    <div class="card accent"><div class="tag">ХУР / XYP</div><h3>Төрийн мэдээлэл солилцоо</h3><p>Иргэний бүртгэл (WS100101), хуулийн этгээдийн баталгаажуулалт (WS100201) — маягт бөглөхөд иргэний мэдээлэл автоматаар татагдана. Дахин бичих, алдах зүйл байхгүй.</p></div>
+    <div class="card accent"><div class="tag">Үндэсний E-ID</div><h3>Хуулийн хүчинтэй гарын үсэг</h3><p>PIN2-оор баталгаажсан QUALIFIED түвшний тоон гарын үсэг — цаасан гарын үсэгтэй адил хуулийн хүчинтэй. Stamp унтарсан ч PAdES fallback-аар баримт гарын үсэггүй үлдэхгүй.</p></div>
+    <div class="card accent"><div class="tag">ДАН</div><h3>Нэгдсэн нэвтрэлт</h3><p>Mobile OTP, банкны SSO, царай танилт — иргэн өөрийн дассан аргаараа нэвтэрнэ. Платформ өөрөө ч OIDC provider тул бусад системд identity түгээнэ.</p></div>
+    <div class="card accent"><div class="tag">e-Barimt</div><h3>Татварын бүрэн нийцэл</h3><p>Нэхэмжлэх бүр 10% НӨАТ, e-Barimt баримттай — санхүүгийн ажилтан тусдаа систем рүү орж давхар бүртгэхгүй.</p></div>
+  </div>
+  <p class="lead" style="font-size:15px;max-width:none"><b style="color:var(--good)">Аюулгүйн баталгаа:</b> E-ID / ДАН / ХУР-ын mock горим зөвхөн хөгжүүлэлтийн орчинд — <code>ENVIRONMENT=production</code> үед автоматаар унтарч, хуурамч мэдээллээр нэвтрэх боломжгүй.</p></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Төрийн интеграц</span><span>8 / 20</span></div>
+</section>
+
+<!-- 9. Аюулгүй байдал -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №4</div>
+  <h2>Аюулгүй байдал — давхарласан хамгаалалт</h2>
+  <div class="grow"><div class="cols c3">
+    <div class="card accent v"><h3>Мөрийн түвшний тусгаарлалт</h3><p>PostgreSQL row-level security + dbguard: query бүр тенантын хамгаалалттай role дотор гүйнэ. Хөгжүүлэгч <code>WHERE tenant_id</code> мартсан ч өөр байгууллагын өгөгдөл гарахгүй.</p></div>
+    <div class="card accent v"><h3>Session — цуцлагдах чадвартай</h3><p>256 битийн санамсаргүй токен, санд зөвхөн SHA-256 хэш нь хадгалагдана. JWT-ийн "цуцалж болдоггүй" сул талаас зайлсхийсэн — нэг товчоор бүх session унтарна.</p></div>
+    <div class="card accent v"><h3>Нэвтрэлтийн сахилга</h3><p>bcrypt хэш, IP-д суурилсан rate limit, lockout, constant-time OAuth2 танилт — таамаглах, тулгах халдлагад тэсвэртэй.</p></div>
+    <div class="card accent v"><h3>Эрхийн нарийн загвар</h3><p>RBAC — үүрэг, зөвшөөрөл тенант бүрийн хяналтад; эрх тохируулах үйлдэл нь өөрөө админ эрх шаарддаг тул өөрийгөө өргөмжлөх боломжгүй.</p></div>
+    <div class="card accent v"><h3>Audit бүртгэл</h3><p>Хэн, хэзээ, юу хийснийг тенант, хэрэглэгч, үйлдлээр нь бүртгэнэ — маргаан гарахад эргэж харах газартай.</p></div>
+    <div class="card accent v"><h3>CI-д шигтгэсэн шалгалт</h3><p>Push бүрд gosec, govulncheck, race detector, lint — эмзэг байдал нийлэхээсээ өмнө баригдана. SECURITY.md-ээр зохион байгуулалттай мэдээллийн суваг.</p></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Аюулгүй байдал</span><span>9 / 20</span></div>
+</section>
+
+<!-- 10. Resilience -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №5</div>
+  <h2>Cloud-native тэсвэрлэлт — ачаалалд бөхийдөггүй</h2>
+  <div class="grow"><div class="split">
+    <ul class="clean">
+      <li><b>Adaptive circuit breaker</b> — Google SRE-ийн загвар: алдааны харьцаа хэтэрмэгц гадаад системийг түр тусгаарлаж, платформыг гинжин уналтаас хамгаална.</li>
+      <li><b>Adaptive load shedding</b> — даац хэтрэхэд шинэ хүсэлтэд <code>503 + Retry-After</code> — системийг унагахын оронд эелдэг татгалзана.</li>
+      <li><b>Singleflight</b> — давхардсан асуулгыг нэгтгэж, кэш нурах үеийн шуурганаас DB-г хамгаална.</li>
+      <li><b>Экспоненциал retry</b> — түр зуурын алдааг хэрэглэгчид мэдэгдэхгүйгээр давтан оролдоно.</li>
+    </ul>
+    <div class="dg">
+      <div class="layer l-gray"><div class="lt">Хүсэлтийн урсгал</div><div class="ld">лог · panic сэргээлт · load shed · хэмжүүр · CORS</div></div>
+      <div class="arrowrow">▼</div>
+      <div class="layer l-blue"><div class="lt">Танилт + Тенант context</div><div class="ld">session шалгалт → tenant_id бүх query-д уягдана</div></div>
+      <div class="arrowrow">▼</div>
+      <div class="layer l-aqua"><div class="lt">Апп хаалт (gating)</div><div class="ld">суулгаагүй апп → 403</div></div>
+      <div class="arrowrow">▼</div>
+      <div class="layer l-yellow"><div class="lt">Модулийн handler</div><div class="ld">бизнес логик · transaction · audit</div></div>
+    </div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Тэсвэрлэлт</span><span>10 / 20</span></div>
+</section>
+
+<!-- 11. Хэл -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №6</div>
+  <h2>Монгол хэл — нэмэлт биш, эх сурвалж</h2>
+  <div class="grow"><div class="split">
+    <ul class="clean g">
+      <li><b>Монгол эх, 7 хэл:</b> монгол + НҮБ-ын албан ёсны 6 хэл (араб, хятад, англи, франц, орос, испани) — экспортын зах зээлд шууд бэлэн.</li>
+      <li><b>Баримт бүрэн орчуулгатай:</b> README-ээс эхлээд архитектурын тодорхойлолт хүртэл долоон хэлээр, хайлттай вэб хэлбэрээр.</li>
+      <li><b>Нэр томьёо нэгдмэл:</b> орчуулгын гарын авлага (TRANSLATION_GUIDE) нэр томьёог албажуулж, зуун платформ нэг хэлээр ярина.</li>
+      <li><b>Хэрэглэгч сонгоно:</b> програм монгол/англиар ирж, үлдсэн хэлийг Тохиргооноос асаана.</li>
+    </ul>
+    <div class="dg" style="justify-content:center">
+      <div class="layer l-blue" style="justify-content:center"><div class="lt" style="min-width:0;font-size:22px">Монгол — эх сурвалж</div></div>
+      <div class="arrowrow">▼ орчуулгын нэгдсэн урсгал ▼</div>
+      <div class="chips" style="justify-content:center">
+        <span class="chip" style="font-size:15px;padding:8px 16px">العربية</span>
+        <span class="chip" style="font-size:15px;padding:8px 16px">中文</span>
+        <span class="chip" style="font-size:15px;padding:8px 16px">English</span>
+        <span class="chip" style="font-size:15px;padding:8px 16px">Français</span>
+        <span class="chip" style="font-size:15px;padding:8px 16px">Русский</span>
+        <span class="chip" style="font-size:15px;padding:8px 16px">Español</span>
+      </div>
+    </div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Хэлний бодлого</span><span>11 / 20</span></div>
+</section>
+
+<!-- 12. Native бүрхүүл -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №7</div>
+  <h2>Нэг цөм — бүх төхөөрөмж</h2>
+  <div class="grow">
+    <div class="dg" style="margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+        <div class="layer l-violet" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">macOS · iOS</div><div class="ld">Swift / AppKit</div></div>
+        <div class="layer l-violet" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">Windows</div><div class="ld">C# / .NET</div></div>
+        <div class="layer l-violet" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">Android</div><div class="ld">Kotlin</div></div>
+        <div class="layer l-violet" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">Linux · Вэб</div><div class="ld">PWA</div></div>
+        <div class="layer l-violet" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">Киоск</div><div class="ld">enrollment + PIN</div></div>
+        <div class="layer l-violet" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">ПОС</div><div class="ld">төхөөрөмжийн шугам</div></div>
+      </div>
+      <div class="arrowrow">▼ &nbsp;window.GeregeShell — бичигдсэн гэрээ (Bridge Contract v1)&nbsp; ▼</div>
+      <div class="layer l-blue" style="justify-content:center"><div class="lt" style="min-width:0">Вэб клиент = ажлын муж · бүрхүүл = session, цэс, tray, төхөөрөмжийн хандалт</div></div>
+    </div>
+    <p class="lead" style="font-size:16px;max-width:none">Native бүрхүүл нэвтрэлтээ өөрийн UI-аар хийж, вэб клиент бүрхүүл дотор chrome-оо нуугаад зөвхөн ажлын муж болж рендерлэгдэнэ. Хөтчөөр орвол мөн л бүрэн аппликейшн. <b>Нэг л вэб кодоор</b> зургаан төрлийн төхөөрөмжийн туршлага — платформ бүрт тусдаа апп хөгжүүлэх зардал байхгүй.</p>
+  </div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Төхөөрөмжүүд</span><span>12 / 20</span></div>
+</section>
+
+<!-- 13. AI -->
+<section class="slide">
+  <div class="kicker">Гол давуу тал №8</div>
+  <h2>AI Copilot — тенантын өгөгдөлд суурилсан туслах</h2>
+  <div class="grow"><div class="cols c3">
+    <div class="card accent m"><h3>Tenant-safe pipeline</h3><p>AI туслах зөвхөн тухайн тенантын өгөгдлийн сангийн бодит төлөвт холбогдоно — өөр байгууллагын мэдээлэл рүү халддаггүй, quota болон rate limit-тэй.</p></div>
+    <div class="card accent m"><h3>Яриа, дуу, орчуулга</h3><p>Chat, STT, TTS, орчуулга нэг дор — монголоор асууж, монголоор сонсоно. Gemini загварууд тохиргоогоор солигдоно.</p></div>
+    <div class="card accent m"><h3>Эрэлт таамаглагч</h3><p>Агуулахын түүхэн хөдөлгөөнөөс аюулгүйн үлдэгдэл, дахин захиалгын цэгийг санал болгоно — жижиг бизнест өгөгдлийн аналистын үүрэг гүйцэтгэнэ.</p></div>
+    <div class="card accent m"><h3>Удирдлагатай prompt</h3><p>Админ prompt болон мэдлэгийн сангаа өөрөө тохируулна — AI байгууллагынхаа дүрэм журмаар ярьдаг болно.</p></div>
+    <div class="card accent m"><h3>Сонголттой</h3><p>API түлхүүр өгөөгүй бол AI бүрэн унтарсан байна — AI-гүй ажиллах эрх чөлөө хэвээр.</p></div>
+    <div class="card accent m"><h3>Ирээдүйд нээлттэй</h3><p>Модель солигдоход платформ өөрчлөгдөхгүй — тохиргооны түвшний шийдвэр.</p></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · AI Copilot</span><span>13 / 20</span></div>
+</section>
+
+<!-- 14. Тайлан -->
+<section class="slide">
+  <div class="kicker">Шинэ чадвар</div>
+  <h2>Тайлангийн систем — тенант дамнасан нэгдсэн харагдац</h2>
+  <div class="grow"><div class="split">
+    <ul class="clean">
+      <li><b>Модуль бүр тайлантайгаа ирнэ:</b> нэхэмжлэх, агуулах, гарын үсэг — pivot, граф, Excel/PDF export, товлосон и-мэйл илгээлт.</li>
+      <li><b>Default deny + зөвшөөрөл:</b> тенант дамнасан харагдац зөвхөн эзэмшигчийн өгсөн, буцаагдах grant-аар нээгдэнэ.</li>
+      <li><b>Counterparty scope:</b> харилцагч тал зөвхөн өөртэй нь холбоотой гүйлгээний тайланг харна — бусад нь битүү.</li>
+      <li><b>Хоёр талын audit:</b> хэн юу татсан нь эзэмшигчид ил.</li>
+    </ul>
+    <div class="dg">
+      <div class="layer l-blue" style="justify-content:center"><div class="lt" style="min-width:0">Уурхай — «Тээвэр» нэгдсэн тайлан</div></div>
+      <div class="arrowrow">▲ зөвхөн нэгтгэсэн үр дүн ▲</div>
+      <div class="layer l-gray" style="justify-content:center"><div class="ld"><b>Тайлангийн хөдөлгүүр</b> — grant шалгаж, тенант бүрийн context дотор (RLS хэвээр) counterparty шүүлттэй гүйнэ</div></div>
+      <div class="arrowrow">▲ grant · grant · grant ▲</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <div class="layer l-aqua" style="flex-direction:column;align-items:flex-start;gap:2px"><div class="lt" style="min-width:0">Тээвэр Ко №1</div><div class="ld">өөрийн тенант</div></div>
+        <div class="layer l-aqua" style="flex-direction:column;align-items:flex-start;gap:2px"><div class="lt" style="min-width:0">Тээвэр Ко №2</div><div class="ld">өөрийн тенант</div></div>
+        <div class="layer l-aqua" style="flex-direction:column;align-items:flex-start;gap:2px"><div class="lt" style="min-width:0">… Ко №100</div><div class="ld">өөрийн тенант</div></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Тайлан</span><span>14 / 20</span></div>
+</section>
+
+<!-- 15. Мониторинг -->
+<section class="slide">
+  <div class="kicker">Шинэ чадвар</div>
+  <h2>Ажиглалт — унахаас нь өмнө мэдэдэг платформ</h2>
+  <div class="grow"><div class="cols c3">
+    <div class="card accent a"><div class="tag">Metrics</div><h3>Prometheus + Grafana</h3><p>RED хэмжүүр, DB pool, resilience төлөв, ХУР/eID зэрэг гадаад систем бүрийн хурд — бүгд dashboard дээр амьд.</p></div>
+    <div class="card accent a"><div class="tag">Logs · Traces</div><h3>Loki + Tempo + OTel</h3><p>Лог мөр бүр trace ID-тай — удаан хүсэлт хаана цаг идсэн нь нэг товчоор нээгдэнэ.</p></div>
+    <div class="card accent a"><div class="tag">Alerting</div><h3>SLO + burn rate</h3><p>«CPU 80%» биш — Google SRE-ийн multi-window burn-rate загвар: жинхэнэ асуудалд хурдан сэрээж, түр үсрэлтэд чимээгүй.</p></div>
+    <div class="card accent a"><div class="tag">Errors</div><h3>Error tracking</h3><p>Panic, frontend алдаа хэдэн хэрэглэгчид тохиолдсоноор нь группэлж харуулна — таамаг биш баримтаар засна.</p></div>
+    <div class="card accent a"><div class="tag">Uptime</div><h3>Гаднаас шалгагч</h3><p>Тусдаа хостоос /health, TLS хугацааг шалгана — монитор өөрөө унасныг ч анзаарна.</p></div>
+    <div class="card accent a"><div class="tag">Runbooks</div><h3>Alert бүр заавартай</h3><p>Дохио бүрд «эхний 5 минутад юу шалгах» бичигдсэн — шөнийн ээлж таамаглахгүй, гүйцэтгэнэ.</p></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Ажиглалт</span><span>15 / 20</span></div>
+</section>
+
+<!-- 16. Control Plane -->
+<section class="slide">
+  <div class="kicker">Шинэ чадвар</div>
+  <h2>Control Plane — операторын удирдлагын давхарга</h2>
+  <div class="grow"><div class="split rev">
+    <div class="dg">
+      <div class="layer l-blue"><div class="lt">cp.nexus.gerege.mn</div><div class="ld">IP allowlist · TOTP заавал · step-up · append-only audit</div></div>
+      <div class="arrowrow">удирдана ▼</div>
+      <div class="layer l-gray"><div class="lt">Тенантууд</div><div class="ld">үүсгэх · түдгэлзүүлэх · 30 хоногийн grace устгал · quota</div></div>
+      <div class="layer l-gray"><div class="lt">Платформ</div><div class="ld">public/private горим · динамик тохиргоо · feature flags · kill switch</div></div>
+      <div class="layer l-gray"><div class="lt">Ажиллагаа</div><div class="ld">deploy товч (CI-гээр) · backup төлөв · каталог · metering</div></div>
+    </div>
+    <ul class="clean">
+      <li><b>Data plane / control plane ялгаа:</b> тенантын апп ба операторын консол тусдаа хост, тусдаа бүртгэл, тусдаа эрхийн ертөнц.</li>
+      <li><b>Public / private горим:</b> нээлттэй бүртгэлтэй платформоос урьдчилан бүртгэлтэй хаалттай платформ хүртэл нэг тохиргоогоор.</li>
+      <li><b>Support хэрэгслүүд:</b> нууц үг reset, session цуцлалт, шалтгаантай impersonation — бүгд audit-тай.</li>
+      <li><b>Аюулгүйн зарчим:</b> env засдаггүй, серверт exec хийдэггүй — бүх өөрчлөлт хяналттай, буцаагдах замаар.</li>
+    </ul>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Control Plane</span><span>16 / 20</span></div>
+</section>
+
+<!-- 17. Экосистемийн загвар -->
+<section class="slide">
+  <div class="kicker">Ирээдүйн загвар</div>
+  <h2>Нэг цөм → зуун платформ: гурван түвшний загвар</h2>
+  <div class="grow"><div class="dg" style="gap:8px">
+    <div class="layer l-blue"><div class="lt">ЦӨМ — open-gerege-nexus</div><div class="ld">Платформын бүх чадвар + <b>pkg/nexus SDK</b> (semver амлалттай нийтийн API) — экосистемийн ганц эх сурвалж, хэн ч хуулбарладаггүй</div><span class="pill b">нэг repo</span></div>
+    <div class="arrowrow">▼ go.mod-ын нэг мөрөөр dependency ▼</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div class="layer l-aqua" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">gerege-commerce</div><div class="ld">бараа · агуулах · нэхэмжлэх · ПОС</div><span class="pill g">Distribution</span></div>
+      <div class="layer l-aqua" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">gerege-gov</div><div class="ld">төрийн үйлчилгээ · дараалал</div><span class="pill g">Distribution</span></div>
+      <div class="layer l-aqua" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="lt" style="min-width:0">gerege-appstore</div><div class="ld">registry · publisher studio</div><span class="pill g">Distribution</span></div>
+    </div>
+    <div class="arrowrow">▼ нэг образ — өөр тохиргоо, каталог, брэнд ▼</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+      <div class="layer l-yellow"><div class="ld"><b>Улсын нэгдсэн</b><br>nexus.gerege.mn</div></div>
+      <div class="layer l-yellow"><div class="ld"><b>Аймаг, сум</b><br>SSO federation-оор дээшээ холбогдоно</div></div>
+      <div class="layer l-yellow"><div class="ld"><b>Салбар, компани</b><br>өөрийн домэйн, өөрийн брэнд</div></div>
+      <div class="layer l-yellow"><div class="ld"><b>…зуу зуун deployment</b><br>код биш — тохиргоо</div></div>
+    </div>
+    <div class="layer l-orange"><div class="lt">Гуравдагч аппууд</div><div class="ld">OAuth2/OIDC-ээр холбогдож апп стороор түгээгдэнэ — ямар ч хэл, ямар ч стек, git нь өөрсдийнх</div><span class="pill o">External</span></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Экосистем</span><span>17 / 20</span></div>
+</section>
+
+<!-- 18. Хөгжүүлэлтийн загвар -->
+<section class="slide">
+  <div class="kicker">Ирээдүйн загвар</div>
+  <h2>Зуун repo-г жижиг баг дааж чадах хөгжүүлэлтийн загвар</h2>
+  <div class="grow"><div class="cols c2" style="gap:20px">
+    <div class="card accent"><h3>Release train — 2 долоо хоног</h3><p>Цөм тогтмол хэмнэлээр semver release гаргана. Distribution бүрд Renovate шинэ хувилбарын PR-ыг автоматаар нээж, CI нь шалгана — цөмийн засвар зуун платформд <b>цагийн дотор</b> тархана.</p></div>
+    <div class="card accent"><h3>Upstream-first дүрэм</h3><p>Цөмд хэрэгтэй засвар зөвхөн цөм рүү PR-аар — хуулбарлаж «түр засах» зам хаалттай. Зуун repo нэг чиглэлд урсана, drift үүсэхгүй.</p></div>
+    <div class="card accent"><h3>Шинэ платформ — хагас өдөрт</h3><p>Template repo + reusable CI: шинэ distribution үүсгэх нь скелет хуулж нэр солих төдий. CI тодорхойлолт нэг газар — засвар нь бүгдэд нэгэн зэрэг.</p></div>
+    <div class="card accent"><h3>Хил нь тодорхой</h3><p>Тенантын шинэ тайлан — өөрийн repo-д, өнөөдөр deploy. Хөдөлгүүрийн шинэ чадвар — цөм рүү PR, дараагийн train-д. Багууд юу хаана амьдардгийг мэднэ.</p></div>
+  </div></div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Хөгжүүлэлт</span><span>18 / 20</span></div>
+</section>
+
+<!-- 19. Замын зураг -->
+<section class="slide">
+  <div class="kicker">Замын зураг</div>
+  <h2>Дараагийн алхмууд</h2>
+  <div class="grow">
+    <table class="t">
+      <tr><th style="width:22%">Үе шат</th><th>Агуулга</th><th style="width:24%">Үр дүн</th></tr>
+      <tr><td>1 · Ажиглалт</td><td>Хэмжүүр гүйцээх, Grafana/Loki/Tempo стек, SLO burn-rate alerting, runbook</td><td>Унахаас өмнө мэддэг платформ</td></tr>
+      <tr><td>2 · Тайлан</td><td>Reports модуль, export, товлосон илгээлт, тенант дамнасан grant</td><td>Шийдвэрийн түвшний харагдац</td></tr>
+      <tr><td>3 · Control Plane</td><td>cp.nexus.gerege.mn — тенант lifecycle, тохиргоо, flags, metering</td><td>Мэргэжлийн операторын удирдлага</td></tr>
+      <tr><td>4 · Нэршил + SDK</td><td>Модулиудын нэршлийн засвар, pkg/nexus нийтийн SDK, semver v1.0</td><td>Гадны баг модуль бичиж чадна</td></tr>
+      <tr><td>5 · Экосистем</td><td>Distribution салгалт (appstore → gov → commerce), template + reusable CI</td><td>Зуун платформ руу тэлэх суурь</td></tr>
+    </table>
+    <p class="lead" style="font-size:15px;margin-top:14px;max-width:none">Үе шат бүр бие даасан үнэ цэн өгнө — аль ч цэгт зогссон ч платформ өмнөхөөсөө хүчтэй байна.</p>
+  </div>
+  <div class="foot"><span><b>Gerege Nexus</b> · Замын зураг</span><span>19 / 20</span></div>
+</section>
+
+<!-- 20. Дүгнэлт -->
+<section class="slide">
+  <div class="grow" style="align-items:flex-start;gap:26px">
+    <div class="kicker">Дүгнэлт</div>
+    <h1 style="font-size:44px">Нэг цөм.<br><span style="color:var(--brand)">Зуун платформ.</span><br>Нэг экосистем.</h1>
+    <p class="lead">Gerege Nexus бол зөвхөн нэг систем биш — Монголын цахим үйлчилгээний дараагийн зуун платформ ургах <b style="color:var(--ink)">үндэсний хэмжээний суурь</b>. Нээлттэй эх, монгол хэл, төрийн дэд бүтэц, аюулгүй байдал — бүгд нэг цөмд.</p>
+    <div class="chips">
+      <span class="chip hl">nexus.gerege.mn</span>
+      <span class="chip">appstore.gerege.mn</span>
+      <span class="chip">developer.gerege.mn</span>
+      <span class="chip">gerege-systems.github.io/open-gerege-nexus</span>
+      <span class="chip">github.com/gerege-systems/open-gerege-nexus</span>
+    </div>
+  </div>
+  <div class="foot"><span><b>Gerege Systems Development Team</b> · Gemini AI · Claude AI</span><span>20 / 20</span></div>
+</section>
+
+</div>
+<div class="nav">
+  <button id="prev" aria-label="Өмнөх">‹</button>
+  <button id="next" aria-label="Дараах">›</button>
+</div>
+<div class="pageno" id="pageno">1 / 20</div>
+<script>
+const slides=[...document.querySelectorAll('.slide')];let i=0;
+const show=n=>{i=Math.max(0,Math.min(slides.length-1,n));
+  slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+  document.getElementById('pageno').textContent=(i+1)+' / '+slides.length;
+  document.getElementById('progress').style.width=((i+1)/slides.length*100)+'%';
+  location.hash=i+1;};
+document.getElementById('next').onclick=()=>show(i+1);
+document.getElementById('prev').onclick=()=>show(i-1);
+addEventListener('keydown',e=>{
+  if(['ArrowRight','PageDown',' '].includes(e.key))show(i+1);
+  if(['ArrowLeft','PageUp'].includes(e.key))show(i-1);
+  if(e.key==='Home')show(0); if(e.key==='End')show(slides.length-1);
+  if(e.key==='f')document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
+});
+let tx=null;
+addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive:true});
+addEventListener('touchend',e=>{if(tx===null)return;const d=e.changedTouches[0].clientX-tx;
+  if(d<-50)show(i+1); if(d>50)show(i-1); tx=null;},{passive:true});
+const h=parseInt(location.hash.slice(1)); if(h>=1)show(h-1);
+</script>
+</body>
+</html>
