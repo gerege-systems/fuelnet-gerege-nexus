@@ -15,6 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed — the App Store left, and is a product of its own
+
+The first distribution split. `apps/appstore_registry`, `apps/publisher_studio`
+and `apps/store_review` now live in
+[appstore-gerege-nexus](https://github.com/gerege-systems/appstore-gerege-nexus),
+which takes this platform as a dependency by tag and adds nothing but three
+modules and the line that registers them. Every other deployment stopped
+carrying them as dead weight the day they left.
+
+- Gone from here: the three module packages, `catalog/profiles/appstore`,
+  `cmd/appstore-import` (an operational tool for those tables), and the App
+  Store's entries in the public-route list. That last one matters: a name on
+  that list is a permission, and leaving `/api/v1/registry/*` behind would have
+  blessed the next core route that happened to be mounted under it.
+- **Migration `00038_appstore_registry.sql` stays.** It has already run on every
+  deployment in the field, and removing an applied migration from the sequence
+  buys a tidier directory at the price of a history that no longer describes the
+  database. The tables sit unused where the App Store is not installed. New
+  store migrations belong to the distribution, in its own goose table.
+- The distribution needs a route-policy guard of its own. It has public routes —
+  the signed catalogue and the keys that verify it — and nothing there is
+  checking them yet.
+
+
 ## [1.1.0] - 2026-08-14
 
 ### Added — `pkg/platform`, so a distribution can start the platform it compiles against

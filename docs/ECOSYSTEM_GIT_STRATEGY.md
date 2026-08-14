@@ -154,7 +154,7 @@ route redirect. Энэ зардал нь SDK гарсны **дараа** төл�
 
 | Шинэ repo | Одоогийн код | Шалтгаан |
 | --- | --- | --- |
-| **gerege-appstore** | `apps/appstore_registry`, `apps/publisher_studio`, `apps/store_review` | Зөвхөн appstore.gerege.mn deployment-д хэрэгтэй — бусад зуун платформ энэ кодыг үхмэл ачаа болгож тээх шаардлагагүй. GitLab дээрх одоогийн appstore repo-уудтай нэгтгэж нэг бүтээгдэхүүн болгоно. **Хамгийн эхэнд салгах нь энэ** — хил нь хамгийн тод |
+| **appstore-gerege-nexus** ✅ салгасан | `apps/appstore_registry`, `apps/publisher_studio`, `apps/store_review` | Зөвхөн appstore.gerege.mn deployment-д хэрэгтэй — бусад зуун платформ энэ кодыг үхмэл ачаа болгож тээх шаардлагагүй. GitLab дээрх одоогийн appstore repo-уудтай нэгтгэж нэг бүтээгдэхүүн болгоно. **Хамгийн эхэнд салгах нь энэ** — хил нь хамгийн тод |
 | **gerege-commerce** | `apps/products`, `apps/inventory`, `apps/billing` + frontend `pos/` | Худалдаа-агуулах-нэхэмжлэхийн vertical; e-Barimt, НӨАТ нь домэйн логик. products-ийг billing/inventory л ашигладаг тул хамт явна |
 | **gerege-gov** | `apps/gov_services` + frontend `line/` (цахим дараалал) | Төрийн үйлчилгээний vertical — шийдвэрлэх урсгал, цаг захиалга, дараалал |
 
@@ -168,7 +168,13 @@ distribution-ийг бүгдийг нь суулгасан Түвшин 2-ын �
 
 0. **Нэршлийн засвар** (`core`→`organisation`, `developer_portal`→
    `sso_clients`, `egov` модуль ялгаж гаргах) — SDK-ээс өмнө;
-1. `gerege-appstore` — хил тод, хэрэглэгч цөөн, эхний туршилт;
+1. ~~`gerege-appstore`~~ → **[appstore-gerege-nexus](https://github.com/gerege-systems/appstore-gerege-nexus)**
+   — салгасан. Гурван модуль тэнд нүүж, цөмийг `backend v1.1.0` tag-аар авна.
+   Салгалт нь гурван зүйлийг шаардсан бөгөөд гурвуулаа одоо бүх distribution-д
+   бэлэн: `pkg/nexus` (модулийн гэрээ), `pkg/catalog` (апп сторын гэрээ),
+   `pkg/platform` (нийтийн эхлүүлэгч). Дөрөв дэх нь `cmd/migrate`-ийн
+   `MIGRATIONS_DIR`/`MIGRATIONS_TABLE` — distribution өөрийн schema-тай бол
+   хэрэгтэй;
 2. `gerege-gov` — дараагийн тод vertical;
 3. `gerege-commerce` — contacts/products-ийн FK хамаарлыг SDK-ийн
    interface-ээр цэвэрлэх шаардлагатай тул хамгийн сүүлд;

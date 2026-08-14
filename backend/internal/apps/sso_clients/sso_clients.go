@@ -9,7 +9,8 @@
  *
  * It was called `developer_portal`, which named the wrong thing twice. There is
  * a real developer portal in this ecosystem — developer.gerege.mn, backed by
- * apps/publisher_studio — where a third party submits an app to the store; an
+ * the appstore-gerege-nexus distribution — where a third party submits an app
+ * to the store; an
  * administrator who wanted that and found this instead had no way to tell from
  * the name that they were in the wrong product. And what this actually is has
  * nothing to do with developers: it is CRUD over OAuth2 clients, done by

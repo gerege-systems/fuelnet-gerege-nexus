@@ -8,7 +8,6 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
@@ -18,10 +17,8 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/publisher_studio"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/store_review"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
@@ -59,15 +56,11 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	documents.New(p)
 	gov_services.New(p, integrations)
 	sso_clients.New(sso)
-	// The App Store's own registry. Present in every build and dormant in
-	// almost all of them: without a signing key it publishes no catalogue, and
-	// without the app installed its routes are unreachable anyway.
-	appstore_registry.New(p)
-	// The two surfaces over it. Separate modules because a publisher submits
-	// and a reviewer publishes, and one permission covering both would make the
-	// queue decorative.
-	publisher_studio.New(p)
-	store_review.New(p)
+	// The App Store's three modules used to be constructed here. They are a
+	// product of their own now — github.com/gerege-systems/appstore-gerege-nexus
+	// — and reach this list through platform.Options.Modules, the same way any
+	// distribution's do. Every other deployment stopped carrying them as dead
+	// weight the day they left.
 	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
 	// Last, and after every module that registers a report: the reports app
 	// serves the registry, and a module constructed after it would have its
