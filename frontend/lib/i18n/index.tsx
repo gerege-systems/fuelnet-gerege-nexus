@@ -15,6 +15,7 @@ import { contacts } from "./addons/contacts";
 import { cp } from "./addons/cp";
 import { core } from "./addons/core";
 import { sso_clients } from "./addons/sso_clients";
+import { storefront } from "./addons/storefront";
 import { modules } from "./addons/modules";
 import { documents } from "./addons/documents";
 import { egov } from "./addons/egov";
@@ -92,6 +93,7 @@ const dictionary = {
   ...cp,
   ...core,
   ...sso_clients,
+  ...storefront,
   ...modules,
   ...documents,
   ...egov,
