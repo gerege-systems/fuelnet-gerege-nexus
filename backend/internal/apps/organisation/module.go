@@ -66,7 +66,7 @@ const LegacyID = "io.gerege.nexus.core"
 
 type Module struct {
 	db    *pgxpool.Pool
-	perms rbac.PermissionStore
+	perms nexus.PermissionStore
 }
 
 func New(db *pgxpool.Pool) *Module {
@@ -131,8 +131,8 @@ func (m *Module) Menus() []nexus.MenuDefinition {
 func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/v1/organisation", func(cr chi.Router) {
 		cr.Use(tenantAuthMiddleware)
-		read := rbac.RequirePermission(m.perms, "organisation.read")
-		manage := rbac.RequirePermission(m.perms, "organisation.manage")
+		read := nexus.RequirePermission(m.perms, "organisation.read")
+		manage := nexus.RequirePermission(m.perms, "organisation.manage")
 
 		// How it is arranged.
 		cr.With(read).Get("/departments", m.handleListDepartments)

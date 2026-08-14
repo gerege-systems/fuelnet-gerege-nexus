@@ -27,10 +27,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -125,7 +122,7 @@ func (m *SSOClientsModule) routes(tenantAuthMiddleware func(http.Handler) http.H
 // away, and then called a provider method that returned every client on the
 // platform — so any tenant could enumerate every other tenant's integrations.
 func (m *SSOClientsModule) handleListApps(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -133,28 +130,28 @@ func (m *SSOClientsModule) handleListApps(w http.ResponseWriter, r *http.Request
 	clients, err := m.sso.Store().ListClients(r.Context(), tenantID)
 	if err != nil {
 		slog.Error("failed to list oauth2 clients", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not load applications")
+		nexus.Error(w, http.StatusInternalServerError, "could not load applications")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, clients)
+	nexus.JSON(w, http.StatusOK, clients)
 }
 
 func (m *SSOClientsModule) handleGetApp(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	client, err := m.sso.Store().GetTenantClient(r.Context(), tenantID, chi.URLParam(r, "clientID"))
 	if errors.Is(err, ssoprovider.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "application not found")
+		nexus.Error(w, http.StatusNotFound, "application not found")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the application")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the application")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, client)
+	nexus.JSON(w, http.StatusOK, client)
 }
 
 // appRequest is the create/update payload.
@@ -174,21 +171,21 @@ type appRequest struct {
 }
 
 func (m *SSOClientsModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	claims, _ := auth.UserFromContext(r.Context())
+	claims, _ := nexus.UserFromContext(r.Context())
 
 	var req appRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid payload")
+		nexus.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 
 	normalised, verr := normalise(&req)
 	if verr != nil {
-		httpx.Error(w, http.StatusBadRequest, verr.Error())
+		nexus.Error(w, http.StatusBadRequest, verr.Error())
 		return
 	}
 
@@ -217,35 +214,35 @@ func (m *SSOClientsModule) handleCreateApp(w http.ResponseWriter, r *http.Reques
 	created, err := m.sso.Store().CreateClient(r.Context(), client, secretHash, claims.UserID)
 	if err != nil {
 		slog.Error("failed to create an oauth2 client", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not register the application")
+		nexus.Error(w, http.StatusInternalServerError, "could not register the application")
 		return
 	}
 
 	// The only time the secret is ever readable. Every later read redacts it,
 	// because the database holds a digest and cannot reproduce it.
 	created.Secret = secret
-	httpx.JSON(w, http.StatusCreated, created)
+	nexus.JSON(w, http.StatusCreated, created)
 }
 
 func (m *SSOClientsModule) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	existing, err := m.sso.Store().GetTenantClient(r.Context(), tenantID, chi.URLParam(r, "clientID"))
 	if errors.Is(err, ssoprovider.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "application not found")
+		nexus.Error(w, http.StatusNotFound, "application not found")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the application")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the application")
 		return
 	}
 
 	var req appRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid payload")
+		nexus.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 	// The client type is fixed at registration: flipping a public client to
@@ -255,7 +252,7 @@ func (m *SSOClientsModule) handleUpdateApp(w http.ResponseWriter, r *http.Reques
 
 	normalised, verr := normalise(&req)
 	if verr != nil {
-		httpx.Error(w, http.StatusBadRequest, verr.Error())
+		nexus.Error(w, http.StatusBadRequest, verr.Error())
 		return
 	}
 
@@ -271,25 +268,25 @@ func (m *SSOClientsModule) handleUpdateApp(w http.ResponseWriter, r *http.Reques
 	updated, err := m.sso.Store().UpdateClient(r.Context(), tenantID, existing)
 	if err != nil {
 		slog.Error("failed to update an oauth2 client", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "could not update the application")
+		nexus.Error(w, http.StatusInternalServerError, "could not update the application")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, updated)
+	nexus.JSON(w, http.StatusOK, updated)
 }
 
 func (m *SSOClientsModule) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	err := m.sso.Store().DeleteClient(r.Context(), tenantID, chi.URLParam(r, "clientID"))
 	if errors.Is(err, ssoprovider.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "application not found")
+		nexus.Error(w, http.StatusNotFound, "application not found")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not delete the application")
+		nexus.Error(w, http.StatusInternalServerError, "could not delete the application")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -299,7 +296,7 @@ func (m *SSOClientsModule) handleDeleteApp(w http.ResponseWriter, r *http.Reques
 // was no way to do this before: a leaked secret meant deleting the integration
 // and re-registering it under a new client_id.
 func (m *SSOClientsModule) handleRotateSecret(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -307,27 +304,27 @@ func (m *SSOClientsModule) handleRotateSecret(w http.ResponseWriter, r *http.Req
 	clientID := chi.URLParam(r, "clientID")
 	client, err := m.sso.Store().GetTenantClient(r.Context(), tenantID, clientID)
 	if errors.Is(err, ssoprovider.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "application not found")
+		nexus.Error(w, http.StatusNotFound, "application not found")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the application")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the application")
 		return
 	}
 	if client.IsPublic() {
-		httpx.Error(w, http.StatusBadRequest, "a public client has no secret to rotate")
+		nexus.Error(w, http.StatusBadRequest, "a public client has no secret to rotate")
 		return
 	}
 
 	secret := "sec_" + ssoprovider.NewIdentifier(48)
 	if err := m.sso.Store().RotateClientSecret(r.Context(), tenantID, clientID, ssoprovider.HashSecret(secret)); err != nil {
 		slog.Error("failed to rotate a client secret", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "could not rotate the secret")
+		nexus.Error(w, http.StatusInternalServerError, "could not rotate the secret")
 		return
 	}
 
 	client.Secret = secret
-	httpx.JSON(w, http.StatusOK, client)
+	nexus.JSON(w, http.StatusOK, client)
 }
 
 // handleAudit reports what this tenant's clients are actually doing: live
@@ -337,7 +334,7 @@ func (m *SSOClientsModule) handleRotateSecret(w http.ResponseWriter, r *http.Req
 // consent nobody remembers granting is the one worth withdrawing; neither was
 // visible anywhere before.
 func (m *SSOClientsModule) handleAudit(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -345,46 +342,46 @@ func (m *SSOClientsModule) handleAudit(w http.ResponseWriter, r *http.Request) {
 	activity, err := m.sso.Store().ClientActivityByTenant(r.Context(), tenantID)
 	if err != nil {
 		slog.Error("failed to load oauth2 client activity", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not load activity")
+		nexus.Error(w, http.StatusInternalServerError, "could not load activity")
 		return
 	}
 	consents, err := m.sso.Store().ConsentsByTenant(r.Context(), tenantID, 200)
 	if err != nil {
 		slog.Error("failed to load oauth2 consents", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not load consents")
+		nexus.Error(w, http.StatusInternalServerError, "could not load consents")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]any{"clients": activity, "consents": consents})
+	nexus.JSON(w, http.StatusOK, map[string]any{"clients": activity, "consents": consents})
 }
 
 // handleRevokeTokens invalidates every live token a client holds without
 // deleting the registration, so a suspected leak can be contained while the
 // integration keeps its client_id.
 func (m *SSOClientsModule) handleRevokeTokens(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	clientID := chi.URLParam(r, "clientID")
 	if _, err := m.sso.Store().GetTenantClient(r.Context(), tenantID, clientID); err != nil {
-		httpx.Error(w, http.StatusNotFound, "application not found")
+		nexus.Error(w, http.StatusNotFound, "application not found")
 		return
 	}
 
 	revoked, err := m.sso.Store().RevokeClientTokens(r.Context(), tenantID, clientID)
 	if err != nil {
 		slog.Error("failed to revoke client tokens", "error", err, "client_id", clientID)
-		httpx.Error(w, http.StatusInternalServerError, "could not revoke tokens")
+		nexus.Error(w, http.StatusInternalServerError, "could not revoke tokens")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"revoked": revoked})
+	nexus.JSON(w, http.StatusOK, map[string]any{"revoked": revoked})
 }
 
 // handleWithdrawConsent removes one user's standing grant to a client.
 func (m *SSOClientsModule) handleWithdrawConsent(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -392,12 +389,12 @@ func (m *SSOClientsModule) handleWithdrawConsent(w http.ResponseWriter, r *http.
 	err := m.sso.Store().WithdrawConsent(r.Context(), tenantID,
 		chi.URLParam(r, "clientID"), chi.URLParam(r, "userID"))
 	if errors.Is(err, ssoprovider.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "consent not found")
+		nexus.Error(w, http.StatusNotFound, "consent not found")
 		return
 	}
 	if err != nil {
 		slog.Error("failed to withdraw consent", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "could not withdraw the consent")
+		nexus.Error(w, http.StatusInternalServerError, "could not withdraw the consent")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -407,17 +404,17 @@ func (m *SSOClientsModule) handleWithdrawConsent(w http.ResponseWriter, r *http.
 // which kid their library should be pinning and when it appeared. Only public
 // metadata: the query never selects the private half.
 func (m *SSOClientsModule) handleSigningKeys(w http.ResponseWriter, r *http.Request) {
-	if _, ok := tenant.Require(w, r); !ok {
+	if _, ok := nexus.RequireTenant(w, r); !ok {
 		return
 	}
 
 	keys, err := m.sso.Store().SigningKeys(r.Context())
 	if err != nil {
 		slog.Error("failed to load signing keys", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "could not load signing keys")
+		nexus.Error(w, http.StatusInternalServerError, "could not load signing keys")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"keys":     keys,
 		"jwks_uri": m.sso.Issuer() + "/.well-known/jwks.json",
 	})
@@ -426,7 +423,7 @@ func (m *SSOClientsModule) handleSigningKeys(w http.ResponseWriter, r *http.Requ
 // handleListScopes gives the portal's scope picker the same vocabulary the
 // consent screen renders, so the two cannot drift.
 func (m *SSOClientsModule) handleListScopes(w http.ResponseWriter, r *http.Request) {
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"scopes":      ssoprovider.SupportedScopes,
 		"grant_types": ssoprovider.SupportedGrantTypes,
 	})
@@ -436,7 +433,7 @@ func (m *SSOClientsModule) handleListScopes(w http.ResponseWriter, r *http.Reque
 // into their client library, rather than making them assemble the origin.
 func (m *SSOClientsModule) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 	issuer := m.sso.Issuer()
-	httpx.JSON(w, http.StatusOK, map[string]string{
+	nexus.JSON(w, http.StatusOK, map[string]string{
 		"issuer":                 issuer,
 		"discovery":              issuer + "/.well-known/openid-configuration",
 		"jwks_uri":               issuer + "/.well-known/jwks.json",

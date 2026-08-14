@@ -12,9 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -442,7 +441,7 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	// recorded alongside the signatures it will govern — and the record carries the
 	// chain itself, not just how long it is. "The CONTRACT chain went from three steps
 	// to three steps" answers nothing about who was swapped in.
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.approval_chain_changed", docType, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.approval_chain_changed", docType, map[string]any{
 		"steps": len(cleaned), "chain": cleaned,
 	})
 
@@ -544,7 +543,7 @@ func (m *DocumentsModule) RouteDocument(ctx context.Context, tenantID, docID str
 		slog.WarnContext(ctx, "routed the document but could not read back its chain for the record",
 			"document_id", docID, "error", err)
 	}
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.routed", docID, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.routed", docID, map[string]any{
 		"doc_type": docType, "chain": given,
 	})
 
@@ -583,21 +582,21 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 }
 
 func (m *DocumentsModule) listWorkflowsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	list, err := m.ListWorkflows(r.Context(), tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch approval chains")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch approval chains")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -615,11 +614,11 @@ func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Req
 		Steps *[]WorkflowStep `json:"steps"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid approval chain payload")
+		nexus.Error(w, http.StatusBadRequest, "invalid approval chain payload")
 		return
 	}
 	if req.Steps == nil {
-		httpx.Error(w, http.StatusBadRequest,
+		nexus.Error(w, http.StatusBadRequest,
 			"invalid approval chain payload: steps is required — send an empty array to clear the chain")
 		return
 	}
@@ -629,11 +628,11 @@ func (m *DocumentsModule) saveWorkflowHandler(w http.ResponseWriter, r *http.Req
 		writeWriteFailure(r.Context(), w, err, "failed to save the approval chain")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, saved)
+	nexus.JSON(w, http.StatusOK, saved)
 }
 
 func (m *DocumentsModule) routeDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -641,17 +640,17 @@ func (m *DocumentsModule) routeDocumentHandler(w http.ResponseWriter, r *http.Re
 	doc, err := m.RouteDocument(r.Context(), tenantID, chi.URLParam(r, "id"))
 	switch {
 	case errors.Is(err, ErrNotRoutable):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case err != nil:
-		httpx.Error(w, http.StatusInternalServerError, "failed to route document")
+		nexus.Error(w, http.StatusInternalServerError, "failed to route document")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, doc)
+	nexus.JSON(w, http.StatusOK, doc)
 }
 
 func (m *DocumentsModule) listDocumentStepsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -659,17 +658,17 @@ func (m *DocumentsModule) listDocumentStepsHandler(w http.ResponseWriter, r *htt
 	list, err := m.DocumentSteps(r.Context(), tenantID, chi.URLParam(r, "id"))
 	switch {
 	case errors.Is(err, ErrNotSignable):
-		httpx.Error(w, http.StatusNotFound, "document not found")
+		nexus.Error(w, http.StatusNotFound, "document not found")
 		return
 	case err != nil:
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch the approval chain")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch the approval chain")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *DocumentsModule) listSignaturesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -677,11 +676,11 @@ func (m *DocumentsModule) listSignaturesHandler(w http.ResponseWriter, r *http.R
 	list, err := m.ListSignatures(r.Context(), tenantID, chi.URLParam(r, "id"))
 	switch {
 	case errors.Is(err, ErrNotSignable):
-		httpx.Error(w, http.StatusNotFound, "document not found")
+		nexus.Error(w, http.StatusNotFound, "document not found")
 		return
 	case err != nil:
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch signatures")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch signatures")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }

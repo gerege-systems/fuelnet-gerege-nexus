@@ -42,12 +42,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -91,7 +87,7 @@ type Module struct {
 	db    *pgxpool.Pool
 	xyp   *gerege.GeregeService
 	rails Rails
-	perms rbac.PermissionStore
+	perms nexus.PermissionStore
 }
 
 func New(db *pgxpool.Pool, xyp *gerege.GeregeService, rails Rails) *Module {
@@ -167,25 +163,25 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 	r.Route("/api/v1/egov", func(er chi.Router) {
 		er.Use(tenantAuthMiddleware)
 
-		read := rbac.RequirePermission(m.perms, "egov.read")
+		read := nexus.RequirePermission(m.perms, "egov.read")
 		er.With(read).Get("/connections", m.handleConnections)
 		er.With(read).Get("/history", m.handleHistory)
 
-		er.With(rbac.RequirePermission(m.perms, "egov.citizen.read")).Post("/citizen", m.handleCitizen)
-		er.With(rbac.RequirePermission(m.perms, "egov.company.read")).Post("/company", m.handleCompany)
+		er.With(nexus.RequirePermission(m.perms, "egov.citizen.read")).Post("/citizen", m.handleCitizen)
+		er.With(nexus.RequirePermission(m.perms, "egov.company.read")).Post("/company", m.handleCompany)
 	})
 
 	// DEPRECATED: remove in vNEXT — the addresses these two lookups had while
 	// they were platform routes.
 	r.Route("/api/v1/xyp", func(xr chi.Router) {
 		xr.Use(tenantAuthMiddleware)
-		xr.With(rbac.RequirePermission(m.perms, "egov.citizen.read")).Post("/citizen", m.handleCitizen)
-		xr.With(rbac.RequirePermission(m.perms, "egov.company.read")).Post("/company", m.handleCompany)
+		xr.With(nexus.RequirePermission(m.perms, "egov.citizen.read")).Post("/citizen", m.handleCitizen)
+		xr.With(nexus.RequirePermission(m.perms, "egov.company.read")).Post("/company", m.handleCompany)
 	})
 }
 
 func (m *Module) handleCitizen(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -194,25 +190,25 @@ func (m *Module) handleCitizen(w http.ResponseWriter, r *http.Request) {
 		RegNumber string `json:"reg_number"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<13)).Decode(&req); err != nil || req.RegNumber == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid registration number")
+		nexus.Error(w, http.StatusBadRequest, "invalid registration number")
 		return
 	}
 
 	info, err := m.Citizen(r.Context(), req.RegNumber)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
+		nexus.Error(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
 		return
 	}
 
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "egov.citizen_queried", "egov",
+	claims, _ := nexus.UserFromContext(r.Context())
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "egov.citizen_queried", "egov",
 		map[string]any{"reg_number": req.RegNumber})
 
-	httpx.JSON(w, http.StatusOK, info)
+	nexus.JSON(w, http.StatusOK, info)
 }
 
 func (m *Module) handleCompany(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -221,21 +217,21 @@ func (m *Module) handleCompany(w http.ResponseWriter, r *http.Request) {
 		CompanyReg string `json:"company_reg"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<13)).Decode(&req); err != nil || req.CompanyReg == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid company registration number")
+		nexus.Error(w, http.StatusBadRequest, "invalid company registration number")
 		return
 	}
 
 	info, err := m.Company(r.Context(), req.CompanyReg)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
+		nexus.Error(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
 		return
 	}
 
-	claims, _ := auth.UserFromContext(r.Context())
-	audit.Record(r.Context(), tenantID, claims.UserID, "egov.company_queried", "egov",
+	claims, _ := nexus.UserFromContext(r.Context())
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "egov.company_queried", "egov",
 		map[string]any{"company_reg": req.CompanyReg})
 
-	httpx.JSON(w, http.StatusOK, info)
+	nexus.JSON(w, http.StatusOK, info)
 }
 
 // handleConnections answers with the three rails and where a person manages
@@ -246,14 +242,14 @@ func (m *Module) handleCompany(w http.ResponseWriter, r *http.Request) {
 // deliberately not here, and a screen that mentions the thing without saying
 // where it is would only send people looking through Settings.
 func (m *Module) handleConnections(w http.ResponseWriter, r *http.Request) {
-	if _, ok := tenant.Require(w, r); !ok {
+	if _, ok := nexus.RequireTenant(w, r); !ok {
 		return
 	}
 	rails := []Rail{}
 	if m.rails != nil {
 		rails = m.rails()
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"rails": rails,
 		// Where the person's own linked identities live. See the package
 		// comment for why they are not here.
@@ -276,7 +272,7 @@ type historyEntry struct {
 // also the one place a deletion is not expected: an organisation should not be
 // able to tidy away the record of whose registry data it read.
 func (m *Module) handleHistory(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -290,7 +286,7 @@ func (m *Module) handleHistory(w http.ResponseWriter, r *http.Request) {
 		  LIMIT 200`, tenantID)
 	if err != nil {
 		slog.Error("egov: could not read the lookup history", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not load the history")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the history")
 		return
 	}
 	defer rows.Close()
@@ -309,5 +305,5 @@ func (m *Module) handleHistory(w http.ResponseWriter, r *http.Request) {
 	// the same acts under their old name, and a history that started empty on
 	// the day this module shipped would look like a history that had been
 	// cleared.
-	httpx.JSON(w, http.StatusOK, entries)
+	nexus.JSON(w, http.StatusOK, entries)
 }

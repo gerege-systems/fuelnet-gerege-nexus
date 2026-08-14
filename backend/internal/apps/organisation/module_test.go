@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -84,8 +84,8 @@ func newFixture(t *testing.T) *fixture {
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := tenant.WithTenantID(r.Context(), f.tenantID)
-			ctx = auth.WithUserContext(ctx, auth.UserClaims{UserID: f.userID, TenantID: f.tenantID, IsAdmin: true})
+			ctx := nexus.WithTenantID(r.Context(), f.tenantID)
+			ctx = nexus.WithUser(ctx, nexus.UserClaims{UserID: f.userID, TenantID: f.tenantID, IsAdmin: true})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})

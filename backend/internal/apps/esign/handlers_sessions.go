@@ -27,9 +27,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -155,11 +155,11 @@ func (m *Module) signInitHandler(w http.ResponseWriter, r *http.Request) {
 		Provider: ProviderEID, Action: ActionSignStart, Outcome: OutcomeOK,
 		RegNo: signerEtsi, ActorUserID: actor.UserID,
 	})
-	audit.Record(r.Context(), tenantID, actor.UserID, "esign.sign_started", "esign", map[string]any{
+	nexus.Audit(r.Context(), tenantID, actor.UserID, "esign.sign_started", "esign", map[string]any{
 		"session_id": started.SessionID, "document_id": documentID, "on_behalf_of": onBehalfOf,
 	})
 
-	httpx.JSON(w, http.StatusOK, session)
+	nexus.JSON(w, http.StatusOK, session)
 }
 
 // readSignInput accepts either shape of request and returns the bytes to sign.
@@ -265,7 +265,7 @@ func (m *Module) signStatusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if session.State != SessionPending {
 		// Terminal is a settled fact; re-asking would only add latency.
-		httpx.JSON(w, http.StatusOK, session)
+		nexus.JSON(w, http.StatusOK, session)
 		return
 	}
 
@@ -274,10 +274,10 @@ func (m *Module) signStatusHandler(w http.ResponseWriter, r *http.Request) {
 		// A transient upstream failure is not a verdict — the ceremony is still
 		// open on the citizen's phone, and the browser treats an unchanged
 		// answer as "keep waiting", which is correct.
-		httpx.JSON(w, http.StatusOK, session)
+		nexus.JSON(w, http.StatusOK, session)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, settled)
+	nexus.JSON(w, http.StatusOK, settled)
 }
 
 // settle asks the library for the ceremony's state and records the outcome.
@@ -325,7 +325,7 @@ func (m *Module) settle(r *http.Request, tenantID string, actor Actor, session *
 				RegNo: session.SignerEtsi, FirstName: session.SignerName,
 				ActorUserID: actor.UserID,
 			})
-			audit.Record(r.Context(), tenantID, actor.UserID, "esign.document_signed", "esign", map[string]any{
+			nexus.Audit(r.Context(), tenantID, actor.UserID, "esign.document_signed", "esign", map[string]any{
 				"session_id": session.ID, "document_id": session.DocumentID, "provider": ProviderEID,
 			})
 			// The qualified rail files the finished document the same way the
@@ -406,7 +406,7 @@ func (m *Module) signCancelHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, session)
+	nexus.JSON(w, http.StatusOK, session)
 }
 
 // organizationsHandler lists the organisations the signer may act for.
@@ -417,17 +417,17 @@ func (m *Module) organizationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if actor.Etsi == "" {
 		// Not an error: an unlinked account simply has nothing to represent.
-		httpx.JSON(w, http.StatusOK, []any{})
+		nexus.JSON(w, http.StatusOK, []any{})
 		return
 	}
 	orgs, err := m.eid.Representations(r.Context(), actor.Etsi)
 	if err != nil {
 		// The dropdown is an enhancement; failing it would block signing for a
 		// permission the relying party may not even hold.
-		httpx.JSON(w, http.StatusOK, []any{})
+		nexus.JSON(w, http.StatusOK, []any{})
 		return
 	}
-	httpx.JSON(w, http.StatusOK, orgs)
+	nexus.JSON(w, http.StatusOK, orgs)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

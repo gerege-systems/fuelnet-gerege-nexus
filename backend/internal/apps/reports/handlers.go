@@ -15,12 +15,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -43,7 +41,7 @@ type reportSummary struct {
 // apps it has, and a section it does not have simply is not there — rather than
 // being there and refusing when clicked.
 func (m *Module) handleList(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -78,7 +76,7 @@ func (m *Module) handleList(w http.ResponseWriter, r *http.Request) {
 		response = append(response, group{App: app, Reports: groups[app]})
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]any{"groups": response})
+	nexus.JSON(w, http.StatusOK, map[string]any{"groups": response})
 }
 
 // paramView is a parameter as the form needs it: the spec, plus the options for
@@ -101,7 +99,7 @@ func (m *Module) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		if spec.Kind == reporting.ParamUUID && spec.OptionsQuery != "" {
 			options, err := m.loadOptions(r, tenantID, spec)
 			if err != nil {
-				httpx.Error(w, http.StatusInternalServerError, "could not load the parameter options")
+				nexus.Error(w, http.StatusInternalServerError, "could not load the parameter options")
 				return
 			}
 			view.Options = options
@@ -112,7 +110,7 @@ func (m *Module) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		params = append(params, view)
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"key":     report.Key(),
 		"app":     report.App(),
 		"titles":  report.Titles(),
@@ -136,13 +134,13 @@ func (m *Module) handleRun(w http.ResponseWriter, r *http.Request) {
 
 	params, err := reporting.Bind(report, raw, locale)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	result, err := m.engine.Run(r.Context(), tenantID, report, params)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "the report could not be produced: "+err.Error())
+		nexus.Error(w, http.StatusInternalServerError, "the report could not be produced: "+err.Error())
 		return
 	}
 
@@ -151,7 +149,7 @@ func (m *Module) handleRun(w http.ResponseWriter, r *http.Request) {
 		"params": raw,
 	})
 
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"key":    report.Key(),
 		"title":  reporting.LocalizedTitle(report.Titles(), locale, report.Key()),
 		"result": result,
@@ -167,7 +165,7 @@ func (m *Module) handleExport(w http.ResponseWriter, r *http.Request) {
 
 	format, err := reporting.ParseFormat(r.URL.Query().Get("format"))
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -179,20 +177,20 @@ func (m *Module) handleExport(w http.ResponseWriter, r *http.Request) {
 
 	params, err := reporting.Bind(report, raw, locale)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	result, err := m.engine.Run(r.Context(), tenantID, report, params)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "the report could not be produced: "+err.Error())
+		nexus.Error(w, http.StatusInternalServerError, "the report could not be produced: "+err.Error())
 		return
 	}
 
 	title := reporting.LocalizedTitle(report.Titles(), locale, report.Key())
 	payload, err := reporting.Export(format, title, result, locale)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "the export could not be written")
+		nexus.Error(w, http.StatusInternalServerError, "the export could not be written")
 		return
 	}
 
@@ -223,7 +221,7 @@ func (m *Module) handleExport(w http.ResponseWriter, r *http.Request) {
 // organisation never installed — the list would not show it and the API would
 // serve it anyway.
 func (m *Module) resolve(w http.ResponseWriter, r *http.Request) (string, reporting.Report, bool) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return "", nil, false
 	}
@@ -231,7 +229,7 @@ func (m *Module) resolve(w http.ResponseWriter, r *http.Request) (string, report
 	key := strings.TrimSpace(chi.URLParam(r, "key"))
 	report, found := reporting.Get(key)
 	if !found {
-		httpx.Error(w, http.StatusNotFound, "no such report")
+		nexus.Error(w, http.StatusNotFound, "no such report")
 		return "", nil, false
 	}
 
@@ -243,7 +241,7 @@ func (m *Module) resolve(w http.ResponseWriter, r *http.Request) (string, report
 		// 404 rather than 403: whether another organisation's app exists is not
 		// this caller's business, and the two answers together enumerate the
 		// catalogue.
-		httpx.Error(w, http.StatusNotFound, "no such report")
+		nexus.Error(w, http.StatusNotFound, "no such report")
 		return "", nil, false
 	}
 	return tenantID, report, true
@@ -260,7 +258,7 @@ func (m *Module) installedApps(r *http.Request, tenantID string) (map[string]boo
 
 // loadOptions fills a UUID parameter's dropdown from the tenant's own rows.
 func (m *Module) loadOptions(r *http.Request, tenantID string, spec reporting.ParamSpec) ([]reporting.ParamOption, error) {
-	ctx := tenant.WithTenantID(r.Context(), tenantID)
+	ctx := nexus.WithTenantID(r.Context(), tenantID)
 	rows, err := m.db.Query(ctx, spec.OptionsQuery, tenantID)
 	if err != nil {
 		return nil, err
@@ -303,7 +301,7 @@ func decodeParams(w http.ResponseWriter, r *http.Request) (map[string]string, bo
 		if err.Error() == "EOF" {
 			return raw, true
 		}
-		httpx.Error(w, http.StatusBadRequest, "invalid report parameters")
+		nexus.Error(w, http.StatusBadRequest, "invalid report parameters")
 		return nil, false
 	}
 	if body.Params != nil {
@@ -322,8 +320,8 @@ func localeOf(r *http.Request) string { return config.LocaleFromRequest(r) }
 // question an organisation is entitled to an answer to.
 func (m *Module) record(r *http.Request, tenantID, action, key string, details map[string]any) {
 	userID := ""
-	if claims, err := auth.UserFromContext(r.Context()); err == nil {
+	if claims, err := nexus.UserFromContext(r.Context()); err == nil {
 		userID = claims.UserID
 	}
-	audit.Record(r.Context(), tenantID, userID, action, key, details)
+	nexus.Audit(r.Context(), tenantID, userID, action, key, details)
 }

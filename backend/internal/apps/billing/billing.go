@@ -15,9 +15,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -84,22 +82,22 @@ func (m *BillingModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(h
 }
 
 func (m *BillingModule) listInvoicesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	list, err := m.ListInvoices(r.Context(), tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch invoices")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch invoices")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *BillingModule) createInvoiceHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -109,17 +107,17 @@ func (m *BillingModule) createInvoiceHandler(w http.ResponseWriter, r *http.Requ
 		Amount      float64 `json:"amount"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ContactName == "" || req.Amount <= 0 {
-		httpx.Error(w, http.StatusBadRequest, "invalid invoice parameters: contact_name and a positive amount are required")
+		nexus.Error(w, http.StatusBadRequest, "invalid invoice parameters: contact_name and a positive amount are required")
 		return
 	}
 
 	inv, err := m.CreateInvoice(r.Context(), tenantID, req.ContactName, req.Amount)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	httpx.JSON(w, http.StatusCreated, inv)
+	nexus.JSON(w, http.StatusCreated, inv)
 }
 
 func (m *BillingModule) CreateInvoice(ctx context.Context, tenantID, contactName string, amount float64) (*Invoice, error) {

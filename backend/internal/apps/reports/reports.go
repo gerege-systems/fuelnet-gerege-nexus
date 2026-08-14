@@ -125,34 +125,34 @@ func (m *Module) RegisterRoutes(r chi.Router, gateMiddleware func(http.Handler) 
 		// Reading. `reports.view` plus, per report, the app it belongs to —
 		// checked in the handler rather than here, because which app depends
 		// on which report was asked for.
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/", m.handleList)
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/schedules", m.handleListSchedules)
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/{key}", m.handleMetadata)
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/run", m.handleRun)
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/export", m.handleExport)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Get("/", m.handleList)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Get("/schedules", m.handleListSchedules)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Get("/{key}", m.handleMetadata)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Post("/{key}/run", m.handleRun)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Post("/{key}/export", m.handleExport)
 
 		// The consolidated view. Reading, from this organisation's side: the
 		// permission that matters on the other side is the grant, and it was
 		// given by the organisation that owns the data rather than by anything
 		// here.
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Post("/{key}/run-consolidated", m.handleRunConsolidated)
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/grants", m.handleListGrants)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Post("/{key}/run-consolidated", m.handleRunConsolidated)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Get("/grants", m.handleListGrants)
 		// Who has read our data. A read, and one this organisation is entitled
 		// to — see handleAccessHistory.
-		rr.With(rbac.RequirePermission(m.perms, PermissionView)).Get("/grants/history", m.handleAccessHistory)
+		rr.With(nexus.RequirePermission(m.perms, PermissionView)).Get("/grants/history", m.handleAccessHistory)
 
 		// Scheduling. Administrative: it sends this organisation's numbers to
 		// an address list, on a timer, without anybody present.
-		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Post("/schedules", m.handleCreateSchedule)
-		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Put("/schedules/{id}", m.handleUpdateSchedule)
-		rr.With(rbac.RequirePermission(m.perms, PermissionSchedule)).Delete("/schedules/{id}", m.handleDeleteSchedule)
+		rr.With(nexus.RequirePermission(m.perms, PermissionSchedule)).Post("/schedules", m.handleCreateSchedule)
+		rr.With(nexus.RequirePermission(m.perms, PermissionSchedule)).Put("/schedules/{id}", m.handleUpdateSchedule)
+		rr.With(nexus.RequirePermission(m.perms, PermissionSchedule)).Delete("/schedules/{id}", m.handleDeleteSchedule)
 
 		// Sharing. Under reports.share, not reports.schedule: asking another
 		// organisation for their numbers, and agreeing to hand over your own,
 		// is a different decision from mailing your own out — and the second
 		// one is the one this platform is most careful about.
-		rr.With(rbac.RequirePermission(m.perms, PermissionShare)).Post("/grants", m.handleRequestGrant)
-		rr.With(rbac.RequirePermission(m.perms, PermissionShare)).Post("/grants/{id}/accept", m.handleAcceptGrant)
-		rr.With(rbac.RequirePermission(m.perms, PermissionShare)).Post("/grants/{id}/revoke", m.handleRevokeGrant)
+		rr.With(nexus.RequirePermission(m.perms, PermissionShare)).Post("/grants", m.handleRequestGrant)
+		rr.With(nexus.RequirePermission(m.perms, PermissionShare)).Post("/grants/{id}/accept", m.handleAcceptGrant)
+		rr.With(nexus.RequirePermission(m.perms, PermissionShare)).Post("/grants/{id}/revoke", m.handleRevokeGrant)
 	})
 }

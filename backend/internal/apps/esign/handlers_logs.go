@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 func (m *Module) listLogsHandler(w http.ResponseWriter, r *http.Request) {
@@ -32,12 +32,12 @@ func (m *Module) listLogsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// As with documents, the original endpoint answered with a bare array.
 	if r.URL.Query().Get("paginated") == "true" {
-		httpx.JSON(w, http.StatusOK, Page[SignatureLog]{
+		nexus.JSON(w, http.StatusOK, Page[SignatureLog]{
 			Items: list, Total: total, Limit: query.Limit, Offset: query.Offset,
 		})
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 // exportLogsHandler streams the filtered log as CSV. An auditor needs the

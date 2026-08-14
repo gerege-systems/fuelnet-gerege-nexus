@@ -25,11 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -244,7 +241,7 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 // ─── Service passport ────────────────────────────────────────────────────────
 
 func (m *Module) listServicesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -257,7 +254,7 @@ func (m *Module) listServicesHandler(w http.ResponseWriter, r *http.Request) {
 		  WHERE tenant_id = $1
 		  ORDER BY category, name`, tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch services")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch services")
 		return
 	}
 	defer rows.Close()
@@ -268,28 +265,28 @@ func (m *Module) listServicesHandler(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&s.ID, &s.TenantID, &s.Code, &s.Name, &s.NameEN, &s.Category, &s.Description,
 			&s.Fee, &s.DurationDays, &s.RequiredEvidences, &s.AppointmentRequired, &s.Active, &s.CreatedAt,
 			&s.FulfillmentMode, &s.WorkflowVersionID, &s.OwnerUnitID); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "failed to read services")
+			nexus.Error(w, http.StatusInternalServerError, "failed to read services")
 			return
 		}
 		list = append(list, s)
 	}
 	if rows.Err() != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to read services")
+		nexus.Error(w, http.StatusInternalServerError, "failed to read services")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *Module) createServiceHandler(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	// The service passport is organisation-wide configuration.
 	if !claims.IsAdmin {
-		httpx.Error(w, http.StatusForbidden, "tenant administrator role required")
+		nexus.Error(w, http.StatusForbidden, "tenant administrator role required")
 		return
 	}
 
@@ -305,11 +302,11 @@ func (m *Module) createServiceHandler(w http.ResponseWriter, r *http.Request) {
 		AppointmentRequired bool     `json:"appointment_required"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Code == "" || req.Name == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid service: code and name are required")
+		nexus.Error(w, http.StatusBadRequest, "invalid service: code and name are required")
 		return
 	}
 	if req.Fee < 0 {
-		httpx.Error(w, http.StatusBadRequest, "fee cannot be negative")
+		nexus.Error(w, http.StatusBadRequest, "fee cannot be negative")
 		return
 	}
 	if req.Category == "" {
@@ -336,17 +333,17 @@ func (m *Module) createServiceHandler(w http.ResponseWriter, r *http.Request) {
 			&s.DurationDays, &s.RequiredEvidences, &s.AppointmentRequired, &s.Active, &s.CreatedAt,
 			&s.FulfillmentMode, &s.WorkflowVersionID, &s.OwnerUnitID)
 	if err != nil {
-		httpx.Error(w, http.StatusConflict, "service code already exists for this tenant")
+		nexus.Error(w, http.StatusConflict, "service code already exists for this tenant")
 		return
 	}
 
-	httpx.JSON(w, http.StatusCreated, s)
+	nexus.JSON(w, http.StatusCreated, s)
 }
 
 // ─── Applications ────────────────────────────────────────────────────────────
 
 func (m *Module) listApplicationsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -366,10 +363,10 @@ func (m *Module) listApplicationsHandler(w http.ResponseWriter, r *http.Request)
 
 	list, err := m.queryApplications(r.Context(), query, args...)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch applications")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch applications")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 // createApplicationHandler is the original portal submission endpoint. It now
@@ -456,7 +453,7 @@ func (m *Module) createApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	httpx.JSON(w, http.StatusCreated, app)
+	nexus.JSON(w, http.StatusCreated, app)
 }
 
 // cancelApplicationHandler cancels a request. The cancellation runs through the
@@ -490,12 +487,12 @@ func (m *Module) cancelApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]string{
+	nexus.JSON(w, http.StatusOK, map[string]string{
 		"status": applicationStatusFor(task.Status), "id": applicationID,
 	})
 }
 func (m *Module) timelineHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -509,7 +506,7 @@ func (m *Module) timelineHandler(w http.ResponseWriter, r *http.Request) {
 		  WHERE e.application_id = $1 AND a.tenant_id = $2
 		  ORDER BY e.created_at`, id, tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch the timeline")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch the timeline")
 		return
 	}
 	defer rows.Close()
@@ -518,23 +515,23 @@ func (m *Module) timelineHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var e Event
 		if err := rows.Scan(&e.ID, &e.EventType, &e.Message, &e.Actor, &e.CreatedAt); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "failed to read the timeline")
+			nexus.Error(w, http.StatusInternalServerError, "failed to read the timeline")
 			return
 		}
 		list = append(list, e)
 	}
 	if rows.Err() != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to read the timeline")
+		nexus.Error(w, http.StatusInternalServerError, "failed to read the timeline")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 // ─── Officer queue ───────────────────────────────────────────────────────────
 
 func (m *Module) officerQueueHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -549,10 +546,10 @@ func (m *Module) officerQueueHandler(w http.ResponseWriter, r *http.Request) {
 		  ORDER BY a.created_at`,
 		tenantID, []string{StatusSubmitted, StatusInReview, StatusInfoRequested})
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch the officer queue")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch the officer queue")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 // decideHandler is the original officer decision endpoint. Legacy decisions are
@@ -625,12 +622,12 @@ func (m *Module) decideHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]string{
+	nexus.JSON(w, http.StatusOK, map[string]string{
 		"status": applicationStatusFor(task.Status), "id": applicationID, "task_status": task.Status,
 	})
 }
 func (m *Module) listAppointmentsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -644,7 +641,7 @@ func (m *Module) listAppointmentsHandler(w http.ResponseWriter, r *http.Request)
 		  WHERE ap.tenant_id = $1
 		  ORDER BY ap.scheduled_at`, tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch appointments")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch appointments")
 		return
 	}
 	defer rows.Close()
@@ -655,23 +652,23 @@ func (m *Module) listAppointmentsHandler(w http.ResponseWriter, r *http.Request)
 		if err := rows.Scan(&a.ID, &a.TenantID, &a.ApplicationID, &a.ServiceID, &a.ServiceName,
 			&a.CitizenName, &a.ScheduledAt, &a.Location, &a.Status, &a.CreatedAt,
 			&a.Mode, &a.MeetingURL, &a.MeetingProvider); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "failed to read appointments")
+			nexus.Error(w, http.StatusInternalServerError, "failed to read appointments")
 			return
 		}
 		list = append(list, a)
 	}
 	if rows.Err() != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to read appointments")
+		nexus.Error(w, http.StatusInternalServerError, "failed to read appointments")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -687,11 +684,11 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		DurationMinutes int `json:"duration_minutes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ServiceID == "" || req.CitizenName == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid appointment: service_id and citizen_name are required")
+		nexus.Error(w, http.StatusBadRequest, "invalid appointment: service_id and citizen_name are required")
 		return
 	}
 	if req.ScheduledAt.IsZero() || req.ScheduledAt.Before(time.Now()) {
-		httpx.Error(w, http.StatusBadRequest, "scheduled_at must be in the future")
+		nexus.Error(w, http.StatusBadRequest, "scheduled_at must be in the future")
 		return
 	}
 	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
@@ -699,7 +696,7 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		mode = AppointmentInPerson
 	}
 	if mode != AppointmentInPerson && mode != AppointmentOnline {
-		httpx.Error(w, http.StatusBadRequest, "mode must be IN_PERSON or ONLINE")
+		nexus.Error(w, http.StatusBadRequest, "mode must be IN_PERSON or ONLINE")
 		return
 	}
 
@@ -714,11 +711,11 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		Scan(&a.ID, &a.TenantID, &a.ApplicationID, &a.ServiceID, &a.CitizenName, &a.ScheduledAt,
 			&a.Location, &a.Status, &a.CreatedAt, &a.Mode, &a.MeetingURL, &a.MeetingProvider)
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpx.Error(w, http.StatusNotFound, "service not found or no longer offered")
+		nexus.Error(w, http.StatusNotFound, "service not found or no longer offered")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to book the appointment")
+		nexus.Error(w, http.StatusInternalServerError, "failed to book the appointment")
 		return
 	}
 
@@ -726,7 +723,7 @@ func (m *Module) createAppointmentHandler(w http.ResponseWriter, r *http.Request
 		m.attachMeeting(r.Context(), claims.TenantID, &a, req.DurationMinutes)
 	}
 
-	httpx.JSON(w, http.StatusCreated, a)
+	nexus.JSON(w, http.StatusCreated, a)
 }
 
 // Appointment modes. An online appointment is held over a conferencing link

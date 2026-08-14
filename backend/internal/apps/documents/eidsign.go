@@ -11,10 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -229,7 +228,7 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	// else can fail. Who asked for a signature is not who gave it, and the ledger
 	// only ever knows the latter — this is the other half of the trail, and it must
 	// not go missing because the bookkeeping below did.
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signature_requested", docID, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.signature_requested", docID, map[string]any{
 		"signer_reg_number": regNumber,
 		"display_text":      displayText,
 		"session_id":        started.SessionID,
@@ -452,7 +451,7 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 }
 
 func (m *DocumentsModule) startEIDSignatureHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -461,30 +460,30 @@ func (m *DocumentsModule) startEIDSignatureHandler(w http.ResponseWriter, r *htt
 		RegNumber string `json:"reg_number"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.RegNumber) == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid signature request: reg_number is required")
+		nexus.Error(w, http.StatusBadRequest, "invalid signature request: reg_number is required")
 		return
 	}
 
 	session, err := m.StartEIDSignature(r.Context(), tenantID, chi.URLParam(r, "id"), req.RegNumber)
 	switch {
 	case errors.Is(err, ErrNotSignable), errors.Is(err, ErrAlreadySigned):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrProviderUnavailable):
-		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
+		nexus.Error(w, http.StatusServiceUnavailable, err.Error())
 		return
 	case errors.Is(err, ErrSignatureRejected):
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
-		httpx.Error(w, http.StatusInternalServerError, "failed to start the signature request")
+		nexus.Error(w, http.StatusInternalServerError, "failed to start the signature request")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, session)
+	nexus.JSON(w, http.StatusOK, session)
 }
 
 func (m *DocumentsModule) pollEIDSignatureHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -493,27 +492,27 @@ func (m *DocumentsModule) pollEIDSignatureHandler(w http.ResponseWriter, r *http
 		SessionID string `json:"session_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.SessionID) == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid poll request: session_id is required")
+		nexus.Error(w, http.StatusBadRequest, "invalid poll request: session_id is required")
 		return
 	}
 
 	progress, err := m.PollEIDSignature(r.Context(), tenantID, chi.URLParam(r, "id"), req.SessionID)
 	switch {
 	case errors.Is(err, ErrSignSessionUnknown):
-		httpx.Error(w, http.StatusNotFound, err.Error())
+		nexus.Error(w, http.StatusNotFound, err.Error())
 		return
 	case errors.Is(err, ErrNotSignable), errors.Is(err, ErrAlreadySigned):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrProviderUnavailable):
-		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
+		nexus.Error(w, http.StatusServiceUnavailable, err.Error())
 		return
 	case errors.Is(err, ErrSignatureRejected):
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
-		httpx.Error(w, http.StatusInternalServerError, "failed to complete the signature")
+		nexus.Error(w, http.StatusInternalServerError, "failed to complete the signature")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, progress)
+	nexus.JSON(w, http.StatusOK, progress)
 }

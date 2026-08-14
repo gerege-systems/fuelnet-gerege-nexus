@@ -22,8 +22,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/Masterminds/semver/v3"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -37,7 +38,7 @@ import (
 // check.
 func (m *Module) requireCatalogue(w http.ResponseWriter) bool {
 	if m.catalog == nil {
-		httpx.Error(w, http.StatusServiceUnavailable,
+		nexus.Error(w, http.StatusServiceUnavailable,
 			"this instance does not publish an app catalogue")
 		return false
 	}
@@ -61,19 +62,19 @@ func (m *Module) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	// database that has gone away.
 	if platform != "" {
 		if _, err := semver.NewVersion(platform); err != nil {
-			httpx.Error(w, http.StatusBadRequest, "platform must be a semver version, for example 1.0.0")
+			nexus.Error(w, http.StatusBadRequest, "platform must be a semver version, for example 1.0.0")
 			return
 		}
 	}
 	if channel != "" && channel != "stable" && channel != "beta" {
-		httpx.Error(w, http.StatusBadRequest, `channel must be "stable" or "beta"`)
+		nexus.Error(w, http.StatusBadRequest, `channel must be "stable" or "beta"`)
 		return
 	}
 
 	snapshot, err := m.catalog.Catalog(r.Context(), channel, platform)
 	if err != nil {
 		slog.Error("could not build the catalog", "error", err, "channel", channel, "platform", platform)
-		httpx.Error(w, http.StatusInternalServerError, "could not build the catalog")
+		nexus.Error(w, http.StatusInternalServerError, "could not build the catalog")
 		return
 	}
 
@@ -94,7 +95,7 @@ func (m *Module) handleListApps(w http.ResponseWriter, r *http.Request) {
 	apps, err := m.store.ListApps(r.Context(), "")
 	if err != nil {
 		slog.Error("could not list apps", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "could not list apps")
+		nexus.Error(w, http.StatusInternalServerError, "could not list apps")
 		return
 	}
 	locale := localeFrom(r)
@@ -102,23 +103,23 @@ func (m *Module) handleListApps(w http.ResponseWriter, r *http.Request) {
 	for _, app := range apps {
 		view = append(view, m.appView(r.Context(), app, locale))
 	}
-	httpx.JSON(w, http.StatusOK, view)
+	nexus.JSON(w, http.StatusOK, view)
 }
 
 func (m *Module) handleGetApp(w http.ResponseWriter, r *http.Request) {
 	app, err := m.store.AppBySlug(r.Context(), chi.URLParam(r, "slug"))
 	if errors.Is(err, ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "app not found")
+		nexus.Error(w, http.StatusNotFound, "app not found")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the app")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the app")
 		return
 	}
 
 	versions, err := m.store.ListVersions(r.Context(), app.ID, true)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load versions")
+		nexus.Error(w, http.StatusInternalServerError, "could not load versions")
 		return
 	}
 
@@ -130,40 +131,40 @@ func (m *Module) handleGetApp(w http.ResponseWriter, r *http.Request) {
 	if external, err := m.store.ExternalRegistration(r.Context(), app.ID); err == nil {
 		view["external"] = external
 	}
-	httpx.JSON(w, http.StatusOK, view)
+	nexus.JSON(w, http.StatusOK, view)
 }
 
 func (m *Module) handleListVersions(w http.ResponseWriter, r *http.Request) {
 	app, err := m.store.AppBySlug(r.Context(), chi.URLParam(r, "slug"))
 	if errors.Is(err, ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "app not found")
+		nexus.Error(w, http.StatusNotFound, "app not found")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the app")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the app")
 		return
 	}
 	versions, err := m.store.ListVersions(r.Context(), app.ID, true)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load versions")
+		nexus.Error(w, http.StatusInternalServerError, "could not load versions")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, versions)
+	nexus.JSON(w, http.StatusOK, versions)
 }
 
 // handleChronicle serves one app's published history.
 func (m *Module) handleChronicle(w http.ResponseWriter, r *http.Request) {
 	app, err := m.store.AppBySlug(r.Context(), chi.URLParam(r, "slug"))
 	if err != nil {
-		httpx.Error(w, http.StatusNotFound, "app not found")
+		nexus.Error(w, http.StatusNotFound, "app not found")
 		return
 	}
 	entries, err := m.store.Chronicle(r.Context(), app.ID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the chronicle")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the chronicle")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"app_id": app.ID, "slug": app.Slug, "entries": entries,
 	})
 }
@@ -176,7 +177,7 @@ func (m *Module) handleKeys(w http.ResponseWriter, _ *http.Request) {
 	// rotation without a redeploy. Public for the same reason as
 	// /.well-known/jwks.json: a client reads it in order to check a signature,
 	// which is something it does before it trusts anything.
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"keys": []map[string]string{{
 			"key_id": m.signer.KeyID,
 			"alg":    "Ed25519",
@@ -260,10 +261,10 @@ func (m *Module) handleRegistryState(w http.ResponseWriter, r *http.Request) {
 	}
 	revision, err := m.store.Revision(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not read the registry state")
+		nexus.Error(w, http.StatusInternalServerError, "could not read the registry state")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"revision":   revision,
 		"key_id":     m.signer.KeyID,
 		"public_key": m.signer.PublicKey(),
@@ -284,8 +285,8 @@ func (m *Module) handleRebuildSnapshots(w http.ResponseWriter, r *http.Request) 
 	discarded, err := m.store.DiscardSnapshots(r.Context())
 	if err != nil {
 		slog.Error("could not discard the catalogue snapshots", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "could not discard the snapshots")
+		nexus.Error(w, http.StatusInternalServerError, "could not discard the snapshots")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"discarded": discarded})
+	nexus.JSON(w, http.StatusOK, map[string]any{"discarded": discarded})
 }

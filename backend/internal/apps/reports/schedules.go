@@ -15,10 +15,9 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -41,17 +40,17 @@ type scheduleRequest struct {
 }
 
 func (m *Module) handleListSchedules(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	schedules, err := reporting.ListSchedules(r.Context(), m.db, tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not read the schedules")
+		nexus.Error(w, http.StatusInternalServerError, "could not read the schedules")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{
+	nexus.JSON(w, http.StatusOK, map[string]any{
 		"schedules": schedules,
 		// Whether anything can actually be sent. Without it the screen would
 		// let somebody create a schedule, show it as active, and never say why
@@ -61,7 +60,7 @@ func (m *Module) handleListSchedules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -72,12 +71,12 @@ func (m *Module) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := ""
-	if claims, err := auth.UserFromContext(r.Context()); err == nil {
+	if claims, err := nexus.UserFromContext(r.Context()); err == nil {
 		userID = claims.UserID
 	}
 
 	var id string
-	err := m.db.QueryRow(tenant.WithTenantID(r.Context(), tenantID), `
+	err := m.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
 		INSERT INTO report_schedules
 		    (tenant_id, report_key, name, params, cron, format, recipients, active, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, '')::uuid)
@@ -85,7 +84,7 @@ func (m *Module) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
 		tenantID, request.ReportKey, request.Name, request.Params, request.Cron,
 		request.Format, request.Recipients, activeOrDefault(request.Active), userID).Scan(&id)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not save the schedule")
+		nexus.Error(w, http.StatusInternalServerError, "could not save the schedule")
 		return
 	}
 
@@ -94,17 +93,17 @@ func (m *Module) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
 		"cron":        request.Cron,
 		"recipients":  len(request.Recipients),
 	})
-	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id})
+	nexus.JSON(w, http.StatusCreated, map[string]any{"id": id})
 }
 
 func (m *Module) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if _, err := uuid.Parse(id); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid schedule id")
+		nexus.Error(w, http.StatusBadRequest, "invalid schedule id")
 		return
 	}
 
@@ -116,7 +115,7 @@ func (m *Module) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	// The tenant clause is here as well as in the policy. `WHERE id = $1` alone
 	// would be a schedule id from one organisation editing another's row, and
 	// the row-level policy is the layer that catches it — not the only one.
-	tag, err := m.db.Exec(tenant.WithTenantID(r.Context(), tenantID), `
+	tag, err := m.db.Exec(nexus.WithTenantID(r.Context(), tenantID), `
 		UPDATE report_schedules
 		   SET report_key = $3, name = $4, params = $5, cron = $6, format = $7,
 		       recipients = $8, active = $9, updated_at = NOW()
@@ -124,41 +123,41 @@ func (m *Module) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		id, tenantID, request.ReportKey, request.Name, request.Params, request.Cron,
 		request.Format, request.Recipients, activeOrDefault(request.Active))
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not update the schedule")
+		nexus.Error(w, http.StatusInternalServerError, "could not update the schedule")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		httpx.Error(w, http.StatusNotFound, "no such schedule")
+		nexus.Error(w, http.StatusNotFound, "no such schedule")
 		return
 	}
 
 	m.record(r, tenantID, "reports.schedule_updated", report.Key(), map[string]any{
 		"schedule_id": id, "cron": request.Cron, "active": activeOrDefault(request.Active),
 	})
-	httpx.JSON(w, http.StatusOK, map[string]any{"id": id})
+	nexus.JSON(w, http.StatusOK, map[string]any{"id": id})
 }
 
 func (m *Module) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if _, err := uuid.Parse(id); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid schedule id")
+		nexus.Error(w, http.StatusBadRequest, "invalid schedule id")
 		return
 	}
 
 	var reportKey string
-	err := m.db.QueryRow(tenant.WithTenantID(r.Context(), tenantID),
+	err := m.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID),
 		`DELETE FROM report_schedules WHERE id = $1 AND tenant_id = $2 RETURNING report_key`,
 		id, tenantID).Scan(&reportKey)
 	if errors.Is(err, pgx.ErrNoRows) {
-		httpx.Error(w, http.StatusNotFound, "no such schedule")
+		nexus.Error(w, http.StatusNotFound, "no such schedule")
 		return
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not remove the schedule")
+		nexus.Error(w, http.StatusInternalServerError, "could not remove the schedule")
 		return
 	}
 
@@ -177,34 +176,34 @@ func (m *Module) decodeSchedule(w http.ResponseWriter, r *http.Request, tenantID
 
 	var request scheduleRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid schedule")
+		nexus.Error(w, http.StatusBadRequest, "invalid schedule")
 		return request, nil, false
 	}
 
 	report, found := reporting.Get(strings.TrimSpace(request.ReportKey))
 	if !found {
-		httpx.Error(w, http.StatusBadRequest, "no such report")
+		nexus.Error(w, http.StatusBadRequest, "no such report")
 		return request, nil, false
 	}
 
 	installed, err := m.installedApps(r, tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not check the installed apps")
+		nexus.Error(w, http.StatusInternalServerError, "could not check the installed apps")
 		return request, nil, false
 	}
 	if !installed[report.App()] {
-		httpx.Error(w, http.StatusBadRequest, "no such report")
+		nexus.Error(w, http.StatusBadRequest, "no such report")
 		return request, nil, false
 	}
 
 	if _, err := reporting.ParseCron(request.Cron); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "the schedule expression is not valid: "+err.Error())
+		nexus.Error(w, http.StatusBadRequest, "the schedule expression is not valid: "+err.Error())
 		return request, nil, false
 	}
 
 	format, err := reporting.ParseFormat(request.Format)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return request, nil, false
 	}
 	request.Format = string(format)
@@ -216,13 +215,13 @@ func (m *Module) decodeSchedule(w http.ResponseWriter, r *http.Request, tenantID
 		request.Params = map[string]string{}
 	}
 	if _, err := reporting.Bind(report, request.Params, "mn"); err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return request, nil, false
 	}
 
 	recipients, err := normalizeRecipients(request.Recipients)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return request, nil, false
 	}
 	request.Recipients = recipients

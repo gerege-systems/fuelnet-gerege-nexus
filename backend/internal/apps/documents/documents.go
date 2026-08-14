@@ -23,15 +23,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -137,7 +133,7 @@ type DocumentsModule struct {
 	// The interface rather than the concrete store, so the route table can be
 	// tested against a stub. What each route is checked against is the part of
 	// this module most easily changed by accident and least visible when it is.
-	perms rbac.PermissionStore
+	perms nexus.PermissionStore
 
 	// Whether this cluster has an ICU collation for the title search to lean on. See
 	// titleMatch: without one, a Cyrillic search is case-sensitive on a database
@@ -230,7 +226,7 @@ const bodyLimit = 64 << 10 // 64 KB, sixteen times the largest real request
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ContentLength > bodyLimit {
-			httpx.Error(w, http.StatusRequestEntityTooLarge,
+			nexus.Error(w, http.StatusRequestEntityTooLarge,
 				fmt.Sprintf("the request body is larger than %d bytes", bodyLimit))
 			return
 		}
@@ -243,9 +239,9 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 	r.Route("/api/v1/documents", func(dr chi.Router) {
 		dr.Use(tenantAuthMiddleware)
 		dr.Use(limitBody)
-		read := rbac.RequirePermission(m.perms, "documents.read")
-		manage := rbac.RequirePermission(m.perms, "documents.manage")
-		sign := rbac.RequirePermission(m.perms, "documents.sign")
+		read := nexus.RequirePermission(m.perms, "documents.read")
+		manage := nexus.RequirePermission(m.perms, "documents.manage")
+		sign := nexus.RequirePermission(m.perms, "documents.sign")
 		dr.With(read).Get("/", m.listDocumentsHandler)
 		dr.With(manage).Post("/", m.createDocumentHandler)
 
@@ -302,7 +298,7 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 }
 
 func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -329,7 +325,7 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 	if raw := strings.TrimSpace(query.Get("after_at")); raw != "" {
 		at, parseErr := time.Parse(time.RFC3339Nano, raw)
 		if parseErr != nil {
-			httpx.Error(w, http.StatusBadRequest, "after_at must be an RFC3339 timestamp")
+			nexus.Error(w, http.StatusBadRequest, "after_at must be an RFC3339 timestamp")
 			return
 		}
 		filter.AfterAt = at
@@ -337,21 +333,21 @@ func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Re
 	// Both halves name one row, so one without the other would silently page from
 	// somewhere nobody asked for.
 	if (filter.AfterID == "") != filter.AfterAt.IsZero() {
-		httpx.Error(w, http.StatusBadRequest, "after_at and after_id go together")
+		nexus.Error(w, http.StatusBadRequest, "after_at and after_id go together")
 		return
 	}
 	page, err := m.ListDocuments(r.Context(), tenantID, filter, limit, offset)
 	if errors.Is(err, ErrInvalidDocument) {
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to fetch documents", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch documents")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch documents")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, page)
+	nexus.JSON(w, http.StatusOK, page)
 }
 
 // intParam reads a whole-number query parameter, answering 400 when one was sent and
@@ -364,14 +360,14 @@ func intParam(w http.ResponseWriter, query url.Values, name string) (int, bool) 
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, fmt.Sprintf("%s must be a whole number", name))
+		nexus.Error(w, http.StatusBadRequest, fmt.Sprintf("%s must be a whole number", name))
 		return 0, false
 	}
 	return value, true
 }
 
 func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -381,7 +377,7 @@ func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.R
 		DocType string `json:"doc_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Title == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid document parameters: title is required")
+		nexus.Error(w, http.StatusBadRequest, "invalid document parameters: title is required")
 		return
 	}
 
@@ -391,11 +387,11 @@ func (m *DocumentsModule) createDocumentHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	httpx.JSON(w, http.StatusCreated, doc)
+	nexus.JSON(w, http.StatusCreated, doc)
 }
 
 func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -406,39 +402,39 @@ func (m *DocumentsModule) signWithDANHandler(w http.ResponseWriter, r *http.Requ
 		OTPCode   string `json:"otp_code"`   // Нэг удаагийн нууц код
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RegNumber == "" {
-		httpx.Error(w, http.StatusBadRequest, "invalid signature request: reg_number is required")
+		nexus.Error(w, http.StatusBadRequest, "invalid signature request: reg_number is required")
 		return
 	}
 
 	doc, err := m.SignWithDAN(r.Context(), tenantID, docID, req.RegNumber, req.OTPCode)
 	switch {
 	case errors.Is(err, ErrNotSignable):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrAlreadySigned):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrProviderUnavailable):
 		// The gateway, not the caller. Same 503 the E-ID routes give, and for the same
 		// reason: it is worth trying again, and it is not something the operator did.
-		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
+		nexus.Error(w, http.StatusServiceUnavailable, err.Error())
 		return
 	case errors.Is(err, ErrSignatureRejected):
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
 		// A storage failure is ours, not the caller's: report it as one and keep
 		// the driver's message out of the response.
 		slog.ErrorContext(r.Context(), "failed to sign document through DAN", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "failed to sign document")
+		nexus.Error(w, http.StatusInternalServerError, "failed to sign document")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, doc)
+	nexus.JSON(w, http.StatusOK, doc)
 }
 
 func (m *DocumentsModule) renameDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -447,29 +443,29 @@ func (m *DocumentsModule) renameDocumentHandler(w http.ResponseWriter, r *http.R
 		Title string `json:"title"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid rename request: title is required")
+		nexus.Error(w, http.StatusBadRequest, "invalid rename request: title is required")
 		return
 	}
 
 	doc, err := m.RenameDocument(r.Context(), tenantID, chi.URLParam(r, "id"), req.Title)
 	switch {
 	case errors.Is(err, ErrTitleFrozen):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrInvalidDocument):
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case err != nil:
 		slog.ErrorContext(r.Context(), "failed to rename document", "error", err)
-		httpx.Error(w, http.StatusInternalServerError, "failed to rename document")
+		nexus.Error(w, http.StatusInternalServerError, "failed to rename document")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, doc)
+	nexus.JSON(w, http.StatusOK, doc)
 }
 
 func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -478,14 +474,14 @@ func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.R
 	doc, err := m.RejectDocument(r.Context(), tenantID, docID)
 	switch {
 	case errors.Is(err, ErrNotSignable):
-		httpx.Error(w, http.StatusConflict, err.Error())
+		nexus.Error(w, http.StatusConflict, err.Error())
 		return
 	case err != nil:
-		httpx.Error(w, http.StatusInternalServerError, "failed to reject document")
+		nexus.Error(w, http.StatusInternalServerError, "failed to reject document")
 		return
 	}
 
-	httpx.JSON(w, http.StatusOK, doc)
+	nexus.JSON(w, http.StatusOK, doc)
 }
 
 // textFault says why a string cannot be stored as Postgres text, or "" when it can.
@@ -577,7 +573,7 @@ func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, d
 		slog.WarnContext(ctx, "created the document but could not read back its chain for the record",
 			"document_id", id, "error", err)
 	}
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.created", id, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.created", id, map[string]any{
 		"doc_type": docType, "title": title, "status": StatusPending, "chain": given,
 	})
 
@@ -847,7 +843,7 @@ func (m *DocumentsModule) RenameDocument(ctx context.Context, tenantID, docID, t
 	}
 
 	// Both titles, because a dispute asks what it used to say.
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.renamed", docID, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.renamed", docID, map[string]any{
 		"from": was, "to": title,
 	})
 
@@ -1017,7 +1013,7 @@ func (m *DocumentsModule) writeSignature(ctx context.Context, tenantID, docID, m
 	// applies. It carries what the signature was, not only that one happened:
 	// which citizen, through which channel, on whose certificate, which step of
 	// the chain it filled, and whether it completed it.
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signed", docID, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.signed", docID, map[string]any{
 		"method":              method,
 		"signer_reg_number":   signature.RegNumber,
 		"certificate_serial":  signature.CertificateSerial,
@@ -1055,7 +1051,7 @@ func (m *DocumentsModule) RejectDocument(ctx context.Context, tenantID, docID st
 		return nil, fmt.Errorf("reject document: %w", err)
 	}
 
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.rejected", docID, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.rejected", docID, map[string]any{
 		"doc_type": docType, "title": title, "signatures_held": held,
 	})
 
@@ -1322,7 +1318,7 @@ func (m *DocumentsModule) scanDocument(row rowScanner) (*Document, error) {
 // administrator reading the log would recognise. Calls that arrive outside a
 // request — a migration, a test — have no claims and are recorded as the system.
 func actorFor(ctx context.Context) string {
-	claims, err := auth.UserFromContext(ctx)
+	claims, err := nexus.UserFromContext(ctx)
 	if err != nil {
 		return "system"
 	}
@@ -1357,11 +1353,11 @@ func isConstraintViolation(err error, name string) bool {
 func writeWriteFailure(ctx context.Context, w http.ResponseWriter, err error, whatFailed string) {
 	switch {
 	case errors.Is(err, ErrInvalidDocument), errors.Is(err, ErrInvalidConfiguration):
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 	case isUniqueViolation(err):
-		httpx.Error(w, http.StatusConflict, "this was changed by someone else at the same time — reload and try again")
+		nexus.Error(w, http.StatusConflict, "this was changed by someone else at the same time — reload and try again")
 	default:
 		slog.ErrorContext(ctx, whatFailed, "error", err)
-		httpx.Error(w, http.StatusInternalServerError, whatFailed)
+		nexus.Error(w, http.StatusInternalServerError, whatFailed)
 	}
 }

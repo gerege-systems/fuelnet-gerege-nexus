@@ -28,10 +28,6 @@ import (
 	"strings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -104,19 +100,19 @@ func (m *Module) RegisterRoutes(r chi.Router, gate func(http.Handler) http.Handl
 func (m *Module) handleQueue(w http.ResponseWriter, r *http.Request) {
 	pending, err := m.store.ListReviewQueue(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the review queue")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the review queue")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, pending)
+	nexus.JSON(w, http.StatusOK, pending)
 }
 
 func (m *Module) handleHistory(w http.ResponseWriter, r *http.Request) {
 	history, err := m.store.ReviewHistory(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the review history")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the review history")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, history)
+	nexus.JSON(w, http.StatusOK, history)
 }
 
 // handleDecision publishes, rejects or withdraws a version.
@@ -125,13 +121,13 @@ func (m *Module) handleHistory(w http.ResponseWriter, r *http.Request) {
 // app not in the store" is a question a publisher is entitled to an answer to,
 // and because a decision nobody is named for is one nobody can be asked about.
 func (m *Module) handleDecision(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -140,19 +136,19 @@ func (m *Module) handleDecision(w http.ResponseWriter, r *http.Request) {
 		Note   string `json:"note"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 	switch body.Action {
 	case "publish", "reject", "yank":
 	default:
-		httpx.Error(w, http.StatusBadRequest, `action must be "publish", "reject" or "yank"`)
+		nexus.Error(w, http.StatusBadRequest, `action must be "publish", "reject" or "yank"`)
 		return
 	}
 	// A refusal with no reason is a refusal a publisher cannot act on. Publishing
 	// needs no note — the version speaks for itself — but turning one down does.
 	if body.Action != "publish" && strings.TrimSpace(body.Note) == "" {
-		httpx.Error(w, http.StatusBadRequest,
+		nexus.Error(w, http.StatusBadRequest,
 			"say why: a rejected or withdrawn version needs a reason its publisher can act on")
 		return
 	}
@@ -161,26 +157,26 @@ func (m *Module) handleDecision(w http.ResponseWriter, r *http.Request) {
 	err = m.store.DecideVersion(r.Context(), versionID, body.Action, claims.UserID,
 		claims.Email, strings.TrimSpace(body.Note))
 	if errors.Is(err, appstore_registry.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound, "no such version")
+		nexus.Error(w, http.StatusNotFound, "no such version")
 		return
 	}
 	if err != nil {
 		slog.Error("could not record a review decision", "error", err, "version_id", versionID)
-		httpx.Error(w, http.StatusInternalServerError, "could not record the decision")
+		nexus.Error(w, http.StatusInternalServerError, "could not record the decision")
 		return
 	}
-	audit.Record(r.Context(), tenantID, claims.UserID, "store_review."+body.Action, "store_app_version",
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "store_review."+body.Action, "store_app_version",
 		map[string]any{"version_id": versionID, "note": body.Note})
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": body.Action})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": body.Action})
 }
 
 func (m *Module) handlePublishers(w http.ResponseWriter, r *http.Request) {
 	publishers, err := m.store.ListPublishers(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load publishers")
+		nexus.Error(w, http.StatusInternalServerError, "could not load publishers")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, publishers)
+	nexus.JSON(w, http.StatusOK, publishers)
 }
 
 // handleVerifyPublisher is the decision that a publisher is who they say.
@@ -190,13 +186,13 @@ func (m *Module) handlePublishers(w http.ResponseWriter, r *http.Request) {
 // reviewer accepted it, which is a different fact from the confirmation itself
 // and the one a storefront badge should rest on.
 func (m *Module) handleVerifyPublisher(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -204,13 +200,13 @@ func (m *Module) handleVerifyPublisher(w http.ResponseWriter, r *http.Request) {
 	publisherID := chi.URLParam(r, "id")
 	if err := m.store.SetPublisherVerified(r.Context(), publisherID, verified, claims.UserID); err != nil {
 		if errors.Is(err, appstore_registry.ErrNotFound) {
-			httpx.Error(w, http.StatusNotFound, "no such publisher")
+			nexus.Error(w, http.StatusNotFound, "no such publisher")
 			return
 		}
-		httpx.Error(w, http.StatusInternalServerError, "could not record the decision")
+		nexus.Error(w, http.StatusInternalServerError, "could not record the decision")
 		return
 	}
-	audit.Record(r.Context(), tenantID, claims.UserID, "store_review.publisher_verified", "publisher",
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "store_review.publisher_verified", "publisher",
 		map[string]any{"publisher_id": publisherID, "verified": verified})
-	httpx.JSON(w, http.StatusOK, map[string]any{"verified": verified})
+	nexus.JSON(w, http.StatusOK, map[string]any{"verified": verified})
 }

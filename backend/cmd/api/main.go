@@ -26,6 +26,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -132,6 +133,12 @@ func main() {
 	// Where audit rows go. Before this the trail was stdout only — unsearchable
 	// and gone with the container.
 	audit.UseDatabase(db)
+	// And the same recorder for anything written against the public SDK. An
+	// app module cannot import internal/platform/audit, so it calls
+	// nexus.Audit; without this line those events would be logged and dropped
+	// while the platform's own reached the table, which is the worst of the
+	// three possible states because the trail would look complete.
+	nexus.UseAuditSink(audit.Record)
 
 	databaseReachable := db.Ping(ctx) == nil
 	if !databaseReachable {

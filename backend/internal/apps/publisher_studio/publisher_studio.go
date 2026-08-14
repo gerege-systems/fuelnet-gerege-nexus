@@ -27,11 +27,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -104,18 +100,18 @@ func (m *Module) RegisterRoutes(r chi.Router, gate func(http.Handler) http.Handl
 // publisherFor resolves the profile the caller's organisation publishes under,
 // answering 404 when it has none yet.
 func (m *Module) publisherFor(w http.ResponseWriter, r *http.Request) (*appstore_registry.Publisher, string, bool) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return nil, "", false
 	}
 	publisher, err := m.store.PublisherByTenant(r.Context(), tenantID)
 	if errors.Is(err, appstore_registry.ErrNotFound) {
-		httpx.Error(w, http.StatusNotFound,
+		nexus.Error(w, http.StatusNotFound,
 			"this organisation has no publishing profile yet")
 		return nil, tenantID, false
 	}
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load the publishing profile")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the publishing profile")
 		return nil, tenantID, false
 	}
 	return publisher, tenantID, true
@@ -126,7 +122,7 @@ func (m *Module) handleProfile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	httpx.JSON(w, http.StatusOK, publisher)
+	nexus.JSON(w, http.StatusOK, publisher)
 }
 
 // handleSaveProfile records or edits how this organisation appears in the
@@ -137,13 +133,13 @@ func (m *Module) handleProfile(w http.ResponseWriter, r *http.Request) {
 // publishes under are different decisions, and a store is the more permanent of
 // the two.
 func (m *Module) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -153,18 +149,18 @@ func (m *Module) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 		ContactEmail string `json:"contact_email"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSubmission)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 	body.Slug = strings.ToLower(strings.TrimSpace(body.Slug))
 	body.Name = strings.TrimSpace(body.Name)
 	if !security.IsValidSlug(body.Slug) {
-		httpx.Error(w, http.StatusBadRequest,
+		nexus.Error(w, http.StatusBadRequest,
 			"the publisher handle must be a slug: lowercase letters, digits and dashes")
 		return
 	}
 	if body.Name == "" {
-		httpx.Error(w, http.StatusBadRequest, "a publisher name is required")
+		nexus.Error(w, http.StatusBadRequest, "a publisher name is required")
 		return
 	}
 
@@ -173,17 +169,17 @@ func (m *Module) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 		ContactEmail: strings.TrimSpace(body.ContactEmail),
 	})
 	if errors.Is(err, appstore_registry.ErrConflict) {
-		httpx.Error(w, http.StatusConflict, "another organisation already publishes under that handle")
+		nexus.Error(w, http.StatusConflict, "another organisation already publishes under that handle")
 		return
 	}
 	if err != nil {
 		slog.Error("could not save a publishing profile", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not save the publishing profile")
+		nexus.Error(w, http.StatusInternalServerError, "could not save the publishing profile")
 		return
 	}
-	audit.Record(r.Context(), tenantID, claims.UserID, "publisher.profile_saved", "publisher",
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "publisher.profile_saved", "publisher",
 		map[string]any{"slug": saved.Slug})
-	httpx.JSON(w, http.StatusOK, saved)
+	nexus.JSON(w, http.StatusOK, saved)
 }
 
 func (m *Module) handleListApps(w http.ResponseWriter, r *http.Request) {
@@ -195,10 +191,10 @@ func (m *Module) handleListApps(w http.ResponseWriter, r *http.Request) {
 	// app you have registered and not yet published is what you came to see.
 	apps, err := m.store.ListApps(r.Context(), publisher.ID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load your apps")
+		nexus.Error(w, http.StatusInternalServerError, "could not load your apps")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, apps)
+	nexus.JSON(w, http.StatusOK, apps)
 }
 
 // handleUpsertApp registers an app or edits its catalogue entry.
@@ -211,9 +207,9 @@ func (m *Module) handleUpsertApp(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -229,18 +225,18 @@ func (m *Module) handleUpsertApp(w http.ResponseWriter, r *http.Request) {
 		Texts       map[string]appcatalog.CatalogAppText `json:"translations"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSubmission)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 	if body.ID == "" || !security.IsValidSlug(body.Slug) || strings.TrimSpace(body.Name) == "" {
-		httpx.Error(w, http.StatusBadRequest, "an app needs an id, a valid slug and a name")
+		nexus.Error(w, http.StatusBadRequest, "an app needs an id, a valid slug and a name")
 		return
 	}
 	if body.Type == "" {
 		body.Type = appcatalog.TypeModule
 	}
 	if body.Type != appcatalog.TypeModule && body.Type != appcatalog.TypeExternal {
-		httpx.Error(w, http.StatusBadRequest, `type must be "module" or "external"`)
+		nexus.Error(w, http.StatusBadRequest, `type must be "module" or "external"`)
 		return
 	}
 	if body.Visibility == "" {
@@ -260,16 +256,16 @@ func (m *Module) handleUpsertApp(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, appstore_registry.ErrConflict) {
 			// Somebody else registered this id. 409 rather than 404: the caller
 			// chose the id and is entitled to know it is taken.
-			httpx.Error(w, http.StatusConflict, "that app id belongs to another publisher")
+			nexus.Error(w, http.StatusConflict, "that app id belongs to another publisher")
 			return
 		}
 		slog.Error("could not save an app", "error", err, "app_id", body.ID)
-		httpx.Error(w, http.StatusInternalServerError, "could not save the app")
+		nexus.Error(w, http.StatusInternalServerError, "could not save the app")
 		return
 	}
-	audit.Record(r.Context(), tenantID, claims.UserID, "publisher.app_saved", "store_app",
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "publisher.app_saved", "store_app",
 		map[string]any{"app_id": app.ID})
-	httpx.JSON(w, http.StatusOK, app)
+	nexus.JSON(w, http.StatusOK, app)
 }
 
 // ownApp resolves one of the caller's own apps, answering 404 for anybody
@@ -282,7 +278,7 @@ func (m *Module) ownApp(w http.ResponseWriter, r *http.Request) (*appstore_regis
 	}
 	app, err := m.store.AppBySlug(r.Context(), chi.URLParam(r, "slug"))
 	if err != nil || app.PublisherID != publisher.ID {
-		httpx.Error(w, http.StatusNotFound, "app not found")
+		nexus.Error(w, http.StatusNotFound, "app not found")
 		return nil, tenantID, false
 	}
 	return app, tenantID, true
@@ -295,10 +291,10 @@ func (m *Module) handleListVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	versions, err := m.store.ListVersions(r.Context(), app.ID, false)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not load versions")
+		nexus.Error(w, http.StatusInternalServerError, "could not load versions")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, versions)
+	nexus.JSON(w, http.StatusOK, versions)
 }
 
 // handleSubmitVersion puts a manifest in the review queue.
@@ -311,9 +307,9 @@ func (m *Module) handleSubmitVersion(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -322,25 +318,25 @@ func (m *Module) handleSubmitVersion(w http.ResponseWriter, r *http.Request) {
 		Manifest appcatalog.Manifest `json:"manifest"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSubmission)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 
 	saved, err := m.store.SubmitManifest(r.Context(), app, body.Channel, body.Manifest, claims.Email)
 	switch {
 	case errors.Is(err, appstore_registry.ErrInvalidSubmission):
-		httpx.Error(w, http.StatusBadRequest, err.Error())
+		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	case errors.Is(err, appstore_registry.ErrConflict):
-		httpx.Error(w, http.StatusConflict,
+		nexus.Error(w, http.StatusConflict,
 			"that version already exists; a published version is immutable, so submit a new number")
 		return
 	case err != nil:
 		slog.Error("could not submit a version", "error", err, "app_id", app.ID)
-		httpx.Error(w, http.StatusInternalServerError, "could not submit the version")
+		nexus.Error(w, http.StatusInternalServerError, "could not submit the version")
 		return
 	}
-	audit.Record(r.Context(), tenantID, claims.UserID, "publisher.version_submitted", "store_app_version",
+	nexus.Audit(r.Context(), tenantID, claims.UserID, "publisher.version_submitted", "store_app_version",
 		map[string]any{"app_id": app.ID, "version": saved.Version})
-	httpx.JSON(w, http.StatusCreated, saved)
+	nexus.JSON(w, http.StatusCreated, saved)
 }

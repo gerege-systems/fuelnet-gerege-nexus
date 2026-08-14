@@ -1,43 +1,27 @@
 package rbac
 
 import (
-	"context"
-	"errors"
 	"net/http"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-type PermissionStore interface {
-	GetUserPermissions(ctx context.Context, tenantID, userID string) (map[string]bool, error)
-}
+// PermissionStore answers what a person may do in an organisation.
+//
+// An alias, not a second interface: the store the platform builds is handed to
+// nexus.RequirePermission, and two structurally identical named interfaces
+// would satisfy each other only by accident of Go's rules rather than by
+// anybody having decided they are the same thing.
+type PermissionStore = nexus.PermissionStore
 
-var ErrForbidden = errors.New("forbidden: insufficient permissions")
+// ErrForbidden is the refusal a permission check produces.
+var ErrForbidden = nexus.ErrForbidden
 
 // RequirePermission returns an HTTP middleware that enforces server-side permission authorization.
+//
+// The check moved to `backend/pkg/nexus` with the PermissionStore interface it
+// reads through: a module in another repository refuses its own requests, and
+// it cannot import a package under internal/ to do it. This forwards.
 func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, err := auth.UserFromContext(r.Context())
-			if err != nil {
-				httpx.Error(w, http.StatusUnauthorized, "unauthorized")
-				return
-			}
-
-			// Admin user bypasses individual permission checks
-			if claims.IsAdmin {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			perms, err := store.GetUserPermissions(r.Context(), claims.TenantID, claims.UserID)
-			if err != nil || !perms[permissionCode] {
-				httpx.Error(w, http.StatusForbidden, "forbidden: permission "+permissionCode+" required")
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
+	return nexus.RequirePermission(store, permissionCode)
 }

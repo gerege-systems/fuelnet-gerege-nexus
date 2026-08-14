@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -197,7 +196,7 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 
 	saved.UpdatedAt = &updatedAt
 
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.signature_policy_changed", docType, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.signature_policy_changed", docType, map[string]any{
 		"allow_eid":            saved.AllowEID,
 		"allow_dan":            saved.AllowDAN,
 		"require_named_signer": saved.RequireNamedSigner,
@@ -247,21 +246,21 @@ func (m *DocumentsModule) pendingCanRequireNamedSigners(ctx context.Context, q q
 }
 
 func (m *DocumentsModule) listSignaturePoliciesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	list, err := m.ListSignaturePolicies(r.Context(), tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch signature policies")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch signature policies")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *DocumentsModule) saveSignaturePolicyHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -272,7 +271,7 @@ func (m *DocumentsModule) saveSignaturePolicyHandler(w http.ResponseWriter, r *h
 		RequireNamedSigner bool `json:"require_named_signer"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid signature policy payload")
+		nexus.Error(w, http.StatusBadRequest, "invalid signature policy payload")
 		return
 	}
 
@@ -286,5 +285,5 @@ func (m *DocumentsModule) saveSignaturePolicyHandler(w http.ResponseWriter, r *h
 		writeWriteFailure(r.Context(), w, err, "failed to save the signature policy")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, saved)
+	nexus.JSON(w, http.StatusOK, saved)
 }

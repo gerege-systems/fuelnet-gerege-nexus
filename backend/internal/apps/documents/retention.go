@@ -10,9 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -165,7 +164,7 @@ func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docTy
 	// The rule is stored by this point, so the change is recorded before anything
 	// else can fail. Reporting a 500 for a rule that IS saved — and skipping its
 	// audit entry — is worse than answering without the counts.
-	audit.Record(ctx, tenantID, actorFor(ctx), "documents.retention_rule_changed", docType, map[string]any{
+	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.retention_rule_changed", docType, map[string]any{
 		"retain_years": saved.RetainYears,
 	})
 
@@ -189,21 +188,21 @@ func (m *DocumentsModule) SaveRetentionRule(ctx context.Context, tenantID, docTy
 }
 
 func (m *DocumentsModule) listRetentionRulesHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	list, err := m.ListRetentionRules(r.Context(), tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to fetch retention rules")
+		nexus.Error(w, http.StatusInternalServerError, "failed to fetch retention rules")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *DocumentsModule) saveRetentionRuleHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -213,7 +212,7 @@ func (m *DocumentsModule) saveRetentionRuleHandler(w http.ResponseWriter, r *htt
 		Note        string `json:"note"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "invalid retention rule payload")
+		nexus.Error(w, http.StatusBadRequest, "invalid retention rule payload")
 		return
 	}
 
@@ -222,5 +221,5 @@ func (m *DocumentsModule) saveRetentionRuleHandler(w http.ResponseWriter, r *htt
 		writeWriteFailure(r.Context(), w, err, "failed to save the retention rule")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, saved)
+	nexus.JSON(w, http.StatusOK, saved)
 }

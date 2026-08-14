@@ -14,10 +14,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
@@ -48,7 +47,7 @@ type Person struct {
 }
 
 func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -71,10 +70,10 @@ func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
 		   LEFT JOIN roles r ON r.id = mr.role_id
 		  WHERE ms.tenant_id = ANY($1::uuid[])
 		  GROUP BY ms.id, u.id, d.name, tn.name
-		  ORDER BY tn.name, ms.active DESC, u.name`, tenant.Allowed(r.Context()))
+		  ORDER BY tn.name, ms.active DESC, u.name`, nexus.AllowedTenants(r.Context()))
 	if err != nil {
 		slog.Error("core: could not list people", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not load the people")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the people")
 		return
 	}
 	defer rows.Close()
@@ -85,16 +84,16 @@ func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&p.MembershipID, &p.UserID, &p.Name, &p.Email, &p.Phone,
 			&p.JobTitle, &p.DepartmentID, &p.DepartmentName, &p.Active, &p.IsAdmin,
 			&p.JoinedAt, &p.Roles, &p.TenantID, &p.TenantName); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "could not read the people")
+			nexus.Error(w, http.StatusInternalServerError, "could not read the people")
 			return
 		}
 		people = append(people, p)
 	}
 	if err := rows.Err(); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not read the people")
+		nexus.Error(w, http.StatusInternalServerError, "could not read the people")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, people)
+	nexus.JSON(w, http.StatusOK, people)
 }
 
 // handleUpdatePerson edits what this organisation knows about somebody.
@@ -104,7 +103,7 @@ func (m *Module) handleListPeople(w http.ResponseWriter, r *http.Request) {
 // administrator of one tenant renaming a user would rename them in every other
 // tenant that person belongs to.
 func (m *Module) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -115,7 +114,7 @@ func (m *Module) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
 		DepartmentID *string `json:"department_id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 
@@ -137,21 +136,21 @@ func (m *Module) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
 	if isForeignKeyViolation(err) {
 		// Same composite key as everywhere else: a department belonging to
 		// another organisation is refused by the schema, not by a check here.
-		httpx.Error(w, http.StatusBadRequest, "that department is not in your organisation")
+		nexus.Error(w, http.StatusBadRequest, "that department is not in your organisation")
 		return
 	}
 	if err != nil {
 		slog.Error("core: could not update a person", "error", err, "membership_id", membershipID)
-		httpx.Error(w, http.StatusInternalServerError, "could not save the change")
+		nexus.Error(w, http.StatusInternalServerError, "could not save the change")
 		return
 	}
 	if tag.RowsAffected() == 0 {
 		// Not "forbidden": whether a membership exists in another tenant is not
 		// this caller's business.
-		httpx.Error(w, http.StatusNotFound, "this person is not in your organisation")
+		nexus.Error(w, http.StatusNotFound, "this person is not in your organisation")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 // handleDeactivatePerson ends somebody's membership without erasing them.
@@ -169,13 +168,13 @@ func (m *Module) handleReactivatePerson(w http.ResponseWriter, r *http.Request) 
 }
 
 func (m *Module) setPersonActive(w http.ResponseWriter, r *http.Request, active bool) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
-		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
+		nexus.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	membershipID := chi.URLParam(r, "id")
@@ -188,14 +187,14 @@ func (m *Module) setPersonActive(w http.ResponseWriter, r *http.Request, active 
 			`SELECT user_id::text FROM memberships WHERE id = $1 AND tenant_id = $2`,
 			membershipID, tenantID).Scan(&userID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				httpx.Error(w, http.StatusNotFound, "this person is not in your organisation")
+				nexus.Error(w, http.StatusNotFound, "this person is not in your organisation")
 				return
 			}
-			httpx.Error(w, http.StatusInternalServerError, "could not read the membership")
+			nexus.Error(w, http.StatusInternalServerError, "could not read the membership")
 			return
 		}
 		if userID == claims.UserID {
-			httpx.Error(w, http.StatusBadRequest, "you cannot deactivate your own membership")
+			nexus.Error(w, http.StatusBadRequest, "you cannot deactivate your own membership")
 			return
 		}
 
@@ -207,14 +206,14 @@ func (m *Module) setPersonActive(w http.ResponseWriter, r *http.Request, active 
 			   JOIN users u ON u.id = ms.user_id
 			  WHERE ms.tenant_id = $1 AND ms.active AND u.is_admin AND ms.id <> $2`,
 			tenantID, membershipID).Scan(&remaining); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "could not check the administrators")
+			nexus.Error(w, http.StatusInternalServerError, "could not check the administrators")
 			return
 		}
 		var isAdmin bool
 		if err := m.db.QueryRow(r.Context(),
 			`SELECT u.is_admin FROM memberships ms JOIN users u ON u.id = ms.user_id
 			  WHERE ms.id = $1`, membershipID).Scan(&isAdmin); err == nil && isAdmin && remaining == 0 {
-			httpx.Error(w, http.StatusBadRequest,
+			nexus.Error(w, http.StatusBadRequest,
 				"this is the last administrator of the organisation; appoint another one first")
 			return
 		}
@@ -226,14 +225,14 @@ func (m *Module) setPersonActive(w http.ResponseWriter, r *http.Request, active 
 		 WHERE id = $1 AND tenant_id = $2`, membershipID, tenantID, active)
 	if err != nil {
 		slog.Error("core: could not change a membership", "error", err, "membership_id", membershipID)
-		httpx.Error(w, http.StatusInternalServerError, "could not save the change")
+		nexus.Error(w, http.StatusInternalServerError, "could not save the change")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		httpx.Error(w, http.StatusNotFound, "this person is not in your organisation")
+		nexus.Error(w, http.StatusNotFound, "this person is not in your organisation")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]bool{"active": active})
+	nexus.JSON(w, http.StatusOK, map[string]bool{"active": active})
 }
 
 // --- departments ------------------------------------------------------------
@@ -253,7 +252,7 @@ type Department struct {
 }
 
 func (m *Module) handleListDepartments(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -268,10 +267,10 @@ func (m *Module) handleListDepartments(w http.ResponseWriter, r *http.Request) {
 		   LEFT JOIN memberships mgr ON mgr.id = d.manager_membership_id
 		   LEFT JOIN users u ON u.id = mgr.user_id
 		  WHERE d.tenant_id = ANY($1::uuid[])
-		  ORDER BY tn.name, d.active DESC, d.name`, tenant.Allowed(r.Context()))
+		  ORDER BY tn.name, d.active DESC, d.name`, nexus.AllowedTenants(r.Context()))
 	if err != nil {
 		slog.Error("core: could not list departments", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not load the departments")
+		nexus.Error(w, http.StatusInternalServerError, "could not load the departments")
 		return
 	}
 	defer rows.Close()
@@ -281,16 +280,16 @@ func (m *Module) handleListDepartments(w http.ResponseWriter, r *http.Request) {
 		var d Department
 		if err := rows.Scan(&d.ID, &d.Code, &d.Name, &d.ParentID, &d.ManagerID,
 			&d.ManagerName, &d.Active, &d.PeopleCount, &d.TenantID, &d.TenantName); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "could not read the departments")
+			nexus.Error(w, http.StatusInternalServerError, "could not read the departments")
 			return
 		}
 		list = append(list, d)
 	}
 	if err := rows.Err(); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not read the departments")
+		nexus.Error(w, http.StatusInternalServerError, "could not read the departments")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 type departmentBody struct {
@@ -301,20 +300,20 @@ type departmentBody struct {
 }
 
 func (m *Module) handleCreateDepartment(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	var body departmentBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 	body.Code = strings.TrimSpace(body.Code)
 	body.Name = strings.TrimSpace(body.Name)
 	if body.Name == "" || !security.IsValidSlug(body.Code) {
-		httpx.Error(w, http.StatusBadRequest,
+		nexus.Error(w, http.StatusBadRequest,
 			"a department needs a name and a code of lowercase letters, digits, - and _")
 		return
 	}
@@ -325,26 +324,26 @@ func (m *Module) handleCreateDepartment(w http.ResponseWriter, r *http.Request) 
 		 VALUES ($1, $2, $3, $4::uuid, $5::uuid) RETURNING id::text`,
 		tenantID, body.Code, body.Name, emptyToNil(body.ParentID), emptyToNil(body.ManagerID)).Scan(&id)
 	if isUniqueViolation(err) {
-		httpx.Error(w, http.StatusConflict, "a department with that code already exists")
+		nexus.Error(w, http.StatusConflict, "a department with that code already exists")
 		return
 	}
 	if isForeignKeyViolation(err) {
 		// The composite foreign keys make this the schema's answer to a parent
 		// or a manager from another tenant, rather than a check somebody has to
 		// remember to write.
-		httpx.Error(w, http.StatusBadRequest, "the parent department or manager is not in your organisation")
+		nexus.Error(w, http.StatusBadRequest, "the parent department or manager is not in your organisation")
 		return
 	}
 	if err != nil {
 		slog.Error("core: could not create a department", "error", err, "tenant_id", tenantID)
-		httpx.Error(w, http.StatusInternalServerError, "could not create the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not create the department")
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]string{"id": id})
+	nexus.JSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -352,11 +351,11 @@ func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) 
 
 	var body departmentBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&body); err != nil {
-		httpx.Error(w, http.StatusBadRequest, "malformed request body")
+		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
 	if strings.TrimSpace(body.Name) == "" {
-		httpx.Error(w, http.StatusBadRequest, "a department needs a name")
+		nexus.Error(w, http.StatusBadRequest, "a department needs a name")
 		return
 	}
 	// A department cannot be its own parent, and cannot be moved under one of
@@ -368,7 +367,7 @@ func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) 
 	if body.ParentID != nil && strings.TrimSpace(*body.ParentID) != "" {
 		parent := strings.TrimSpace(*body.ParentID)
 		if parent == id {
-			httpx.Error(w, http.StatusBadRequest, "a department cannot report to itself")
+			nexus.Error(w, http.StatusBadRequest, "a department cannot report to itself")
 			return
 		}
 		var descendant bool
@@ -382,11 +381,11 @@ func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) 
 			 SELECT EXISTS (SELECT 1 FROM below WHERE id = $2::uuid)`,
 			id, parent, tenantID).Scan(&descendant); err != nil {
 			slog.Error("core: could not check the department tree", "error", err, "department_id", id)
-			httpx.Error(w, http.StatusInternalServerError, "could not save the department")
+			nexus.Error(w, http.StatusInternalServerError, "could not save the department")
 			return
 		}
 		if descendant {
-			httpx.Error(w, http.StatusConflict,
+			nexus.Error(w, http.StatusConflict,
 				"that unit is already below this one; the two would report to each other")
 			return
 		}
@@ -398,19 +397,19 @@ func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) 
 		 WHERE id = $1 AND tenant_id = $2`,
 		id, tenantID, strings.TrimSpace(body.Name), emptyToNil(body.ParentID), emptyToNil(body.ManagerID))
 	if isForeignKeyViolation(err) {
-		httpx.Error(w, http.StatusBadRequest, "the parent department or manager is not in your organisation")
+		nexus.Error(w, http.StatusBadRequest, "the parent department or manager is not in your organisation")
 		return
 	}
 	if err != nil {
 		slog.Error("core: could not update a department", "error", err, "department_id", id)
-		httpx.Error(w, http.StatusInternalServerError, "could not save the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not save the department")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		httpx.Error(w, http.StatusNotFound, "department not found")
+		nexus.Error(w, http.StatusNotFound, "department not found")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 // handleArchiveDepartment retires a department without deleting it.
@@ -419,7 +418,7 @@ func (m *Module) handleUpdateDepartment(w http.ResponseWriter, r *http.Request) 
 // takes it out of every list that offers a choice — which is what somebody
 // pressing "delete" on an empty-looking department actually wants.
 func (m *Module) handleArchiveDepartment(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -428,14 +427,14 @@ func (m *Module) handleArchiveDepartment(w http.ResponseWriter, r *http.Request)
 		`UPDATE departments SET active = FALSE, updated_at = NOW()
 		 WHERE id = $1 AND tenant_id = $2`, chi.URLParam(r, "id"), tenantID)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "could not archive the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not archive the department")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		httpx.Error(w, http.StatusNotFound, "department not found")
+		nexus.Error(w, http.StatusNotFound, "department not found")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "archived"})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "archived"})
 }
 
 // handleRestoreDepartment brings an archived department back.
@@ -445,7 +444,7 @@ func (m *Module) handleArchiveDepartment(w http.ResponseWriter, r *http.Request)
 // — and until now the only half that was reachable was the archiving. A screen
 // that lists what it archived and cannot undo it is a delete with extra steps.
 func (m *Module) handleRestoreDepartment(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -461,11 +460,11 @@ func (m *Module) handleRestoreDepartment(w http.ResponseWriter, r *http.Request)
 		   FROM departments d JOIN departments p ON p.id = d.parent_id
 		  WHERE d.id = $1 AND d.tenant_id = $2`, id, tenantID).Scan(&parentName, &parentArchived)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		httpx.Error(w, http.StatusInternalServerError, "could not read the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not read the department")
 		return
 	}
 	if parentArchived {
-		httpx.Error(w, http.StatusConflict,
+		nexus.Error(w, http.StatusConflict,
 			"the unit this one reports to is archived; restore "+parentName+" first")
 		return
 	}
@@ -475,14 +474,14 @@ func (m *Module) handleRestoreDepartment(w http.ResponseWriter, r *http.Request)
 		 WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		slog.Error("core: could not restore a department", "error", err, "department_id", id)
-		httpx.Error(w, http.StatusInternalServerError, "could not restore the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not restore the department")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		httpx.Error(w, http.StatusNotFound, "department not found")
+		nexus.Error(w, http.StatusNotFound, "department not found")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "restored"})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "restored"})
 }
 
 // handleDeleteDepartment removes a unit that never really existed.
@@ -496,7 +495,7 @@ func (m *Module) handleRestoreDepartment(w http.ResponseWriter, r *http.Request)
 // units report to this one" tells the operator what to move, and "nothing does"
 // would not have been a refusal at all.
 func (m *Module) handleDeleteDepartment(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -508,11 +507,11 @@ func (m *Module) handleDeleteDepartment(w http.ResponseWriter, r *http.Request) 
 		        (SELECT count(*) FROM departments  WHERE parent_id     = $1 AND tenant_id = $2)`,
 		id, tenantID).Scan(&people, &children); err != nil {
 		slog.Error("core: could not check what a department holds", "error", err, "department_id", id)
-		httpx.Error(w, http.StatusInternalServerError, "could not check the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not check the department")
 		return
 	}
 	if people > 0 || children > 0 {
-		httpx.Error(w, http.StatusConflict, fmt.Sprintf(
+		nexus.Error(w, http.StatusConflict, fmt.Sprintf(
 			"this unit still has %d people and %d units under it; move them first, or archive it instead",
 			people, children))
 		return
@@ -522,14 +521,14 @@ func (m *Module) handleDeleteDepartment(w http.ResponseWriter, r *http.Request) 
 		`DELETE FROM departments WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		slog.Error("core: could not delete a department", "error", err, "department_id", id)
-		httpx.Error(w, http.StatusInternalServerError, "could not delete the department")
+		nexus.Error(w, http.StatusInternalServerError, "could not delete the department")
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		httpx.Error(w, http.StatusNotFound, "department not found")
+		nexus.Error(w, http.StatusNotFound, "department not found")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // emptyToNil turns an absent or blank identifier into SQL NULL, so "no parent"

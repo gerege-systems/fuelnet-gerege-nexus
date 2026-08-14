@@ -1,0 +1,342 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * What the platform lends a module, and how a module answers.
+ *
+ * module.go says what a module *is*; this file says what it may *use*. The two
+ * halves are the whole contract: a module that can be registered but has no way
+ * to read a row, name its caller or refuse a request is a module that can only
+ * be declared, not written.
+ *
+ * The surface here is small on purpose, and it is small because it was measured
+ * rather than designed. Across the platform's own fourteen modules the entire
+ * demand on the platform was: write a JSON response (420 call sites), find out
+ * which organisation and which person the request belongs to (94), refuse it if
+ * a permission is missing (24), record that something happened (41), and query
+ * the database. Everything else those modules import — the report engine, the
+ * catalogue, the state-registry clients, the SSO provider — is either a
+ * subsystem in its own right or a specialised rail, and neither belongs in the
+ * first version of a contract that cannot be narrowed later.
+ *
+ * The implementations stay in internal/. What is here is the interface, the two
+ * functions with no state to hide, and the sinks the platform installs at
+ * startup.
+ */
+
+package nexus
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+// ---------------------------------------------------------------- responses
+
+// JSON writes value as the whole response body.
+//
+// An encoding failure is logged rather than returned: the status line and
+// headers are already on the wire by the time Encode runs, so there is no
+// second answer left to give and a caller could do nothing with the error.
+func JSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		slog.Error("failed to encode JSON response", "status", status, "error", err)
+	}
+}
+
+// Error answers with {"error": message}.
+//
+// message is encoded rather than interpolated. Handlers used to build the body
+// by concatenating a permission code or a failure reason into a JSON literal,
+// which produced invalid JSON the moment the value contained a quote, a
+// backslash or a newline — and the client saw a parse error instead of the
+// reason it was refused.
+func Error(w http.ResponseWriter, status int, message string) {
+	JSON(w, status, map[string]string{"error": message})
+}
+
+// ------------------------------------------------------------------ context
+
+// contextKey is unexported so nothing outside this package can write the values
+// below. A module reads who the caller is; deciding it is the platform's, and a
+// context key another package could construct would make that a suggestion.
+type contextKey string
+
+const (
+	tenantIDKey contextKey = "tenant_id"
+	// allowedKey carries every organisation the caller's session is active in.
+	//
+	// tenantIDKey stays the one they are acting in — the organisation a new row
+	// is written into. This is the wider set they may read across, and it is
+	// empty for almost every session.
+	allowedKey     contextKey = "allowed_tenant_ids"
+	userContextKey contextKey = "authenticated_user"
+)
+
+// ErrTenantMissing is returned when a context carries no acting organisation.
+var ErrTenantMissing = errors.New("tenant context is missing")
+
+// ErrUnauthenticated is returned when a context carries no caller.
+var ErrUnauthenticated = errors.New("unauthenticated")
+
+// UserClaims is who the platform decided the caller is.
+//
+// A module reads this and never builds one: it is written by the session
+// middleware from a session row, and a claim a handler could invent is not a
+// claim.
+type UserClaims struct {
+	UserID   string `json:"user_id"`
+	TenantID string `json:"tenant_id"`
+	Email    string `json:"email"`
+	IsAdmin  bool   `json:"is_admin"`
+	// AllowedTenantIDs is every organisation this session reads across, and
+	// TenantID is always among them. Empty means only TenantID, which is what
+	// every session is until somebody asks for more.
+	//
+	// IsAdmin is deliberately not widened with it: being an administrator is a
+	// role held in one organisation, and holding it in the parent says nothing
+	// about the subsidiary.
+	AllowedTenantIDs []string `json:"allowed_tenant_ids,omitempty"`
+	// Impersonated says this session belongs to a platform operator acting as
+	// this person rather than to the person themselves.
+	//
+	// It travels with the claims rather than being looked up where it is
+	// needed, because three separate things depend on it — the banner the
+	// shell shows, the mark on every audit row, and the fact that /me reports
+	// it — and a fact three consumers each fetch for themselves is a fact they
+	// can disagree about.
+	Impersonated bool `json:"impersonated,omitempty"`
+	// ImpersonatedBy is the operator's id. Never their address, and never
+	// serialised: this struct reaches the browser of somebody whose
+	// organisation is being looked at, and who is looking is answered by the
+	// organisation's own audit trail, in full, rather than by a claim in a
+	// JSON body.
+	ImpersonatedBy string `json:"-"`
+}
+
+// WithTenantID injects the acting organisation into a context.
+//
+// Exported because the platform sets it and because a test needs to; a module
+// calling this in a handler is a module deciding which organisation it is
+// acting for, which is the one thing tenant isolation is.
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, tenantIDKey, tenantID)
+}
+
+// WithAllowedTenants records the organisations this request may read across.
+//
+// The caller is expected to have taken the list from the session row, which is
+// the only place it is written and only after the same membership check that
+// decides the acting tenant. Never build it from something a request said.
+func WithAllowedTenants(ctx context.Context, tenantIDs []string) context.Context {
+	if len(tenantIDs) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, allowedKey, tenantIDs)
+}
+
+// AllowedTenants returns the organisations this request may read across, which
+// is always at least the one it is acting in.
+//
+// Handlers that mean "this organisation" should keep using RequireTenant. This
+// is for the few lists that are deliberately a group view.
+func AllowedTenants(ctx context.Context) []string {
+	current, _ := ctx.Value(tenantIDKey).(string)
+	set, _ := ctx.Value(allowedKey).([]string)
+	if len(set) == 0 {
+		if current == "" {
+			return nil
+		}
+		return []string{current}
+	}
+	return set
+}
+
+// WithoutTenant strips the tenant from a context, putting the caller back on
+// the platform path — outside the row-level policies.
+//
+// It is for the handful of questions that are genuinely about a person rather
+// than about a tenant. Reach for it only where crossing organisations is the
+// point, and never with an id that arrived from a request without a membership
+// check behind it.
+func WithoutTenant(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, allowedKey, []string(nil))
+	return context.WithValue(ctx, tenantIDKey, "")
+}
+
+// TenantID extracts the acting organisation from a context.
+//
+// Handlers should reach for RequireTenant instead. This is for callers that
+// have a context but no ResponseWriter to answer on.
+func TenantID(ctx context.Context) (string, error) {
+	tenantID, ok := ctx.Value(tenantIDKey).(string)
+	if !ok || tenantID == "" {
+		return "", ErrTenantMissing
+	}
+	return tenantID, nil
+}
+
+// RequireTenant resolves the caller's organisation, or answers 401 and reports
+// false. A handler that gets false has already had its response written and
+// must return.
+//
+// This is not middleware, and there is deliberately none: what guards a request
+// is the session middleware, the only thing that puts a tenant into the
+// context, and the app gate, which refuses the request when this fails.
+func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool) {
+	tenantID, err := TenantID(r.Context())
+	if err != nil {
+		Error(w, http.StatusUnauthorized, "unauthorized")
+		return "", false
+	}
+	return tenantID, true
+}
+
+// WithUser injects the caller's claims into a context. The platform's session
+// middleware is what calls this.
+func WithUser(ctx context.Context, claims UserClaims) context.Context {
+	return context.WithValue(ctx, userContextKey, claims)
+}
+
+// UserFromContext returns who the platform decided the caller is.
+//
+// Claims with no user id count as absent. A zero-valued UserClaims reaching a
+// handler would otherwise read as "an authenticated person whose id is the
+// empty string", and every query scoped to that id would quietly match nothing
+// instead of refusing.
+func UserFromContext(ctx context.Context) (UserClaims, error) {
+	claims, ok := ctx.Value(userContextKey).(UserClaims)
+	if !ok || claims.UserID == "" {
+		return UserClaims{}, ErrUnauthenticated
+	}
+	return claims, nil
+}
+
+// ----------------------------------------------------------------- database
+
+// DB is the database as a module sees it.
+//
+// It is pgx's own shape rather than an abstraction over it, and deliberately:
+// this platform is committed to pgx and hand-written SQL, and an interface that
+// hid the driver would either leak it back through the row types or force every
+// module to translate between two vocabularies for no benefit. `*pgxpool.Pool`
+// satisfies this as it is.
+//
+// What the interface buys, then, is not portability but honesty about the
+// contract: the platform hands a module a handle with these four methods, and a
+// module cannot reach past it to the pool's configuration, its statistics or
+// its Close.
+//
+// Every query is tenant-scoped by row-level security, decided from the tenant
+// on the connection rather than from anything the module passes — see
+// internal/platform/dbguard. A module that forgets a WHERE tenant_id still
+// cannot read another organisation's rows.
+type DB interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// --------------------------------------------------------------- permissions
+
+// ErrForbidden is the refusal a permission check produces.
+var ErrForbidden = errors.New("forbidden: insufficient permissions")
+
+// PermissionStore answers what a person may do in an organisation.
+//
+// The implementation is the platform's — it reads roles, caches per tenant and
+// is invalidated across replicas. A module holds one and asks it.
+type PermissionStore interface {
+	GetUserPermissions(ctx context.Context, tenantID, userID string) (map[string]bool, error)
+}
+
+// RequirePermission is middleware that refuses a request the caller has no
+// right to make.
+//
+// A tenant administrator passes without a lookup. That is not a shortcut around
+// the check: the administrator role is defined as holding every permission in
+// its organisation, so asking the store would return true for all of them, and
+// a per-request query to learn that is a query with a known answer.
+func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, err := UserFromContext(r.Context())
+			if err != nil {
+				Error(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			if claims.IsAdmin {
+				next.ServeHTTP(w, r)
+				return
+			}
+			permissions, err := store.GetUserPermissions(r.Context(), claims.TenantID, claims.UserID)
+			if err != nil || !permissions[permissionCode] {
+				Error(w, http.StatusForbidden, "forbidden: permission "+permissionCode+" required")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// --------------------------------------------------------------------- audit
+
+// AuditSink is where recorded events go. The platform installs one at startup;
+// see UseAuditSink.
+type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
+
+var auditSink AuditSink
+
+// UseAuditSink installs the platform's audit recorder.
+//
+// It is a sink rather than an interface a module holds because an audit row is
+// not a service a module may decline to use: everything that records one should
+// reach the same table, and a module that was handed a recorder could be
+// constructed without one.
+func UseAuditSink(sink AuditSink) { auditSink = sink }
+
+// Audit records that something happened, for the log that answers "who read my
+// data".
+//
+// Best-effort by design: an audit write must not fail the operation it is
+// describing. With no sink installed the event is logged and dropped, which is
+// what happens in a test that constructs a module without a platform.
+func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any) {
+	if auditSink == nil {
+		slog.Info("AUDIT_EVENT_UNSUNK", "tenant_id", tenantID, "user_id", userID,
+			"action", action, "resource", resource)
+		return
+	}
+	auditSink(ctx, tenantID, userID, action, resource, details)
+}
+
+// -------------------------------------------------------------------- wiring
+
+// Platform is what a module is handed when it is built.
+//
+// One argument rather than four, because the list will grow and a constructor
+// signature that changes every time the platform lends a module something new
+// is a signature every distribution has to chase. A module takes what it needs
+// in its constructor and keeps that:
+//
+//	func New(p nexus.Platform) *Module {
+//	    m := &Module{db: p.DB(), perms: p.Permissions()}
+//	    nexus.Register(m)
+//	    return m
+//	}
+type Platform interface {
+	// DB is the tenant-scoped database handle.
+	DB() DB
+	// Permissions answers what a person may do, for RequirePermission.
+	Permissions() PermissionStore
+}

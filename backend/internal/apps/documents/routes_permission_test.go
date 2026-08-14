@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,14 +47,14 @@ func routerFor(t *testing.T, held string) http.Handler {
 	// the permission middleware reads.
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := auth.WithUserContext(r.Context(), auth.UserClaims{
+			ctx := nexus.WithUser(r.Context(), nexus.UserClaims{
 				UserID: "11111111-1111-1111-1111-111111111111",
 				// Not an administrator: RequirePermission waves those through,
 				// which would make every case below pass for the wrong reason.
 				TenantID: "22222222-2222-2222-2222-222222222222",
 				Email:    "member@example.mn",
 			})
-			ctx = tenant.WithTenantID(ctx, "22222222-2222-2222-2222-222222222222")
+			ctx = nexus.WithTenantID(ctx, "22222222-2222-2222-2222-222222222222")
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})

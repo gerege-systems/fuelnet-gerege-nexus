@@ -31,13 +31,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -147,11 +144,11 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 // linked, their eID signing identity. It is the single place authorisation
 // context is built, so no handler can forget to apply it.
 func (m *Module) actorFrom(r *http.Request) (string, Actor, error) {
-	tenantID, err := tenant.FromContext(r.Context())
+	tenantID, err := nexus.TenantID(r.Context())
 	if err != nil {
 		return "", Actor{}, &Error{Code: "UNAUTHORIZED", Message: "unauthorized", Status: http.StatusUnauthorized}
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
 		return "", Actor{}, &Error{Code: "UNAUTHORIZED", Message: "unauthorized", Status: http.StatusUnauthorized}
 	}
@@ -217,11 +214,11 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		if status == 0 {
 			status = http.StatusBadRequest
 		}
-		httpx.JSON(w, status, map[string]string{"error": domain.Message, "code": domain.Code})
+		nexus.JSON(w, status, map[string]string{"error": domain.Message, "code": domain.Code})
 		return
 	}
 	slog.Error("esign: unhandled error", "error", err)
-	httpx.JSON(w, http.StatusInternalServerError, map[string]string{
+	nexus.JSON(w, http.StatusInternalServerError, map[string]string{
 		"error": "internal error", "code": "INTERNAL",
 	})
 }

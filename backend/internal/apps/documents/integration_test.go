@@ -12,12 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
 // These tests exercise signing against a real PostgreSQL schema, because what
@@ -1954,7 +1955,7 @@ func TestTextThatCannotBeStoredIsRefusedNotBlamedOnUs(t *testing.T) {
 // three-approver contract into a one-signature one.
 func TestAnAbsentChainIsNotAnEmptyChain(t *testing.T) {
 	f := newFixture(t)
-	ctx := tenant.WithTenantID(context.Background(), f.tenantID)
+	ctx := nexus.WithTenantID(context.Background(), f.tenantID)
 
 	if _, err := f.m.ReplaceWorkflow(context.Background(), f.tenantID, "CONTRACT", []WorkflowStep{
 		{Order: 1, Name: "Ня-бо", SignerRegNumber: "УБ99010111"},

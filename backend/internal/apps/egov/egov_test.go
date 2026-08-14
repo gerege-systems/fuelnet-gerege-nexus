@@ -11,9 +11,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -74,10 +72,13 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatalf("membership: %v", err)
 	}
 
-	// audit.Record writes through a package-level pool the server installs at
-	// startup. Without it the call is a log line and the history screen would
-	// have nothing to read — which is exactly what this test is checking.
+	// Two wires the server puts in place at startup, and a test has to as well:
+	// the pool audit.Record writes through, and the sink nexus.Audit forwards
+	// to. Miss either and the call is only a log line — AUDIT_EVENT_UNSUNK for
+	// the second — and the history screen has nothing to read, which is exactly
+	// what this test is checking.
 	audit.UseDatabase(pool)
+	nexus.UseAuditSink(audit.Record)
 
 	// Mock mode, which is the state a deployment without ХУР credentials is in
 	// and the only one a test can be in.
@@ -90,8 +91,8 @@ func newFixture(t *testing.T) *fixture {
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := tenant.WithTenantID(r.Context(), f.tenantID)
-			ctx = auth.WithUserContext(ctx, auth.UserClaims{UserID: f.userID, TenantID: f.tenantID, IsAdmin: true})
+			ctx := nexus.WithTenantID(r.Context(), f.tenantID)
+			ctx = nexus.WithUser(ctx, nexus.UserClaims{UserID: f.userID, TenantID: f.tenantID, IsAdmin: true})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})

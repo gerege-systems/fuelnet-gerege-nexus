@@ -22,9 +22,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -51,10 +51,10 @@ func (m *Module) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	// screen still reads it that way, so paginated callers opt in explicitly
 	// rather than every existing client breaking on an envelope.
 	if r.URL.Query().Get("paginated") == "true" {
-		httpx.JSON(w, http.StatusOK, Page[Document]{Items: list, Total: total, Limit: limit, Offset: offset})
+		nexus.JSON(w, http.StatusOK, Page[Document]{Items: list, Total: total, Limit: limit, Offset: offset})
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 func (m *Module) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +67,7 @@ func (m *Module) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, doc)
+	nexus.JSON(w, http.StatusOK, doc)
 }
 
 // uploadDocumentHandler takes a base64 payload. It is the original intake and
@@ -178,12 +178,12 @@ func (m *Module) storeUpload(w http.ResponseWriter, r *http.Request, tenantID st
 		return
 	}
 
-	audit.Record(r.Context(), tenantID, actor.UserID, "esign.document_uploaded", "esign", map[string]any{
+	nexus.Audit(r.Context(), tenantID, actor.UserID, "esign.document_uploaded", "esign", map[string]any{
 		"document_id": doc.ID,
 		"title":       doc.Title,
 		"bytes":       len(pdf),
 	})
-	httpx.JSON(w, http.StatusCreated, doc)
+	nexus.JSON(w, http.StatusCreated, doc)
 }
 
 func (m *Module) downloadDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +227,7 @@ func (m *Module) deleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.UserID, "esign.document_archived", "esign", map[string]any{
+	nexus.Audit(r.Context(), tenantID, actor.UserID, "esign.document_archived", "esign", map[string]any{
 		"document_id": id,
 	})
 	w.WriteHeader(http.StatusNoContent)

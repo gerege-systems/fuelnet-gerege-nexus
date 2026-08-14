@@ -16,10 +16,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,11 +25,11 @@ import (
 // is the single place authorisation context is built, so no handler can forget
 // to apply it.
 func (m *Module) actorFrom(r *http.Request) (string, Actor, error) {
-	tenantID, err := tenant.FromContext(r.Context())
+	tenantID, err := nexus.TenantID(r.Context())
 	if err != nil {
 		return "", Actor{}, &WorkflowError{Code: "UNAUTHORIZED", Message: "unauthorized", Status: http.StatusUnauthorized}
 	}
-	claims, err := auth.UserFromContext(r.Context())
+	claims, err := nexus.UserFromContext(r.Context())
 	if err != nil {
 		return "", Actor{}, &WorkflowError{Code: "UNAUTHORIZED", Message: "unauthorized", Status: http.StatusUnauthorized}
 	}
@@ -83,7 +81,7 @@ func (m *Module) listUnitsHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, units)
+	nexus.JSON(w, http.StatusOK, units)
 }
 
 func (m *Module) unitTreeHandler(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +110,7 @@ func (m *Module) unitTreeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		roots = append(roots, u)
 	}
-	httpx.JSON(w, http.StatusOK, roots)
+	nexus.JSON(w, http.StatusOK, roots)
 }
 
 func (m *Module) createUnitHandler(w http.ResponseWriter, r *http.Request) {
@@ -135,8 +133,8 @@ func (m *Module) createUnitHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.unit_created", unit.ID, map[string]any{"code": unit.Code})
-	httpx.JSON(w, http.StatusCreated, unit)
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.unit_created", unit.ID, map[string]any{"code": unit.Code})
+	nexus.JSON(w, http.StatusCreated, unit)
 }
 
 func (m *Module) assignUnitMemberHandler(w http.ResponseWriter, r *http.Request) {
@@ -166,9 +164,9 @@ func (m *Module) assignUnitMemberHandler(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.unit_member_assigned", in.UnitID,
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.unit_member_assigned", in.UnitID,
 		map[string]any{"user_id": in.UserID, "role": in.UnitRole})
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
 // ─── Workflow configuration ──────────────────────────────────────────────────
@@ -177,7 +175,7 @@ func (m *Module) listTemplatesHandler(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := m.require(w, r, PermRead); !ok {
 		return
 	}
-	httpx.JSON(w, http.StatusOK, Templates)
+	nexus.JSON(w, http.StatusOK, Templates)
 }
 
 func (m *Module) listWorkflowsHandler(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +188,7 @@ func (m *Module) listWorkflowsHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, workflows)
+	nexus.JSON(w, http.StatusOK, workflows)
 }
 
 func (m *Module) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
@@ -219,9 +217,9 @@ func (m *Module) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.workflow_created", version.WorkflowID,
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.workflow_created", version.WorkflowID,
 		map[string]any{"template": in.Template, "version": version.Version})
-	httpx.JSON(w, http.StatusCreated, version)
+	nexus.JSON(w, http.StatusCreated, version)
 }
 
 func (m *Module) getVersionHandler(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +232,7 @@ func (m *Module) getVersionHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, notFound(err, "workflow version"))
 		return
 	}
-	httpx.JSON(w, http.StatusOK, version)
+	nexus.JSON(w, http.StatusOK, version)
 }
 
 func (m *Module) publishVersionHandler(w http.ResponseWriter, r *http.Request) {
@@ -247,8 +245,8 @@ func (m *Module) publishVersionHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.workflow_published", versionID, nil)
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": VersionPublished, "id": versionID})
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.workflow_published", versionID, nil)
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": VersionPublished, "id": versionID})
 }
 
 func (m *Module) configureServiceHandler(w http.ResponseWriter, r *http.Request) {
@@ -278,9 +276,9 @@ func (m *Module) configureServiceHandler(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.service_configured", serviceID,
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.service_configured", serviceID,
 		map[string]any{"mode": in.FulfillmentMode})
-	httpx.JSON(w, http.StatusOK, map[string]string{"status": "configured", "id": serviceID})
+	nexus.JSON(w, http.StatusOK, map[string]string{"status": "configured", "id": serviceID})
 }
 
 func (m *Module) listRoutingRulesHandler(w http.ResponseWriter, r *http.Request) {
@@ -293,7 +291,7 @@ func (m *Module) listRoutingRulesHandler(w http.ResponseWriter, r *http.Request)
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, rules)
+	nexus.JSON(w, http.StatusOK, rules)
 }
 
 func (m *Module) createRoutingRuleHandler(w http.ResponseWriter, r *http.Request) {
@@ -323,8 +321,8 @@ func (m *Module) createRoutingRuleHandler(w http.ResponseWriter, r *http.Request
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.routing_rule_created", rule.ID, nil)
-	httpx.JSON(w, http.StatusCreated, rule)
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.routing_rule_created", rule.ID, nil)
+	nexus.JSON(w, http.StatusCreated, rule)
 }
 
 // ─── Ingestion ───────────────────────────────────────────────────────────────
@@ -349,10 +347,10 @@ func (m *Module) ingestHandler(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	if result.Created {
 		status = http.StatusCreated
-		audit.Record(r.Context(), tenantID, actor.Email, "gov.request_ingested", in.ExternalRequestID,
+		nexus.Audit(r.Context(), tenantID, actor.Email, "gov.request_ingested", in.ExternalRequestID,
 			map[string]any{"source": in.SourceSystem, "service": in.ServiceCode})
 	}
-	httpx.JSON(w, status, result)
+	nexus.JSON(w, status, result)
 }
 
 // ─── Queues, detail and actions ──────────────────────────────────────────────
@@ -388,7 +386,7 @@ func (m *Module) listTasksHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, page)
+	nexus.JSON(w, http.StatusOK, page)
 }
 
 func (m *Module) requestDetailHandler(w http.ResponseWriter, r *http.Request) {
@@ -401,7 +399,7 @@ func (m *Module) requestDetailHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, detail)
+	nexus.JSON(w, http.StatusOK, detail)
 }
 
 func (m *Module) actHandler(w http.ResponseWriter, r *http.Request) {
@@ -422,9 +420,9 @@ func (m *Module) actHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, actor.Email, "gov.task_"+in.Action, task.ID,
+	nexus.Audit(r.Context(), tenantID, actor.Email, "gov.task_"+in.Action, task.ID,
 		map[string]any{"status": task.Status, "unit_id": task.UnitID})
-	httpx.JSON(w, http.StatusOK, task)
+	nexus.JSON(w, http.StatusOK, task)
 }
 
 func (m *Module) dashboardHandler(w http.ResponseWriter, r *http.Request) {
@@ -437,7 +435,7 @@ func (m *Module) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, summary)
+	nexus.JSON(w, http.StatusOK, summary)
 }
 
 // ─── Outbox ──────────────────────────────────────────────────────────────────
@@ -482,7 +480,7 @@ func (m *Module) listOutboxHandler(w http.ResponseWriter, r *http.Request) {
 		writeDomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, list)
+	nexus.JSON(w, http.StatusOK, list)
 }
 
 // ─── Error rendering ─────────────────────────────────────────────────────────
@@ -495,10 +493,10 @@ func writeDomainError(w http.ResponseWriter, err error) {
 		if status == 0 {
 			status = statusForCode(domain.Code)
 		}
-		httpx.JSON(w, status, map[string]string{"error": domain.Message, "code": domain.Code})
+		nexus.JSON(w, status, map[string]string{"error": domain.Message, "code": domain.Code})
 		return
 	}
-	httpx.JSON(w, http.StatusInternalServerError, map[string]string{
+	nexus.JSON(w, http.StatusInternalServerError, map[string]string{
 		"error": "internal error", "code": "INTERNAL",
 	})
 }
