@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-14
+
+Эхний тогтвортой хувилбар: `backend/pkg/nexus` нь semver амлалттай нийтийн
+API болж, экосистемийн салгалтын 0-р (нэршил) ба 1-р (SDK) алхам дуусав.
+Энэ хувилбараас эхлэн distribution repo нь цөмийг fork хийхгүйгээр
+dependency болгон авч чадна — [хувилбар гаргах журам](docs/RELEASING.md).
+
 ### Added — a release process, and the tests that make its promise checkable
 
 Step 2 of the ecosystem split. A tag is the only way another repository can
