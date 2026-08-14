@@ -1,0 +1,106 @@
+name: Release
+
+# A tag is the only way a distribution repository can depend on this one, so a
+# tag has to mean something. This is what makes it mean something.
+#
+# It runs on `backend/vX.Y.Z` — the Go submodule tag form. A plain `vX.Y.Z` tag
+# would be ignored by the module proxy for a module that lives in a
+# subdirectory, so it is ignored here too rather than half-released.
+on:
+  push:
+    tags:
+      - "backend/v*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify the tagged commit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      # The tag says what this build claims to be, and two things read it: the
+      # module proxy, and every app manifest that names a platform constraint.
+      # They have to agree, and a tag on a commit whose PlatformVersion says
+      # something else is the disagreement nobody would notice until a store
+      # refused an app.
+      - name: The tag and the platform version agree
+        run: |
+          tagged="${GITHUB_REF_NAME#backend/v}"
+          stamped=$(grep -oE 'PlatformVersion = "[^"]+"' internal/platform/server.go | cut -d'"' -f2)
+          echo "tag=$tagged  source=$stamped"
+          if [ "$tagged" != "$stamped" ]; then
+            echo "::error::tag backend/v$tagged is on a commit whose PlatformVersion is $stamped."
+            echo "::error::Set PlatformVersion in internal/platform/server.go to $tagged and tag again."
+            exit 1
+          fi
+
+      # The contract, checked one more time on the exact commit being published.
+      # CI has already run these on main; a tag can be pushed to any commit.
+      - name: The SDK contract is intact
+        run: go test ./pkg/nexus/...
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Build
+        run: go build ./...
+
+  publish:
+    name: Publish
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Ask the proxy for the version that was just tagged. It is what a
+      # distribution's `go get` will hit, and a release nobody has fetched is a
+      # release whose first fetch happens in somebody else's CI.
+      - name: Warm the Go module proxy
+        run: |
+          version="${GITHUB_REF_NAME#backend/}"
+          module="github.com/gerege-systems/open-gerege-nexus/backend"
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS "https://proxy.golang.org/${module}/@v/${version}.info"; then
+              echo "the proxy has ${module}@${version}"
+              exit 0
+            fi
+            echo "attempt $attempt: the proxy does not have it yet; waiting"
+            sleep 20
+          done
+          # Not a failure of the release: the tag exists and `go get` will fetch
+          # it directly. Worth saying out loud because the first distribution to
+          # upgrade will wait for this instead.
+          echo "::warning::the module proxy has not picked up ${version} yet"
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#backend/}"
+          # The notes come from the changelog rather than from the commit log:
+          # a release is read by people deciding whether to upgrade, and a list
+          # of commit subjects is not that.
+          notes=$(awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md)
+          if [ -z "$notes" ]; then
+            notes="See CHANGELOG.md for what changed in ${version}."
+          fi
+          printf '%s\n' "$notes" > /tmp/notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$version" \
+            --notes-file /tmp/notes.md

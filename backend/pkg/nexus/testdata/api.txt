@@ -1,0 +1,69 @@
+  DB.Begin(ctx context.Context) (pgx.Tx, error)
+  DB.BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
+  DB.Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+  DB.Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+  DB.QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+  Dependency.ID string
+  Dependency.VersionConstraint string
+  MenuDefinition.AppID string
+  MenuDefinition.AppName string
+  MenuDefinition.ExternalURL string
+  MenuDefinition.ID string
+  MenuDefinition.Icon string
+  MenuDefinition.Label string
+  MenuDefinition.Labels map[string]string
+  MenuDefinition.Order int
+  MenuDefinition.ParentID string
+  MenuDefinition.Path string
+  Module.Dependencies() []Dependency
+  Module.ID() string
+  Module.Menus() []MenuDefinition
+  Module.Name() string
+  Module.Permissions() []PermissionDefinition
+  Module.RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler)
+  Module.Version() string
+  PermissionDefinition.AdminOnly bool
+  PermissionDefinition.Code string
+  PermissionDefinition.Description string
+  PermissionDefinition.Name string
+  PermissionStore.GetUserPermissions(ctx context.Context, tenantID, userID string) (map[string]bool, error)
+  Platform.DB() DB
+  Platform.Permissions() PermissionStore
+  UserClaims.AllowedTenantIDs []string
+  UserClaims.Email string
+  UserClaims.Impersonated bool
+  UserClaims.ImpersonatedBy string
+  UserClaims.IsAdmin bool
+  UserClaims.TenantID string
+  UserClaims.UserID string
+func (MenuDefinition) LocalizedLabel(locale string) string
+func AllowedTenants(ctx context.Context) []string
+func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
+func Error(w http.ResponseWriter, status int, message string)
+func Get(id string) (Module, bool)
+func JSON(w http.ResponseWriter, status int, value any)
+func List() []Module
+func NewPlatform(db DB, permissions PermissionStore) Platform
+func Register(m Module)
+func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler
+func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool)
+func TenantID(ctx context.Context) (string, error)
+func UseAuditSink(sink AuditSink)
+func UserFromContext(ctx context.Context) (UserClaims, error)
+func VerifyModuleExists(id string) error
+func WithAllowedTenants(ctx context.Context, tenantIDs []string) context.Context
+func WithTenantID(ctx context.Context, tenantID string) context.Context
+func WithUser(ctx context.Context, claims UserClaims) context.Context
+func WithoutTenant(ctx context.Context) context.Context
+type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
+type DB interface
+type Dependency struct
+type MenuDefinition struct
+type Module interface
+type PermissionDefinition struct
+type PermissionStore interface
+type Platform interface
+type UserClaims struct
+var ErrForbidden
+var ErrTenantMissing
+var ErrUnauthenticated

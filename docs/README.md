@@ -61,6 +61,7 @@ Spanish) — seven in total.
 | [`NATIVE_LOGIN_SPEC.md`](NATIVE_LOGIN_SPEC.md) | MN | Swift, C#, Kotlin клиентүүдийн нэвтрэлтийн зан төлөв |
 | [`NATIVE_SETTINGS_SPEC.md`](NATIVE_SETTINGS_SPEC.md) | MN | Бүрхүүл, төхөөрөмж, peripheral, fleet тохиргоо |
 | [`MODULE_AUTHORING_GUIDE.md`](MODULE_AUTHORING_GUIDE.md) | EN | Шинэ апп модуль хөгжүүлэх алхам алхмаар заавар |
+| [`RELEASING.md`](RELEASING.md) | MN | `pkg/nexus`-ийн semver амлалт, түүнийг хамгаалдаг тест, tag гаргах журам |
 | [`GOV_SERVICES_WORKFLOW.md`](GOV_SERVICES_WORKFLOW.md) | EN | Тохируулж болох төрийн үйлчилгээний урсгал, шилжүүлэлт, баталгаажуулалт |
 | [`DOCUMENTS_SIGNING.md`](DOCUMENTS_SIGNING.md) | EN | Цахим баримтын гарын үсэг ба батламжийн урсгал |
 | [`APPSTORE_OPERATIONS.md`](APPSTORE_OPERATIONS.md) | EN | Апп сторын каталог нийтлэх, хувилбар шилжүүлэх ажиллагаа |

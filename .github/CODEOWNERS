@@ -1,0 +1,13 @@
+# Who has to look at a change before it lands.
+#
+# One entry, and deliberately one: a CODEOWNERS file that names an owner for
+# every directory turns review into a formality nobody reads. This names the
+# one place where a mistake is expensive in a way no test result shows.
+
+# The ecosystem's contract. Every distribution repository compiles against this
+# package and pins it by tag, so a change here is a change to code that is not
+# in this repository and cannot be fixed from it — see docs/RELEASING.md §1.
+#
+# The golden file beside it is part of the same review: its diff is the plain
+# statement of what the contract gained or lost.
+/backend/pkg/nexus/ @gerege-systems/core-team

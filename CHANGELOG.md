@@ -15,6 +15,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — a release process, and the tests that make its promise checkable
+
+Step 2 of the ecosystem split. A tag is the only way another repository can
+depend on this one, so a tag has to mean something; this is what makes it mean
+something.
+
+- **`docs/RELEASING.md`** — the semver promise in plain terms (what breaks a
+  caller and what does not, with the interface-versus-struct distinction spelled
+  out because it is the one people get wrong), the `backend/vX.Y.Z` tag form Go
+  requires of a module in a subdirectory, and the procedure.
+- **The exported API of `pkg/nexus` is a golden file**
+  (`pkg/nexus/testdata/api.txt`, 66 lines — the whole ecosystem contract on one
+  page). Changing it is allowed and often right; changing it *by accident* is
+  not. `go test ./pkg/nexus -update` re-records it, and the diff is what a
+  reviewer reads. Without this the promise would be broken not by anybody
+  deciding to break it but by a rename during a refactor, or by a method added
+  to an interface a distribution implements — neither of which fails a test
+  here, and both of which fail in somebody else's build days later.
+- **`.github/workflows/release.yml`** runs on a `backend/v*` tag: it refuses a
+  tag whose commit carries a different `PlatformVersion`, re-runs the contract
+  tests and the suite on the exact commit being published, warms the Go module
+  proxy, and cuts a GitHub release from the changelog section for that version.
+- **`.github/CODEOWNERS`**, one entry, for `backend/pkg/nexus`.
+- **The deploy now stamps `PlatformVersion` into the image.** The Dockerfile has
+  accepted a `VERSION` build argument since it was written and nothing ever
+  passed one, so every production image has told every app store it is 1.0.0 —
+  which is what a manifest's `"platform": ">=1.1.0"` constraint would have been
+  checked against.
+
 ### Added — `pkg/nexus`, the SDK that makes a product possible without a fork
 
 Step 1 of the ecosystem split (`docs/ECOSYSTEM_GIT_STRATEGY.md` §6), and the
