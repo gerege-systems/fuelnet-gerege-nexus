@@ -1,7 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
-
 import Applications from "@/components/landing/Applications";
 import Architecture from "@/components/landing/Architecture";
 import Capabilities from "@/components/landing/Capabilities";
@@ -12,7 +8,7 @@ import SiteHeader from "@/components/landing/SiteHeader";
 import Storefront from "@/components/landing/Storefront";
 import Technology from "@/components/landing/Technology";
 import Trust from "@/components/landing/Trust";
-import { fetchStorefront, type StoreApp } from "@/lib/storefront";
+import { fetchStorefrontOnServer } from "@/lib/storefront";
 
 /**
  * The public landing page — the only screen a visitor sees before signing in.
@@ -35,26 +31,22 @@ import { fetchStorefront, type StoreApp } from "@/lib/storefront";
  * catalogue. So that deployment gets the catalogue, and the platform's argument
  * gives way to it.
  *
- * Which page to render is asked of the server at run time rather than decided
- * at build time, and that is the whole point: one image serves every
- * deployment, so the image cannot know which one it is. The same reasoning as
- * lib/apiBase.ts, for the same reason.
+ * Which page that is gets decided here, on the server, before anything is sent.
+ * It was briefly decided in the browser instead, and that was wrong twice over:
+ * a visitor saw the platform page and then watched it turn into a shop, and
+ * anything that does not run JavaScript — every crawler — only ever saw the
+ * first of those. A catalogue nobody can find is not much of a shop.
+ *
+ * It stays a run-time question rather than a build-time one, though: one image
+ * serves every deployment, so the image cannot know which one it is. The
+ * deployment says where its API is (`API_INTERNAL_URL`) and this asks.
  */
-export default function LandingPage() {
-  const [apps, setApps] = useState<StoreApp[] | null>(null);
-  const [asked, setAsked] = useState(false);
 
-  useEffect(() => {
-    let live = true;
-    fetchStorefront().then((found) => {
-      if (!live) return;
-      setApps(found);
-      setAsked(true);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
+// The catalogue changes when a publisher acts, not when a visitor arrives.
+export const revalidate = 60;
+
+export default async function LandingPage() {
+  const apps = await fetchStorefrontOnServer();
 
   return (
     <div className="gp-landing" id="top">
@@ -64,9 +56,6 @@ export default function LandingPage() {
           <Storefront apps={apps} />
         ) : (
           <>
-            {/* Until the question is answered, the platform page is what shows.
-                A spinner over the whole landing would trade a correct page for
-                a blank one on every visit, to spare a store one repaint. */}
             <Hero />
             <Architecture />
             <Applications />
@@ -78,10 +67,6 @@ export default function LandingPage() {
         )}
       </main>
       <SiteFooter />
-      {/* asked is read so the effect's completion is observable in the tree;
-          without it a store's first paint and its second are indistinguishable
-          to anything watching. */}
-      <span hidden data-storefront-resolved={asked} />
     </div>
   );
 }
