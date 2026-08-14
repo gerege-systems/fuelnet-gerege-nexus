@@ -1,12 +1,24 @@
-# ppt.nexus.gerege.mn — static presentation site.
-# Drop into /etc/nginx/sites-available/, symlink to sites-enabled, reload.
+# ppt.nexus.gerege.mn — статик танилцуулга (нэг бие даасан index.html).
+#
+# Энэ хостын конвенц: дэд домэйн бүр өөрийн certbot гэрчилгээтэй (wildcard биш).
+# Тиймээс энд ЗӨВХӨН 80 портын блокийг бичнэ — TLS-ийн мөрүүдийг certbot өөрөө
+# нэмнэ. Суулгах дараалал:
+#
+#   sudo install -m 0644 ppt.nexus.gerege.mn.conf \
+#        /etc/nginx/sites-available/ppt.nexus.gerege.mn
+#   sudo ln -sfn /etc/nginx/sites-available/ppt.nexus.gerege.mn \
+#                /etc/nginx/sites-enabled/ppt.nexus.gerege.mn
+#   sudo nginx -t && sudo systemctl reload nginx
+#   sudo certbot --nginx -d ppt.nexus.gerege.mn --redirect
+#
+# certbot дараа нь 443 блок үүсгэж, 80-г 301 болгож өөрчилнө — js.nexus,
+# cp.nexus зэрэгтэй яг ижил хэлбэр гарна.
+
 server {
-    listen 443 ssl http2;
+    listen 80;
     server_name ppt.nexus.gerege.mn;
 
-    # Reuse the certificate setup used by the other nexus subdomains.
-    ssl_certificate     /etc/letsencrypt/live/nexus.gerege.mn/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/nexus.gerege.mn/privkey.pem;
+    location /.well-known/acme-challenge/ { root /var/www/html; }
 
     root /var/www/nexus-ppt;
     index index.html;
@@ -16,13 +28,7 @@ server {
 
     location / {
         try_files $uri $uri/ /index.html;
-        # Single self-contained file; allow revalidation on each deploy.
+        # Нэг файлтай тул deploy бүрт дахин шалгуулна.
         add_header Cache-Control "public, max-age=300, must-revalidate";
     }
-}
-
-server {
-    listen 80;
-    server_name ppt.nexus.gerege.mn;
-    return 301 https://$host$request_uri;
 }
