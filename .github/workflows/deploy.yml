@@ -152,10 +152,11 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:latest
             ${{ steps.meta.outputs.image }}:${{ github.event.workflow_run.head_sha || github.sha }}
-          # NEXT_PUBLIC_* is inlined into the client bundle at build time, so
-          # the production API URL has to be known here, not at run time.
+          # NEXT_PUBLIC_API_URL is deliberately not passed. Baked in, it ties
+          # the image to one hostname, so the same product needs a second image
+          # for its staging and a third for the next deployment. Left empty the
+          # browser asks whichever host served the page — see lib/apiBase.ts.
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ env.PUBLIC_ORIGIN }}/api/v1
             VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}

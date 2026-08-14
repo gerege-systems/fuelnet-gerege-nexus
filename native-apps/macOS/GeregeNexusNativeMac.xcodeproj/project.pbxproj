@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		8D1107500486CEB800E417A5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107400486CEB800E417A5 /* main.swift */; };
+		8D11075B0486CEB800E417A5 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D11074B0486CEB800E417A5 /* DesignSystem.swift */; };
 		8D1107510486CEB800E417A5 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107410486CEB800E417A5 /* AppDelegate.swift */; };
 		8D1107520486CEB800E417A5 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107420486CEB800E417A5 /* MainWindowController.swift */; };
 		8D1107530486CEB800E417A5 /* NativeIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1107430486CEB800E417A5 /* NativeIPC.swift */; };
@@ -23,6 +24,7 @@
 /* Begin PBXFileReference section */
 		8D11073B0486CEB800E417A5 /* GeregeNexusNativeMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GeregeNexusNativeMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D1107400486CEB800E417A5 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		8D11074B0486CEB800E417A5 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		8D1107410486CEB800E417A5 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		8D1107420486CEB800E417A5 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		8D1107430486CEB800E417A5 /* NativeIPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIPC.swift; sourceTree = "<group>"; };
@@ -71,6 +73,7 @@
 			children = (
 				8D1107400486CEB800E417A5 /* main.swift */,
 				8D1107410486CEB800E417A5 /* AppDelegate.swift */,
+				8D11074B0486CEB800E417A5 /* DesignSystem.swift */,
 				8D1107420486CEB800E417A5 /* MainWindowController.swift */,
 				8D1107430486CEB800E417A5 /* NativeIPC.swift */,
 				8D1107460486CEB800E417A5 /* NativeAuth.swift */,
@@ -141,6 +144,7 @@
 			files = (
 				8D1107500486CEB800E417A5 /* main.swift in Sources */,
 				8D1107510486CEB800E417A5 /* AppDelegate.swift in Sources */,
+				8D11075B0486CEB800E417A5 /* DesignSystem.swift in Sources */,
 				8D1107520486CEB800E417A5 /* MainWindowController.swift in Sources */,
 				8D1107530486CEB800E417A5 /* NativeIPC.swift in Sources */,
 				8D1107560486CEB800E417A5 /* NativeAuth.swift in Sources */,

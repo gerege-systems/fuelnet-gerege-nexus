@@ -9,7 +9,10 @@ RUN npm ci
 COPY . .
 
 # NEXT_PUBLIC_* values are baked into the client bundle at build time.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+# Empty by default, and production leaves it empty: the browser then asks the
+# host that served the page, which is what keeps one image usable by every
+# deployment. Set it only where the API is genuinely on another origin.
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Browser error reporting. It has to be a build argument rather than a runtime
