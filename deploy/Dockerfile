@@ -35,12 +35,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/migrate
 
 # The operational tools, in the image because that is where an operator is.
 #
-# APPSTORE_OPERATIONS.md tells whoever is running a cutover to invoke these, and
-# it said `go run` — which assumes a Go toolchain on a production host that
-# deliberately has nothing on it but this image. A procedure that cannot be
-# followed with what is installed is a procedure nobody follows.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
-        -o /bin/appstore-import ./cmd/appstore-import
+# The runbooks tell whoever is running a cutover to invoke these, and they said
+# `go run` — which assumes a Go toolchain on a production host that deliberately
+# has nothing on it but this image. A procedure that cannot be followed with
+# what is installed is a procedure nobody follows.
+#
+# appstore-import used to be here too. It writes the App Store's own tables and
+# left with that product; the image stopped being able to build it the moment it
+# did, which is what turned CI red.
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
         -o /bin/catalog-diff ./cmd/catalog-diff
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
@@ -75,7 +77,6 @@ WORKDIR /app
 
 COPY --from=builder /bin/api /app/api
 COPY --from=builder /bin/migrate /app/migrate
-COPY --from=builder /bin/appstore-import /app/appstore-import
 COPY --from=builder /bin/catalog-diff /app/catalog-diff
 COPY --from=builder /bin/publish-catalog /app/publish-catalog
 COPY --from=builder /bin/operator-bootstrap /app/operator-bootstrap
