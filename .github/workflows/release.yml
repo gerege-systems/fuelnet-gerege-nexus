@@ -28,21 +28,17 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      # The tag says what this build claims to be, and two things read it: the
-      # module proxy, and every app manifest that names a platform constraint.
-      # They have to agree, and a tag on a commit whose PlatformVersion says
-      # something else is the disagreement nobody would notice until a store
-      # refused an app.
-      - name: The tag and the platform version agree
+      # Two version numbers, deliberately not the same one — see
+      # docs/RELEASING.md §3. The tag is the SDK's promise to distribution
+      # repositories; PlatformVersion is what an app manifest's
+      # `"platform": ">=1.0.0"` is checked against. Printed together because
+      # somebody cutting a release should see both, and never compared, because
+      # forcing them equal is how a manifest constraint gets broken by a
+      # decision about a Go module.
+      - name: Record both version numbers
         run: |
-          tagged="${GITHUB_REF_NAME#backend/v}"
-          stamped=$(grep -oE 'PlatformVersion = "[^"]+"' internal/platform/server.go | cut -d'"' -f2)
-          echo "tag=$tagged  source=$stamped"
-          if [ "$tagged" != "$stamped" ]; then
-            echo "::error::tag backend/v$tagged is on a commit whose PlatformVersion is $stamped."
-            echo "::error::Set PlatformVersion in internal/platform/server.go to $tagged and tag again."
-            exit 1
-          fi
+          echo "module tag:      ${GITHUB_REF_NAME}"
+          echo "PlatformVersion: $(grep -oE 'PlatformVersion = "[^"]+"' internal/platform/server.go | cut -d'"' -f2)"
 
       # The contract, checked one more time on the exact commit being published.
       # CI has already run these on main; a tag can be pushed to any commit.
@@ -88,7 +84,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version="${GITHUB_REF_NAME#backend/}"
+          tag="${GITHUB_REF_NAME#backend/}"
+          version="${tag#v}"
           # The notes come from the changelog rather than from the commit log:
           # a release is read by people deciding whether to upgrade, and a list
           # of commit subjects is not that.
@@ -102,5 +99,5 @@ jobs:
           fi
           printf '%s\n' "$notes" > /tmp/notes.md
           gh release create "$GITHUB_REF_NAME" \
-            --title "$version" \
+            --title "$tag" \
             --notes-file /tmp/notes.md
