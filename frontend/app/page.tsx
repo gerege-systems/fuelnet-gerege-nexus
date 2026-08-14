@@ -42,8 +42,18 @@ import { fetchStorefrontOnServer } from "@/lib/storefront";
  * deployment says where its API is (`API_INTERNAL_URL`) and this asks.
  */
 
-// The catalogue changes when a publisher acts, not when a visitor arrives.
-export const revalidate = 60;
+// Rendered per request, not prerendered at build.
+//
+// Which product this deployment is depends on an environment variable, and a
+// build has no environment: prerendering baked the platform page into the image
+// and served it to the first visitor after every deploy — for a full minute,
+// until the first revalidation replaced it with the shop. A page that is wrong
+// exactly when somebody first looks at it is wrong.
+//
+// The render is cheap and the fetch behind it is not repeated: it carries its
+// own 60-second cache, so the API is asked once a minute however many people
+// arrive.
+export const dynamic = "force-dynamic";
 
 export default async function LandingPage() {
   const apps = await fetchStorefrontOnServer();
