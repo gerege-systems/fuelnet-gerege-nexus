@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
 // Where the catalogue comes from.
@@ -71,7 +73,7 @@ type Config struct {
 	// modules compiled into this binary. A candidate that fails is discarded
 	// and the next source is tried, so a bad publish costs an instance its
 	// updates rather than its store.
-	Verify func([]CatalogApp) error
+	Verify func([]catalog.CatalogApp) error
 
 	// HTTPClient is the client used for the registry. Nil gets a bounded
 	// default; a test passes its own.
@@ -164,7 +166,7 @@ type Provider struct {
 
 	mu      sync.RWMutex
 	etag    string
-	current []CatalogApp
+	current []catalog.CatalogApp
 }
 
 // NewProvider builds a provider. It performs no I/O; Load does.
@@ -189,7 +191,7 @@ func (p *Provider) SyncInterval() time.Duration { return p.cfg.SyncInterval }
 // gone costs a warning and nothing else — the same rule the cold-database path
 // follows, and for the same reason: an instance that cannot boot serves nobody,
 // including the tenants whose apps are already installed and have not changed.
-func (p *Provider) Load(ctx context.Context) ([]CatalogApp, error) {
+func (p *Provider) Load(ctx context.Context) ([]catalog.CatalogApp, error) {
 	if p.Remote() {
 		apps, _, err := p.Refresh(ctx)
 		if err == nil && apps != nil {
@@ -235,7 +237,7 @@ func (p *Provider) Load(ctx context.Context) ([]CatalogApp, error) {
 }
 
 // check holds a candidate catalogue against the binary about to serve it.
-func (p *Provider) check(apps []CatalogApp) error {
+func (p *Provider) check(apps []catalog.CatalogApp) error {
 	if p.cfg.Verify == nil {
 		return nil
 	}
@@ -247,7 +249,7 @@ func (p *Provider) check(apps []CatalogApp) error {
 // The second return value is false when the registry answered 304, which is the
 // common case and the reason the ETag is kept: a sync that changes nothing must
 // not churn the database or drop every tenant's app-gate cache.
-func (p *Provider) Refresh(ctx context.Context) ([]CatalogApp, bool, error) {
+func (p *Provider) Refresh(ctx context.Context) ([]catalog.CatalogApp, bool, error) {
 	if !p.Remote() {
 		return nil, false, errors.New("no app catalog registry is configured")
 	}
@@ -349,7 +351,7 @@ func signedMessage(doc signedCatalog) []byte {
 // A signature that does not check out is not a reason to read the document more
 // carefully — it is a reason to stop reading it. Nothing from an unverified
 // document reaches the rest of the platform, not even a field.
-func (p *Provider) parseSigned(body []byte) ([]CatalogApp, error) {
+func (p *Provider) parseSigned(body []byte) ([]catalog.CatalogApp, error) {
 	var doc signedCatalog
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return nil, fmt.Errorf("unmarshal registry catalog: %w", err)
@@ -366,7 +368,7 @@ func (p *Provider) parseSigned(body []byte) ([]CatalogApp, error) {
 		return nil, fmt.Errorf("catalog signature does not verify (key_id %q)", doc.KeyID)
 	}
 
-	var apps []CatalogApp
+	var apps []catalog.CatalogApp
 	if err := json.Unmarshal(doc.Apps, &apps); err != nil {
 		return nil, fmt.Errorf("unmarshal catalog apps: %w", err)
 	}
@@ -377,7 +379,7 @@ func (p *Provider) parseSigned(body []byte) ([]CatalogApp, error) {
 	//
 	// DEPRECATED: remove in vNEXT — see alias.go.
 	apps = applyRenames(apps)
-	if err := ValidateCatalog(apps, p.cfg.PlatformVersion); err != nil {
+	if err := catalog.ValidateCatalog(apps, p.cfg.PlatformVersion); err != nil {
 		return nil, err
 	}
 	if err := p.check(apps); err != nil {
@@ -391,7 +393,7 @@ func (p *Provider) parseSigned(body []byte) ([]CatalogApp, error) {
 // It is verified again rather than trusted for having been verified once: the
 // file sits on disk between two boots, and anything that could edit it could
 // also have written it in the first place.
-func (p *Provider) loadCache() ([]CatalogApp, error) {
+func (p *Provider) loadCache() ([]catalog.CatalogApp, error) {
 	// #nosec G304 -- CATALOG_CACHE_PATH is deployment configuration, and what
 	// is read from it is only used if it carries the registry's signature.
 	body, err := os.ReadFile(p.cfg.CachePath)
@@ -418,7 +420,7 @@ func (p *Provider) writeCache(body []byte) error {
 	return os.Rename(temp, p.cfg.CachePath)
 }
 
-func (p *Provider) remember(apps []CatalogApp) {
+func (p *Provider) remember(apps []catalog.CatalogApp) {
 	p.mu.Lock()
 	p.current = apps
 	p.mu.Unlock()
@@ -427,7 +429,7 @@ func (p *Provider) remember(apps []CatalogApp) {
 // ListApps returns the catalogue currently held. It does not fetch: the held
 // copy is what the rest of the platform is serving, and a read path that could
 // block on somebody else's HTTP server is not one.
-func (p *Provider) ListApps(_ context.Context) ([]CatalogApp, error) {
+func (p *Provider) ListApps(_ context.Context) ([]catalog.CatalogApp, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.current == nil {
@@ -437,17 +439,17 @@ func (p *Provider) ListApps(_ context.Context) ([]CatalogApp, error) {
 }
 
 // GetAppBySlug returns one catalogue entry.
-func (p *Provider) GetAppBySlug(ctx context.Context, slug string) (CatalogApp, error) {
+func (p *Provider) GetAppBySlug(ctx context.Context, slug string) (catalog.CatalogApp, error) {
 	apps, err := p.ListApps(ctx)
 	if err != nil {
-		return CatalogApp{}, err
+		return catalog.CatalogApp{}, err
 	}
 	for _, app := range apps {
 		if app.Slug == slug {
 			return app, nil
 		}
 	}
-	return CatalogApp{}, fmt.Errorf("app %q is not in the catalog", slug)
+	return catalog.CatalogApp{}, fmt.Errorf("app %q is not in the catalog", slug)
 }
 
 // urlValue keeps a configured value from changing the shape of the query.

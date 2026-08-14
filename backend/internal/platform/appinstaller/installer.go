@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -72,13 +74,13 @@ type AppInstaller struct {
 	// under a ranging goroutine is a data race, and this one would be reading
 	// the list that decides what a tenant may install.
 	mu      sync.RWMutex
-	catalog []appcatalog.CatalogApp
+	catalog []catalog.CatalogApp
 }
 
-func NewAppInstaller(db *pgxpool.Pool, catalog []appcatalog.CatalogApp, platformVersion string) *AppInstaller {
+func NewAppInstaller(db *pgxpool.Pool, apps []catalog.CatalogApp, platformVersion string) *AppInstaller {
 	return &AppInstaller{
 		db:              db,
-		catalog:         catalog,
+		catalog:         apps,
 		platformVersion: platformVersion,
 	}
 }
@@ -88,13 +90,13 @@ func NewAppInstaller(db *pgxpool.Pool, catalog []appcatalog.CatalogApp, platform
 // Installations already written are untouched: what a tenant has installed is a
 // database row, and this only changes what the store offers and what an upgrade
 // would move to.
-func (ai *AppInstaller) SetCatalog(catalog []appcatalog.CatalogApp) {
+func (ai *AppInstaller) SetCatalog(apps []catalog.CatalogApp) {
 	ai.mu.Lock()
-	ai.catalog = catalog
+	ai.catalog = apps
 	ai.mu.Unlock()
 }
 
-func (ai *AppInstaller) GetCatalog() []appcatalog.CatalogApp {
+func (ai *AppInstaller) GetCatalog() []catalog.CatalogApp {
 	ai.mu.RLock()
 	defer ai.mu.RUnlock()
 	return ai.catalog
@@ -108,14 +110,14 @@ func (ai *AppInstaller) GetCatalog() []appcatalog.CatalogApp {
 //
 // DEPRECATED: the fallback, not the method — remove in vNEXT with appcatalog's
 // rename table.
-func (ai *AppInstaller) GetAppBySlug(slug string) (appcatalog.CatalogApp, bool) {
+func (ai *AppInstaller) GetAppBySlug(slug string) (catalog.CatalogApp, bool) {
 	current := appcatalog.ResolveAppSlug(slug)
 	for _, app := range ai.GetCatalog() {
 		if app.Slug == current {
 			return app, true
 		}
 	}
-	return appcatalog.CatalogApp{}, false
+	return catalog.CatalogApp{}, false
 }
 
 // GetAppByID also answers to the id an app used to have — an installation row
@@ -123,14 +125,14 @@ func (ai *AppInstaller) GetAppBySlug(slug string) (appcatalog.CatalogApp, bool) 
 // republished.
 //
 // DEPRECATED: the fallback, not the method — remove in vNEXT.
-func (ai *AppInstaller) GetAppByID(id string) (appcatalog.CatalogApp, bool) {
+func (ai *AppInstaller) GetAppByID(id string) (catalog.CatalogApp, bool) {
 	current := appcatalog.ResolveAppID(id)
 	for _, app := range ai.GetCatalog() {
 		if app.ID == current {
 			return app, true
 		}
 	}
-	return appcatalog.CatalogApp{}, false
+	return catalog.CatalogApp{}, false
 }
 
 // InstallApp handles recursive dependency resolution and tenant installation.
@@ -165,9 +167,9 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 	}
 
 	// Build dependency graph from catalog
-	catalog := ai.GetCatalog()
-	manifests := make([]appcatalog.Manifest, 0, len(catalog))
-	for _, app := range catalog {
+	available := ai.GetCatalog()
+	manifests := make([]catalog.Manifest, 0, len(available))
+	for _, app := range available {
 		manifests = append(manifests, app.Manifest)
 	}
 	graph := NewDependencyGraph(manifests)
@@ -286,7 +288,7 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 // tenant could finish an installation with none of the app's permissions
 // granted and be told it had succeeded — the app then appeared installed and
 // refused every request behind it.
-func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tenantID, adminRoleID string, app appcatalog.CatalogApp) error {
+func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tenantID, adminRoleID string, app catalog.CatalogApp) error {
 	// Where the permissions come from follows what the app is. A module's are
 	// read from the compiled module, which is the code that will enforce them;
 	// an external app has no code here, so its manifest is the only statement of
@@ -402,7 +404,7 @@ func (ai *AppInstaller) UpgradeApp(ctx context.Context, tenantID, appSlug, userI
 		return "", "", fmt.Errorf("read installation of %s: %w", targetApp.ID, err)
 	}
 
-	if !appcatalog.IsNewerVersion(targetApp.Version, installed) {
+	if !catalog.IsNewerVersion(targetApp.Version, installed) {
 		return installed, targetApp.Version, ErrAlreadyCurrent
 	}
 

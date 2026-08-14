@@ -15,7 +15,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
 // SystemActor is what an upgrade nobody pressed a button for is recorded as.
@@ -125,7 +125,7 @@ func (ai *AppInstaller) AutoUpdate(ctx context.Context) (AutoUpdateResult, error
 
 	for _, c := range candidates {
 		app, known := ai.GetAppByID(c.appID)
-		if !known || !appcatalog.IsNewerVersion(app.Version, c.installed) {
+		if !known || !catalog.IsNewerVersion(app.Version, c.installed) {
 			continue
 		}
 		if !c.auto || c.pinned != "" {
@@ -188,7 +188,7 @@ func (ai *AppInstaller) AutoUpdate(ctx context.Context) (AutoUpdateResult, error
 // The installed version's manifest comes from app_versions, which SyncCatalog
 // has been filling since the version history was added. An installation older
 // than that has no row, and this returns an error rather than a guess.
-func (ai *AppInstaller) widenedGrant(ctx context.Context, app appcatalog.CatalogApp, installedVersion string) ([]string, error) {
+func (ai *AppInstaller) widenedGrant(ctx context.Context, app catalog.CatalogApp, installedVersion string) ([]string, error) {
 	if !app.Manifest.IsExternal() {
 		return nil, nil
 	}
@@ -201,7 +201,7 @@ func (ai *AppInstaller) widenedGrant(ctx context.Context, app appcatalog.Catalog
 		return nil, fmt.Errorf("read the manifest of %s %s: %w", app.ID, installedVersion, err)
 	}
 
-	var installed appcatalog.Manifest
+	var installed catalog.Manifest
 	if err := json.Unmarshal(encoded, &installed); err != nil {
 		return nil, fmt.Errorf("decode the manifest of %s %s: %w", app.ID, installedVersion, err)
 	}

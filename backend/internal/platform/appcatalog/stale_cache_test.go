@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 )
 
@@ -38,7 +40,7 @@ func TestACacheThatDoesNotMatchThisBuildIsNotUsed(t *testing.T) {
 	// What the platform passes as Verify: this build's own opinion of what a
 	// catalogue must contain.
 	required := "io.gerege.nexus.organisation"
-	verify := func(apps []appcatalog.CatalogApp) error {
+	verify := func(apps []catalog.CatalogApp) error {
 		for _, app := range apps {
 			if app.ID == required {
 				return nil

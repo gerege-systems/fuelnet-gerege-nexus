@@ -25,9 +25,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -154,7 +154,7 @@ func (m *Module) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Slug = strings.ToLower(strings.TrimSpace(body.Slug))
 	body.Name = strings.TrimSpace(body.Name)
-	if !security.IsValidSlug(body.Slug) {
+	if !catalog.IsValidSlug(body.Slug) {
 		nexus.Error(w, http.StatusBadRequest,
 			"the publisher handle must be a slug: lowercase letters, digits and dashes")
 		return
@@ -214,28 +214,28 @@ func (m *Module) handleUpsertApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ID          string                               `json:"id"`
-		Slug        string                               `json:"slug"`
-		Type        string                               `json:"type"`
-		Name        string                               `json:"name"`
-		Description string                               `json:"description"`
-		IconURL     string                               `json:"icon_url"`
-		Category    string                               `json:"category"`
-		Visibility  string                               `json:"visibility"`
-		Texts       map[string]appcatalog.CatalogAppText `json:"translations"`
+		ID          string                            `json:"id"`
+		Slug        string                            `json:"slug"`
+		Type        string                            `json:"type"`
+		Name        string                            `json:"name"`
+		Description string                            `json:"description"`
+		IconURL     string                            `json:"icon_url"`
+		Category    string                            `json:"category"`
+		Visibility  string                            `json:"visibility"`
+		Texts       map[string]catalog.CatalogAppText `json:"translations"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSubmission)).Decode(&body); err != nil {
 		nexus.Error(w, http.StatusBadRequest, "malformed request body")
 		return
 	}
-	if body.ID == "" || !security.IsValidSlug(body.Slug) || strings.TrimSpace(body.Name) == "" {
+	if body.ID == "" || !catalog.IsValidSlug(body.Slug) || strings.TrimSpace(body.Name) == "" {
 		nexus.Error(w, http.StatusBadRequest, "an app needs an id, a valid slug and a name")
 		return
 	}
 	if body.Type == "" {
-		body.Type = appcatalog.TypeModule
+		body.Type = catalog.TypeModule
 	}
-	if body.Type != appcatalog.TypeModule && body.Type != appcatalog.TypeExternal {
+	if body.Type != catalog.TypeModule && body.Type != catalog.TypeExternal {
 		nexus.Error(w, http.StatusBadRequest, `type must be "module" or "external"`)
 		return
 	}
@@ -314,8 +314,8 @@ func (m *Module) handleSubmitVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Channel  string              `json:"channel"`
-		Manifest appcatalog.Manifest `json:"manifest"`
+		Channel  string           `json:"channel"`
+		Manifest catalog.Manifest `json:"manifest"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSubmission)).Decode(&body); err != nil {
 		nexus.Error(w, http.StatusBadRequest, "malformed request body")

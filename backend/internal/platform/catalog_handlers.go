@@ -17,7 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
@@ -106,7 +107,7 @@ func appReadPermission(appID string) string {
 
 func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := tenant.FromContext(r.Context())
-	catalog := s.installer.GetCatalog()
+	available := s.installer.GetCatalog()
 
 	// "installed" and "enabled" are distinct states: an app can be installed
 	// and then disabled. Deriving both from the enabled-only query reported
@@ -118,7 +119,7 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type StoreAppResponse struct {
-		appcatalog.CatalogApp
+		catalog.CatalogApp
 		Installed bool `json:"installed"`
 		Enabled   bool `json:"enabled"`
 		// What this tenant is running, and what the catalogue carries. They
@@ -131,8 +132,8 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	locale := config.LocaleFromRequest(r)
-	res := make([]StoreAppResponse, 0, len(catalog))
-	for _, app := range catalog {
+	res := make([]StoreAppResponse, 0, len(available))
+	for _, app := range available {
 		held, installed := installedStates[app.ID]
 		res = append(res, StoreAppResponse{
 			CatalogApp:       app.Localized(locale),
@@ -140,7 +141,7 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 			Enabled:          held.Enabled,
 			InstalledVersion: held.Version,
 			LatestVersion:    app.Version,
-			UpdateAvailable:  installed && appcatalog.IsNewerVersion(app.Version, held.Version),
+			UpdateAvailable:  installed && catalog.IsNewerVersion(app.Version, held.Version),
 		})
 	}
 
@@ -234,7 +235,7 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 				item.Name = localized
 			}
 			item.LatestVersion = catalogApp.Version
-			item.UpdateAvailable = appcatalog.IsNewerVersion(catalogApp.Version, item.InstalledVersion)
+			item.UpdateAvailable = catalog.IsNewerVersion(catalogApp.Version, item.InstalledVersion)
 			// Only report a hold that is still true: once the pin is at the
 			// version being offered, or the offer is gone, the recorded reason
 			// is history rather than a decision.

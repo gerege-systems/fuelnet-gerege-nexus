@@ -1,11 +1,27 @@
-package appcatalog
+// Package catalog is the app-store contract: what a manifest is, what a
+// catalogue entry is, and what makes either one valid.
+//
+// It is separate from `pkg/nexus` because it has a different audience. The SDK
+// is compiled against by whoever writes a Go module; this is compiled against
+// by whoever runs a registry, publishes to one, or reads a catalogue — and by
+// the third-party publisher who never writes Go at all and only needs the JSON
+// shape these types define.
+//
+// `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.4 names this one of three contracts that
+// outlive the core's release cycle. It is versioned with this module today and
+// may become a repository of its own once more than one team publishes against
+// it; keeping it in `pkg/` rather than `internal/` is what makes that a move
+// rather than a rewrite.
+//
+// What is here is the schema and its validation. Anything that knows where a
+// catalogue lives on a particular deployment — the bundled file, the disk
+// cache, the signed fetch from a registry — is that deployment's business and
+// stays in internal/platform/appcatalog.
+package catalog
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 
@@ -270,44 +286,4 @@ func IsNewerVersion(candidate, installed string) bool {
 		return candidate != installed
 	}
 	return newer.GreaterThan(held)
-}
-
-// LoadManifestFile loads and validates a manifest file.
-func LoadManifestFile(path string, platformVersion string) (Manifest, error) {
-	// #nosec G304 -- the only caller builds this from the catalogue directory
-	// and a slug already checked by security.IsValidSlug, which admits neither
-	// a separator nor a dot. It is read once at startup, never per request.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Manifest{}, fmt.Errorf("read manifest file %s: %w", path, err)
-	}
-	var m Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
-		return Manifest{}, fmt.Errorf("unmarshal manifest JSON: %w", err)
-	}
-	if err := ValidateManifest(m, platformVersion); err != nil {
-		return Manifest{}, fmt.Errorf("validate manifest %s: %w", path, err)
-	}
-	return m, nil
-}
-
-// Interfaces for future marketplace / remote registry boundary:
-type CatalogRepository interface {
-	GetAppBySlug(ctx context.Context, slug string) (CatalogApp, error)
-	ListApps(ctx context.Context) ([]CatalogApp, error)
-}
-
-type PackageStorage interface {
-	FetchPackage(ctx context.Context, packageURL string) ([]byte, error)
-}
-
-type PackageVerifier interface {
-	VerifyChecksum(data []byte, expectedSHA256 string) error
-	VerifySignature(data []byte, signature string) error
-}
-
-type Installer interface {
-	InstallApp(ctx context.Context, tenantID, appSlug string) error
-	DisableApp(ctx context.Context, tenantID, appSlug string) error
-	EnableApp(ctx context.Context, tenantID, appSlug string) error
 }

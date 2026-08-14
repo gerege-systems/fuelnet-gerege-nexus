@@ -23,9 +23,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -102,11 +103,11 @@ type App struct {
 
 	// Who stands behind the app, hoisted out of the manifest so the storefront
 	// can render a credit line without decoding one.
-	Authors     []appcatalog.Person `json:"authors,omitempty"`
-	Maintainers []appcatalog.Person `json:"maintainers,omitempty"`
-	Repository  string              `json:"repository,omitempty"`
-	Homepage    string              `json:"homepage,omitempty"`
-	License     string              `json:"license,omitempty"`
+	Authors     []catalog.Person `json:"authors,omitempty"`
+	Maintainers []catalog.Person `json:"maintainers,omitempty"`
+	Repository  string           `json:"repository,omitempty"`
+	Homepage    string           `json:"homepage,omitempty"`
+	License     string           `json:"license,omitempty"`
 	// The registration's own trail. Not served to the public storefront — see
 	// the API layer, which selects what a stranger may read.
 	CreatedBy string `json:"created_by,omitempty"`
@@ -116,11 +117,11 @@ type App struct {
 // ChronicleEntry is one published version as the public chronicle serves it:
 // what changed, when, and who reviewed it in.
 type ChronicleEntry struct {
-	Version     string                  `json:"version"`
-	Channel     string                  `json:"channel"`
-	PublishedAt *time.Time              `json:"published_at,omitempty"`
-	Notes       *appcatalog.ReleaseNote `json:"release_notes,omitempty"`
-	Authors     []string                `json:"authors,omitempty"`
+	Version     string               `json:"version"`
+	Channel     string               `json:"channel"`
+	PublishedAt *time.Time           `json:"published_at,omitempty"`
+	Notes       *catalog.ReleaseNote `json:"release_notes,omitempty"`
+	Authors     []string             `json:"authors,omitempty"`
 }
 
 // Version is one published (or pending) release of an app.
@@ -130,7 +131,7 @@ type Version struct {
 	Version     string                `json:"version"`
 	Channel     string                `json:"channel"`
 	MinPlatform string                `json:"min_platform"`
-	Manifest    appcatalog.Manifest   `json:"manifest"`
+	Manifest    catalog.Manifest      `json:"manifest"`
 	Status      string                `json:"status"`
 	SubmittedBy string                `json:"submitted_by,omitempty"`
 	ReviewNote  string                `json:"review_note,omitempty"`
@@ -406,7 +407,7 @@ func (s *Store) Chronicle(ctx context.Context, appID string) ([]ChronicleEntry, 
 		// still belongs in the list: it shipped, and a history that hides it is
 		// wrong in the direction that matters.
 		if len(notes) > 0 {
-			var note appcatalog.ReleaseNote
+			var note catalog.ReleaseNote
 			if err := json.Unmarshal(notes, &note); err == nil {
 				entry.Notes = &note
 			}
@@ -443,7 +444,7 @@ func jsonOrDefault(value any, fallback string) any {
 
 // UpsertApp creates or updates a catalogue entry. The publisher may not be
 // changed by an update: an app belongs to whoever registered it.
-func (s *Store) UpsertApp(ctx context.Context, a *App, texts map[string]appcatalog.CatalogAppText) error {
+func (s *Store) UpsertApp(ctx context.Context, a *App, texts map[string]catalog.CatalogAppText) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -497,7 +498,7 @@ func (s *Store) UpsertApp(ctx context.Context, a *App, texts map[string]appcatal
 }
 
 // AppTexts returns every translation held for an app.
-func (s *Store) AppTexts(ctx context.Context, appID string) (map[string]appcatalog.CatalogAppText, error) {
+func (s *Store) AppTexts(ctx context.Context, appID string) (map[string]catalog.CatalogAppText, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT locale, name, description, category FROM store_app_texts WHERE app_id = $1`, appID)
 	if err != nil {
@@ -505,10 +506,10 @@ func (s *Store) AppTexts(ctx context.Context, appID string) (map[string]appcatal
 	}
 	defer rows.Close()
 
-	texts := make(map[string]appcatalog.CatalogAppText)
+	texts := make(map[string]catalog.CatalogAppText)
 	for rows.Next() {
 		var locale string
-		var text appcatalog.CatalogAppText
+		var text catalog.CatalogAppText
 		if err := rows.Scan(&locale, &text.Name, &text.Description, &text.Category); err != nil {
 			return nil, err
 		}
@@ -610,7 +611,7 @@ var ErrInvalidSubmission = errors.New("invalid submission")
 // platform later rejected on arrival at an instance, which is a support ticket
 // rather than an error message.
 func (s *Store) SubmitManifest(ctx context.Context, app *App, channel string,
-	manifest appcatalog.Manifest, submittedBy string) (*Version, error) {
+	manifest catalog.Manifest, submittedBy string) (*Version, error) {
 
 	if channel == "" {
 		channel = "stable"
@@ -621,7 +622,7 @@ func (s *Store) SubmitManifest(ctx context.Context, app *App, channel string,
 	if manifest.ID != app.ID {
 		return nil, fmt.Errorf("%w: the manifest id must match the app id", ErrInvalidSubmission)
 	}
-	if (manifest.Type == appcatalog.TypeExternal) != (app.Type == appcatalog.TypeExternal) {
+	if (manifest.Type == catalog.TypeExternal) != (app.Type == catalog.TypeExternal) {
 		return nil, fmt.Errorf("%w: the manifest type must match the app type", ErrInvalidSubmission)
 	}
 	// Validated with an empty platform version: the app's own constraint is
@@ -629,7 +630,7 @@ func (s *Store) SubmitManifest(ctx context.Context, app *App, channel string,
 	// A registry serves catalogues to instances older and newer than itself, and
 	// refusing a manifest for a platform it does not happen to be running would
 	// make the registry's own version a publishing rule.
-	if err := appcatalog.ValidateManifest(manifest, ""); err != nil {
+	if err := catalog.ValidateManifest(manifest, ""); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidSubmission, err.Error())
 	}
 
@@ -646,7 +647,7 @@ func (s *Store) SubmitManifest(ctx context.Context, app *App, channel string,
 
 // ExternalFromManifest builds the queryable external registration, or nil for a
 // module app.
-func ExternalFromManifest(appID string, m appcatalog.Manifest) *ExternalRegistration {
+func ExternalFromManifest(appID string, m catalog.Manifest) *ExternalRegistration {
 	if !m.IsExternal() || m.External == nil {
 		return nil
 	}

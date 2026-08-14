@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -22,13 +24,13 @@ import (
 const exampleExternalManifest = "../../../catalog/manifests/example-external.json"
 
 // externalCatalogApp is the shipped example as the store would carry it.
-func externalCatalogApp(t *testing.T) appcatalog.CatalogApp {
+func externalCatalogApp(t *testing.T) catalog.CatalogApp {
 	t.Helper()
 	manifest, err := appcatalog.LoadManifestFile(filepath.FromSlash(exampleExternalManifest), PlatformVersion)
 	if err != nil {
 		t.Fatalf("load the example external manifest: %v", err)
 	}
-	return appcatalog.CatalogApp{
+	return catalog.CatalogApp{
 		ID: manifest.ID, Slug: "example-external", Name: manifest.Name,
 		Category: "Third party", Visibility: "public", Version: manifest.Version,
 		Manifest: manifest,
@@ -46,7 +48,7 @@ func TestTheShippedExternalManifestIsAcceptedAsOne(t *testing.T) {
 	}
 	// A catalogue carrying it has to pass the same validation every source goes
 	// through — including the one place that would refuse a Go module for it.
-	if err := appcatalog.ValidateCatalog([]appcatalog.CatalogApp{app}, PlatformVersion); err != nil {
+	if err := catalog.ValidateCatalog([]catalog.CatalogApp{app}, PlatformVersion); err != nil {
 		t.Fatalf("expected the example external app to be a valid catalog entry: %v", err)
 	}
 	// And no compiled module is expected of it. This is the check that made
@@ -71,7 +73,7 @@ func TestAnExternalAppMustLaunchOverHTTPS(t *testing.T) {
 			spec.LaunchURL = launchURL
 			manifest.External = &spec
 
-			err := appcatalog.ValidateManifest(manifest, PlatformVersion)
+			err := catalog.ValidateManifest(manifest, PlatformVersion)
 			if err == nil {
 				t.Fatalf("expected launch_url %q to be refused", launchURL)
 			}
@@ -85,17 +87,17 @@ func TestAnExternalAppMustLaunchOverHTTPS(t *testing.T) {
 // fakeInstalledApps stands in for the installer's view of a tenant.
 type fakeInstalledApps struct {
 	enabled []string
-	catalog []appcatalog.CatalogApp
+	catalog []catalog.CatalogApp
 }
 
 func (f fakeInstalledApps) GetEnabledAppIDsForTenant(context.Context, string) ([]string, error) {
 	return f.enabled, nil
 }
-func (f fakeInstalledApps) GetCatalog() []appcatalog.CatalogApp { return f.catalog }
+func (f fakeInstalledApps) GetCatalog() []catalog.CatalogApp { return f.catalog }
 
 func TestAnInstalledExternalAppContributesAnExternalMenuEntry(t *testing.T) {
 	app := externalCatalogApp(t)
-	store := fakeInstalledApps{enabled: []string{app.ID}, catalog: []appcatalog.CatalogApp{app}}
+	store := fakeInstalledApps{enabled: []string{app.ID}, catalog: []catalog.CatalogApp{app}}
 
 	menus, err := menu.GetTenantMenus(context.Background(), store, "tenant", "mn")
 	if err != nil {
@@ -124,7 +126,7 @@ func TestAnInstalledExternalAppContributesAnExternalMenuEntry(t *testing.T) {
 
 func TestAnUninstalledExternalAppContributesNothing(t *testing.T) {
 	app := externalCatalogApp(t)
-	store := fakeInstalledApps{catalog: []appcatalog.CatalogApp{app}}
+	store := fakeInstalledApps{catalog: []catalog.CatalogApp{app}}
 
 	menus, err := menu.GetTenantMenus(context.Background(), store, "tenant", "mn")
 	if err != nil {
@@ -141,7 +143,7 @@ func TestTheInstallGateAnswersForExternalClientsOnly(t *testing.T) {
 
 	installed := map[string]bool{}
 	gate := externalAppGate{
-		catalog: func() []appcatalog.CatalogApp { return []appcatalog.CatalogApp{app} },
+		catalog: func() []catalog.CatalogApp { return []catalog.CatalogApp{app} },
 		installed: func(_ context.Context, _, appID string) (bool, error) {
 			return installed[appID], nil
 		},
@@ -169,7 +171,7 @@ func TestTheInstallGateAnswersForExternalClientsOnly(t *testing.T) {
 func TestTheInstallGateReportsAFailedLookupRatherThanAllowing(t *testing.T) {
 	app := externalCatalogApp(t)
 	gate := externalAppGate{
-		catalog: func() []appcatalog.CatalogApp { return []appcatalog.CatalogApp{app} },
+		catalog: func() []catalog.CatalogApp { return []catalog.CatalogApp{app} },
 		installed: func(context.Context, string, string) (bool, error) {
 			return false, errors.New("database unreachable")
 		},

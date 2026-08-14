@@ -3,11 +3,11 @@ package appcatalog_test
 import (
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
 func TestValidateManifest(t *testing.T) {
-	validManifest := appcatalog.Manifest{
+	validManifest := catalog.Manifest{
 		ID:       "io.gerege.nexus.test",
 		Name:     "Test App",
 		Version:  "1.0.0",
@@ -15,7 +15,7 @@ func TestValidateManifest(t *testing.T) {
 	}
 
 	t.Run("Valid manifest passes", func(t *testing.T) {
-		err := appcatalog.ValidateManifest(validManifest, "1.0.0")
+		err := catalog.ValidateManifest(validManifest, "1.0.0")
 		if err != nil {
 			t.Fatalf("expected valid manifest to pass, got: %v", err)
 		}
@@ -24,7 +24,7 @@ func TestValidateManifest(t *testing.T) {
 	t.Run("Invalid semver fails", func(t *testing.T) {
 		invalid := validManifest
 		invalid.Version = "invalid-semver"
-		err := appcatalog.ValidateManifest(invalid, "1.0.0")
+		err := catalog.ValidateManifest(invalid, "1.0.0")
 		if err == nil {
 			t.Fatal("expected invalid semver to fail validation")
 		}
@@ -33,7 +33,7 @@ func TestValidateManifest(t *testing.T) {
 	t.Run("Incompatible platform constraint fails", func(t *testing.T) {
 		incompatible := validManifest
 		incompatible.Platform = ">=2.0.0"
-		err := appcatalog.ValidateManifest(incompatible, "1.0.0")
+		err := catalog.ValidateManifest(incompatible, "1.0.0")
 		if err == nil {
 			t.Fatal("expected platform constraint incompatibility to fail validation")
 		}
@@ -60,8 +60,8 @@ func TestIsNewerVersion(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := appcatalog.IsNewerVersion(tc.candidate, tc.installed); got != tc.want {
-				t.Fatalf("IsNewerVersion(%q, %q) = %v, want %v", tc.candidate, tc.installed, got, tc.want)
+			if got := catalog.IsNewerVersion(tc.candidate, tc.installed); got != tc.want {
+				t.Fatalf("catalog.IsNewerVersion(%q, %q) = %v, want %v", tc.candidate, tc.installed, got, tc.want)
 			}
 		})
 	}

@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -34,23 +35,23 @@ func appregistryRegisterStub(t *testing.T, id, version string) {
 // catalogue entry and the manifest — drifted apart for two shipped apps because
 // nothing compared them. This is the half of the comparison that needs the
 // module registry; the catalogue-against-manifest half lives in
-// appcatalog.ValidateCatalog, which every catalogue source goes through.
+// catalog.ValidateCatalog, which every catalogue source goes through.
 func TestACatalogVersionMustMatchTheCompiledModule(t *testing.T) {
 	// The registry is filled by apps.Bootstrap, which a unit test does not run,
 	// so a real app id would still find no module here. Registering a stub is
 	// what makes the comparison happen at all.
 	appregistryRegisterStub(t, "io.gerege.nexus.stub", "1.0.0")
 
-	catalog := []appcatalog.CatalogApp{{
+	available := []catalog.CatalogApp{{
 		ID:      "io.gerege.nexus.stub",
 		Slug:    "stub",
 		Version: "1.1.0",
-		Manifest: appcatalog.Manifest{
+		Manifest: catalog.Manifest{
 			ID: "io.gerege.nexus.stub", Name: "Stub", Version: "1.1.0",
 		},
 	}}
 
-	err := verifyCatalogVersions(catalog)
+	err := verifyCatalogVersions(available)
 	if err == nil {
 		t.Fatal("expected a catalog entry ahead of its compiled module to be refused")
 	}
@@ -62,16 +63,16 @@ func TestACatalogVersionMustMatchTheCompiledModule(t *testing.T) {
 func TestAnAppWithNoCompiledModuleIsAccepted(t *testing.T) {
 	// An external app has no Go module by definition, so a missing registry
 	// entry is not drift.
-	catalog := []appcatalog.CatalogApp{{
+	available := []catalog.CatalogApp{{
 		ID:      "mn.example.hrms",
 		Slug:    "hrms",
 		Version: "2026.8.0",
-		Manifest: appcatalog.Manifest{
+		Manifest: catalog.Manifest{
 			ID: "mn.example.hrms", Name: "HRMS", Version: "2026.8.0",
 		},
 	}}
 
-	if err := verifyCatalogVersions(withDefaultApp(catalog...)); err != nil {
+	if err := verifyCatalogVersions(withDefaultApp(available...)); err != nil {
 		t.Fatalf("expected an app with no compiled module to pass; got %v", err)
 	}
 }
@@ -79,9 +80,9 @@ func TestAnAppWithNoCompiledModuleIsAccepted(t *testing.T) {
 // And the refusal itself: a catalogue with no default app is one this build must
 // not run on, whatever else it carries.
 func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
-	err := verifyCatalogVersions([]appcatalog.CatalogApp{{
+	err := verifyCatalogVersions([]catalog.CatalogApp{{
 		ID: "mn.example.hrms", Slug: "hrms", Version: "2026.8.0",
-		Manifest: appcatalog.Manifest{ID: "mn.example.hrms", Name: "HRMS", Version: "2026.8.0"},
+		Manifest: catalog.Manifest{ID: "mn.example.hrms", Name: "HRMS", Version: "2026.8.0"},
 	}})
 	if err == nil {
 		t.Fatal("expected a catalogue without the default app to be refused")
@@ -99,14 +100,14 @@ func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 //
 // Built from DefaultApps rather than from a literal list, so adding a default
 // app does not silently fail every catalogue fixture in the package.
-func withDefaultApp(apps ...appcatalog.CatalogApp) []appcatalog.CatalogApp {
-	catalog := make([]appcatalog.CatalogApp, 0, len(appinstaller.DefaultApps)+len(apps))
+func withDefaultApp(apps ...catalog.CatalogApp) []catalog.CatalogApp {
+	full := make([]catalog.CatalogApp, 0, len(appinstaller.DefaultApps)+len(apps))
 	for _, id := range appinstaller.DefaultApps {
 		slug := id[strings.LastIndex(id, ".")+1:]
-		catalog = append(catalog, appcatalog.CatalogApp{
+		full = append(full, catalog.CatalogApp{
 			ID: id, Slug: slug, Version: "1.0.0",
-			Manifest: appcatalog.Manifest{ID: id, Name: slug, Version: "1.0.0"},
+			Manifest: catalog.Manifest{ID: id, Name: slug, Version: "1.0.0"},
 		})
 	}
-	return append(catalog, apps...)
+	return append(full, apps...)
 }

@@ -6,7 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,23 +34,23 @@ func testPool(t *testing.T) *pgxpool.Pool {
 }
 
 // externalApp builds a catalogue entry for a third-party platform.
-func externalApp(version string, permissions []string, scopes []string, launch string) appcatalog.CatalogApp {
-	manifest := appcatalog.Manifest{
-		ID: "mn.test.hrms", Name: "Test HRMS", Version: version, Type: appcatalog.TypeExternal,
-		External: &appcatalog.ExternalSpec{LaunchURL: launch, Scopes: scopes, Embed: "new_tab"},
+func externalApp(version string, permissions []string, scopes []string, launch string) catalog.CatalogApp {
+	manifest := catalog.Manifest{
+		ID: "mn.test.hrms", Name: "Test HRMS", Version: version, Type: catalog.TypeExternal,
+		External: &catalog.ExternalSpec{LaunchURL: launch, Scopes: scopes, Embed: "new_tab"},
 	}
 	for _, code := range permissions {
 		manifest.Permissions = append(manifest.Permissions,
 			nexus.PermissionDefinition{Code: code, Name: code})
 	}
-	return appcatalog.CatalogApp{
+	return catalog.CatalogApp{
 		ID: manifest.ID, Slug: "test-hrms", Name: manifest.Name,
 		Version: version, Visibility: "public", Manifest: manifest,
 	}
 }
 
 // fixture puts one tenant with one installed external app into the database.
-func fixture(t *testing.T, installed appcatalog.CatalogApp) (*pgxpool.Pool, string) {
+func fixture(t *testing.T, installed catalog.CatalogApp) (*pgxpool.Pool, string) {
 	t.Helper()
 	pool := testPool(t)
 	ctx := context.Background()
@@ -103,7 +104,7 @@ func TestAWiderVersionIsHeldForAnAdministrator(t *testing.T) {
 
 	// The same app, now asking to read the organisation's ERP data.
 	wider := externalApp("1.1.0", []string{"hrms.read"}, []string{"openid", "erp.read"}, "https://hrms.test/sso")
-	installer := appinstaller.NewAppInstaller(pool, []appcatalog.CatalogApp{wider}, "1.0.0")
+	installer := appinstaller.NewAppInstaller(pool, []catalog.CatalogApp{wider}, "1.0.0")
 
 	result, err := installer.AutoUpdate(context.Background())
 	if err != nil {
@@ -136,7 +137,7 @@ func TestAMetadataOnlyVersionIsAppliedOnItsOwn(t *testing.T) {
 
 	// A new name and a new path under the same host: nothing to approve.
 	same := externalApp("1.1.0", []string{"hrms.read"}, []string{"openid"}, "https://hrms.test/sso/v2")
-	installer := appinstaller.NewAppInstaller(pool, []appcatalog.CatalogApp{same}, "1.0.0")
+	installer := appinstaller.NewAppInstaller(pool, []catalog.CatalogApp{same}, "1.0.0")
 
 	result, err := installer.AutoUpdate(context.Background())
 	if err != nil {
@@ -165,7 +166,7 @@ func TestMovingToAnotherHostIsHeld(t *testing.T) {
 	// Somewhere else entirely is not the same application, whatever the
 	// manifest calls itself.
 	moved := externalApp("1.1.0", []string{"hrms.read"}, []string{"openid"}, "https://elsewhere.example/sso")
-	installer := appinstaller.NewAppInstaller(pool, []appcatalog.CatalogApp{moved}, "1.0.0")
+	installer := appinstaller.NewAppInstaller(pool, []catalog.CatalogApp{moved}, "1.0.0")
 
 	result, err := installer.AutoUpdate(context.Background())
 	if err != nil {
@@ -186,7 +187,7 @@ func TestAnInstallationWithAutoUpdateOffIsLeftAlone(t *testing.T) {
 	}
 
 	newer := externalApp("1.1.0", []string{"hrms.read"}, []string{"openid"}, "https://hrms.test/sso")
-	installer := appinstaller.NewAppInstaller(pool, []appcatalog.CatalogApp{newer}, "1.0.0")
+	installer := appinstaller.NewAppInstaller(pool, []catalog.CatalogApp{newer}, "1.0.0")
 
 	result, err := installer.AutoUpdate(context.Background())
 	if err != nil {
@@ -205,7 +206,7 @@ func TestTurningAutoUpdateBackOnClearsThePin(t *testing.T) {
 	pool, tenantID := fixture(t, installed)
 
 	wider := externalApp("1.1.0", []string{"hrms.read"}, []string{"openid", "erp.read"}, "https://hrms.test/sso")
-	installer := appinstaller.NewAppInstaller(pool, []appcatalog.CatalogApp{wider}, "1.0.0")
+	installer := appinstaller.NewAppInstaller(pool, []catalog.CatalogApp{wider}, "1.0.0")
 	if _, err := installer.AutoUpdate(context.Background()); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}

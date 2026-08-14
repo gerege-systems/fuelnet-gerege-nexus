@@ -11,7 +11,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/jackc/pgx/v5"
 )
@@ -85,7 +86,7 @@ func (s *Server) installedAppSet(ctx context.Context, tenantID string) (map[stri
 // It takes its two dependencies as functions rather than reaching into the
 // server, so the decision can be tested without a database behind it.
 type externalAppGate struct {
-	catalog   func() []appcatalog.CatalogApp
+	catalog   func() []catalog.CatalogApp
 	installed func(ctx context.Context, tenantID, appID string) (bool, error)
 }
 

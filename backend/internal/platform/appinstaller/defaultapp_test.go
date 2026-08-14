@@ -4,11 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 )
 
@@ -19,11 +20,11 @@ import (
 // against a real schema.
 //
 //	TEST_DATABASE_URL=postgres://... go test ./internal/platform/appinstaller/...
-func organisationCatalogApp() appcatalog.CatalogApp {
-	manifest := appcatalog.Manifest{
+func organisationCatalogApp() catalog.CatalogApp {
+	manifest := catalog.Manifest{
 		ID: organisation.ID, Name: "Organisation & People", Version: "1.0.0", Platform: ">=1.0.0",
 	}
-	return appcatalog.CatalogApp{
+	return catalog.CatalogApp{
 		ID: organisation.ID, Slug: "organisation", Name: manifest.Name,
 		Version: "1.0.0", Visibility: "public", Manifest: manifest,
 	}
@@ -48,7 +49,7 @@ func newSweptTenant(t *testing.T) (*appinstaller.AppInstaller, string) {
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID) })
 
-	installer := appinstaller.NewAppInstaller(pool, []appcatalog.CatalogApp{organisationCatalogApp()}, "1.0.0")
+	installer := appinstaller.NewAppInstaller(pool, []catalog.CatalogApp{organisationCatalogApp()}, "1.0.0")
 	// In the same order as the server: the catalogue reaches the apps table
 	// first, and an installation row references it.
 	if err := installer.SyncCatalog(ctx); err != nil {

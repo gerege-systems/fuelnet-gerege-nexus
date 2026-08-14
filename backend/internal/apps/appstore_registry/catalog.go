@@ -19,8 +19,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/Masterminds/semver/v3"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -231,10 +232,10 @@ func (c *CatalogService) build(ctx context.Context, channel, platform string, re
 	// produce the same bytes, which is what makes the ETag mean "unchanged"
 	// instead of "asked again".
 	var generatedAt time.Time
-	chosen := make(map[string]appcatalog.CatalogApp)
+	chosen := make(map[string]catalog.CatalogApp)
 	order := make([]string, 0)
 	for rows.Next() {
-		var app appcatalog.CatalogApp
+		var app catalog.CatalogApp
 		var minPlatform string
 		var manifest []byte
 		var publishedAt *time.Time
@@ -257,7 +258,7 @@ func (c *CatalogService) build(ctx context.Context, channel, platform string, re
 		if !seen {
 			order = append(order, app.ID)
 		}
-		if seen && !appcatalog.IsNewerVersion(app.Version, held.Version) {
+		if seen && !catalog.IsNewerVersion(app.Version, held.Version) {
 			continue
 		}
 		chosen[app.ID] = app
@@ -269,7 +270,7 @@ func (c *CatalogService) build(ctx context.Context, channel, platform string, re
 		return nil, err
 	}
 
-	apps := make([]appcatalog.CatalogApp, 0, len(order))
+	apps := make([]catalog.CatalogApp, 0, len(order))
 	for _, id := range order {
 		apps = append(apps, chosen[id])
 	}
@@ -288,7 +289,7 @@ func (c *CatalogService) build(ctx context.Context, channel, platform string, re
 	// on arrival and discards the whole document if it fails, so publishing
 	// something invalid would not break instances — it would silently stop them
 	// receiving updates, which is worse because nobody would notice.
-	if err := appcatalog.ValidateCatalog(apps, platform); err != nil {
+	if err := catalog.ValidateCatalog(apps, platform); err != nil {
 		return nil, fmt.Errorf("refusing to sign an invalid catalog: %w", err)
 	}
 
@@ -315,7 +316,7 @@ func (c *CatalogService) build(ctx context.Context, channel, platform string, re
 // place or it is not agreed at all. The apps array is marshalled once and those
 // bytes are both signed and embedded — encoding it twice would eventually
 // produce two different byte strings and a signature nobody can verify.
-func SignDocument(signer *Signer, generatedAt time.Time, apps []appcatalog.CatalogApp) ([]byte, time.Time, error) {
+func SignDocument(signer *Signer, generatedAt time.Time, apps []catalog.CatalogApp) ([]byte, time.Time, error) {
 	appsJSON, err := json.Marshal(apps)
 	if err != nil {
 		return nil, generatedAt, err

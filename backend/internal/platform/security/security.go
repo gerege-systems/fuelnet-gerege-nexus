@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
 // HeadersMiddleware injects HTTP security headers onto every response.
@@ -26,23 +28,14 @@ func HeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// IsValidSlug prevents path traversal attacks by requiring lowercase
-// alphanumerics, hyphens and underscores only. Underscores are permitted
-// because catalog slugs used them — rejecting them made those apps impossible
-// to install. None of the platform's own slugs carries one any more, but the
-// allowance stays: a slug is a third party's to choose, and narrowing this
-// would make an app in somebody's registry uninstallable without warning.
-func IsValidSlug(slug string) bool {
-	if slug == "" || len(slug) > 64 {
-		return false
-	}
-	for _, ch := range slug {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' && ch != '_' {
-			return false
-		}
-	}
-	return true
-}
+// IsValidSlug reports whether a slug is one the catalogue would accept.
+//
+// The rule moved to `backend/pkg/catalog` with the schema it belongs to: a slug
+// is a store URL segment and a manifest filename, so what counts as one is part
+// of the app-store contract rather than of this deployment's hardening. This
+// forwards, because two packages each with their own idea of a valid slug would
+// disagree exactly once — on the app that could be published and not installed.
+func IsValidSlug(slug string) bool { return catalog.IsValidSlug(slug) }
 
 // SafeCORSOrigins returns whitelist of origins based on environment.
 //

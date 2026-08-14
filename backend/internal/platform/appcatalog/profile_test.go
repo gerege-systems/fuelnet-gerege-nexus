@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 )
 
@@ -89,13 +91,13 @@ func TestBothCataloguesAgreeAboutCore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	find := func(apps []appcatalog.CatalogApp, id string) (appcatalog.CatalogApp, bool) {
+	find := func(apps []catalog.CatalogApp, id string) (catalog.CatalogApp, bool) {
 		for _, app := range apps {
 			if app.ID == id {
 				return app, true
 			}
 		}
-		return appcatalog.CatalogApp{}, false
+		return catalog.CatalogApp{}, false
 	}
 
 	here, ok := find(bundled, "io.gerege.nexus.organisation")

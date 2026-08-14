@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
 // LoadFile reads catalog/apps.json and the manifests beside it.
@@ -28,7 +29,7 @@ import (
 // of objects for "permissions") and nobody noticed: the apps installed with an
 // empty dependency graph and never contributed a menu entry. Catalog integrity
 // is a startup error.
-func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
+func LoadFile(path string, platformVersion string) ([]catalog.CatalogApp, error) {
 	// #nosec G304 -- APP_CATALOG_PATH is deployment configuration read once at
 	// startup. No request reaches this.
 	data, err := os.ReadFile(path)
@@ -36,7 +37,7 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 		return nil, err
 	}
 
-	var rawCatalog []CatalogApp
+	var rawCatalog []catalog.CatalogApp
 	if err := json.Unmarshal(data, &rawCatalog); err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 	rawCatalog = applyRenames(rawCatalog)
 
 	catalogDir := filepath.Dir(path)
-	catalog := make([]CatalogApp, 0, len(rawCatalog))
+	apps := make([]catalog.CatalogApp, 0, len(rawCatalog))
 	for _, app := range rawCatalog {
 		if !security.IsValidSlug(app.Slug) {
 			return nil, fmt.Errorf("catalog app %q has an invalid slug %q", app.ID, app.Slug)
@@ -60,7 +61,7 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 		// The chronicle entry for the version being shipped is folded into the
 		// manifest here, so nothing downstream has to know the chronicle exists:
 		// the store card, the history drawer and the registry all read
-		// Manifest.ReleaseNotes. Written in two places by hand, the two would
+		// catalog.Manifest.ReleaseNotes. Written in two places by hand, the two would
 		// disagree the first time somebody edited one of them.
 		notes, err := releaseNotesFor(catalogDir, app.Slug, manifest.Version)
 		if err != nil {
@@ -70,13 +71,13 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 			manifest.ReleaseNotes = notes
 		}
 		app.Manifest = manifest
-		catalog = append(catalog, app)
+		apps = append(apps, app)
 	}
 
-	if err := ValidateCatalog(catalog, platformVersion); err != nil {
+	if err := catalog.ValidateCatalog(apps, platformVersion); err != nil {
 		return nil, err
 	}
-	return catalog, nil
+	return apps, nil
 }
 
 // releaseNotesFor reads the chronicle entry for one version, or nil when the
@@ -87,7 +88,7 @@ func LoadFile(path string, platformVersion string) ([]CatalogApp, error) {
 // against the whole catalogue and where failing it stops a release rather than
 // a running instance: a deployment whose bundled file predates the chronicle
 // must still boot.
-func releaseNotesFor(catalogDir, slug, version string) (*ReleaseNote, error) {
+func releaseNotesFor(catalogDir, slug, version string) (*catalog.ReleaseNote, error) {
 	chronicle, kept, err := LoadChronicle(catalogDir, slug)
 	if err != nil {
 		return nil, err
@@ -103,46 +104,4 @@ func releaseNotesFor(catalogDir, slug, version string) (*ReleaseNote, error) {
 	// declares it, and validateProvenance refuses the two disagreeing.
 	entry.Version = ""
 	return &entry, nil
-}
-
-// ValidateCatalog is what a catalogue has to satisfy whatever it arrived on.
-//
-// The file path validates each manifest as it reads it, so for that source this
-// mostly re-checks; for a registry answer, where the manifests arrive inline, it
-// is the only check there is. Both go through it so a remote catalogue can never
-// be held to a weaker standard than the file one.
-func ValidateCatalog(catalog []CatalogApp, platformVersion string) error {
-	seenSlugs := make(map[string]string, len(catalog))
-	seenIDs := make(map[string]bool, len(catalog))
-	for _, app := range catalog {
-		if app.ID == "" {
-			return fmt.Errorf("catalog entry %q has no id", app.Slug)
-		}
-		if !security.IsValidSlug(app.Slug) {
-			return fmt.Errorf("catalog app %q has an invalid slug %q", app.ID, app.Slug)
-		}
-		// A slug is a URL path segment in the store API and the key the shell
-		// installs by, so two apps claiming one is not a cosmetic conflict:
-		// whichever is listed first would answer for both.
-		if other, taken := seenSlugs[app.Slug]; taken {
-			return fmt.Errorf("catalog apps %s and %s both claim the slug %q", other, app.ID, app.Slug)
-		}
-		if seenIDs[app.ID] {
-			return fmt.Errorf("catalog lists %s twice", app.ID)
-		}
-		seenSlugs[app.Slug], seenIDs[app.ID] = app.ID, true
-
-		if app.Manifest.ID != app.ID {
-			return fmt.Errorf("manifest for %s declares id %q but the catalog entry is %q",
-				app.Slug, app.Manifest.ID, app.ID)
-		}
-		if err := ValidateManifest(app.Manifest, platformVersion); err != nil {
-			return fmt.Errorf("validate manifest for %s: %w", app.ID, err)
-		}
-		if app.Manifest.Version != app.Version {
-			return fmt.Errorf("catalog entry %s is version %q but its manifest declares %q",
-				app.ID, app.Version, app.Manifest.Version)
-		}
-	}
-	return nil
 }

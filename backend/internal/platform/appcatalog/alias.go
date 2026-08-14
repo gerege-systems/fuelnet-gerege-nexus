@@ -22,6 +22,8 @@
 
 package appcatalog
 
+import "github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 // renamedIDs maps a retired app id to the one it is now.
 //
 // DEPRECATED: remove in vNEXT.
@@ -63,7 +65,7 @@ func ResolveAppSlug(slug string) string {
 // Every id in the document is rewritten, not just the app's own: a dependency
 // naming the old id would resolve to nothing, and the copy inside the manifest
 // is what an upgrade compares an installation against.
-func applyRenames(apps []CatalogApp) []CatalogApp {
+func applyRenames(apps []catalog.CatalogApp) []catalog.CatalogApp {
 	for i := range apps {
 		apps[i].ID = ResolveAppID(apps[i].ID)
 		apps[i].Slug = ResolveAppSlug(apps[i].Slug)

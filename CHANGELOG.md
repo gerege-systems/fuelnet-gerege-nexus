@@ -15,6 +15,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `pkg/catalog`, the app-store contract, and a clean appstore boundary
+
+Preparation for the first distribution split (`gerege-appstore`). The three
+store modules — the registry, the publisher studio and the review queue — were
+measured against the rest of the platform first, and the boundary turned out to
+be almost clean already: nothing in the core imports them, and the only thing
+holding them here was the catalogue schema, which lived in
+`internal/platform/appcatalog` where no other repository can reach it.
+
+- **New public package `backend/pkg/catalog`** carrying the schema and its
+  validation: `Manifest`, `CatalogApp`, `Chronicle`, `ReleaseNote`, `Person`,
+  `ValidateManifest`, `ValidateChronicle`, `ValidateCatalog`, `IsNewerVersion`,
+  and the slug rule. `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.4 names this one of
+  three contracts that outlive the core's release cycle; it is separate from
+  `pkg/nexus` because its audience is different — a registry operator or a
+  third-party publisher, not somebody writing a Go module.
+- **What stays in `internal/`** is anything that knows where a catalogue lives
+  on a particular deployment: the bundled file, the disk cache, the signed fetch
+  from a registry, and the rename table.
+- **`IsValidSlug` moved with the schema.** What counts as a slug is part of the
+  app-store contract — a slug is a store URL segment and a manifest filename —
+  rather than of this deployment's hardening. `security.IsValidSlug` forwards,
+  so the two can never disagree about the one app that could be published and
+  not installed.
+- **Four unused interfaces deleted** (`CatalogRepository`, `PackageStorage`,
+  `PackageVerifier`, `Installer`), left over from a sketch of "the future
+  marketplace boundary". Nothing implemented or called them, and carrying them
+  into a public package would have frozen four shapes nobody uses into the
+  semver promise.
+- The same import-graph guard as `pkg/nexus`: the catalogue contract may not
+  reach `internal/`.
+
+The three store modules now import `pkg/nexus`, `pkg/catalog` and each other,
+and nothing else from this repository. What still ties them here is three lines
+in `internal/apps/runtime.go` — the lines that become a distribution's
+`main.go`.
+
 ## [1.0.0] - 2026-08-14
 
 Эхний тогтвортой хувилбар: `backend/pkg/nexus` нь semver амлалттай нийтийн

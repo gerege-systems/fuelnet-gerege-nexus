@@ -12,7 +12,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
@@ -144,7 +145,7 @@ func (s *Server) appReleaseHistory(r *http.Request, appID, locale string) ([]his
 		// unreadable, not a broken history: the line still says the version
 		// shipped and when. Older rows predate the chronicle and simply carry
 		// no notes.
-		var manifest appcatalog.Manifest
+		var manifest catalog.Manifest
 		if json.Unmarshal(raw, &manifest) == nil && manifest.ReleaseNotes != nil {
 			note := manifest.ReleaseNotes
 			entry.Kind = note.Kind

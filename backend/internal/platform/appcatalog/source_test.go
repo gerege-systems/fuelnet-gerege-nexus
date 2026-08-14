@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 )
 
@@ -250,7 +252,7 @@ func TestACatalogueThatFailsTheExtraCheckIsRejected(t *testing.T) {
 	// This is where the platform holds a catalogue against the modules compiled
 	// into the binary. A signature proves who sent a catalogue, not that this
 	// build can run it.
-	cfg.Verify = func(apps []appcatalog.CatalogApp) error {
+	cfg.Verify = func(apps []catalog.CatalogApp) error {
 		for _, app := range apps {
 			if app.ID == remoteApp {
 				return fmt.Errorf("%s is not compiled into this binary", app.ID)

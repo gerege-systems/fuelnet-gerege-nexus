@@ -9,10 +9,10 @@ package platform
 import (
 	"net/http"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -92,10 +92,10 @@ func (s *Server) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	locale := config.LocaleFromRequest(r)
-	catalog := s.installer.GetCatalog()
-	rows := make([]overviewApp, 0, len(catalog))
+	available := s.installer.GetCatalog()
+	rows := make([]overviewApp, 0, len(available))
 	drifted := 0
-	for _, app := range catalog {
+	for _, app := range available {
 		localized := app.Localized(locale)
 		row := overviewApp{
 			AppID: app.ID, Slug: app.Slug, Name: localized.Name,
@@ -114,7 +114,7 @@ func (s *Server) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 			row.InstalledVersion = state.Version
 			row.AutoUpdate = state.AutoUpdate
 			row.PinnedVersion = state.PinnedVersion
-			row.UpdateAvailable = appcatalog.IsNewerVersion(app.Version, state.Version)
+			row.UpdateAvailable = catalog.IsNewerVersion(app.Version, state.Version)
 			row.Held = held[app.ID]
 		}
 		if notes := app.Manifest.ReleaseNotes; notes != nil {
@@ -149,7 +149,7 @@ func (s *Server) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 		"sync":             sync,
 		"apps":             rows,
 		"summary": map[string]int{
-			"catalog":   len(catalog),
+			"catalog":   len(available),
 			"installed": len(installed),
 			"updates":   countIf(rows, func(a overviewApp) bool { return a.UpdateAvailable }),
 			"held":      countIf(rows, func(a overviewApp) bool { return a.Held }),

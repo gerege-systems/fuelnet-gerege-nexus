@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
@@ -413,12 +415,12 @@ const catalogLoadTimeout = 20 * time.Second
 // the catalogue came from: the bundled file failing it is a startup error, the
 // same way its manifests failing validation is, while a registry answer failing
 // it is discarded in favour of the cache or the file. The catalogue/manifest
-// half of the comparison lives in appcatalog.ValidateCatalog, which every source
+// half of the comparison lives in catalog.ValidateCatalog, which every source
 // goes through.
 //
 // An app with no compiled module is not an error. External apps have none by
 // definition.
-func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
+func verifyCatalogVersions(catalog []catalog.CatalogApp) error {
 	present := make(map[string]bool, len(catalog))
 	for _, app := range catalog {
 		present[app.ID] = true

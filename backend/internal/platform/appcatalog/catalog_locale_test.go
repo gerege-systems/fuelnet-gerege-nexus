@@ -6,7 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 )
 
@@ -21,7 +22,7 @@ func TestShippedCatalogCoversEverySupportedLocale(t *testing.T) {
 		t.Skipf("catalog not readable from this working directory: %v", err)
 	}
 
-	var apps []appcatalog.CatalogApp
+	var apps []catalog.CatalogApp
 	if err := json.Unmarshal(raw, &apps); err != nil {
 		t.Fatalf("catalog is not valid JSON: %v", err)
 	}

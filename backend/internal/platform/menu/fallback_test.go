@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -40,7 +41,7 @@ type enabledStore struct{ ids []string }
 func (s enabledStore) GetEnabledAppIDsForTenant(context.Context, string) ([]string, error) {
 	return s.ids, nil
 }
-func (s enabledStore) GetCatalog() []appcatalog.CatalogApp { return nil }
+func (s enabledStore) GetCatalog() []catalog.CatalogApp { return nil }
 
 func TestAModuleWithoutABlueprintStillContributesItsOwnScreens(t *testing.T) {
 	mod := blueprintlessModule{}

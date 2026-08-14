@@ -6,7 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -20,7 +21,7 @@ type InstalledAppStore interface {
 	// GetCatalog is what external apps are read from. They have no compiled
 	// module to ask for menus, so their manifest is the only place their
 	// navigation exists.
-	GetCatalog() []appcatalog.CatalogApp
+	GetCatalog() []catalog.CatalogApp
 }
 
 func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]nexus.MenuDefinition, error) {

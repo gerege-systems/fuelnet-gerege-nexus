@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -54,26 +55,26 @@ func goldenSigner(t *testing.T) *appstore_registry.Signer {
 // goldenApps is the input the golden document was signed over: one module app
 // and one external app, which between them exercise every field that carries
 // meaning across the boundary.
-func goldenApps() []appcatalog.CatalogApp {
-	return []appcatalog.CatalogApp{
+func goldenApps() []catalog.CatalogApp {
+	return []catalog.CatalogApp{
 		{
 			ID: "io.gerege.nexus.contacts", Slug: "contacts", Name: "Contacts",
 			Description: "Manage business contacts.", Category: "CRM",
 			Visibility: "public", Version: "1.0.0",
-			Manifest: appcatalog.Manifest{
+			Manifest: catalog.Manifest{
 				ID: "io.gerege.nexus.contacts", Name: "Contacts", Version: "1.0.0", Platform: ">=1.0.0",
 				Permissions: []nexus.PermissionDefinition{{Code: "contacts.read", Name: "Read contacts"}},
 			},
-			Translations: map[string]appcatalog.CatalogAppText{"mn": {Name: "Харилцагчид"}},
+			Translations: map[string]catalog.CatalogAppText{"mn": {Name: "Харилцагчид"}},
 		},
 		{
 			ID: "mn.example.hrms", Slug: "hrms", Name: "Example HRMS",
 			Description: "A third-party platform.", Category: "HR",
 			Visibility: "public", Version: "2026.8.0",
-			Manifest: appcatalog.Manifest{
+			Manifest: catalog.Manifest{
 				ID: "mn.example.hrms", Name: "Example HRMS", Version: "2026.8.0",
-				Type: appcatalog.TypeExternal, Platform: ">=1.0.0",
-				External: &appcatalog.ExternalSpec{
+				Type: catalog.TypeExternal, Platform: ">=1.0.0",
+				External: &catalog.ExternalSpec{
 					LaunchURL: "https://hrms.example.mn/sso/gerege", SSOClientID: "app_hrms",
 					Scopes: []string{"openid", "profile"}, Embed: "new_tab",
 				},

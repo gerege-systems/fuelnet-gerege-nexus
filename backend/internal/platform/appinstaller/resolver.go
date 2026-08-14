@@ -3,15 +3,15 @@ package appinstaller
 import (
 	"fmt"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
 type DependencyGraph struct {
-	apps map[string]appcatalog.Manifest
+	apps map[string]catalog.Manifest
 }
 
-func NewDependencyGraph(manifests []appcatalog.Manifest) *DependencyGraph {
-	g := &DependencyGraph{apps: make(map[string]appcatalog.Manifest)}
+func NewDependencyGraph(manifests []catalog.Manifest) *DependencyGraph {
+	g := &DependencyGraph{apps: make(map[string]catalog.Manifest)}
 	for _, m := range manifests {
 		g.apps[m.ID] = m
 	}

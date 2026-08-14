@@ -3,27 +3,28 @@ package appinstaller_test
 import (
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
-	contacts := appcatalog.Manifest{
+	contacts := catalog.Manifest{
 		ID:           "io.gerege.nexus.contacts",
 		Name:         "Contacts",
 		Version:      "1.0.0",
 		Dependencies: nil,
 	}
 
-	products := appcatalog.Manifest{
+	products := catalog.Manifest{
 		ID:           "io.gerege.nexus.products",
 		Name:         "Products",
 		Version:      "1.0.0",
 		Dependencies: nil,
 	}
 
-	inventory := appcatalog.Manifest{
+	inventory := catalog.Manifest{
 		ID:      "io.gerege.nexus.inventory",
 		Name:    "Inventory",
 		Version: "1.0.0",
@@ -34,7 +35,7 @@ func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
 	}
 
 	t.Run("Happy path: Inventory resolves Contacts and Products first", func(t *testing.T) {
-		g := appinstaller.NewDependencyGraph([]appcatalog.Manifest{contacts, products, inventory})
+		g := appinstaller.NewDependencyGraph([]catalog.Manifest{contacts, products, inventory})
 		order, err := g.ResolveInstallOrder("io.gerege.nexus.inventory")
 		if err != nil {
 			t.Fatalf("expected resolution to succeed, got: %v", err)
@@ -48,7 +49,7 @@ func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
 	})
 
 	t.Run("Missing dependency fails resolution", func(t *testing.T) {
-		g := appinstaller.NewDependencyGraph([]appcatalog.Manifest{inventory}) // missing contacts & products
+		g := appinstaller.NewDependencyGraph([]catalog.Manifest{inventory}) // missing contacts & products
 		_, err := g.ResolveInstallOrder("io.gerege.nexus.inventory")
 		if err == nil {
 			t.Fatal("expected error due to missing dependencies, got nil")
@@ -56,15 +57,15 @@ func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
 	})
 
 	t.Run("Cycle detection fails resolution", func(t *testing.T) {
-		appA := appcatalog.Manifest{
+		appA := catalog.Manifest{
 			ID:           "app.a",
 			Dependencies: []nexus.Dependency{{ID: "app.b"}},
 		}
-		appB := appcatalog.Manifest{
+		appB := catalog.Manifest{
 			ID:           "app.b",
 			Dependencies: []nexus.Dependency{{ID: "app.a"}},
 		}
-		g := appinstaller.NewDependencyGraph([]appcatalog.Manifest{appA, appB})
+		g := appinstaller.NewDependencyGraph([]catalog.Manifest{appA, appB})
 		_, err := g.ResolveInstallOrder("app.a")
 		if err == nil {
 			t.Fatal("expected cycle detection error, got nil")

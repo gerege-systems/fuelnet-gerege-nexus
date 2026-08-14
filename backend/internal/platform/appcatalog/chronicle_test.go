@@ -4,13 +4,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 )
 
 // catalogDir is the bundled catalogue, from this package's directory.
 const catalogDir = "../../../../catalog"
 
-func bundledCatalog(t *testing.T) []appcatalog.CatalogApp {
+func bundledCatalog(t *testing.T) []catalog.CatalogApp {
 	t.Helper()
 	apps, err := appcatalog.LoadFile(filepath.Join(catalogDir, "apps.json"), "1.0.0")
 	if err != nil {
@@ -49,7 +51,7 @@ func TestEveryCatalogVersionHasAChronicleEntry(t *testing.T) {
 
 // The entry has to reach the manifest, because that is the only way it reaches
 // anything else — the store card, the history drawer and the registry all read
-// Manifest.ReleaseNotes and none of them opens a chronicle file.
+// catalog.Manifest.ReleaseNotes and none of them opens a chronicle file.
 func TestTheChronicleEntryTravelsInTheManifest(t *testing.T) {
 	for _, app := range bundledCatalog(t) {
 		notes := app.Manifest.ReleaseNotes
@@ -84,45 +86,45 @@ func TestEveryChronicleFileIsValid(t *testing.T) {
 		if chronicle.AppID != app.ID {
 			t.Errorf("chronicle for %s declares app_id %q", app.Slug, chronicle.AppID)
 		}
-		if err := appcatalog.ValidateChronicle(chronicle); err != nil {
+		if err := catalog.ValidateChronicle(chronicle); err != nil {
 			t.Errorf("%s: %v", app.ID, err)
 		}
 	}
 }
 
 func TestValidateChronicleRefusesWhatItShould(t *testing.T) {
-	good := appcatalog.ReleaseNote{
-		Version: "1.0.0", Kind: appcatalog.KindFeature,
+	good := catalog.ReleaseNote{
+		Version: "1.0.0", Kind: catalog.KindFeature,
 		Summary: map[string]string{"mn": "Шинэ", "en": "New"},
 	}
-	note := func(mutate func(*appcatalog.ReleaseNote)) appcatalog.Chronicle {
+	note := func(mutate func(*catalog.ReleaseNote)) catalog.Chronicle {
 		entry := good
 		entry.Summary = map[string]string{"mn": "Шинэ", "en": "New"}
 		mutate(&entry)
-		return appcatalog.Chronicle{AppID: "io.example.app", Entries: []appcatalog.ReleaseNote{entry}}
+		return catalog.Chronicle{AppID: "io.example.app", Entries: []catalog.ReleaseNote{entry}}
 	}
 
-	for name, c := range map[string]appcatalog.Chronicle{
-		"no app_id":          {Entries: []appcatalog.ReleaseNote{good}},
-		"no version":         note(func(e *appcatalog.ReleaseNote) { e.Version = "" }),
-		"version not semver": note(func(e *appcatalog.ReleaseNote) { e.Version = "one" }),
-		"unknown kind":       note(func(e *appcatalog.ReleaseNote) { e.Kind = "refactor" }),
-		"no mongolian":       note(func(e *appcatalog.ReleaseNote) { delete(e.Summary, "mn") }),
-		"no english":         note(func(e *appcatalog.ReleaseNote) { delete(e.Summary, "en") }),
-		"bad date":           note(func(e *appcatalog.ReleaseNote) { e.ReleasedAt = "11-08-2026" }),
+	for name, c := range map[string]catalog.Chronicle{
+		"no app_id":          {Entries: []catalog.ReleaseNote{good}},
+		"no version":         note(func(e *catalog.ReleaseNote) { e.Version = "" }),
+		"version not semver": note(func(e *catalog.ReleaseNote) { e.Version = "one" }),
+		"unknown kind":       note(func(e *catalog.ReleaseNote) { e.Kind = "refactor" }),
+		"no mongolian":       note(func(e *catalog.ReleaseNote) { delete(e.Summary, "mn") }),
+		"no english":         note(func(e *catalog.ReleaseNote) { delete(e.Summary, "en") }),
+		"bad date":           note(func(e *catalog.ReleaseNote) { e.ReleasedAt = "11-08-2026" }),
 	} {
-		if err := appcatalog.ValidateChronicle(c); err == nil {
+		if err := catalog.ValidateChronicle(c); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
 
 	// The same version twice is a history that cannot be read in order.
-	twice := appcatalog.Chronicle{AppID: "io.example.app", Entries: []appcatalog.ReleaseNote{good, good}}
-	if err := appcatalog.ValidateChronicle(twice); err == nil {
+	twice := catalog.Chronicle{AppID: "io.example.app", Entries: []catalog.ReleaseNote{good, good}}
+	if err := catalog.ValidateChronicle(twice); err == nil {
 		t.Error("a version recorded twice was accepted")
 	}
 
-	if err := appcatalog.ValidateChronicle(note(func(*appcatalog.ReleaseNote) {})); err != nil {
+	if err := catalog.ValidateChronicle(note(func(*catalog.ReleaseNote) {})); err != nil {
 		t.Errorf("a well-formed chronicle was refused: %v", err)
 	}
 }
