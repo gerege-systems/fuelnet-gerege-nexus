@@ -42,14 +42,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -97,7 +96,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool, xyp *gerege.GeregeService, rails Rails) *Module {
 	m := &Module{db: db, xyp: xyp, rails: rails, perms: rbac.NewSQLPermissionStore(db)}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -121,7 +120,7 @@ func (m *Module) Version() string { return "1.0.0" }
 // Contacts reads the citizen registry through this module and does not depend
 // on it: an address book that refuses to open because the state integration is
 // missing would be a worse product than one that cannot pre-fill a form.
-func (m *Module) Dependencies() []internal.Dependency { return nil }
+func (m *Module) Dependencies() []nexus.Dependency { return nil }
 
 // Permissions: one to see the screens, two to ask the state a question.
 //
@@ -133,8 +132,8 @@ func (m *Module) Dependencies() []internal.Dependency { return nil }
 // `xyp.citizen.read` and `xyp.company.read`, granted to the administrator role
 // alone by migration 00024; this keeps that and says why in code rather than
 // in a migration nobody re-reads.
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "egov.read", Name: "Read e-Government Link",
 			Description: "See how this organisation is connected to the state's systems, and what it has looked up"},
 		{Code: "egov.citizen.read", Name: "Query the citizen registry", AdminOnly: true,
@@ -144,8 +143,8 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "egov_lookups", Label: "Registry lookups", Path: "/egov", Icon: "landmark", Order: 10,
 			Labels: map[string]string{"mn": "Лавлагаа", "ar": "استعلامات السجل", "zh": "登记查询",
 				"fr": "Consultations du registre", "ru": "Справки из реестра", "es": "Consultas al registro"}},

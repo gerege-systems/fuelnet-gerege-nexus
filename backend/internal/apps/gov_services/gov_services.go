@@ -25,13 +25,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -154,7 +153,7 @@ func New(db *pgxpool.Pool, meetings MeetingBooker) *Module {
 		perms:    rbac.NewSQLPermissionStore(db),
 		meetings: meetings,
 	}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -164,14 +163,14 @@ func (m *Module) Version() string { return "1.1.0" }
 
 // Dependencies: an application always names a citizen, and Contacts is where
 // XYP-verified citizen records live.
-func (m *Module) Dependencies() []internal.Dependency {
-	return []internal.Dependency{
+func (m *Module) Dependencies() []nexus.Dependency {
+	return []nexus.Dependency{
 		{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
 	}
 }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: PermRead, Name: "Read State Services", Description: "View the service registry, requests and dashboards"},
 		{Code: PermApply, Name: "Submit Requests", Description: "Submit, ingest and cancel service requests"},
 		{Code: PermProcess, Name: "Process Requests", Description: "Assign, start, complete and reject tasks"},
@@ -182,8 +181,8 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{
 			ID: "gov_services", ParentID: "operations", Label: "State Services",
 			Path: "/gov-services", Icon: "landmark", Order: 5,

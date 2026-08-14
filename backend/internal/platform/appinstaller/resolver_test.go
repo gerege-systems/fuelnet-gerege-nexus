@@ -3,9 +3,9 @@ package appinstaller_test
 import (
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
@@ -27,7 +27,7 @@ func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
 		ID:      "io.gerege.nexus.inventory",
 		Name:    "Inventory",
 		Version: "1.0.0",
-		Dependencies: []internal.Dependency{
+		Dependencies: []nexus.Dependency{
 			{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
 			{ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
 		},
@@ -58,11 +58,11 @@ func TestDependencyGraph_ResolutionAndCycleDetection(t *testing.T) {
 	t.Run("Cycle detection fails resolution", func(t *testing.T) {
 		appA := appcatalog.Manifest{
 			ID:           "app.a",
-			Dependencies: []internal.Dependency{{ID: "app.b"}},
+			Dependencies: []nexus.Dependency{{ID: "app.b"}},
 		}
 		appB := appcatalog.Manifest{
 			ID:           "app.b",
-			Dependencies: []internal.Dependency{{ID: "app.a"}},
+			Dependencies: []nexus.Dependency{{ID: "app.a"}},
 		}
 		g := appinstaller.NewDependencyGraph([]appcatalog.Manifest{appA, appB})
 		_, err := g.ResolveInstallOrder("app.a")

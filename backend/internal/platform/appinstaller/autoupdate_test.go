@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -40,7 +40,7 @@ func externalApp(version string, permissions []string, scopes []string, launch s
 	}
 	for _, code := range permissions {
 		manifest.Permissions = append(manifest.Permissions,
-			internal.PermissionDefinition{Code: code, Name: code})
+			nexus.PermissionDefinition{Code: code, Name: code})
 	}
 	return appcatalog.CatalogApp{
 		ID: manifest.ID, Slug: "test-hrms", Name: manifest.Name,

@@ -1,4 +1,39 @@
-package internal
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * Package nexus is the contract between this platform and the apps built on it.
+ *
+ * Everything in `internal/` is closed to other repositories — that is the Go
+ * language rule, not a policy — and until this package existed the only way to
+ * build a product on Gerege Nexus was to fork it. One fork per product means
+ * every fix is applied once per product for ever, which is the failure this
+ * package exists to prevent. What is here is what an app module needs in order
+ * to be an app module, and nothing else:
+ *
+ *	Module            what a module is, and what the platform will ask of it
+ *	Register          how a module joins the binary it is compiled into
+ *	Dependency        what it needs installed first
+ *	PermissionDefinition, MenuDefinition   what it declares to the platform
+ *
+ * The implementations stay in `internal/`. This package is a contract, and a
+ * contract that also contained the machinery would drag the machinery into the
+ * semver promise with it.
+ *
+ * # Stability
+ *
+ * This package is versioned with the module and does not break inside a major
+ * version. That is the whole point of it: a distribution repository pins
+ * `github.com/gerege-systems/open-gerege-nexus/backend vX.Y.Z` and expects its
+ * modules to keep compiling until X changes. Anything that would break a
+ * caller goes through deprecation and one major cycle — see CONTRIBUTING.
+ *
+ * The platform's own thirteen modules are written against this package rather
+ * than against `internal/`. That is deliberate: an SDK its author does not use
+ * is an SDK nobody has tried.
+ */
+package nexus
 
 import (
 	"net/http"
@@ -62,6 +97,17 @@ func (m MenuDefinition) LocalizedLabel(locale string) string {
 }
 
 // Module defines the contract every compile-time app module must implement.
+//
+// A module is a Go type with these seven methods and a constructor that calls
+// Register. The platform owns HTTP, sessions, the database and the store; a
+// module owns its own routes, its own tables and what it declares here.
+//
+// RegisterRoutes is handed the root router rather than a pre-scoped group, and
+// the middleware it is given carries two decisions the platform has already
+// made: whether this tenant has the app installed, and — for apps the platform
+// knows a permission prefix for — whether the caller may make this kind of
+// request. A module that wants a finer split applies its own permission
+// middleware on top, which is what most of them do.
 type Module interface {
 	ID() string
 	Name() string

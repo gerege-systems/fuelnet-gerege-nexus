@@ -27,12 +27,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -53,7 +52,7 @@ const LegacyID = "io.gerege.nexus.developer_portal"
 // New builds the module and registers it in the compile-time app registry.
 func New(sso *ssoprovider.SSOProvider) *SSOClientsModule {
 	m := &SSOClientsModule{sso: sso}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -61,17 +60,17 @@ func (m *SSOClientsModule) ID() string      { return ID }
 func (m *SSOClientsModule) Name() string    { return "SSO Clients" }
 func (m *SSOClientsModule) Version() string { return "2.0.0" }
 
-func (m *SSOClientsModule) Dependencies() []internal.Dependency { return nil }
+func (m *SSOClientsModule) Dependencies() []nexus.Dependency { return nil }
 
-func (m *SSOClientsModule) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *SSOClientsModule) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "sso_clients.read", Name: "Read SSO Clients", Description: "View registered OAuth2 client applications"},
 		{Code: "sso_clients.manage", Name: "Manage SSO Clients", Description: "Register, configure and revoke OAuth2 client applications"},
 	}
 }
 
-func (m *SSOClientsModule) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *SSOClientsModule) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "sso_clients_apps", Label: "SSO clients", Path: "/sso-clients", Icon: "code", Order: 10, Labels: map[string]string{"mn": "SSO клиентүүд", "ar": "عملاء SSO", "zh": "SSO 客户端", "fr": "Clients SSO", "ru": "SSO-клиенты", "es": "Clientes SSO"}},
 	}
 }

@@ -27,13 +27,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,7 +44,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool) *Module {
 	m := &Module{db: db, store: appstore_registry.NewStore(db)}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -53,8 +52,8 @@ func (m *Module) ID() string      { return "io.gerege.nexus.store_review" }
 func (m *Module) Name() string    { return "Store Review" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency {
-	return []internal.Dependency{
+func (m *Module) Dependencies() []nexus.Dependency {
+	return []nexus.Dependency{
 		{ID: "io.gerege.nexus.appstore_registry", VersionConstraint: ">=1.0.0"},
 	}
 }
@@ -64,8 +63,8 @@ func (m *Module) Dependencies() []internal.Dependency {
 // Reading is the weaker of the two and is genuinely useful on its own: somebody
 // triaging submissions, or answering a publisher asking where theirs has got
 // to, needs to see the queue and has no business publishing from it.
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "store_review.read", Name: "See the review queue",
 			Description: "View submitted versions and their review history"},
 		{Code: "store_review.decide", Name: "Publish and reject",
@@ -73,8 +72,8 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{
 			ID: "store_review", Label: "Review Queue",
 			Path: "/module/store-review", Icon: "list-checks", Order: 30,

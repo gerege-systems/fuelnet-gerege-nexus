@@ -15,6 +15,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `pkg/nexus`, the SDK that makes a product possible without a fork
+
+Step 1 of the ecosystem split (`docs/ECOSYSTEM_GIT_STRATEGY.md` §6), and the
+precondition for every step after it. The module contract lived in
+`backend/internal/module.go`, and Go forbids another repository from importing
+anything under `internal/` — so the only way to build a product on this platform
+was to fork it, and one fork per product means every fix is applied once per
+product for ever.
+
+- **New public package `backend/pkg/nexus`** carrying the contract: `Module`,
+  `Dependency`, `PermissionDefinition`, `MenuDefinition`, and the compile-time
+  registry (`Register`, `Get`, `List`, `VerifyModuleExists`). It imports nothing
+  from `internal/`, and a test enforces that by walking its import graph — an
+  import that crept in would compile fine here and break every distribution.
+- **All fourteen modules and the platform now import it**, which is the only
+  way to know the SDK is usable: an SDK its author does not use is one nobody
+  has tried.
+- **`internal/module.go` and `internal/platform/appregistry` are gone.** Not
+  deprecated — both were under `internal/`, so no caller outside this repository
+  could exist to break, and leaving forwarding shims would have left two names
+  for one thing.
+- A test defines a module in an external test package against `pkg/nexus` alone,
+  registers it and mounts its routes: the same view a distribution repository
+  has of this platform.
+
+Implementations stay in `internal/`. The SDK is a contract, and a contract that
+also carried the machinery would drag the machinery into the semver promise.
+What is not in it yet is the service half — the tenant-scoped database handle,
+HTTP helpers, RBAC, audit and the report registry — which the platform's modules
+still reach through `internal/platform/*`. That is the next piece of §6 step 1.
+
 ### Added — `egov`, the front door to the state's systems
 
 The last of the three naming corrections, and the only one that creates a module

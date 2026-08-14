@@ -15,11 +15,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -48,7 +47,7 @@ type BillingModule struct {
 // ("module is not present in binary registry") and its menu never appeared.
 func New(db *pgxpool.Pool) *BillingModule {
 	m := &BillingModule{db: db}
-	appregistry.Register(m)
+	nexus.Register(m)
 	registerReports()
 	return m
 }
@@ -57,21 +56,21 @@ func (m *BillingModule) ID() string      { return "io.gerege.nexus.billing" }
 func (m *BillingModule) Name() string    { return "Public Billing & e-Barimt" }
 func (m *BillingModule) Version() string { return "1.0.0" }
 
-func (m *BillingModule) Dependencies() []internal.Dependency {
-	return []internal.Dependency{
+func (m *BillingModule) Dependencies() []nexus.Dependency {
+	return []nexus.Dependency{
 		{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
 	}
 }
 
-func (m *BillingModule) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *BillingModule) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "billing.read", Name: "Read Invoices", Description: "View invoices and e-Barimt receipts"},
 		{Code: "billing.manage", Name: "Manage Invoices", Description: "Issue invoices and submit e-Barimt receipts"},
 	}
 }
 
-func (m *BillingModule) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *BillingModule) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "billing", ParentID: "operations", Label: "Public Billing", Path: "/billing", Icon: "credit-card", Order: 20, Labels: map[string]string{"mn": "Нэхэмжлэх", "ar": "الفوترة العامة", "zh": "公共计费", "fr": "Facturation publique", "ru": "Счета", "es": "Facturación pública"}},
 	}
 }

@@ -25,15 +25,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -49,7 +48,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool) *Module {
 	m := &Module{db: db, store: appstore_registry.NewStore(db)}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -59,14 +58,14 @@ func (m *Module) Version() string { return "1.0.0" }
 
 // Dependencies names the registry, because this module writes rows the registry
 // serves and there is no version of this that is useful without it.
-func (m *Module) Dependencies() []internal.Dependency {
-	return []internal.Dependency{
+func (m *Module) Dependencies() []nexus.Dependency {
+	return []nexus.Dependency{
 		{ID: "io.gerege.nexus.appstore_registry", VersionConstraint: ">=1.0.0"},
 	}
 }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "publisher.read", Name: "See published apps",
 			Description: "View this organisation's publishing profile, apps and submissions"},
 		{Code: "publisher.manage", Name: "Publish apps",
@@ -74,8 +73,8 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{
 			ID: "publisher_studio", Label: "Publisher Studio",
 			Path: "/module/publisher", Icon: "upload", Order: 20,

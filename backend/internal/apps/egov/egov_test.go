@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -121,7 +121,7 @@ func (f *fixture) do(t *testing.T, method, target, body string) *httptest.Respon
 func TestTheRegistryLookupsAreNotHandedToEveryMember(t *testing.T) {
 	module := egov.New(nil, nil, nil)
 
-	byCode := map[string]internal.PermissionDefinition{}
+	byCode := map[string]nexus.PermissionDefinition{}
 	for _, permission := range module.Permissions() {
 		byCode[permission.Code] = permission
 	}

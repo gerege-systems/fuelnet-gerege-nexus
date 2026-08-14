@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,7 +31,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool) *Module {
 	m := &Module{db: db}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -40,19 +39,19 @@ func (m *Module) ID() string      { return "io.gerege.nexus.products" }
 func (m *Module) Name() string    { return "Products" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency {
+func (m *Module) Dependencies() []nexus.Dependency {
 	return nil
 }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "products.read", Name: "Read Products", Description: "View product catalog"},
 		{Code: "products.manage", Name: "Manage Products", Description: "Create and edit products"},
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "products", ParentID: "master_data", Label: "Products", Path: "/products", Icon: "package", Order: 20, Labels: map[string]string{"mn": "Бараа бүтээгдэхүүн", "ar": "المنتجات", "zh": "产品", "fr": "Produits", "ru": "Товары", "es": "Productos"}},
 	}
 }

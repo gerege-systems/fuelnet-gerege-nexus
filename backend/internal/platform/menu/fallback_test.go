@@ -5,10 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -18,17 +17,17 @@ import (
 // This is the module that has no blueprint, standing in for the next one.
 type blueprintlessModule struct{}
 
-func (blueprintlessModule) ID() string                          { return "io.gerege.nexus.noblueprint" }
-func (blueprintlessModule) Name() string                        { return "No Blueprint" }
-func (blueprintlessModule) Version() string                     { return "1.0.0" }
-func (blueprintlessModule) Dependencies() []internal.Dependency { return nil }
-func (blueprintlessModule) Permissions() []internal.PermissionDefinition {
+func (blueprintlessModule) ID() string                       { return "io.gerege.nexus.noblueprint" }
+func (blueprintlessModule) Name() string                     { return "No Blueprint" }
+func (blueprintlessModule) Version() string                  { return "1.0.0" }
+func (blueprintlessModule) Dependencies() []nexus.Dependency { return nil }
+func (blueprintlessModule) Permissions() []nexus.PermissionDefinition {
 	return nil
 }
-func (blueprintlessModule) Menus() []internal.MenuDefinition {
+func (blueprintlessModule) Menus() []nexus.MenuDefinition {
 	// Declared out of order on purpose: what comes back must follow Order, not
 	// the order they were written in.
-	return []internal.MenuDefinition{
+	return []nexus.MenuDefinition{
 		{ID: "noblueprint_third", Label: "Third", Path: "/noblueprint/c", Icon: "box", Order: 7},
 		{ID: "noblueprint_home", Label: "Home", Path: "/noblueprint", Icon: "box", Order: 5},
 		{ID: "noblueprint_second", Label: "Second", Path: "/noblueprint/b", Icon: "box", Order: 6},
@@ -45,7 +44,7 @@ func (s enabledStore) GetCatalog() []appcatalog.CatalogApp { return nil }
 
 func TestAModuleWithoutABlueprintStillContributesItsOwnScreens(t *testing.T) {
 	mod := blueprintlessModule{}
-	appregistry.Register(mod)
+	nexus.Register(mod)
 
 	menus, err := menu.GetTenantMenus(context.Background(),
 		enabledStore{ids: []string{mod.ID()}}, "tenant", "en")
@@ -53,7 +52,7 @@ func TestAModuleWithoutABlueprintStillContributesItsOwnScreens(t *testing.T) {
 		t.Fatalf("menus: %v", err)
 	}
 
-	var found *internal.MenuDefinition
+	var found *nexus.MenuDefinition
 	for i := range menus {
 		if menus[i].ID == "noblueprint_home" {
 			found = &menus[i]
@@ -78,7 +77,7 @@ func TestAModuleWithoutABlueprintStillContributesItsOwnScreens(t *testing.T) {
 // departments — or any other arrangement, changing between builds.
 func TestAModulesMenusKeepTheOrderItDeclared(t *testing.T) {
 	mod := blueprintlessModule{}
-	appregistry.Register(mod)
+	nexus.Register(mod)
 
 	menus, err := menu.GetTenantMenus(context.Background(),
 		enabledStore{ids: []string{mod.ID()}}, "tenant", "en")

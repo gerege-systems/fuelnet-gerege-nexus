@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -52,7 +51,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool, allowNegativeStock bool) *Module {
 	m := &Module{db: db, allowNegativeStock: allowNegativeStock}
-	appregistry.Register(m)
+	nexus.Register(m)
 	registerReports()
 	return m
 }
@@ -61,22 +60,22 @@ func (m *Module) ID() string      { return "io.gerege.nexus.inventory" }
 func (m *Module) Name() string    { return "Inventory" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency {
-	return []internal.Dependency{
+func (m *Module) Dependencies() []nexus.Dependency {
+	return []nexus.Dependency{
 		{ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
 		{ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
 	}
 }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "inventory.read", Name: "Read Inventory", Description: "View stock levels and warehouses"},
 		{Code: "inventory.manage", Name: "Manage Inventory", Description: "Create warehouses and stock adjustments"},
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "inventory", ParentID: "operations", Label: "Inventory", Path: "/inventory", Icon: "boxes", Order: 10, Labels: map[string]string{"mn": "Агуулах", "ar": "المخزون", "zh": "库存", "fr": "Inventaire", "ru": "Склад", "es": "Inventario"}},
 	}
 }

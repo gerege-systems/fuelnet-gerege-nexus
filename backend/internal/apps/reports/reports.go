@@ -20,10 +20,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -74,7 +73,7 @@ func New(db *pgxpool.Pool, installedApps InstalledApps) *Module {
 		perms:     rbac.NewSQLPermissionStore(db),
 		installed: installedApps,
 	}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -85,18 +84,18 @@ func (m *Module) Version() string { return "1.0.0" }
 // Dependencies is empty on purpose. Reports is useful with any combination of
 // the other apps and useless with none of them, and declaring a dependency on
 // billing would mean a tenant that only runs inventory could not install it.
-func (m *Module) Dependencies() []internal.Dependency { return nil }
+func (m *Module) Dependencies() []nexus.Dependency { return nil }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: PermissionView, Name: "View Reports", Description: "Run and export the reports of the apps this organisation has installed"},
 		{Code: PermissionSchedule, Name: "Schedule Reports", Description: "Create and remove scheduled reports that are mailed out automatically"},
 		{Code: PermissionShare, Name: "Share Reports Across Organisations", Description: "Ask another organisation to share a report, and agree to share this organisation's own"},
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{
 			ID: "reports", ParentID: "operations", Label: "Reports", Path: "/reports",
 			Icon: "bar-chart-3", Order: 90,

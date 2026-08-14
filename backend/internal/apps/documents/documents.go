@@ -23,8 +23,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
@@ -34,6 +32,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -189,7 +188,7 @@ func New(db *pgxpool.Pool) *DocumentsModule {
 		perms:       rbac.NewSQLPermissionStore(db),
 		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
 	}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -197,18 +196,18 @@ func (m *DocumentsModule) ID() string      { return "io.gerege.nexus.documents" 
 func (m *DocumentsModule) Name() string    { return "Digital Documents & Signatures" }
 func (m *DocumentsModule) Version() string { return "1.0.0" }
 
-func (m *DocumentsModule) Dependencies() []internal.Dependency { return nil }
+func (m *DocumentsModule) Dependencies() []nexus.Dependency { return nil }
 
-func (m *DocumentsModule) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *DocumentsModule) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "documents.read", Name: "Read Documents", Description: "View documents and signature status"},
 		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents, route them for approval, and configure templates, approval chains, signature policies and retention rules"},
 		{Code: "documents.sign", Name: "Sign Documents", Description: "Apply an E-ID / DAN digital signature or reject a document"},
 	}
 }
 
-func (m *DocumentsModule) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *DocumentsModule) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "documents", ParentID: "operations", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 30, Labels: map[string]string{"mn": "Баримт ба цахим гарын үсэг", "ar": "المستندات والتوقيع الإلكتروني", "zh": "文档与电子签名", "fr": "Documents et signature électronique", "ru": "Документы и электронная подпись", "es": "Documentos y firma electrónica"}},
 	}
 }

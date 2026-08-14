@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // The whole external-app path, from the manifest that ships in catalog/ to the
@@ -102,7 +102,7 @@ func TestAnInstalledExternalAppContributesAnExternalMenuEntry(t *testing.T) {
 		t.Fatalf("menus: %v", err)
 	}
 
-	var entry *internal.MenuDefinition
+	var entry *nexus.MenuDefinition
 	for i := range menus {
 		if menus[i].ExternalURL != "" {
 			entry = &menus[i]

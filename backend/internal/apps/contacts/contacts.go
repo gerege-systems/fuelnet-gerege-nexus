@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,7 +32,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool) *Module {
 	m := &Module{db: db}
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -41,19 +40,19 @@ func (m *Module) ID() string      { return "io.gerege.nexus.contacts" }
 func (m *Module) Name() string    { return "Contacts" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency {
+func (m *Module) Dependencies() []nexus.Dependency {
 	return nil
 }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "contacts.read", Name: "Read Contacts", Description: "View contacts list"},
 		{Code: "contacts.manage", Name: "Manage Contacts", Description: "Create and edit contacts"},
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "contacts", ParentID: "master_data", Label: "Contacts", Path: "/contacts", Icon: "users", Order: 10, Labels: map[string]string{"mn": "Харилцагчид", "ar": "جهات الاتصال", "zh": "联系人", "fr": "Contacts", "ru": "Контакты", "es": "Contactos"}},
 	}
 }

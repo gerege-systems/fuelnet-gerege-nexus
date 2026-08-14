@@ -82,9 +82,9 @@
 ## Шинэ бизнес модуль нэмэх
 
 1. `backend/internal/apps/<module_name>/` дор шинэ пакет үүсгэнэ.
-2. `backend/internal/module.go` дахь `internal.Module` интерфейсийг бүрэн
+2. `backend/pkg/nexus`-ийн `nexus.Module` интерфейсийг бүрэн
    хэрэгжүүлнэ.
-3. Модулийг `appregistry`-д бүртгэж, `catalog/manifests/<slug>.json` manifest
+3. Модулийг `nexus.Register`-ээр бүртгэж, `catalog/manifests/<slug>.json` manifest
    файл нэмнэ. Manifest-ийн бүтэц `appcatalog.Manifest`-тэй яг таарах ёстой —
    алдаатай manifest бол сервер асахгүй.
 4. `catalog/apps.json`-д апп-аа бүртгэнэ. `apps` хүснэгт нь ачаалал бүрт энэ

@@ -10,10 +10,10 @@ import (
 	"net/http"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // overviewApp is one row of the administrator's view of the store.
@@ -101,7 +101,7 @@ func (s *Server) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 			AppID: app.ID, Slug: app.Slug, Name: localized.Name,
 			CatalogVersion: app.Version,
 		}
-		if module, compiled := appregistry.Get(app.ID); compiled {
+		if module, compiled := nexus.Get(app.ID); compiled {
 			row.BinaryVersion = module.Version()
 			row.Drifted = module.Version() != app.Version
 			if row.Drifted {

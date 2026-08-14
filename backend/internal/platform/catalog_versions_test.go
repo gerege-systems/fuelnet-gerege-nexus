@@ -5,10 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,14 +20,14 @@ type stubModule struct {
 func (m stubModule) ID() string                                                 { return m.id }
 func (m stubModule) Name() string                                               { return "Stub" }
 func (m stubModule) Version() string                                            { return m.version }
-func (m stubModule) Dependencies() []internal.Dependency                        { return nil }
-func (m stubModule) Permissions() []internal.PermissionDefinition               { return nil }
-func (m stubModule) Menus() []internal.MenuDefinition                           { return nil }
+func (m stubModule) Dependencies() []nexus.Dependency                           { return nil }
+func (m stubModule) Permissions() []nexus.PermissionDefinition                  { return nil }
+func (m stubModule) Menus() []nexus.MenuDefinition                              { return nil }
 func (m stubModule) RegisterRoutes(chi.Router, func(http.Handler) http.Handler) {}
 
 func appregistryRegisterStub(t *testing.T, id, version string) {
 	t.Helper()
-	appregistry.Register(stubModule{id: id, version: version})
+	nexus.Register(stubModule{id: id, version: version})
 }
 
 // The three places an app's version is written — the compiled module, the

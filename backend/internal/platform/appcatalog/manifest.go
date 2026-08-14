@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // App types. An app is a Go module compiled into this binary unless it says
@@ -29,12 +29,12 @@ type Manifest struct {
 	// that runs somewhere else entirely: the platform holds its registration,
 	// its permissions and its menu entry, and hands its users over by OIDC.
 	// Nothing of it is compiled in.
-	Type         string                          `json:"type,omitempty"`
-	External     *ExternalSpec                   `json:"external,omitempty"`
-	Platform     string                          `json:"platform"`
-	Dependencies []internal.Dependency           `json:"dependencies"`
-	Permissions  []internal.PermissionDefinition `json:"permissions"`
-	Menus        []internal.MenuDefinition       `json:"menus"`
+	Type         string                       `json:"type,omitempty"`
+	External     *ExternalSpec                `json:"external,omitempty"`
+	Platform     string                       `json:"platform"`
+	Dependencies []nexus.Dependency           `json:"dependencies"`
+	Permissions  []nexus.PermissionDefinition `json:"permissions"`
+	Menus        []nexus.MenuDefinition       `json:"menus"`
 
 	// Everything below is manifest v2.1: who stands behind this app and what
 	// changed in this version of it. Every field is optional and every one is

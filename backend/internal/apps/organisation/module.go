@@ -46,9 +46,8 @@ package organisation
 import (
 	"net/http"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -72,7 +71,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool) *Module {
 	m := &Module{db: db, perms: rbac.NewSQLPermissionStore(db)}
-	appregistry.Register(m)
+	nexus.Register(m)
 	registerReports()
 	return m
 }
@@ -81,7 +80,7 @@ func (m *Module) ID() string      { return ID }
 func (m *Module) Name() string    { return "Organisation & People" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency { return nil }
+func (m *Module) Dependencies() []nexus.Dependency { return nil }
 
 // Permissions are deliberately two, not six.
 //
@@ -90,8 +89,8 @@ func (m *Module) Dependencies() []internal.Dependency { return nil }
 // legal identity, its structure, or who belongs to it is administrative, and it
 // is one decision rather than three: anybody who can add a person to a
 // department can already put them anywhere in it.
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "organisation.read", Name: "Read Organisation", Description: "View the organisation profile, its departments and its people"},
 		{Code: "organisation.manage", Name: "Manage Organisation", Description: "Edit the organisation profile, its departments and its people"},
 	}
@@ -100,8 +99,8 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 // Menus are the three screens this app is. No parent is named: the platform
 // hangs an app's own menus under its Modules group, and a ParentID set here
 // would be overwritten — which reads as a decision that was silently ignored.
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{
 			ID: "organisation_people", Label: "People",
 			Path: "/organisation/people", Icon: "users", Order: 7,

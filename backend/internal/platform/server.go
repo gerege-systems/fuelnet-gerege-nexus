@@ -24,7 +24,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
@@ -46,6 +45,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -422,7 +422,7 @@ func verifyCatalogVersions(catalog []appcatalog.CatalogApp) error {
 	present := make(map[string]bool, len(catalog))
 	for _, app := range catalog {
 		present[app.ID] = true
-		mod, ok := appregistry.Get(app.ID)
+		mod, ok := nexus.Get(app.ID)
 		if !ok {
 			continue
 		}
@@ -1023,7 +1023,7 @@ func (s *Server) setupRoutes() {
 // straight into the protected group, so their endpoints stayed reachable for
 // tenants that had never installed the app.
 func (s *Server) registerAppModuleRoutes() {
-	for _, module := range appregistry.List() {
+	for _, module := range nexus.List() {
 		module.RegisterRoutes(s.router, s.appGateMiddleware(module.ID()))
 	}
 	s.registerRenamedRouteAliases()

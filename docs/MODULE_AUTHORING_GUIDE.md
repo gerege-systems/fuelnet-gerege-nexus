@@ -14,7 +14,11 @@ Welcome to the **open-gerege-nexus** Module Authoring Guide! This guide explains
 
 In `open-gerege-nexus`, business modules are written in Go as compile-time packages under `backend/internal/apps/`. 
 
-Every module MUST implement the `Module` interface defined in [`backend/internal/module.go`](../backend/internal/module.go):
+Every module MUST implement the `Module` interface defined in the public SDK,
+[`backend/pkg/nexus`](../backend/pkg/nexus/module.go). It is `pkg/` and not
+`internal/` for one reason: Go forbids another repository from importing a
+package under `internal/`, so while the interface lived there the only way to
+build a product on this platform was to fork it.
 
 ```go
 type Module interface {
@@ -32,7 +36,7 @@ type Module interface {
 
 ## Step by step: creating a new module
 
-### Step 1: Define Module Struct & Register in `appregistry`
+### Step 1: Define Module Struct & Register with the SDK
 Create a new directory `backend/internal/apps/invoices/invoices.go`:
 
 ```go
@@ -42,8 +46,7 @@ import (
     "net/http"
     "github.com/go-chi/chi/v5"
     "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/gerege-systems/open-gerege-nexus/backend/internal"
-    "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+    "github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 type Module struct {
@@ -52,7 +55,7 @@ type Module struct {
 
 func New(db *pgxpool.Pool) *Module {
     m := &Module{db: db}
-    appregistry.Register(m)
+    nexus.Register(m)
     return m
 }
 
@@ -60,8 +63,8 @@ func (m *Module) ID() string      { return "io.gerege.nexus.invoices" }
 func (m *Module) Name() string    { return "Invoicing & Billing" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency {
-    return []internal.Dependency{
+func (m *Module) Dependencies() []nexus.Dependency {
+    return []nexus.Dependency{
         {ID: "io.gerege.nexus.contacts", VersionConstraint: "^1.0.0"},
         {ID: "io.gerege.nexus.products", VersionConstraint: "^1.0.0"},
     }
@@ -70,15 +73,15 @@ func (m *Module) Dependencies() []internal.Dependency {
 
 ### Step 2: Define Permissions and Menus
 ```go
-func (m *Module) Permissions() []internal.PermissionDefinition {
-    return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+    return []nexus.PermissionDefinition{
         {Code: "invoices.read", Name: "View Invoices"},
         {Code: "invoices.manage", Name: "Create & Edit Invoices"},
     }
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-    return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+    return []nexus.MenuDefinition{
         {ID: "menu_invoices", Label: "Invoices", Path: "/invoices", Icon: "file-text", Order: 30},
     }
 }

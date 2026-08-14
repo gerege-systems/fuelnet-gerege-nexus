@@ -6,9 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // defaultMenuOrder is where an entry sits when its module expresses no
@@ -24,7 +23,7 @@ type InstalledAppStore interface {
 	GetCatalog() []appcatalog.CatalogApp
 }
 
-func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]internal.MenuDefinition, error) {
+func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, locale string) ([]nexus.MenuDefinition, error) {
 	enabledIDs, err := store.GetEnabledAppIDsForTenant(ctx, tenantID)
 	if err != nil {
 		return nil, err
@@ -33,8 +32,8 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 	for _, id := range enabledIDs {
 		enabled[id] = true
 	}
-	menus := make([]internal.MenuDefinition, 0)
-	for _, mod := range appregistry.List() {
+	menus := make([]nexus.MenuDefinition, 0)
+	for _, mod := range nexus.List() {
 		if !enabled[mod.ID()] {
 			continue
 		}
@@ -50,8 +49,8 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		}
 		modulesID, settingsID := bp.Slug+"_modules", bp.Slug+"_settings"
 		menus = append(menus,
-			localized(internal.MenuDefinition{ID: modulesID, AppID: mod.ID(), AppName: mod.Name(), Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale),
-			localized(internal.MenuDefinition{ID: settingsID, AppID: mod.ID(), AppName: mod.Name(), Label: "Settings", Icon: "settings", Order: 20, Labels: groupSettings}, locale),
+			localized(nexus.MenuDefinition{ID: modulesID, AppID: mod.ID(), AppName: mod.Name(), Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale),
+			localized(nexus.MenuDefinition{ID: settingsID, AppID: mod.ID(), AppName: mod.Name(), Label: "Settings", Icon: "settings", Order: 20, Labels: groupSettings}, locale),
 		)
 		for _, item := range mod.Menus() {
 			// The parent is the platform's to decide; the order is the
@@ -82,7 +81,7 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		}
 		modulesID := app.Slug + "_modules"
 		menus = append(menus,
-			localized(internal.MenuDefinition{ID: modulesID, AppID: app.ID, AppName: app.Name, Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale))
+			localized(nexus.MenuDefinition{ID: modulesID, AppID: app.ID, AppName: app.Name, Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale))
 		for _, item := range app.Manifest.Menus {
 			item.AppID, item.AppName, item.ParentID = app.ID, app.Name, modulesID
 			if item.Order == 0 {
@@ -116,15 +115,15 @@ func routeSlug(appID string) string {
 	return strings.ReplaceAll(slug, "_", "-")
 }
 
-func localized(item internal.MenuDefinition, locale string) internal.MenuDefinition {
+func localized(item nexus.MenuDefinition, locale string) nexus.MenuDefinition {
 	item.Label = item.LocalizedLabel(locale)
 	return item
 }
-func futureDefinition(appID, appName, parent, slug string, item futureMenu, order int, locale string) internal.MenuDefinition {
+func futureDefinition(appID, appName, parent, slug string, item futureMenu, order int, locale string) nexus.MenuDefinition {
 	// Resolving through LocalizedLabel rather than an if/else on "mn" is what
 	// lets a blueprint entry answer in all seven languages: an unknown locale
 	// falls back to EN instead of silently returning Mongolian.
-	return localized(internal.MenuDefinition{
+	return localized(nexus.MenuDefinition{
 		ID:       fmt.Sprintf("%s_%s", slug, item.ID),
 		AppID:    appID,
 		AppName:  appName,

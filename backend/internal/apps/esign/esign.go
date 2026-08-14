@@ -31,8 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
@@ -40,6 +38,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -73,7 +72,7 @@ func New(db *pgxpool.Pool, hsm *gerege.EsignService, eid *eidmongolia.Service, e
 		perms:   rbac.NewSQLPermissionStore(db),
 		exports: exports,
 	}
-	appregistry.Register(m)
+	nexus.Register(m)
 	registerReports()
 	return m
 }
@@ -82,18 +81,18 @@ func (m *Module) ID() string      { return "io.gerege.nexus.esign" }
 func (m *Module) Name() string    { return "PDF E-Sign (Тоон гарын үсэг)" }
 func (m *Module) Version() string { return "2.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency { return nil }
+func (m *Module) Dependencies() []nexus.Dependency { return nil }
 
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: PermRead, Name: "View E-Sign Documents", Description: "View uploaded and signed PDF documents and the signature log"},
 		{Code: PermSign, Name: "Sign Documents", Description: "Sign PDF documents with a digital signature"},
 		{Code: PermManage, Name: "Manage E-Sign", Description: "Upload documents, run batches and configure signing"},
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{ID: "esign", ParentID: "operations", Label: "PDF E-Sign", Path: "/esign", Icon: "pen-tool", Order: 55, Labels: map[string]string{"mn": "PDF цахим гарын үсэг", "ar": "توقيع PDF الإلكتروني", "zh": "PDF 电子签名", "fr": "Signature électronique PDF", "ru": "Электронная подпись PDF", "es": "Firma electrónica PDF"}},
 	}
 }

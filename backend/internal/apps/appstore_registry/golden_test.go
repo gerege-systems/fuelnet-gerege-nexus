@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/appstore_registry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // The catalogue contract, held across a move.
@@ -62,7 +62,7 @@ func goldenApps() []appcatalog.CatalogApp {
 			Visibility: "public", Version: "1.0.0",
 			Manifest: appcatalog.Manifest{
 				ID: "io.gerege.nexus.contacts", Name: "Contacts", Version: "1.0.0", Platform: ">=1.0.0",
-				Permissions: []internal.PermissionDefinition{{Code: "contacts.read", Name: "Read contacts"}},
+				Permissions: []nexus.PermissionDefinition{{Code: "contacts.read", Name: "Read contacts"}},
 			},
 			Translations: map[string]appcatalog.CatalogAppText{"mn": {Name: "Харилцагчид"}},
 		},
@@ -77,7 +77,7 @@ func goldenApps() []appcatalog.CatalogApp {
 					LaunchURL: "https://hrms.example.mn/sso/gerege", SSOClientID: "app_hrms",
 					Scopes: []string{"openid", "profile"}, Embed: "new_tab",
 				},
-				Menus: []internal.MenuDefinition{{
+				Menus: []nexus.MenuDefinition{{
 					ID: "hrms_home", Label: "Example HRMS",
 					ExternalURL: "https://hrms.example.mn/sso/gerege", Icon: "share-2", Order: 10,
 				}},

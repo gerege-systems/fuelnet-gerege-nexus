@@ -31,8 +31,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -76,7 +75,7 @@ func New(db *pgxpool.Pool) *Module {
 		}
 	}
 
-	appregistry.Register(m)
+	nexus.Register(m)
 	return m
 }
 
@@ -84,15 +83,15 @@ func (m *Module) ID() string      { return "io.gerege.nexus.appstore_registry" }
 func (m *Module) Name() string    { return "App Store Registry" }
 func (m *Module) Version() string { return "1.0.0" }
 
-func (m *Module) Dependencies() []internal.Dependency { return nil }
+func (m *Module) Dependencies() []nexus.Dependency { return nil }
 
 // Permissions gates the parts of the registry that are not public.
 //
 // Reading the catalogue needs none — it is public. What needs a permission is
 // operating the registry: rebuilding a snapshot, reading the state a stranger
 // should not see. Publishing and review belong to the other two modules.
-func (m *Module) Permissions() []internal.PermissionDefinition {
-	return []internal.PermissionDefinition{
+func (m *Module) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
 		{Code: "appstore_registry.read", Name: "Read the registry",
 			Description: "See the registry's state and its published catalogue"},
 		{Code: "appstore_registry.manage", Name: "Operate the registry",
@@ -100,8 +99,8 @@ func (m *Module) Permissions() []internal.PermissionDefinition {
 	}
 }
 
-func (m *Module) Menus() []internal.MenuDefinition {
-	return []internal.MenuDefinition{
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{
 		{
 			ID: "appstore_registry", Label: "App Registry",
 			Path: "/module/appstore/registry", Icon: "boxes", Order: 10,

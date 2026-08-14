@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appregistry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -185,7 +185,7 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 		if ok && app.Manifest.IsExternal() {
 			continue
 		}
-		if err := appregistry.VerifyModuleExists(appID); err != nil {
+		if err := nexus.VerifyModuleExists(appID); err != nil {
 			return fmt.Errorf("compile-time module missing for %s: %w", appID, err)
 		}
 	}
@@ -295,7 +295,7 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 	if !app.Manifest.IsExternal() {
 		// Register app permissions for tenant. Get returning !ok used to fall
 		// through to a nil-interface method call and panic the request.
-		mod, ok := appregistry.Get(app.ID)
+		mod, ok := nexus.Get(app.ID)
 		if !ok {
 			return fmt.Errorf("compile-time module missing for %s", app.ID)
 		}
