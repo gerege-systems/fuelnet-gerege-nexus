@@ -1,16 +1,14 @@
 package apps
 
 import (
+	"os"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -40,9 +38,6 @@ var corePolicies = map[string]struct {
 	whyNoRouteGate string
 }{
 	"contacts":    {(*contacts.Module)(nil), "contacts.read", "contacts", ""},
-	"products":    {(*products.Module)(nil), "products.read", "products", ""},
-	"inventory":   {(*inventory.Module)(nil), "inventory.read", "inventory", ""},
-	"billing":     {(*billing.BillingModule)(nil), "billing.read", "billing", ""},
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
 
 	// The two that gate themselves, and why the verb is not enough for them.
@@ -74,12 +69,14 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 // documents does. Absent-because-considered and absent-because-forgotten look
 // identical in a table, so the difference is asserted rather than left to a
 // comment.
+var policylessModules = map[string]nexus.Module{
+	"organisation": (*organisation.Module)(nil),
+	"reports":      (*reports.Module)(nil),
+	"esign":        (*esign.Module)(nil),
+}
+
 func TestTheModulesWithNoPolicyAreTheOnesWeMeant(t *testing.T) {
-	for name, mod := range map[string]nexus.Module{
-		"organisation": (*organisation.Module)(nil),
-		"reports":      (*reports.Module)(nil),
-		"esign":        (*esign.Module)(nil),
-	} {
+	for name, mod := range policylessModules {
 		t.Run(name, func(t *testing.T) {
 			if got := nexus.MenuPermissionOf(mod); got != "" {
 				t.Errorf("expected no menu permission, got %q", got)
@@ -91,18 +88,42 @@ func TestTheModulesWithNoPolicyAreTheOnesWeMeant(t *testing.T) {
 	}
 }
 
-// The count is the point of this one. Adding a module and forgetting to decide
-// its access policy is the mistake that hides: the module works, the routes
-// mount, and nothing asks whether anyone should be able to reach them. A new
-// entry in internal/apps has to be classified in one of the two tables above
-// before this passes.
+// The count is the point of this one, and it reads the directories rather than
+// trusting a number somebody typed.
+//
+// The first version compared two hand-written constants. It would have passed
+// happily while three modules were deleted from the tree, because both
+// constants get edited in the same breath — a test that can only catch somebody
+// editing one of its own numbers and not the other is not watching anything.
+//
+// What it is for: adding a module and never deciding its access policy. The
+// module works, its routes mount, and nothing asks whether anyone should be
+// able to reach them. That mistake leaves no other trace.
 func TestEveryModuleInThisRepositoryIsClassified(t *testing.T) {
-	const classified = 7 + 3 // corePolicies + the deliberately-empty ones
-	const inRepository = 10  // directories under internal/apps holding a module
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read internal/apps: %v", err)
+	}
 
-	if classified != inRepository {
-		t.Fatalf("%d modules classified, %d in the repository — a new module "+
-			"needs an entry in corePolicies or in the empty-policy test",
-			classified, inRepository)
+	unseen := map[string]bool{}
+	for name := range corePolicies {
+		unseen[name] = true
+	}
+	for name := range policylessModules {
+		unseen[name] = true
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if !unseen[entry.Name()] {
+			t.Errorf("internal/apps/%s is not classified — add it to corePolicies "+
+				"or to policylessModules, having decided what gates it", entry.Name())
+		}
+		delete(unseen, entry.Name())
+	}
+	for name := range unseen {
+		t.Errorf("%s is classified but no longer exists; drop it from the table", name)
 	}
 }

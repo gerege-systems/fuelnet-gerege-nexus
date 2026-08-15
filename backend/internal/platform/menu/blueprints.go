@@ -40,23 +40,6 @@ var blueprints = map[string]blueprint{
 	// products has one working screen and nothing else to stand on: the table
 	// holds sku, name, price and active, so categories, price lists, units,
 	// attributes and tax profiles would each be a menu entry over no data.
-	"io.gerege.nexus.products": {Slug: "products"},
-
-	"io.gerege.nexus.inventory": {Slug: "inventory",
-		Modules: []futureMenu{
-			{ID: "replenishment", EN: "Replenishment", Icon: "refresh-cw", Labels: map[string]string{
-				"mn": "Нөхөн дүүргэлт", "ar": "إعادة التزويد", "zh": "补货", "fr": "Réapprovisionnement", "ru": "Пополнение", "es": "Reabastecimiento"}},
-		},
-		Settings: []futureMenu{
-			{ID: "warehouses", EN: "Warehouses", Icon: "warehouse", Labels: map[string]string{
-				"mn": "Агуулах", "ar": "المستودعات", "zh": "仓库", "fr": "Entrepôts", "ru": "Склады", "es": "Almacenes"}},
-		}},
-
-	"io.gerege.nexus.billing": {Slug: "billing",
-		Modules: []futureMenu{
-			{ID: "reports", EN: "Revenue reports", Icon: "chart-column", Labels: map[string]string{
-				"mn": "Орлогын тайлан", "ar": "تقارير الإيرادات", "zh": "收入报表", "fr": "Rapports de revenus", "ru": "Отчёты о доходах", "es": "Informes de ingresos"}},
-		}},
 
 	"io.gerege.nexus.documents": {Slug: "documents",
 		Modules: []futureMenu{

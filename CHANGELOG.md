@@ -49,6 +49,39 @@ it is a deployment rather than a project.
   no routes and lists no menu.
 
 
+## [Unreleased]
+
+### Removed — Commerce left, and is a product of its own
+
+The third and last of the planned vertical splits. `apps/products`,
+`apps/inventory` and `apps/billing` now live in
+[commerce-gerege-nexus](https://github.com/gerege-systems/commerce-gerege-nexus).
+
+As with State Services, no composition image: production carries two tenants,
+and `products`, `stock_levels` and `billing_invoices` hold zero rows between
+them. A deployment that wants commerce runs the distribution.
+
+- **Migrations `00003` and `00004` stay**, and the distribution re-declares the
+  five tables rather than moving them. It could not move them: `00003` creates
+  `contacts` — which the platform keeps — in the same file, and `00004` creates
+  `sessions` and `oauth2_clients` beside the invoices. This entanglement, not
+  the foreign keys the plan blamed, is why commerce was last.
+- **Every index in the distribution's copy is `IF NOT EXISTS`.** The originals
+  were not: `CREATE INDEX idx_products_tenant` with no guard is harmless when a
+  migration runs once against an empty database, and fatal in a history that
+  runs against databases already carrying the platform's copy of these tables.
+- `invoices_created_total` registers tolerantly. During a split the module is
+  compiled twice — once inside the platform it depends on, once in the
+  distribution — and `MustRegister` turns that into a panic at init, before any
+  logging, nowhere near the cause. A module should not stop a binary from
+  booting because an older copy of itself was compiled alongside.
+- **The classification guard now reads the directory.** It compared two
+  hand-written constants, which would have passed while these three modules
+  were deleted, because both numbers get edited in the same breath. It now
+  fails in both directions and both were demonstrated.
+- The frontend pages stay, for the reason they stayed for State Services: the
+  shell is one image serving every deployment.
+
 ## [1.3.0] - 2026-08-15
 
 ### Added — the reporting contract and the document capability, both so a module elsewhere can use them

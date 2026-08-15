@@ -8,14 +8,11 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/billing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
@@ -49,9 +46,6 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	// is their app-facing surface, and the thing contacts reaches through.
 	egov.New(p, xyp, rails)
 	contacts.New(p)
-	products.New(p)
-	inventory.New(p, false)
-	billing.New(p)
 	documents.New(p)
 	sso_clients.New(sso)
 	// The App Store's three modules used to be constructed here. They are a
