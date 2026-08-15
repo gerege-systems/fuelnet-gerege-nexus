@@ -73,10 +73,16 @@ var demoTenants = []struct {
 	roleID string
 	// The apps installed for this tenant. They differ deliberately — after
 	// switching, the sidebar and the app rail must visibly be somebody else's.
+	//
+	// Only apps this binary compiles. The list used to name products,
+	// inventory and billing, which left for the commerce distribution; seeding
+	// went on asking for them and logged a warning per app per boot. A seed
+	// that routinely fails is a seed nobody reads, and the day it fails for a
+	// real reason nobody will notice either.
 	apps []string
 }{
-	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"contacts", "products", "inventory", "documents"}},
-	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"contacts", "billing"}},
+	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"contacts", "documents", "egov"}},
+	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"contacts", "esign"}},
 }
 
 // seedingEnabled reports whether the documented demo account should be
