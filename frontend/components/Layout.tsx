@@ -286,6 +286,12 @@ export default function Layout({children}:{children:React.ReactNode}){
     {/* Issuing a key that sends mail in the tenant's name is administrative, and
         the API behind this screen is admin-only, so the link follows it. */}
     {user?.is_admin&&<NavLink href="/settings/email-verification" active={pathname==="/settings/email-verification"} icon={<MailCheck className="w-5 h-5"/>} label={t("web.menu.email_verification")}/>}
+    {/* Өртөө: the channel to the installations above and below this one.
+        Under Settings rather than Modules because it is configuration that has
+        to outlive the task board being uninstalled — the links carry work for
+        whatever module asks, and the app is only one of them. Administrator
+        only, like the API behind it. */}
+    {user?.is_admin&&<NavLink href="/settings/urtuu" active={pathname==="/settings/urtuu"} icon={<Route className="w-5 h-5"/>} label={t("web.menu.urtuu")}/>}
     {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={t("access.view.title")}/>}
   </MenuGroup></>;
 

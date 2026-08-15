@@ -88,6 +88,11 @@ func (s *Service) exchangeLoop(ctx context.Context) {
 			slog.Warn("urtuu: could not read the links to poll", "error", err)
 		}
 		s.exchangeRound(ctx, links)
+		// Draining the inbox is on this loop rather than a loop of its own
+		// because it has to run on both sides: a parent's inbox is filled by a
+		// child pushing, and a parent has no child links to poll. The round
+		// happens whether or not there was anything to talk to.
+		s.processInbox(ctx)
 
 		select {
 		case <-ctx.Done():

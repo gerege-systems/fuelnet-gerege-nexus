@@ -39,9 +39,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -79,6 +81,17 @@ type Service struct {
 	installationID string
 
 	client *http.Client
+
+	// ring is the state register, when this deployment has been given
+	// credentials for it. Nil is the ordinary case and means the import button
+	// says so rather than failing under somebody's finger.
+	ring RingImporter
+
+	// readers is who reads which kind of envelope. A plain map behind a lock:
+	// it is written a handful of times during construction and read once per
+	// envelope that arrives.
+	readersMu sync.RWMutex
+	readers   map[string]Reader
 
 	// pollWindow is how long HandlePull holds a connection open with nothing to
 	// say. A field rather than the constant alone so the integration tests do
@@ -125,6 +138,13 @@ func New(db *pgxpool.Pool, perms nexus.PermissionStore) *Service {
 	s.installationID = hex.EncodeToString(sum[:16])
 	slog.Info("urtuu: this installation can exchange work with its peers",
 		"installation_id", s.installationID, "public_key", s.PublicKey())
+
+	// The register, and the one kind of envelope this package reads for itself.
+	// The task kinds belong to the Өртөө app and are registered by it, so an
+	// installation without the app still receives, stores and acknowledges them
+	// — and processes them the day it is installed.
+	s.ring = newRingImporter(s.client)
+	s.Deliver(contract.KindCodeSync, s.receiveCodeSync)
 	return s
 }
 
@@ -262,6 +282,21 @@ func (s *Service) TenantRoutes(pr chi.Router) {
 		cr.With(manage).Post("/", s.handleJoin)
 		cr.With(manage).Post("/{id}/confirm", s.handleConfirm)
 		cr.With(manage).Post("/{id}/revoke", s.handleRevoke)
+		// Which of this organisation's codes a link may carry. A PUT because it
+		// replaces the whole set — see handleSetPeerCodes for why adding is not
+		// the operation.
+		cr.With(manage).Put("/{id}/codes", s.handleSetPeerCodes)
+	})
+	pr.Route("/urtuu/codes", func(cr chi.Router) {
+		read := nexus.RequirePermission(s.perms, "urtuu.read")
+		manage := nexus.RequirePermission(s.perms, "urtuu.manage")
+		cr.With(read).Get("/", s.handleListCodes)
+		cr.With(manage).Post("/", s.handleCreateCode)
+		cr.With(manage).Put("/{id}", s.handleUpdateCode)
+		// Reaching out to the state register changes the vocabulary every child
+		// of this organisation will be offered, so it is a manage act even
+		// though nothing local is authored by it.
+		cr.With(manage).Post("/ring-sync", s.handleRingSync)
 	})
 }
 
