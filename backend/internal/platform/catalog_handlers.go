@@ -104,6 +104,31 @@ func appReadPermission(appID string) string {
 	return nexus.MenuPermissionOf(mod)
 }
 
+// runnableHere reports whether this binary could actually run the app.
+//
+// The catalogue is not this repository's list. It arrives signed from a store
+// that serves every deployment in the field, so it advertises apps built from
+// other repositories — and after a distribution split it goes on advertising
+// the app that left for as long as the store's document says so, which is a
+// decision somebody makes deliberately rather than a side effect of a merge.
+//
+// Offering one of those is offering a button that cannot work: the installer
+// checks for a compiled module and refuses, correctly, with an error about
+// binary registries that means nothing to the administrator who pressed
+// Install. Not listing it is the honest answer — this deployment does not have
+// that app, and the fix is to run a distribution that does.
+//
+// External apps are the deliberate exception. They have no Go module by
+// definition, because they are somebody else's running service reached over
+// OIDC; requiring one would hide the whole category.
+func runnableHere(app catalog.CatalogApp) bool {
+	if app.Manifest.IsExternal() {
+		return true
+	}
+	_, compiled := lookupModule(app.ID)
+	return compiled
+}
+
 func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := tenant.FromContext(r.Context())
 	available := s.installer.GetCatalog()
@@ -133,6 +158,9 @@ func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {
 	locale := config.LocaleFromRequest(r)
 	res := make([]StoreAppResponse, 0, len(available))
 	for _, app := range available {
+		if !runnableHere(app) {
+			continue
+		}
 		held, installed := installedStates[app.ID]
 		res = append(res, StoreAppResponse{
 			CatalogApp:       app.Localized(locale),
@@ -155,8 +183,12 @@ func (s *Server) handleGetStoreApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Same rule as the list, for the same reason: an app this binary cannot run
+	// is not an app this deployment has. Answering 404 rather than a detail
+	// page keeps a direct link from offering an Install button that the
+	// installer will refuse.
 	app, ok := s.installer.GetAppBySlug(slug)
-	if !ok {
+	if !ok || !runnableHere(app) {
 		httpx.Error(w, http.StatusNotFound, "app not found")
 		return
 	}
