@@ -77,6 +77,8 @@ func (taskCompletion) Columns() []nexus.ColumnSpec {
 	return []nexus.ColumnSpec{
 		{Key: "code", Kind: nexus.ColumnText, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Код", "en": "Code", "ru": "Код", "zh": "代码", "fr": "Code", "es": "Código", "ar": "الرمز"}},
+		{Key: "line", Kind: nexus.ColumnText,
+			Titles: map[string]string{"mn": "Шугам", "en": "Line", "ru": "Линия", "zh": "线路", "fr": "Ligne", "es": "Línea", "ar": "الخط"}},
 		{Key: "peer", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Платформ", "en": "Installation", "ru": "Платформа", "zh": "平台", "fr": "Installation", "es": "Instalación", "ar": "المنصّة"}},
 		{Key: "raised", Kind: nexus.ColumnNumber, Total: true,
@@ -98,8 +100,12 @@ func (taskCompletion) Columns() []nexus.ColumnSpec {
 // came from for received work, where it went for delegated. Both are the same
 // question from the reader's side: who this task was between.
 func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
+	// Grouped by line as well as by code, because the two lines answer to
+	// different people: a service request's completion is owed to somebody
+	// outside the platform, and mixing the two into one rate would average
+	// away exactly the number a citizen-facing office is judged on.
 	const query = `
-		SELECT t.code,
+		SELECT t.code, t.line,
 		       coalesce(nullif(op.name, ''), nullif(tp.name, ''), '—')       AS peer,
 		       count(*)                                                       AS raised,
 		       count(*) FILTER (WHERE t.status IN ('COMPLETED', 'CLOSED'))     AS completed,
@@ -113,8 +119,8 @@ func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) 
 		  LEFT JOIN urtuu_peers op ON op.id = t.origin_peer_id
 		  LEFT JOIN urtuu_peers tp ON tp.id = t.target_peer_id
 		 WHERE t.tenant_id = $1 AND t.created_at >= $2 AND t.created_at <= $3
-		 GROUP BY 1, 2
-		 ORDER BY 3 DESC, 1
+		 GROUP BY 1, 2, 3
+		 ORDER BY 4 DESC, 1
 		 LIMIT 500`
 
 	rows, err := q.Query(ctx, query,
@@ -124,10 +130,10 @@ func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) 
 	}
 
 	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
-		var code, peer string
+		var code, line, peer string
 		var raised, completed, returned int64
 		var avgDays float64
-		if err := rows.Scan(&code, &peer, &raised, &completed, &returned, &avgDays); err != nil {
+		if err := rows.Scan(&code, &line, &peer, &raised, &completed, &returned, &avgDays); err != nil {
 			return nil, err
 		}
 		rate := 0.0
@@ -135,7 +141,7 @@ func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) 
 			rate = float64(completed) / float64(raised) * 100
 		}
 		return map[string]any{
-			"code": code, "peer": peer, "raised": raised, "completed": completed,
+			"code": code, "line": line, "peer": peer, "raised": raised, "completed": completed,
 			"returned": returned, "rate": rate, "avg_days": round1(avgDays),
 		}, nil
 	})
@@ -173,6 +179,8 @@ func (slaBreaches) Columns() []nexus.ColumnSpec {
 			Titles: map[string]string{"mn": "Даалгавар", "en": "Task", "ru": "Задание", "zh": "任务", "fr": "Tâche", "es": "Tarea", "ar": "المهمة"}},
 		{Key: "code", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Код", "en": "Code", "ru": "Код", "zh": "代码", "fr": "Code", "es": "Código", "ar": "الرمز"}},
+		{Key: "line", Kind: nexus.ColumnText,
+			Titles: map[string]string{"mn": "Шугам", "en": "Line", "ru": "Линия", "zh": "线路", "fr": "Ligne", "es": "Línea", "ar": "الخط"}},
 		{Key: "peer", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Платформ", "en": "Installation", "ru": "Платформа", "zh": "平台", "fr": "Installation", "es": "Instalación", "ar": "المنصّة"}},
 		{Key: "status", Kind: nexus.ColumnText,
@@ -192,7 +200,7 @@ func (slaBreaches) Columns() []nexus.ColumnSpec {
 // accepting the outcome is what ends the question.
 func (slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
-		SELECT t.title, t.code,
+		SELECT t.title, t.code, t.line,
 		       coalesce(nullif(op.name, ''), nullif(tp.name, ''), '—') AS peer,
 		       t.status, t.deadline::date,
 		       EXTRACT(EPOCH FROM (
@@ -206,7 +214,7 @@ func (slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (ne
 		   AND t.created_at >= $2 AND t.created_at <= $3
 		   AND (CASE WHEN t.status IN ('COMPLETED', 'RETURNED') THEN t.updated_at
 		             ELSE NOW() END) > t.deadline
-		 ORDER BY 6 DESC
+		 ORDER BY 7 DESC
 		 LIMIT 500`
 
 	rows, err := q.Query(ctx, query,
@@ -216,14 +224,14 @@ func (slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (ne
 	}
 
 	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
-		var title, code, peer, status string
+		var title, code, line, peer, status string
 		var deadline time.Time
 		var late float64
-		if err := rows.Scan(&title, &code, &peer, &status, &deadline, &late); err != nil {
+		if err := rows.Scan(&title, &code, &line, &peer, &status, &deadline, &late); err != nil {
 			return nil, err
 		}
 		return map[string]any{
-			"title": title, "code": code, "peer": peer, "status": status,
+			"title": title, "code": code, "line": line, "peer": peer, "status": status,
 			"deadline": deadline, "days_late": round1(late),
 		}, nil
 	})

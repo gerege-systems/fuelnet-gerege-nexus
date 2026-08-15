@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	transport "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
@@ -33,10 +34,19 @@ type assignment struct {
 	// TaskID is the *sender's* row id — the mirror it keeps of this work. It
 	// comes back on every update, which is how the two sides stay matched
 	// without either of them having to know the other's database.
-	TaskID  string          `json:"task_id"`
-	Code    string          `json:"code"`
+	TaskID string `json:"task_id"`
+	Code   string `json:"code"`
+	// Line is which promise this work is under. It travels because the
+	// receiving installation has to know: a service request it accepts is one
+	// it cannot close without an answer for somebody outside the platform.
+	Line    string          `json:"line"`
 	Title   string          `json:"title"`
 	Payload json.RawMessage `json:"payload"`
+	// Applicant is who asked, on the service line. It moves downward with the
+	// work — the office that has to issue a certificate cannot issue it to
+	// nobody — and nothing else the sending installation knows about them
+	// travels with it.
+	Applicant json.RawMessage `json:"applicant,omitempty"`
 	// Deadline is the sender's, and it is absolute rather than a duration:
 	// the two clocks disagree, and a duration would be measured from whichever
 	// of them happened to be reading.
@@ -54,9 +64,14 @@ type update struct {
 	// TaskID is the *recipient's* row id, taken from the assignment that
 	// started this. The sender of an update is naming a row in the receiver's
 	// database, which is the only way an answer can find its question.
-	TaskID   string          `json:"task_id"`
-	Status   string          `json:"status"`
-	Note     string          `json:"note,omitempty"`
+	TaskID string `json:"task_id"`
+	Status string `json:"status"`
+	Note   string `json:"note,omitempty"`
+	// Answer is what is being told back to the applicant, on the service line.
+	// It is the reason that line exists: the fulfilment has to arrive at the
+	// installation the person applied to, or their question was answered
+	// somewhere they will never see.
+	Answer   string          `json:"answer,omitempty"`
 	Evidence json.RawMessage `json:"evidence,omitempty"`
 }
 
@@ -81,11 +96,12 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 	var mirrorID string
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, title, payload, target_peer_id, parent_task_id,
-		     origin_chain, status, deadline, evidence, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'RECEIVED', $8, $9, NULLIF($10, '')::uuid)
+		    (tenant_id, code, line, title, payload, applicant, target_peer_id,
+		     parent_task_id, origin_chain, status, deadline, evidence, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'RECEIVED', $10, $11, NULLIF($12, '')::uuid)
 		RETURNING id`,
-		tenantID, parent.Code, parent.Title, parent.Payload, peerID, parent.ID,
+		tenantID, parent.Code, parent.Line, parent.Title, parent.Payload,
+		applicantOrEmpty(parent.Applicant), peerID, parent.ID,
 		parent.OriginChain, deadline, parent.Evidence, actorUserID).Scan(&mirrorID); err != nil {
 		return err
 	}
@@ -96,8 +112,10 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 	_, err = m.link.EnqueueTx(ctx, tx, tenantID, contract.KindTaskAssigned, assignment{
 		TaskID:      mirrorID,
 		Code:        parent.Code,
+		Line:        parent.Line,
 		Title:       parent.Title,
 		Payload:     parent.Payload,
+		Applicant:   parent.Applicant,
 		Deadline:    deadline,
 		OriginChain: parent.OriginChain,
 		Evidence:    readEvidence(parent.Evidence),
@@ -127,9 +145,13 @@ func (m *Module) reportUp(ctx context.Context, tenantID string, task Task, note 
 		return
 	}
 	if _, err := m.link.Enqueue(ctx, tenantID, contract.KindTaskUpdate, update{
-		TaskID:   task.OriginTaskRef(),
-		Status:   task.Status,
-		Note:     note,
+		TaskID: task.OriginTaskRef(),
+		Status: task.Status,
+		Note:   note,
+		// The answer travels with every update rather than only with the
+		// completion: a service request that was answered and then returned for
+		// a correction has two answers to show, in order.
+		Answer:   task.Answer,
 		Evidence: encoded,
 	}, task.OriginPeerID); err != nil {
 		slog.Warn("urtuu: could not report a task's state upward",
@@ -195,15 +217,16 @@ func (m *Module) receiveAssignment(ctx context.Context, message transport.Receiv
 	var taskID string
 	err = tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, title, payload, origin_peer_id, origin_task_id,
-		     origin_chain, status, deadline, evidence)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'RECEIVED', $8, $9)
+		    (tenant_id, code, line, title, payload, applicant, origin_peer_id,
+		     origin_task_id, origin_chain, status, deadline, evidence)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'RECEIVED', $10, $11)
 		-- The unique index on (origin_peer_id, origin_task_id). A reader has to
 		-- be safe to repeat: the envelope is идемпотент by message id, but the
 		-- write that marks it read can fail after this one succeeded.
 		ON CONFLICT (origin_peer_id, origin_task_id) WHERE origin_peer_id IS NOT NULL DO NOTHING
 		RETURNING id`,
-		message.TenantID, work.Code, work.Title, payloadOrEmpty(work.Payload),
+		message.TenantID, work.Code, lineOf(work.Line), work.Title, payloadOrEmpty(work.Payload),
+		applicantOrEmpty(work.Applicant),
 		message.PeerID, work.TaskID, append(work.OriginChain, m.link.InstallationID()),
 		deadline, incomingEvidence).Scan(&taskID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -303,8 +326,10 @@ func (m *Module) receiveUpdate(ctx context.Context, message transport.Received) 
 	if _, err := tx.Exec(ctx, `
 		UPDATE urtuu_tasks
 		   SET status = $2, note = CASE WHEN $3 = '' THEN note ELSE $3 END,
+		       answer = CASE WHEN $5 = '' THEN answer ELSE $5 END,
 		       evidence = coalesce($4, evidence), updated_at = NOW()
-		 WHERE id = $1`, news.TaskID, news.Status, news.Note, evidenceOrNil(news.Evidence)); err != nil {
+		 WHERE id = $1`, news.TaskID, news.Status, news.Note,
+		evidenceOrNil(news.Evidence), news.Answer); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -348,6 +373,13 @@ func (m *Module) rollUp(ctx context.Context, tenantID, parentID string) {
 		return
 	}
 
+	// On the service line the answer has to arrive where the person applied,
+	// not merely where the work was done. So the branches' answers are gathered
+	// onto the task they were split from before it completes — which is also
+	// what makes the roll-up possible at all: the schema refuses a completed
+	// service request with nothing to tell the applicant (migration 00065).
+	m.gatherAnswers(ctx, tenantID, parentID)
+
 	parent, err := m.move(ctx, tenantID, parentID, contract.StatusCompleted, "", "",
 		"every delegated branch is complete")
 	if err != nil {
@@ -361,6 +393,67 @@ func (m *Module) rollUp(ctx context.Context, tenantID, parentID string) {
 	// bottom, one link at a time.
 	if parent.ParentTaskID != "" {
 		m.rollUp(ctx, tenantID, parent.ParentTaskID)
+	}
+}
+
+// gatherAnswers copies what the branches said back onto the task above them.
+//
+// One branch answers as itself; several are joined and each is named, because
+// "the certificate was issued" from one office and "no record found" from
+// another are two different answers to the same request and the person who
+// asked is entitled to both.
+//
+// Nothing is done on the assignment line, and nothing is overwritten: an
+// answer already written here was written by somebody at this installation,
+// and a roll-up is not the thing that should replace it.
+func (m *Module) gatherAnswers(ctx context.Context, tenantID, parentID string) {
+	ctx = nexus.WithTenantID(ctx, tenantID)
+
+	var line, existing string
+	if err := m.db.QueryRow(ctx,
+		`SELECT line, answer FROM urtuu_tasks WHERE id = $1`, parentID).Scan(&line, &existing); err != nil {
+		return
+	}
+	if line != contract.LineService || strings.TrimSpace(existing) != "" {
+		return
+	}
+
+	rows, err := m.db.Query(ctx, `
+		SELECT coalesce(nullif(p.name, ''), '—'), t.answer
+		  FROM urtuu_tasks t
+		  LEFT JOIN urtuu_peers p ON p.id = t.target_peer_id
+		 WHERE t.parent_task_id = $1 AND t.target_peer_id IS NOT NULL AND t.answer <> ''
+		 ORDER BY t.created_at`, parentID)
+	if err != nil {
+		slog.Warn("urtuu: could not gather a request's answers", "task_id", parentID, "error", err)
+		return
+	}
+	defer rows.Close()
+
+	var parts []string
+	for rows.Next() {
+		var peer, answer string
+		if err := rows.Scan(&peer, &answer); err != nil {
+			return
+		}
+		parts = append(parts, peer+": "+answer)
+	}
+	if err := rows.Err(); err != nil || len(parts) == 0 {
+		return
+	}
+	// One branch answers as itself; the office's name only helps when there is
+	// more than one of them.
+	answer := parts[0]
+	if len(parts) > 1 {
+		answer = strings.Join(parts, "\n")
+	} else if peer, rest, found := strings.Cut(parts[0], ": "); found {
+		_ = peer
+		answer = rest
+	}
+	if _, err := m.db.Exec(ctx,
+		`UPDATE urtuu_tasks SET answer = $2, updated_at = NOW() WHERE id = $1`,
+		parentID, answer); err != nil {
+		slog.Warn("urtuu: could not record a request's answer", "task_id", parentID, "error", err)
 	}
 }
 
@@ -390,6 +483,25 @@ func rank(status string) int {
 // nothing here, it is only ever quoted back. Keeping it off the JSON keeps
 // another installation's internal identifier out of this one's API.
 func (t Task) OriginTaskRef() string { return t.originTaskID }
+
+// lineOf keeps an envelope from an older build readable. A peer that does not
+// know about the two lines can only be sending assignments, because that is the
+// only thing its build could raise.
+func lineOf(line string) string {
+	if contract.KnownLine(line) {
+		return line
+	}
+	return contract.LineAssignment
+}
+
+// applicantOrEmpty renders an applicant for a NOT NULL column. Absent is `{}`,
+// which is the honest empty value on the assignment line.
+func applicantOrEmpty(raw json.RawMessage) []byte {
+	if len(raw) == 0 {
+		return []byte(`{}`)
+	}
+	return raw
+}
 
 func payloadOrEmpty(raw json.RawMessage) []byte {
 	if len(raw) == 0 {

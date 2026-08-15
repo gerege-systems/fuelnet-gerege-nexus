@@ -78,6 +78,56 @@ export function useStatusLabel() {
   return (status: string) => labels[status] || status;
 }
 
+/**
+ * The two lines, as a tab strip.
+ *
+ * Tabs and not a dropdown, because they are not a filter over one list — they
+ * are two different promises, and somebody working the service queue is doing a
+ * different job from somebody working the assignment queue. "All" stays
+ * available for the person who wants the whole desk at once.
+ */
+export function LineTabs({
+  line,
+  onChange,
+}: {
+  line: "" | "service" | "assignment";
+  onChange: (line: "" | "service" | "assignment") => void;
+}) {
+  const { t } = useI18n();
+  const tabs: { value: "" | "service" | "assignment"; label: string }[] = [
+    { value: "", label: t("urtuu.filter.all") },
+    { value: "service", label: t("urtuu.line.service") },
+    { value: "assignment", label: t("urtuu.line.assignment") },
+  ];
+  return (
+    <div className="flex flex-wrap gap-1 border-b border-slate-200">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          onClick={() => onChange(tab.value)}
+          className={`px-3 py-1.5 text-xs font-semibold border-b-2 -mb-px transition ${
+            line === tab.value
+              ? "border-indigo-600 text-indigo-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** useLineLabel keeps the dynamic key out of t(), like useStatusLabel. */
+export function useLineLabel() {
+  const { t } = useI18n();
+  const labels: Record<string, string> = {
+    service: t("urtuu.line.service"),
+    assignment: t("urtuu.line.assignment"),
+  };
+  return (line: string) => labels[line] || line;
+}
+
 export function StatusChip({ status }: { status: string }) {
   const label = useStatusLabel();
   return <Chip tone={STATUS_TONE[status] || "slate"}>{label(status)}</Chip>;
@@ -104,6 +154,7 @@ export function TaskQueue({ tasks, empty }: { tasks: UrtuuTask[]; empty: React.R
         <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[11px]">
           <tr>
             <th className="px-3 py-2 text-left">{t("urtuu.field.code")}</th>
+            <th className="px-3 py-2 text-left">{t("urtuu.field.applicant")}</th>
             <th className="px-3 py-2 text-left">{t("urtuu.field.title")}</th>
             <th className="px-3 py-2 text-left">{t("urtuu.field.status")}</th>
             <th className="px-3 py-2 text-left">{t("urtuu.field.deadline")}</th>
@@ -114,6 +165,12 @@ export function TaskQueue({ tasks, empty }: { tasks: UrtuuTask[]; empty: React.R
           {tasks.map((task) => (
             <tr key={task.id} className="hover:bg-slate-50">
               <td className="px-3 py-2 font-mono text-xs text-slate-600 align-top">{task.code}</td>
+              {/* Who asked, on the service line. An empty cell on the
+                  assignment line is the truth there: nobody outside the
+                  platform is waiting. */}
+              <td className="px-3 py-2 align-top text-xs text-slate-600">
+                {task.applicant?.name || "—"}
+              </td>
               <td className="px-3 py-2 align-top">
                 <Link
                   href={`/module/urtuu/tasks/${task.id}`}

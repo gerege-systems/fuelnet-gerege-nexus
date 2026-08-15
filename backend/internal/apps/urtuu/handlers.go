@@ -41,6 +41,7 @@ func (m *Module) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	filter := taskFilter{
 		Direction: query.Get("direction"),
+		Line:      strings.TrimSpace(query.Get("line")),
 		Status:    strings.ToUpper(strings.TrimSpace(query.Get("status"))),
 		Code:      strings.TrimSpace(query.Get("code")),
 		Overdue:   query.Get("overdue") == "true",
@@ -50,6 +51,10 @@ func (m *Module) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// is no work", which is the wrong answer to a typo.
 	if filter.Status != "" && !contract.KnownStatus(contract.TaskStatus(filter.Status)) {
 		nexus.Error(w, http.StatusBadRequest, "no such status: "+filter.Status)
+		return
+	}
+	if filter.Line != "" && !contract.KnownLine(filter.Line) {
+		nexus.Error(w, http.StatusBadRequest, "no such line: "+filter.Line)
 		return
 	}
 	if filter.ParentID != "" {
@@ -127,6 +132,10 @@ type createRequest struct {
 	// work needs no instrument, and the ones that do are the ones that have to
 	// be able to prove it.
 	Document *documentRequest `json:"document"`
+	// Applicant is who asked. Required on the service line and refused on the
+	// assignment line: an order from a ministry has no applicant, and letting
+	// one be attached would invent a citizen behind an internal instruction.
+	Applicant *contract.Applicant `json:"applicant"`
 }
 
 // handleCreateTask raises work and, if it names any links, sends it.
@@ -167,6 +176,21 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The line comes from the code, never from the request. A code imported
+	// from ring.dgov.mn is a state service; one an organisation authored for
+	// its own orders is an assignment. If the raiser could choose, one code
+	// would be usable under two different promises — and the promise is the
+	// whole distinction between the two lines.
+	line := code.Line
+	if !contract.KnownLine(line) {
+		line = contract.LineAssignment
+	}
+	applicant, err := applicantFor(line, request.Applicant)
+	if err != nil {
+		nexus.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Before the transaction, because filing a document is somebody else's
 	// write and must not be inside one this handler might roll back — a task
 	// that failed to send would otherwise leave an orphan document in the
@@ -189,6 +213,7 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	root := Task{
 		Code:    code.Code,
+		Line:    line,
 		Title:   titleFor(code, request.Title, localeOf(r)),
 		Payload: payloadOrEmpty(request.Payload),
 		// The chain starts here. Every installation this work reaches adds
@@ -196,6 +221,7 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		OriginChain: []string{m.link.InstallationID()},
 	}
 	root.Evidence = encodedEvidence
+	root.Applicant = applicant
 	deadline := deadlineFor(code, request.Deadline, now)
 
 	// A task with branches is delegated from birth; one kept here starts where
@@ -217,11 +243,11 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	actor := actorOf(r)
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, title, payload, origin_chain, status, deadline, note,
-		     evidence, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, '')::uuid)
+		    (tenant_id, code, line, title, payload, applicant, origin_chain, status,
+		     deadline, note, evidence, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, '')::uuid)
 		RETURNING id`,
-		tenantID, root.Code, root.Title, root.Payload, root.OriginChain,
+		tenantID, root.Code, line, root.Title, root.Payload, applicant, root.OriginChain,
 		string(status), deadline, strings.TrimSpace(request.Note),
 		encodedEvidence, actor).Scan(&root.ID); err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not raise the task")
@@ -427,6 +453,9 @@ func (m *Module) transition(w http.ResponseWriter, r *http.Request,
 	r.Body = http.MaxBytesReader(w, r.Body, maxTaskBody)
 	var request struct {
 		Note string `json:"note"`
+		// Answer is what the applicant is being told. Required to complete a
+		// service-line task and meaningless on the assignment line.
+		Answer string `json:"answer"`
 		// Document is how a completion carries its proof: the report that was
 		// signed, filed here and referenced by the update that goes upward.
 		Document *documentRequest `json:"document"`
@@ -439,18 +468,43 @@ func (m *Module) transition(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	// The service line's whole promise, checked here so the caller gets a
+	// sentence rather than a constraint violation. The constraint is still
+	// there — see migration 00065 — because a check in one handler is a check
+	// that can be gone round, and "completed with nothing to tell the person
+	// who asked" is the failure this line exists to prevent.
+	current, err := m.getTask(r.Context(), tenantID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		nexus.Error(w, http.StatusNotFound, "no such task")
+		return
+	}
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the task")
+		return
+	}
+	answer := strings.TrimSpace(request.Answer)
+	if to == contract.StatusCompleted && current.Line == contract.LineService &&
+		current.TargetPeerID == "" && answer == "" && strings.TrimSpace(current.Answer) == "" {
+		nexus.Error(w, http.StatusBadRequest,
+			"a service request cannot be completed without an answer for the applicant")
+		return
+	}
+	if answer != "" {
+		if _, err := m.db.Exec(nexus.WithTenantID(r.Context(), tenantID),
+			`UPDATE urtuu_tasks SET answer = $2, updated_at = NOW() WHERE id = $1`,
+			id, answer); err != nil {
+			nexus.Error(w, http.StatusInternalServerError, "could not record the answer")
+			return
+		}
+	}
+
 	if !request.Document.empty() {
 		evidence, err := m.attachDocument(r.Context(), tenantID, request.Document)
 		if err != nil {
 			nexus.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		existing, err := m.getTask(r.Context(), tenantID, id)
-		if err != nil {
-			nexus.Error(w, http.StatusNotFound, "no such task")
-			return
-		}
-		encoded, err := withEvidence(existing.Evidence, evidence)
+		encoded, err := withEvidence(current.Evidence, evidence)
 		if err != nil {
 			nexus.Error(w, http.StatusInternalServerError, "could not record the attachment")
 			return
@@ -498,12 +552,12 @@ func (m *Module) handleBoard(w http.ResponseWriter, r *http.Request) {
 		SELECT CASE WHEN origin_peer_id IS NOT NULL THEN 'incoming'
 		            WHEN target_peer_id IS NOT NULL THEN 'outgoing'
 		            ELSE 'local' END AS direction,
-		       status,
+		       line, status,
 		       count(*),
 		       count(*) FILTER (WHERE deadline IS NOT NULL AND deadline < NOW() AND status <> 'CLOSED')
 		  FROM urtuu_tasks
 		 WHERE tenant_id = $1
-		 GROUP BY 1, 2`, tenantID)
+		 GROUP BY 1, 2, 3`, tenantID)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not read the board")
 		return
@@ -512,6 +566,7 @@ func (m *Module) handleBoard(w http.ResponseWriter, r *http.Request) {
 
 	type tally struct {
 		Direction string `json:"direction"`
+		Line      string `json:"line"`
 		Status    string `json:"status"`
 		Count     int    `json:"count"`
 		Overdue   int    `json:"overdue"`
@@ -519,7 +574,7 @@ func (m *Module) handleBoard(w http.ResponseWriter, r *http.Request) {
 	counts := make([]tally, 0, 16)
 	for rows.Next() {
 		var item tally
-		if err := rows.Scan(&item.Direction, &item.Status, &item.Count, &item.Overdue); err != nil {
+		if err := rows.Scan(&item.Direction, &item.Line, &item.Status, &item.Count, &item.Overdue); err != nil {
 			nexus.Error(w, http.StatusInternalServerError, "could not read the board")
 			return
 		}
@@ -692,4 +747,28 @@ func localeOf(r *http.Request) string {
 		return strings.ToLower(locale[:2])
 	}
 	return "mn"
+}
+
+// applicantFor validates who is said to have asked.
+//
+// Required on the service line and refused on the assignment line. Both halves
+// matter: a request with no applicant is one nobody can answer, and an
+// applicant attached to a ministry's internal order invents a citizen behind an
+// instruction that had none.
+func applicantFor(line string, given *contract.Applicant) ([]byte, error) {
+	if line != contract.LineService {
+		if given != nil && given.Named() {
+			return nil, errors.New("an assignment has no applicant; it is raised by this organisation")
+		}
+		// The column is NOT NULL DEFAULT '{}', and empty is the honest value
+		// for a line where nobody outside the platform is waiting.
+		return []byte(`{}`), nil
+	}
+	if given == nil || !given.Named() {
+		return nil, errors.New("a service request has to say who asked for it")
+	}
+	if given.Kind != "citizen" && given.Kind != "organisation" {
+		return nil, errors.New("an applicant is a citizen or an organisation")
+	}
+	return json.Marshal(given)
 }

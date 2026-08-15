@@ -19,7 +19,7 @@ import { Plus, Send } from "lucide-react";
 import { api, type UrtuuCode, type UrtuuPeer, type UrtuuTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ErrorNote, Loading, Modal, Screen } from "@/components/module/kit";
-import { TaskQueue, useLiveRefresh } from "../shared";
+import { LineTabs, TaskQueue, useLiveRefresh } from "../shared";
 
 /** The properties a code's schema declares, as a flat list of field names. */
 function fieldsOf(schema: unknown): { name: string; title: string }[] {
@@ -34,6 +34,7 @@ export default function OutgoingTasksPage() {
   const [tasks, setTasks] = useState<UrtuuTask[]>([]);
   const [codes, setCodes] = useState<UrtuuCode[]>([]);
   const [peers, setPeers] = useState<UrtuuPeer[]>([]);
+  const [line, setLine] = useState<"" | "service" | "assignment">("");
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
   const [notice, setNotice] = useState("");
@@ -42,7 +43,7 @@ export default function OutgoingTasksPage() {
   const load = useCallback(async () => {
     try {
       const [queue, vocabulary, links] = await Promise.all([
-        api.getUrtuuTasks({ direction: "outgoing" }),
+        api.getUrtuuTasks({ direction: "outgoing", line: line || undefined }),
         api.getUrtuuCodes(),
         api.getUrtuuPeers(),
       ]);
@@ -57,7 +58,7 @@ export default function OutgoingTasksPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [line]);
 
   useEffect(() => {
     load();
@@ -82,6 +83,7 @@ export default function OutgoingTasksPage() {
         </button>
       }
     >
+      <LineTabs line={line} onChange={setLine} />
       {failure && <ErrorNote>{failure}</ErrorNote>}
       {notice && (
         <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
@@ -135,6 +137,7 @@ function RaiseDialog({
     deadline?: string | null;
     peer_ids?: string[];
     document?: { document_id?: string; title?: string; type?: string };
+    applicant?: { kind: "citizen" | "organisation"; name: string; registry_number?: string; contact?: string };
   }) => Promise<void>;
   onClose: () => void;
 }) {
@@ -144,6 +147,12 @@ function RaiseDialog({
   const [deadline, setDeadline] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [targets, setTargets] = useState<string[]>([]);
+  const [applicant, setApplicant] = useState({
+    kind: "citizen" as "citizen" | "organisation",
+    name: "",
+    registry_number: "",
+    contact: "",
+  });
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentType, setDocumentType] = useState("APPROVAL");
   const [busy, setBusy] = useState(false);
@@ -174,6 +183,10 @@ function RaiseDialog({
               document: documentTitle.trim()
                 ? { title: documentTitle.trim(), type: documentType }
                 : undefined,
+              // Only on the service line, where the code says there is somebody
+              // outside the platform waiting. Sending one with an assignment is
+              // refused by the server, which is the right place for that rule.
+              applicant: chosen?.line === "service" ? applicant : undefined,
             });
           } finally {
             setBusy(false);
@@ -201,6 +214,54 @@ function RaiseDialog({
             ))}
           </select>
         </label>
+
+        {/* The line is the code's, so this is a statement rather than a
+            choice: the form changes shape because the code did. */}
+        {chosen && (
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <span className="font-semibold text-slate-700">
+              {chosen.line === "service" ? t("urtuu.line.service") : t("urtuu.line.assignment")}
+            </span>{" "}
+            {chosen.line === "service" ? t("urtuu.line.service_hint") : t("urtuu.line.assignment_hint")}
+          </p>
+        )}
+
+        {chosen?.line === "service" && (
+          <fieldset className="space-y-2 border border-slate-200 rounded-lg p-3">
+            <legend className="text-xs font-semibold text-slate-600 px-1">
+              {t("urtuu.field.applicant")}
+            </legend>
+            <select
+              value={applicant.kind}
+              onChange={(event) =>
+                setApplicant({ ...applicant, kind: event.target.value as "citizen" | "organisation" })
+              }
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+            >
+              <option value="citizen">{t("urtuu.field.applicant_citizen")}</option>
+              <option value="organisation">{t("urtuu.field.applicant_organisation")}</option>
+            </select>
+            <input
+              required
+              value={applicant.name}
+              onChange={(event) => setApplicant({ ...applicant, name: event.target.value })}
+              placeholder={t("urtuu.field.applicant")}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+            />
+            <input
+              value={applicant.registry_number}
+              onChange={(event) => setApplicant({ ...applicant, registry_number: event.target.value })}
+              placeholder={t("urtuu.field.registry_number")}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+            />
+            <input
+              value={applicant.contact}
+              onChange={(event) => setApplicant({ ...applicant, contact: event.target.value })}
+              placeholder={t("urtuu.field.contact")}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+            />
+          </fieldset>
+        )}
 
         <label className="block text-xs font-semibold text-slate-600">
           {t("urtuu.field.title")}

@@ -31,10 +31,21 @@ import (
 
 // Task is one row as the API returns it.
 type Task struct {
-	ID      string          `json:"id"`
-	Code    string          `json:"code"`
+	ID   string `json:"id"`
+	Code string `json:"code"`
+	// Line is which of Өртөө's two promises this task is under — a state
+	// service somebody applied for, or an assignment a superior organisation
+	// gave. Copied from the code when the task is raised, so that a code being
+	// withdrawn later cannot change what a task in flight was.
+	Line    string          `json:"line"`
 	Title   string          `json:"title"`
 	Payload json.RawMessage `json:"payload"`
+	// Applicant is who asked, on the service line. Empty on the assignment
+	// line, where there is nobody outside the platform waiting.
+	Applicant json.RawMessage `json:"applicant,omitempty"`
+	// Answer is what is being told back to the applicant. A service task
+	// cannot be completed without one — the schema itself refuses it.
+	Answer string `json:"answer,omitempty"`
 	// Direction is derived rather than stored: "incoming" is work this
 	// organisation owes somebody, "outgoing" is work it is owed, and "local" is
 	// its own. One field the screens can filter on instead of three nullable
@@ -79,7 +90,7 @@ type TaskEvent struct {
 // — the list, the detail and the tree — and a column added to one of them and
 // not the others is how a screen quietly stops showing something.
 const taskColumns = `
-	t.id::text, t.code, t.title, t.payload,
+	t.id::text, t.code, t.line, t.title, t.payload, t.applicant, t.answer,
 	coalesce(t.origin_peer_id::text, ''), coalesce(op.name, ''), t.origin_task_id,
 	coalesce(t.target_peer_id::text, ''), coalesce(tp.name, ''),
 	coalesce(t.parent_task_id::text, ''), t.origin_chain, t.status, t.deadline,
@@ -94,7 +105,8 @@ const taskFrom = `
 
 func scanTask(rows pgx.Rows, now time.Time) (Task, error) {
 	var task Task
-	if err := rows.Scan(&task.ID, &task.Code, &task.Title, &task.Payload,
+	if err := rows.Scan(&task.ID, &task.Code, &task.Line, &task.Title, &task.Payload,
+		&task.Applicant, &task.Answer,
 		&task.OriginPeerID, &task.OriginPeerName, &task.originTaskID,
 		&task.TargetPeerID, &task.TargetPeerName,
 		&task.ParentTaskID, &task.OriginChain, &task.Status, &task.Deadline,
@@ -121,6 +133,7 @@ func directionOf(task Task) string {
 // taskFilter is what the two queue screens ask for.
 type taskFilter struct {
 	Direction string
+	Line      string
 	Status    string
 	Code      string
 	Overdue   bool
@@ -145,6 +158,9 @@ func (m *Module) listTasks(ctx context.Context, tenantID string, filter taskFilt
 		where = append(where, "t.target_peer_id IS NOT NULL")
 	case "local":
 		where = append(where, "t.origin_peer_id IS NULL AND t.target_peer_id IS NULL")
+	}
+	if filter.Line != "" {
+		add("t.line = $%d", filter.Line)
 	}
 	if filter.Status != "" {
 		add("t.status = $%d", filter.Status)
@@ -307,6 +323,7 @@ type requestCode struct {
 	Code     string
 	Names    map[string]string
 	SLA      *int64
+	Line     string
 	Active   bool
 	SourceOf string
 }
@@ -314,9 +331,10 @@ type requestCode struct {
 func (m *Module) lookupCode(ctx context.Context, tenantID, code string) (requestCode, error) {
 	var found requestCode
 	err := m.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
-		SELECT code, names, EXTRACT(EPOCH FROM default_sla)::bigint, active, source
+		SELECT code, names, EXTRACT(EPOCH FROM default_sla)::bigint, line, active, source
 		  FROM urtuu_request_codes WHERE tenant_id = $1 AND code = $2`,
-		tenantID, code).Scan(&found.Code, &found.Names, &found.SLA, &found.Active, &found.SourceOf)
+		tenantID, code).Scan(&found.Code, &found.Names, &found.SLA, &found.Line,
+		&found.Active, &found.SourceOf)
 	return found, err
 }
 

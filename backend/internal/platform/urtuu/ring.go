@@ -110,7 +110,10 @@ func (ringMock) Processes(_ context.Context) ([]contract.RequestCode, error) {
 			Schema: []byte(`{"type":"object","required":["period"],"properties":` +
 				`{"period":{"type":"string","title":"Хамрах хугацаа"},` +
 				`"scope":{"type":"string","title":"Хамрах хүрээ"}}}`),
-			DefaultSLA:     14 * 24 * time.Hour,
+			DefaultSLA: 14 * 24 * time.Hour,
+			// The register is the state's list of services, so what comes from
+			// it is service-line work by definition.
+			Line:           contract.LineService,
 			Source:         contract.SourceRing,
 			RingProcessRef: "mock/D-101",
 			Version:        1,
@@ -127,6 +130,7 @@ func (ringMock) Processes(_ context.Context) ([]contract.RequestCode, error) {
 			Schema: []byte(`{"type":"object","required":["subject"],"properties":` +
 				`{"subject":{"type":"string","title":"Асуулгын сэдэв"}}}`),
 			DefaultSLA:     3 * 24 * time.Hour,
+			Line:           contract.LineService,
 			Source:         contract.SourceRing,
 			RingProcessRef: "mock/D-204",
 			Version:        1,

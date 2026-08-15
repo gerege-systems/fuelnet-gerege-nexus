@@ -46,6 +46,8 @@ function useLabels() {
           : t("urtuu.status.pending"),
     role: (value: UrtuuPeer["role"]) =>
       value === "parent" ? t("urtuu.role.parent") : t("urtuu.role.child"),
+    line: (value: UrtuuCode["line"]) =>
+      value === "service" ? t("urtuu.line.service") : t("urtuu.line.assignment"),
     source: (value: UrtuuCode["source"]) =>
       value === "ring"
         ? t("urtuu.source.ring")
@@ -305,6 +307,7 @@ export default function UrtuuSettingsPage() {
                 <tr>
                   <th className="px-3 py-2 text-left">{t("urtuu.field.code")}</th>
                   <th className="px-3 py-2 text-left">{t("urtuu.field.name")}</th>
+                  <th className="px-3 py-2 text-left">{t("urtuu.field.line")}</th>
                   <th className="px-3 py-2 text-left">{t("urtuu.field.source")}</th>
                   <th className="px-3 py-2 text-left">{t("urtuu.field.sla")}</th>
                   <th className="px-3 py-2 text-right">{t("urtuu.field.active")}</th>
@@ -315,6 +318,7 @@ export default function UrtuuSettingsPage() {
                   <tr key={code.id} className="hover:bg-slate-50">
                     <td className="px-3 py-2 font-mono text-xs text-slate-700">{code.code}</td>
                     <td className="px-3 py-2 text-slate-800">{codeName(code)}</td>
+                    <td className="px-3 py-2 text-xs text-slate-600">{labels.line(code.line)}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">
                       {labels.source(code.source)}
                       {code.source_peer_name ? ` · ${code.source_peer_name}` : ""}
@@ -604,6 +608,7 @@ function CodeDialog({
 }: {
   onCreate: (input: {
     code: string;
+    line?: "service" | "assignment";
     names: Record<string, string>;
     schema?: unknown;
     default_sla_seconds?: number | null;
@@ -611,7 +616,14 @@ function CodeDialog({
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const [form, setForm] = useState({ code: "local.", mn: "", en: "", days: "", schema: "{}" });
+  const [form, setForm] = useState({
+    code: "local.",
+    mn: "",
+    en: "",
+    days: "",
+    schema: "{}",
+    line: "assignment" as "service" | "assignment",
+  });
   const [busy, setBusy] = useState(false);
   const [schemaError, setSchemaError] = useState("");
 
@@ -635,6 +647,7 @@ function CodeDialog({
           try {
             await onCreate({
               code: form.code.trim(),
+              line: form.line,
               names: { mn: form.mn.trim(), en: form.en.trim() || form.mn.trim() },
               schema,
               // Empty means the code names no norm, which is a different fact
@@ -656,6 +669,19 @@ function CodeDialog({
               onChange={(event) => setForm({ ...form, code: event.target.value })}
               className={`${fieldClass} mt-1 font-mono`}
             />
+          </label>
+          <label className="block text-xs font-semibold text-slate-600">
+            {t("urtuu.field.line")}
+            <select
+              value={form.line}
+              onChange={(event) =>
+                setForm({ ...form, line: event.target.value as "service" | "assignment" })
+              }
+              className={`${fieldClass} mt-1`}
+            >
+              <option value="assignment">{t("urtuu.line.assignment")}</option>
+              <option value="service">{t("urtuu.line.service")}</option>
+            </select>
           </label>
           <label className="block text-xs font-semibold text-slate-600">
             {t("urtuu.field.sla")}

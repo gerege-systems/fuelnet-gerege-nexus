@@ -792,3 +792,140 @@ func TestAnAttachmentIsRefusedWithoutADocumentStore(t *testing.T) {
 		t.Errorf("a refused attachment left %d tasks behind", got)
 	}
 }
+
+// ------------------------------------------------------------- two lines
+
+// serviceLine sets up a pair whose vocabulary carries a state-service code.
+func serviceLine(t *testing.T, pool *pgxpool.Pool, seed byte) (*site, *site, string) {
+	t.Helper()
+	parent, child, parentPeerID := linked(t, pool, seed, "local.count")
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/codes", map[string]any{
+		"code":  "local.certificate",
+		"names": map[string]string{"mn": "Тодорхойлолт олгох", "en": "Issue a certificate"},
+		"line":  contract.LineService,
+	}, http.StatusCreated)
+	parent.call(http.MethodPut, "/api/v1/urtuu/peers/"+parentPeerID+"/codes",
+		map[string]any{"codes": []string{"local.count", "local.certificate"}}, http.StatusOK)
+	carry(t, parent, child)
+
+	return parent, child, parentPeerID
+}
+
+// The service line's whole promise: somebody outside the platform asked, and
+// an answer has to come back to them.
+func TestAServiceRequestCarriesItsApplicantAndDemandsAnAnswer(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := serviceLine(t, pool, 31)
+
+	// A request from nobody is a request nobody can answer.
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.certificate", "peer_ids": []string{parentPeerID},
+	}, http.StatusBadRequest)
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code":     "local.certificate",
+		"peer_ids": []string{parentPeerID},
+		"applicant": map[string]string{
+			"kind": "citizen", "name": "Дорж", "registry_number": "УБ12345678", "contact": "99001122",
+		},
+	}, http.StatusCreated)
+	carry(t, parent, child)
+
+	work := child.tasks("incoming")[0]
+	if work.Line != contract.LineService {
+		t.Fatalf("the arrived task is on the %q line, want %q", work.Line, contract.LineService)
+	}
+	// The applicant travelled: the office that has to issue a certificate
+	// cannot issue it to nobody.
+	var applicant contract.Applicant
+	if err := json.Unmarshal(work.Applicant, &applicant); err != nil {
+		t.Fatalf("decode applicant: %v", err)
+	}
+	if applicant.Name != "Дорж" || applicant.RegistryNumber != "УБ12345678" {
+		t.Errorf("applicant = %+v, want the person who asked", applicant)
+	}
+
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/accept", nil, http.StatusOK)
+
+	// The line's promise, refused at the door rather than at the constraint.
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/complete",
+		map[string]string{"note": "болсон"}, http.StatusBadRequest)
+
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/complete", map[string]string{
+		"answer": "Тодорхойлолт олгов, дугаар 2026/114",
+	}, http.StatusOK)
+	carry(t, parent, child)
+
+	// And the answer reached the installation the person applied to. Without
+	// this the request was fulfilled somewhere they will never see.
+	mirror := parent.tasks("outgoing")[0]
+	if mirror.Status != string(contract.StatusCompleted) {
+		t.Fatalf("the parent's mirror is %q, want COMPLETED", mirror.Status)
+	}
+	if !strings.Contains(mirror.Answer, "2026/114") {
+		t.Errorf("the answer did not come back: %q", mirror.Answer)
+	}
+	root := parent.task(mirror.ParentTaskID)
+	if !strings.Contains(root.Answer, "2026/114") {
+		t.Errorf("the request the citizen made shows no answer: %q", root.Answer)
+	}
+}
+
+// The two lines are two promises, and neither may be worn by the other.
+func TestTheLinesDoNotBorrowEachOthersPromises(t *testing.T) {
+	pool := openPool(t)
+	parent, _, parentPeerID := serviceLine(t, pool, 32)
+
+	// An assignment has no applicant: attaching one would invent a citizen
+	// behind a ministry's internal instruction.
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+		"applicant": map[string]string{"kind": "citizen", "name": "Дорж"},
+	}, http.StatusBadRequest)
+
+	// And an assignment completes with nothing to tell anybody, because there
+	// is nobody outside the platform waiting.
+	created := parent.call(http.MethodPost, "/api/v1/urtuu/tasks",
+		map[string]any{"code": "local.count"}, http.StatusCreated)
+	id := created["id"].(string)
+	if got := parent.task(id).Line; got != contract.LineAssignment {
+		t.Errorf("a locally authored code produced the %q line, want %q", got, contract.LineAssignment)
+	}
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/accept", nil, http.StatusOK)
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/complete", nil, http.StatusOK)
+
+	// The two queues are separately readable, which is what "two lines" means
+	// on every screen.
+	answer := parent.call(http.MethodGet,
+		"/api/v1/urtuu/tasks?line="+contract.LineService, nil, http.StatusOK)
+	tasks, _ := answer["tasks"].([]any)
+	for _, item := range tasks {
+		if line, _ := item.(map[string]any)["line"].(string); line != contract.LineService {
+			t.Errorf("the service queue returned a %q task", line)
+		}
+	}
+	parent.call(http.MethodGet, "/api/v1/urtuu/tasks?line=invented", nil, http.StatusBadRequest)
+}
+
+// The schema is the last line of defence, and it has to hold when the handler
+// is gone round entirely.
+func TestTheDatabaseItselfRefusesAnUnansweredService(t *testing.T) {
+	pool := openPool(t)
+	parent, _, _ := serviceLine(t, pool, 33)
+
+	created := parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code":      "local.certificate",
+		"applicant": map[string]string{"kind": "citizen", "name": "Дорж"},
+	}, http.StatusCreated)
+	id := created["id"].(string)
+
+	_, err := pool.Exec(nexus.WithTenantID(context.Background(), parent.tenantID),
+		`UPDATE urtuu_tasks SET status = 'COMPLETED' WHERE id = $1`, id)
+	if err == nil {
+		t.Fatal("a service request was marked complete with no answer, straight in SQL")
+	}
+	if !strings.Contains(err.Error(), "urtuu_tasks_service_has_answer") {
+		t.Errorf("refused, but not by the constraint that exists for this: %v", err)
+	}
+}

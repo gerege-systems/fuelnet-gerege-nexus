@@ -159,7 +159,7 @@ type codeSync struct {
 // announceCodes tells one link what it may raise work under.
 func (s *Service) announceCodes(ctx context.Context, tenantID, peerID string) error {
 	rows, err := s.db.Query(nexus.WithTenantID(ctx, tenantID), `
-		SELECT c.code, c.names, c.schema,
+		SELECT c.code, c.names, c.schema, c.line,
 		       coalesce(EXTRACT(EPOCH FROM c.default_sla)::bigint, 0),
 		       c.ring_process_ref, c.version
 		  FROM urtuu_peer_codes pc
@@ -176,7 +176,7 @@ func (s *Service) announceCodes(ctx context.Context, tenantID, peerID string) er
 	for rows.Next() {
 		var code contract.RequestCode
 		var seconds int64
-		if err := rows.Scan(&code.Code, &code.Names, &code.Schema, &seconds,
+		if err := rows.Scan(&code.Code, &code.Names, &code.Schema, &code.Line, &seconds,
 			&code.RingProcessRef, &code.Version); err != nil {
 			return err
 		}

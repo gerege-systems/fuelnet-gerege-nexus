@@ -400,6 +400,8 @@ export interface UrtuuCode {
   id: string;
   code: string;
   names: Record<string, string>;
+  /** Which line work raised under this code belongs to. The code decides, not the raiser. */
+  line: "service" | "assignment";
   schema?: unknown;
   /** Null where the code names no norm, which is not the same as a norm of zero. */
   default_sla_seconds: number | null;
@@ -422,10 +424,37 @@ export interface UrtuuCode {
  * subordinate, and "local" is its own. `overdue` is computed on every read
  * rather than stored, so an edited deadline never leaves a stale flag.
  */
+/**
+ * Who asked, on the service line.
+ *
+ * It travels down with the request — the office that has to issue a certificate
+ * cannot issue it to nobody — and nothing else the applying installation knows
+ * about them travels with it.
+ */
+export interface UrtuuApplicant {
+  kind: "citizen" | "organisation";
+  name: string;
+  registry_number?: string;
+  contact?: string;
+}
+
 export interface UrtuuTask {
   id: string;
   code: string;
+  /**
+   * Which of Өртөө's two promises this is under.
+   *
+   * "service" — somebody outside the platform asked the state for something,
+   * and an answer has to come back to them. "assignment" — a superior
+   * organisation gave a subordinate work, and the organisation that raised it
+   * is the one waiting.
+   */
+  line: "service" | "assignment";
   title: string;
+  /** Set on the service line only. */
+  applicant?: UrtuuApplicant;
+  /** What is being told back to the applicant. A service task cannot complete without one. */
+  answer?: string;
   payload?: unknown;
   direction: "incoming" | "outgoing" | "local";
   origin_peer_id?: string;
@@ -498,6 +527,7 @@ export interface UrtuuTreeProgress {
 
 export interface UrtuuTally {
   direction: "incoming" | "outgoing" | "local";
+  line: "service" | "assignment";
   status: string;
   count: number;
   overdue: number;
@@ -1271,6 +1301,7 @@ export const api = {
   createUrtuuCode: (input: {
     code: string;
     names: Record<string, string>;
+    line?: "service" | "assignment";
     schema?: unknown;
     default_sla_seconds?: number | null;
   }) => fetcher<{ id: string; code: string }>("/urtuu/codes", {
@@ -1297,12 +1328,14 @@ export const api = {
   // The Өртөө app (io.gerege.nexus.urtuu): the task board over the channel.
   getUrtuuTasks: (filter: {
     direction?: "incoming" | "outgoing" | "local";
+    line?: "service" | "assignment";
     status?: string;
     code?: string;
     overdue?: boolean;
   } = {}) => {
     const query = new URLSearchParams();
     if (filter.direction) query.set("direction", filter.direction);
+    if (filter.line) query.set("line", filter.line);
     if (filter.status) query.set("status", filter.status);
     if (filter.code) query.set("code", filter.code);
     if (filter.overdue) query.set("overdue", "true");
@@ -1338,6 +1371,8 @@ export const api = {
     note?: string;
     /** The official document behind the work: one already filed, or one to file now. */
     document?: { document_id?: string; title?: string; type?: string };
+    /** Required on the service line, refused on the assignment line. */
+    applicant?: UrtuuApplicant;
   }) => fetcher<{ id: string; status: string }>("/urtuu/tasks", {
     method: "POST",
     body: JSON.stringify(input),

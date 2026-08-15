@@ -170,6 +170,33 @@ export const urtuu = {
   "urtuu.message.moved": { mn: "Даалгаврын төлөв өөрчлөгдлөө", en: "The task has moved" },
   "urtuu.message.no_deadline": { mn: "Хугацаагүй", en: "No deadline" },
   "urtuu.message.pick_code": { mn: "Хүсэлтийн код сонгоно уу", en: "Choose a request code" },
+  // The two lines. They are two promises, not two filters — see
+  // db/migrations/00065 and pkg/urtuu/status.go.
+  "urtuu.line.service": { mn: "Үйлчилгээний хүсэлт", en: "Service request" },
+  "urtuu.line.assignment": { mn: "Албан даалгавар", en: "Official assignment" },
+  "urtuu.line.service_hint": {
+    mn: "Иргэн, байгууллагаас ирсэн хүсэлт доошоо явж, ХАРИУ нь заавал буцаж ирнэ. Хүсэгч платформын гадна байгаа тул хариугүй хаагдвал тэр хүний асуулт зүгээр л алга болно.",
+    en: "A request from a citizen or an organisation travels down and an ANSWER must come back. The person who asked is outside the platform, so a request closed without one is their question thrown away.",
+  },
+  "urtuu.line.assignment_hint": {
+    mn: "Дээд байгууллагаас доод байгууллагад өгсөн ажил. Хүсэгч гэж байхгүй — эхлүүлсэн байгууллага өөрөө үр дүнг нь хүлээж авна.",
+    en: "Work a superior organisation gave a subordinate. There is no applicant: the organisation that raised it is the one waiting for the outcome.",
+  },
+  "urtuu.field.line": { mn: "Шугам", en: "Line" },
+  "urtuu.field.applicant": { mn: "Хүсэгч", en: "Applicant" },
+  "urtuu.field.applicant_kind": { mn: "Хэн", en: "Who" },
+  "urtuu.field.applicant_citizen": { mn: "Иргэн", en: "Citizen" },
+  "urtuu.field.applicant_organisation": { mn: "Байгууллага", en: "Organisation" },
+  "urtuu.field.registry_number": { mn: "Регистрийн дугаар", en: "Registration number" },
+  "urtuu.field.contact": { mn: "Холбоо барих", en: "Contact" },
+  "urtuu.field.answer": { mn: "Хүсэгчид өгөх хариу", en: "Answer for the applicant" },
+  "urtuu.section.answer": { mn: "Хариу", en: "Answer" },
+  "urtuu.message.answer_required": {
+    mn: "Үйлчилгээний хүсэлтийг хариугүйгээр биелсэн гэж хаах боломжгүй.",
+    en: "A service request cannot be completed without an answer for the applicant.",
+  },
+  "urtuu.message.no_answer_yet": { mn: "Хариу хараахан алга", en: "No answer yet" },
+
   "urtuu.section.evidence": { mn: "Албан бичиг", en: "Official document" },
   "urtuu.field.document_title": { mn: "Албан бичгийн гарчиг", en: "Document title" },
   "urtuu.field.document_type": { mn: "Төрөл", en: "Type" },

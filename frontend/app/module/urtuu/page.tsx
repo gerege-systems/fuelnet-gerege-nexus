@@ -15,11 +15,12 @@ import { Route } from "lucide-react";
 import { api, type UrtuuLinkHealth, type UrtuuTally, type UrtuuTask, type UrtuuTreeProgress } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Chip, ErrorNote, Loading, Panel, Screen } from "@/components/module/kit";
-import { TaskQueue, useLiveRefresh, useStatusLabel } from "./shared";
+import { TaskQueue, useLineLabel, useLiveRefresh, useStatusLabel } from "./shared";
 
 export default function UrtuuBoardPage() {
   const { t } = useI18n();
   const statusLabel = useStatusLabel();
+  const lineLabel = useLineLabel();
 
   const [counts, setCounts] = useState<UrtuuTally[]>([]);
   const [overdue, setOverdue] = useState<UrtuuTask[]>([]);
@@ -52,8 +53,11 @@ export default function UrtuuBoardPage() {
 
   if (loading) return <Loading label={t("base.message.loading")} />;
 
-  const incoming = counts.filter((tally) => tally.direction === "incoming");
-  const outgoing = counts.filter((tally) => tally.direction === "outgoing");
+  // Split by line before direction, because the two lines are two promises
+  // and adding them together is what makes a citizen-facing backlog invisible
+  // behind a healthy internal one.
+  const forLine = (line: "service" | "assignment", direction: "incoming" | "outgoing") =>
+    counts.filter((tally) => tally.line === line && tally.direction === direction);
 
   return (
     <Screen
@@ -69,10 +73,15 @@ export default function UrtuuBoardPage() {
         <TaskQueue tasks={overdue} empty={t("urtuu.message.no_overdue")} />
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Tally title={t("urtuu.incoming.title")} rows={incoming} label={statusLabel} />
-        <Tally title={t("urtuu.outgoing.title")} rows={outgoing} label={statusLabel} />
-      </div>
+      {(["service", "assignment"] as const).map((line) => (
+        <section key={line} className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-800">{lineLabel(line)}</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Tally title={t("urtuu.incoming.title")} rows={forLine(line, "incoming")} label={statusLabel} />
+            <Tally title={t("urtuu.outgoing.title")} rows={forLine(line, "outgoing")} label={statusLabel} />
+          </div>
+        </section>
+      ))}
 
       {/* How far each fan-out has got. The question a ministry actually has is
           not "how many tasks" but "of the twenty-one provinces, who is done". */}

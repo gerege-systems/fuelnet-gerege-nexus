@@ -46,6 +46,9 @@ type Code struct {
 	// elsewhere — by ring, or by an administrator — and this platform is not
 	// the thing that decides what a valid JSON Schema looks like.
 	Schema json.RawMessage `json:"schema"`
+	// Line is which of Өртөө's two lines this code belongs to — a state
+	// service, or an internal assignment. See pkg/urtuu.LineService.
+	Line string `json:"line"`
 	// DefaultSLASeconds is null where the code names no norm, which is a
 	// different fact from a norm of zero.
 	DefaultSLASeconds *int64 `json:"default_sla_seconds"`
@@ -68,7 +71,7 @@ type Code struct {
 // thousands.
 func (s *Service) listCodes(ctx context.Context, tenantID string) ([]Code, error) {
 	rows, err := s.db.Query(nexus.WithTenantID(ctx, tenantID), `
-		SELECT c.id::text, c.code, c.names, c.schema,
+		SELECT c.id::text, c.code, c.names, c.schema, c.line,
 		       EXTRACT(EPOCH FROM c.default_sla)::bigint, c.source,
 		       coalesce(c.source_peer_id::text, ''), coalesce(p.name, ''),
 		       c.ring_process_ref, c.version, c.active, c.updated_at,
@@ -87,7 +90,7 @@ func (s *Service) listCodes(ctx context.Context, tenantID string) ([]Code, error
 	codes := make([]Code, 0, 64)
 	for rows.Next() {
 		var code Code
-		if err := rows.Scan(&code.ID, &code.Code, &code.Names, &code.Schema,
+		if err := rows.Scan(&code.ID, &code.Code, &code.Names, &code.Schema, &code.Line,
 			&code.DefaultSLASeconds, &code.Source, &code.SourcePeerID, &code.SourcePeerName,
 			&code.RingProcessRef, &code.Version, &code.Active, &code.UpdatedAt,
 			&code.OpenTo); err != nil {
@@ -122,6 +125,7 @@ type codeRequest struct {
 	Names             map[string]string `json:"names"`
 	Schema            json.RawMessage   `json:"schema"`
 	DefaultSLASeconds *int64            `json:"default_sla_seconds"`
+	Line              string            `json:"line"`
 	Active            *bool             `json:"active"`
 }
 
@@ -150,6 +154,19 @@ func (s *Service) handleCreateCode(w http.ResponseWriter, r *http.Request) {
 				": the unprefixed namespace belongs to ring.dgov.mn")
 		return
 	}
+	line := strings.TrimSpace(request.Line)
+	if line == "" {
+		// A code authored here is an assignment unless it is said to be a
+		// service. The unstated case is the common one — an organisation's own
+		// internal order — and defaulting the other way would attach the
+		// service line's promise (an applicant, and an answer that must come
+		// back) to work that has neither.
+		line = contract.LineAssignment
+	}
+	if !contract.KnownLine(line) {
+		nexus.Error(w, http.StatusBadRequest, "a code belongs to the service line or the assignment line")
+		return
+	}
 	if strings.TrimSpace(request.Names["mn"]) == "" {
 		// Mongolian is the source language of the register and what every
 		// other locale falls back to. A code with no name at all renders as
@@ -161,13 +178,13 @@ func (s *Service) handleCreateCode(w http.ResponseWriter, r *http.Request) {
 	var id string
 	err := s.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
 		INSERT INTO urtuu_request_codes
-		    (tenant_id, code, names, schema, default_sla, source, created_by)
+		    (tenant_id, code, names, schema, default_sla, line, source, created_by)
 		VALUES ($1, $2, $3, $4,
 		        CASE WHEN $5::bigint IS NULL THEN NULL ELSE make_interval(secs => $5::bigint) END,
-		        'local', NULLIF($6, '')::uuid)
+		        $6, 'local', NULLIF($7, '')::uuid)
 		RETURNING id`,
 		tenantID, code, request.Names, schemaOrEmpty(request.Schema),
-		request.DefaultSLASeconds, actorOf(r)).Scan(&id)
+		request.DefaultSLASeconds, line, actorOf(r)).Scan(&id)
 	if err != nil {
 		nexus.Error(w, http.StatusConflict, "that code already exists here")
 		return
@@ -327,17 +344,24 @@ func upsertCode(ctx context.Context, tx pgx.Tx, tenantID, source, peerID string,
 	if names == nil {
 		names = map[string]string{}
 	}
+	line := code.Line
+	if !contract.KnownLine(line) {
+		// A peer on an older build sends no line at all. Its codes are
+		// assignments, because that is the only thing that build could raise.
+		line = contract.LineAssignment
+	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO urtuu_request_codes
-		    (tenant_id, code, names, schema, default_sla, source, source_peer_id,
+		    (tenant_id, code, names, schema, default_sla, line, source, source_peer_id,
 		     ring_process_ref, version)
 		VALUES ($1, $2, $3, $4,
 		        CASE WHEN $5::bigint IS NULL THEN NULL ELSE make_interval(secs => $5::bigint) END,
-		        $6, NULLIF($7, '')::uuid, $8, $9)
+		        $10, $6, NULLIF($7, '')::uuid, $8, $9)
 		ON CONFLICT (tenant_id, code) DO UPDATE
 		   SET names = EXCLUDED.names,
 		       schema = EXCLUDED.schema,
 		       default_sla = EXCLUDED.default_sla,
+		       line = EXCLUDED.line,
 		       source = EXCLUDED.source,
 		       source_peer_id = EXCLUDED.source_peer_id,
 		       ring_process_ref = EXCLUDED.ring_process_ref,
@@ -346,7 +370,7 @@ func upsertCode(ctx context.Context, tx pgx.Tx, tenantID, source, peerID string,
 		 WHERE urtuu_request_codes.version <= EXCLUDED.version
 		   AND urtuu_request_codes.source <> 'local'`,
 		tenantID, code.Code, names, schemaOrEmpty(code.Schema), sla,
-		source, peerID, code.RingProcessRef, max(code.Version, 1))
+		source, peerID, code.RingProcessRef, max(code.Version, 1), line)
 	return err
 }
 

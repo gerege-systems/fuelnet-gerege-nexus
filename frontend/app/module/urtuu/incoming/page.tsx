@@ -14,12 +14,13 @@ import { Inbox } from "lucide-react";
 import { api, type UrtuuTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ErrorNote, Loading, Screen } from "@/components/module/kit";
-import { TaskQueue, useLiveRefresh } from "../shared";
+import { LineTabs, TaskQueue, useLiveRefresh } from "../shared";
 
 export default function IncomingTasksPage() {
   const { t } = useI18n();
   const [tasks, setTasks] = useState<UrtuuTask[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [line, setLine] = useState<"" | "service" | "assignment">("");
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
 
@@ -28,7 +29,7 @@ export default function IncomingTasksPage() {
   // nobody can read while it is refreshing.
   const load = useCallback(async () => {
     try {
-      const answer = await api.getUrtuuTasks({ direction: "incoming", overdue: overdueOnly });
+      const answer = await api.getUrtuuTasks({ direction: "incoming", line: line || undefined, overdue: overdueOnly });
       setTasks(answer.tasks || []);
       setFailure("");
     } catch (err) {
@@ -36,7 +37,7 @@ export default function IncomingTasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [overdueOnly]);
+  }, [overdueOnly, line]);
 
   useEffect(() => {
     load();
@@ -60,6 +61,7 @@ export default function IncomingTasksPage() {
         </label>
       }
     >
+      <LineTabs line={line} onChange={setLine} />
       {failure && <ErrorNote>{failure}</ErrorNote>}
       {loading ? (
         <Loading label={t("base.message.loading")} />

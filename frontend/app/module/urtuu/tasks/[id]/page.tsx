@@ -42,6 +42,7 @@ export default function UrtuuTaskPage() {
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
   const [reason, setReason] = useState("");
+  const [answer, setAnswer] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -68,8 +69,9 @@ export default function UrtuuTaskPage() {
     if (!action) return;
     setFailure("");
     try {
-      await api.moveUrtuuTask(id, action, { note: reason });
+      await api.moveUrtuuTask(id, action, { note: reason, answer });
       setReason("");
+      setAnswer("");
       await load();
     } catch (err) {
       setFailure(err instanceof Error ? err.message : String(err));
@@ -102,6 +104,15 @@ export default function UrtuuTaskPage() {
         <Fact label={task.origin_peer_name ? t("urtuu.field.from") : t("urtuu.field.to")}>
           {task.origin_peer_name || task.target_peer_name || "—"}
         </Fact>
+        {/* Who asked. Only the service line has one, and there it is the
+            first thing anybody working the task needs. */}
+        {task.applicant?.name && (
+          <Fact label={t("urtuu.field.applicant")}>
+            {task.applicant.name}
+            {task.applicant.registry_number ? ` · ${task.applicant.registry_number}` : ""}
+            {task.applicant.contact ? ` · ${task.applicant.contact}` : ""}
+          </Fact>
+        )}
         {task.assigned_name && (
           <Fact label={t("urtuu.field.name")}>{task.assigned_name}</Fact>
         )}
@@ -157,8 +168,32 @@ export default function UrtuuTaskPage() {
         </Panel>
       )}
 
+      {/* The answer, on the service line. It is what the whole line exists
+          for: the person who asked is outside the platform, and a request
+          closed without one is their question thrown away. */}
+      {task.line === "service" && (
+        <Panel className="p-4">
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">{t("urtuu.section.answer")}</h2>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">
+            {task.answer || <span className="text-slate-400">{t("urtuu.message.no_answer_yet")}</span>}
+          </p>
+        </Panel>
+      )}
+
       {next.length > 0 && (
         <Panel className="p-4 space-y-3">
+          {/* Offered wherever this side is the one doing the work, because
+              completing is one of the moves on offer and it cannot be made
+              without this. */}
+          {task.line === "service" && !task.target_peer_id && (
+            <textarea
+              rows={3}
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              placeholder={t("urtuu.field.answer")}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+            />
+          )}
           <input
             value={reason}
             onChange={(event) => setReason(event.target.value)}

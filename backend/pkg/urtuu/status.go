@@ -115,6 +115,60 @@ func Overdue(status TaskStatus, deadline *time.Time, now time.Time) bool {
 	return now.After(*deadline)
 }
 
+// ------------------------------------------------------------ the two lines
+
+// Өртөө carries two kinds of work, and they are two kinds because they make
+// two different promises — not because a screen wanted a filter.
+const (
+	// LineService — ҮЙЛЧИЛГЭЭ. A citizen or an organisation asked the state for
+	// something. The request travels down to whoever must fulfil it and an
+	// ANSWER has to come back: the person who asked is outside the platform,
+	// and a request closed without an answer is their question thrown away.
+	// A service task therefore always names an Applicant and cannot be
+	// completed with nothing to tell them.
+	LineService = "service"
+	// LineAssignment — АЛБАН ДААЛГАВАР. A superior organisation gave a
+	// subordinate work to do. There is no applicant: the organisation that
+	// raised it is the one waiting for the outcome, and it is watching the task
+	// itself.
+	LineAssignment = "assignment"
+)
+
+// KnownLine reports whether a value is one of the two.
+func KnownLine(line string) bool {
+	return line == LineService || line == LineAssignment
+}
+
+// Applicant is who asked, on the service line.
+//
+// It travels *down* with the request, which is not a breach of the rule that
+// data does not move (§2.4): that rule is about an organisation's internal data
+// flowing upward. This is the subject of the request, given by them for exactly
+// this purpose, moving in the direction of the work — the office that has to
+// issue a certificate cannot issue it to nobody.
+//
+// Nothing more than this is carried. Whatever else the applying installation
+// knows about the person stays there.
+type Applicant struct {
+	// Kind is "citizen" or "organisation". It decides what RegistryNumber
+	// means, and a screen that guessed from the shape of the number would be
+	// guessing about somebody's identity.
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// RegistryNumber is the national registration number — the citizen's
+	// регистрийн дугаар or the organisation's. It is what the fulfilling office
+	// looks the applicant up by and what the root installation tracks a request
+	// by, so it is a field rather than a line in a form body.
+	RegistryNumber string `json:"registry_number,omitempty"`
+	// Contact is where the answer is to be sent back to. A telephone number or
+	// an address, as given.
+	Contact string `json:"contact,omitempty"`
+}
+
+// Named reports whether an applicant is filled in enough to act on. A name at
+// minimum: a request from nobody is a request nobody can answer.
+func (a Applicant) Named() bool { return strings.TrimSpace(a.Name) != "" }
+
 // ---------------------------------------------------------- request codes
 
 // Where a request code came from. A code is never free text: a task is created
@@ -157,7 +211,15 @@ type RequestCode struct {
 	// created_at. Zero means the code names no norm and a deadline has to be
 	// set by hand.
 	DefaultSLA time.Duration `json:"default_sla"`
-	Source     string        `json:"source"`
+	// Line is which of the two this code belongs to — see LineService.
+	//
+	// The code decides, not the person raising the task: a code imported from
+	// ring.dgov.mn *is* a state service, and one an organisation authored for
+	// its own orders is an assignment. If the raiser chose, one code could be
+	// used under two different promises, and the promise is the whole
+	// distinction.
+	Line   string `json:"line"`
+	Source string `json:"source"`
 	// RingProcessRef is the id of the process in ring.dgov.mn this was imported
 	// from. Kept so a re-import can update rather than duplicate, and so a
 	// question about the norm has somewhere to be asked.
