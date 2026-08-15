@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
@@ -63,10 +64,10 @@ func (s *Server) handleMenus(w http.ResponseWriter, r *http.Request) {
 
 // appReadPermission decides which permission a menu entry is hidden behind.
 //
-// An external app cannot be named in the switch below — the whole point is that
-// it arrives from a registry rather than from this repository — so its manifest
-// answers for it. A tenant that installs somebody else's HRMS is not thereby
-// putting a link to it in front of every member of the organisation.
+// An external app has no Go module to ask — the whole point is that it arrives
+// from a registry rather than from a compiler — so its manifest answers for it.
+// A tenant that installs somebody else's HRMS is not thereby putting a link to
+// it in front of every member of the organisation.
 func (s *Server) appReadPermission(appID string) string {
 	if app, found := s.installer.GetAppByID(appID); found && app.Manifest.IsExternal() {
 		for _, permission := range app.Manifest.Permissions {
@@ -75,34 +76,23 @@ func (s *Server) appReadPermission(appID string) string {
 			}
 		}
 		// A manifest that asks for nothing is visible to the tenant that
-		// installed it, which is the same answer the switch gives for an app it
-		// does not know.
+		// installed it — the same answer a module gives when it declares no
+		// menu permission.
 		return ""
 	}
 	return appReadPermission(appID)
 }
 
+// appReadPermission asks the module. It used to be a switch listing every app
+// by name, which meant a module in another repository could not answer for
+// itself — and losing the entry was silent, so an extracted app would keep
+// appearing in everyone's sidebar. See nexus.AccessPolicy.
 func appReadPermission(appID string) string {
-	switch appID {
-	case "io.gerege.nexus.contacts":
-		return "contacts.read"
-	case "io.gerege.nexus.products":
-		return "products.read"
-	case "io.gerege.nexus.inventory":
-		return "inventory.read"
-	case "io.gerege.nexus.billing":
-		return "billing.read"
-	case "io.gerege.nexus.documents":
-		return "documents.read"
-	case "io.gerege.nexus.egov":
-		return "egov.read"
-	case "io.gerege.nexus.sso_clients":
-		return "sso_clients.read"
-	case "io.gerege.nexus.gov_services":
-		return "gov.read"
-	default:
+	mod, found := nexus.Get(appID)
+	if !found {
 		return ""
 	}
+	return nexus.MenuPermissionOf(mod)
 }
 
 func (s *Server) handleListStoreApps(w http.ResponseWriter, r *http.Request) {

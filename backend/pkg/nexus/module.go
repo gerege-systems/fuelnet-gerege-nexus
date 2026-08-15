@@ -117,3 +117,59 @@ type Module interface {
 	Menus() []MenuDefinition
 	RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler)
 }
+
+// AccessPolicy is how a module asks the platform to enforce permissions on its
+// behalf. Implementing it is optional; a module that does not is gated only by
+// whether the tenant has it installed, and is expected to check permissions
+// itself.
+//
+// It exists because the platform used to hold this knowledge in two switch
+// statements keyed by app ID — one deciding whether a menu entry is visible,
+// one deciding whether a request is allowed. Both listed every app by name, and
+// a module that lives in another repository cannot add itself to a switch in
+// this one. The consequence was not a compile error but a silent downgrade: an
+// extracted app would keep working, keep appearing in the sidebar, and stop
+// being gated. A permission check that disappears quietly during a refactor is
+// the worst shape this kind of bug can take, so the knowledge now lives with
+// the module that owns it.
+//
+// Both methods may return the empty string, and empty is a real answer rather
+// than an omission — it says the platform should not gate this. Saying it out
+// loud is the point: silence used to mean both "no permission needed" and "this
+// module checks for itself", and nothing in the code could tell them apart.
+type AccessPolicy interface {
+	// MenuPermission is the permission a member must hold for this app's
+	// entries to appear in the navigation menu. Empty means every member of a
+	// tenant that has the app installed sees them.
+	//
+	// This is about visibility, not access: hiding a menu entry is not a
+	// security boundary, and the routes behind it are gated separately.
+	MenuPermission() string
+
+	// RoutePermissionPrefix asks the platform to gate every route this module
+	// registers: `prefix.read` for GET and HEAD, `prefix.manage` for anything
+	// that can change something. Empty means the platform gates nothing beyond
+	// the installation check, which is the right answer for a module whose
+	// rules are finer than the method can express — an approval step that
+	// depends on which unit the applicant belongs to cannot be derived from
+	// the verb.
+	RoutePermissionPrefix() string
+}
+
+// MenuPermissionOf and RoutePermissionPrefixOf read a module's access policy,
+// answering empty for a module that declares none. They exist so callers do not
+// each repeat the type assertion and, more importantly, so there is one place
+// that decides what a module's silence means.
+func MenuPermissionOf(m Module) string {
+	if p, ok := m.(AccessPolicy); ok {
+		return p.MenuPermission()
+	}
+	return ""
+}
+
+func RoutePermissionPrefixOf(m Module) string {
+	if p, ok := m.(AccessPolicy); ok {
+		return p.RoutePermissionPrefix()
+	}
+	return ""
+}

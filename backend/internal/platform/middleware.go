@@ -19,6 +19,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -134,13 +135,19 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 	}
 }
 
+// appRequestPermission asks the module which permission this request needs.
+//
+// The mapping used to be a literal in this function listing five apps by ID.
+// That worked while every module was compiled from this repository and broke
+// quietly the moment one was not: an extracted module simply fell out of the
+// map, and falling out of the map means no permission is required. See
+// nexus.AccessPolicy for why the answer now travels with the module.
 func appRequestPermission(appID, method, path string) string {
-	prefixes := map[string]string{
-		"io.gerege.nexus.contacts": "contacts", "io.gerege.nexus.products": "products",
-		"io.gerege.nexus.inventory": "inventory", "io.gerege.nexus.billing": "billing",
-		"io.gerege.nexus.sso_clients": "sso_clients",
+	mod, found := nexus.Get(appID)
+	if !found {
+		return ""
 	}
-	prefix := prefixes[appID]
+	prefix := nexus.RoutePermissionPrefixOf(mod)
 	if prefix == "" {
 		return ""
 	}

@@ -52,9 +52,15 @@ func New(p nexus.Platform, allowNegativeStock bool) *Module {
 	return m
 }
 
-func (m *Module) ID() string      { return "io.gerege.nexus.inventory" }
-func (m *Module) Name() string    { return "Inventory" }
-func (m *Module) Version() string { return "1.0.0" }
+func (m *Module) ID() string { return "io.gerege.nexus.inventory" }
+
+// MenuPermission and RoutePermissionPrefix are this module's half of
+// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
+// app ID, stated here so it survives the module moving to another repository.
+func (m *Module) MenuPermission() string        { return "inventory.read" }
+func (m *Module) RoutePermissionPrefix() string { return "inventory" }
+func (m *Module) Name() string                  { return "Inventory" }
+func (m *Module) Version() string               { return "1.0.0" }
 
 func (m *Module) Dependencies() []nexus.Dependency {
 	return []nexus.Dependency{

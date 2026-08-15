@@ -54,9 +54,15 @@ func New(sso *ssoprovider.SSOProvider) *SSOClientsModule {
 	return m
 }
 
-func (m *SSOClientsModule) ID() string      { return ID }
-func (m *SSOClientsModule) Name() string    { return "SSO Clients" }
-func (m *SSOClientsModule) Version() string { return "2.0.0" }
+func (m *SSOClientsModule) ID() string { return ID }
+
+// MenuPermission and RoutePermissionPrefix are this module's half of
+// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
+// app ID, stated here so it survives the module moving to another repository.
+func (m *SSOClientsModule) MenuPermission() string        { return "sso_clients.read" }
+func (m *SSOClientsModule) RoutePermissionPrefix() string { return "sso_clients" }
+func (m *SSOClientsModule) Name() string                  { return "SSO Clients" }
+func (m *SSOClientsModule) Version() string               { return "2.0.0" }
 
 func (m *SSOClientsModule) Dependencies() []nexus.Dependency { return nil }
 

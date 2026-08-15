@@ -49,9 +49,15 @@ func New(p nexus.Platform) *BillingModule {
 	return m
 }
 
-func (m *BillingModule) ID() string      { return "io.gerege.nexus.billing" }
-func (m *BillingModule) Name() string    { return "Public Billing & e-Barimt" }
-func (m *BillingModule) Version() string { return "1.0.0" }
+func (m *BillingModule) ID() string { return "io.gerege.nexus.billing" }
+
+// MenuPermission and RoutePermissionPrefix are this module's half of
+// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
+// app ID, stated here so it survives the module moving to another repository.
+func (m *BillingModule) MenuPermission() string        { return "billing.read" }
+func (m *BillingModule) RoutePermissionPrefix() string { return "billing" }
+func (m *BillingModule) Name() string                  { return "Public Billing & e-Barimt" }
+func (m *BillingModule) Version() string               { return "1.0.0" }
 
 func (m *BillingModule) Dependencies() []nexus.Dependency {
 	return []nexus.Dependency{

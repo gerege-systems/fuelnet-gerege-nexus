@@ -1,3 +1,5 @@
+  AccessPolicy.MenuPermission() string
+  AccessPolicy.RoutePermissionPrefix() string
   DB.Begin(ctx context.Context) (pgx.Tx, error)
   DB.BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
   DB.Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
@@ -43,10 +45,12 @@ func Error(w http.ResponseWriter, status int, message string)
 func Get(id string) (Module, bool)
 func JSON(w http.ResponseWriter, status int, value any)
 func List() []Module
+func MenuPermissionOf(m Module) string
 func NewPlatform(db DB, permissions PermissionStore) Platform
 func Register(m Module)
 func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler
 func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool)
+func RoutePermissionPrefixOf(m Module) string
 func TenantID(ctx context.Context) (string, error)
 func UseAuditSink(sink AuditSink)
 func UserFromContext(ctx context.Context) (UserClaims, error)
@@ -55,6 +59,7 @@ func WithAllowedTenants(ctx context.Context, tenantIDs []string) context.Context
 func WithTenantID(ctx context.Context, tenantID string) context.Context
 func WithUser(ctx context.Context, claims UserClaims) context.Context
 func WithoutTenant(ctx context.Context) context.Context
+type AccessPolicy interface
 type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 type DB interface
 type Dependency struct

@@ -187,9 +187,17 @@ func New(p nexus.Platform) *DocumentsModule {
 	return m
 }
 
-func (m *DocumentsModule) ID() string      { return "io.gerege.nexus.documents" }
-func (m *DocumentsModule) Name() string    { return "Digital Documents & Signatures" }
-func (m *DocumentsModule) Version() string { return "1.0.0" }
+func (m *DocumentsModule) ID() string { return "io.gerege.nexus.documents" }
+
+// MenuPermission and RoutePermissionPrefix are this module's half of
+// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
+// app ID, stated here so it survives the module moving to another repository.
+// The routes carry their own checks: who may read a document is decided by
+// who it was shared with, not by the verb.
+func (m *DocumentsModule) MenuPermission() string        { return "documents.read" }
+func (m *DocumentsModule) RoutePermissionPrefix() string { return "" }
+func (m *DocumentsModule) Name() string                  { return "Digital Documents & Signatures" }
+func (m *DocumentsModule) Version() string               { return "1.0.0" }
 
 func (m *DocumentsModule) Dependencies() []nexus.Dependency { return nil }
 

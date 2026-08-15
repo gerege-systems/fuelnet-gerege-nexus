@@ -153,9 +153,17 @@ func New(p nexus.Platform, meetings MeetingBooker) *Module {
 	return m
 }
 
-func (m *Module) ID() string      { return "io.gerege.nexus.gov_services" }
-func (m *Module) Name() string    { return "State Services" }
-func (m *Module) Version() string { return "1.1.0" }
+func (m *Module) ID() string { return "io.gerege.nexus.gov_services" }
+
+// MenuPermission and RoutePermissionPrefix are this module's half of
+// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
+// app ID, stated here so it survives the module moving to another repository.
+// The platform cannot derive these from the method — an approval depends on
+// which unit the applicant belongs to and on the workflow step it is at.
+func (m *Module) MenuPermission() string        { return "gov.read" }
+func (m *Module) RoutePermissionPrefix() string { return "" }
+func (m *Module) Name() string                  { return "State Services" }
+func (m *Module) Version() string               { return "1.1.0" }
 
 // Dependencies: an application always names a citizen, and Contacts is where
 // XYP-verified citizen records live.

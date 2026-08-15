@@ -105,9 +105,17 @@ func (m *Module) Company(ctx context.Context, companyReg string) (*gerege.Compan
 	return m.xyp.GetCompanyInfo(ctx, companyReg)
 }
 
-func (m *Module) ID() string      { return ID }
-func (m *Module) Name() string    { return "e-Government Link" }
-func (m *Module) Version() string { return "1.0.0" }
+func (m *Module) ID() string { return ID }
+
+// MenuPermission and RoutePermissionPrefix are this module's half of
+// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
+// app ID, stated here so it survives the module moving to another repository.
+// Route gating stays with the module: a citizen-registry lookup is a GET,
+// and it must not be a `.read` that every member holds.
+func (m *Module) MenuPermission() string        { return "egov.read" }
+func (m *Module) RoutePermissionPrefix() string { return "" }
+func (m *Module) Name() string                  { return "e-Government Link" }
+func (m *Module) Version() string               { return "1.0.0" }
 
 // Dependencies are none, in the direction that matters.
 //
