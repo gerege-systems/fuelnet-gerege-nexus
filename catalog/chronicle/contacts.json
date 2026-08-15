@@ -1,5 +1,13 @@
 {
   "app_id": "io.gerege.nexus.contacts",
+  "retired": {
+    "on": "2026-08-15",
+    "into": "io.gerege.nexus.organisation",
+    "note": {
+      "mn": "Энэ апп 2026-08-15-нд Бүртгэл аппын дотор орсон. Файл нь устгагдаагүй: доорх хувилбар үнэхээр гарсан. Цаашдын түүх catalog/chronicle/organisation.json дотор.",
+      "en": "This app moved inside Directory on 2026-08-15. The file is kept rather than deleted: the version below really shipped. The history continues in catalog/chronicle/organisation.json."
+    }
+  },
   "entries": [
     {
       "version": "1.0.0",

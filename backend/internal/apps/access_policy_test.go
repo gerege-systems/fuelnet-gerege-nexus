@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
@@ -36,7 +35,6 @@ var corePolicies = map[string]struct {
 	menu, prefix   string
 	whyNoRouteGate string
 }{
-	"contacts":    {(*contacts.Module)(nil), "contacts.read", "contacts", ""},
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
 
 	// The two that gate themselves, and why the verb is not enough for them.
@@ -84,6 +82,14 @@ var policylessModules = map[string]nexus.Module{
 // through Module.require, which is the same way documents gates its own.
 var nonModulePackages = map[string]string{
 	"esign": "the documents app's PDF rails; documents.New builds it and mounts its routes",
+	// contacts declared "contacts.read"/prefix "contacts" until the merge, and
+	// the prefix is the part worth watching: it made the *platform* gate those
+	// routes. A module that mounts another package's routes lends it its own
+	// gate, and organisation declares no prefix — so the register asserts
+	// organisation.read / organisation.manage per route itself, in
+	// contacts.RegisterRoutes. Without that the merge would have quietly turned
+	// "manage required" into "any member of the tenant".
+	"contacts": "the directory's contact register; organisation.New builds it and mounts its routes",
 }
 
 func TestTheModulesWithNoPolicyAreTheOnesWeMeant(t *testing.T) {

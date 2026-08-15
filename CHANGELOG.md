@@ -15,6 +15,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Two cards became one app: Contacts moved inside the Directory
+
+"Organisation & People" and "Contacts" were one subject cut in half — who this
+organisation is made of, and who it deals with. An administrator who installed
+one and not the other had half a directory, and nothing in the store said which
+half was missing. So `io.gerege.nexus.contacts` is gone and its register is part
+of `io.gerege.nexus.organisation`, now called **Directory** (mn: Бүртгэл) at
+version 2.0.0.
+
+The `contacts` table, the API path `/api/v1/contacts` and the screen at
+`/contacts` are all unchanged. What moved is the app the register belongs to.
+
+- **The contact routes assert their own permission now**, and this is the part
+  worth reading twice. They were gated by the platform, from the *registered
+  module's* route prefix — and a module that mounts another package's routes
+  lends it its own gate. The Directory declares no prefix, because it checks
+  each of its routes explicitly. Mounting the register behind it without saying
+  so would have turned "contacts.manage required" into "any member of the
+  tenant", silently, in a diff about menus.
+- **One permission namespace.** `contacts.read/manage` →
+  `organisation.read/manage`, one to one, carried by migration `00059` before
+  the old codes are dropped.
+- **The register arrives everywhere.** The Directory is a default app, so every
+  tenant has it — including tenants that never installed Contacts. That is the
+  thing being fixed rather than a side effect: a directory with no outside half
+  was the half-product this merge exists to end.
+- Migration `00059` was run against a database in the pre-merge shape — a role
+  holding *only* the two contacts codes, a tenant with Contacts and no Directory
+  row at all — and taken down and up again. The role came out holding exactly
+  the two organisation codes; the tenant came out with the Directory installed
+  and enabled.
+- `catalog/chronicle/contacts.json` is kept and marked retired, as
+  `esign.json` was.
+
 ### Changed — Two cards became one app: PDF E-Sign moved inside Documents
 
 The store carried "Digital Documents & Signatures" and "PDF E-Sign" side by

@@ -46,6 +46,7 @@ package organisation
 import (
 	"net/http"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -65,18 +66,37 @@ const LegacyID = "io.gerege.nexus.core"
 type Module struct {
 	db    nexus.DB
 	perms nexus.PermissionStore
+
+	// Who this organisation deals with, as opposed to who it is made of. It
+	// was a second app in the store — see contacts.New for why half a
+	// directory is not a product. Nil is allowed and means this deployment
+	// builds the module without the register: the units and the people work,
+	// and the contact routes are simply not mounted.
+	contacts *contacts.Module
 }
 
-func New(p nexus.Platform) *Module {
-	m := &Module{db: p.DB(), perms: p.Permissions()}
+// contactRegister is the contacts half, or nil on a deployment built without it.
+func New(p nexus.Platform, contactRegister *contacts.Module) *Module {
+	m := &Module{db: p.DB(), perms: p.Permissions(), contacts: contactRegister}
 	nexus.Register(m)
 	registerReports()
 	return m
 }
 
-func (m *Module) ID() string      { return ID }
-func (m *Module) Name() string    { return "Organisation & People" }
-func (m *Module) Version() string { return "1.0.0" }
+func (m *Module) ID() string { return ID }
+
+// Name is the question the app answers, which is "who".
+//
+// It was "Organisation & People" and sat in the store beside "Contacts", which
+// was the same subject cut in half: the people inside and the people outside.
+// A directory is what you get when neither half is optional.
+func (m *Module) Name() string { return "Directory" }
+
+// 2.0.0 because the app's shape changed. It absorbed another app, its
+// permissions are what that app's used to be, and every tenant has it — this
+// one is installed by default — so the contact register arrived everywhere at
+// once.
+func (m *Module) Version() string { return "2.0.0" }
 
 func (m *Module) Dependencies() []nexus.Dependency { return nil }
 
@@ -89,8 +109,8 @@ func (m *Module) Dependencies() []nexus.Dependency { return nil }
 // department can already put them anywhere in it.
 func (m *Module) Permissions() []nexus.PermissionDefinition {
 	return []nexus.PermissionDefinition{
-		{Code: "organisation.read", Name: "Read Organisation", Description: "View the organisation profile, its departments and its people"},
-		{Code: "organisation.manage", Name: "Manage Organisation", Description: "Edit the organisation profile, its departments and its people"},
+		{Code: "organisation.read", Name: "Read Directory", Description: "View the organisation profile, its departments, its people and its contacts"},
+		{Code: "organisation.manage", Name: "Manage Directory", Description: "Edit the organisation profile, its departments, its people and its contacts"},
 	}
 }
 
@@ -113,6 +133,18 @@ func (m *Module) Menus() []nexus.MenuDefinition {
 			Labels: map[string]string{
 				"mn": "Хэлтэс, нэгж", "ar": "الأقسام", "zh": "部门",
 				"fr": "Départements", "ru": "Подразделения", "es": "Departamentos",
+			},
+		},
+		// The outside half. Its path is what it always was: an address people
+		// have bookmarked is not ours to invalidate for a reorganisation they
+		// did not ask for, and unlike the blueprint entries, a menu declared
+		// here carries its own path rather than one built from a slug.
+		{
+			ID: "contacts", Label: "Contacts",
+			Path: "/contacts", Icon: "users", Order: 10,
+			Labels: map[string]string{
+				"mn": "Харилцагчид", "ar": "جهات الاتصال", "zh": "联系人",
+				"fr": "Contacts", "ru": "Контакты", "es": "Contactos",
 			},
 		},
 	}
@@ -149,4 +181,14 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		cr.With(manage).Post("/people/{id}/deactivate", m.handleDeactivatePerson)
 		cr.With(manage).Post("/people/{id}/reactivate", m.handleReactivatePerson)
 	})
+
+	// The contact register, mounted by the app that now owns it.
+	//
+	// It keeps its own prefix — /api/v1/contacts — deliberately. A path is a
+	// contract with every client already written against it, and moving one to
+	// make an internal reorganisation visible from outside costs other people's
+	// afternoons and buys nothing. What merged is the product, not the wiring.
+	if m.contacts != nil {
+		m.contacts.RegisterRoutes(r, tenantAuthMiddleware)
+	}
 }

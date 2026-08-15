@@ -23,48 +23,47 @@ type Contact struct {
 }
 
 type Module struct {
-	db nexus.DB
+	db    nexus.DB
+	perms nexus.PermissionStore
 }
 
+// New builds the contact register. It registers no module, and that is the
+// whole of what changed when the two cards became one.
+//
+// This was `io.gerege.nexus.contacts`, a second app beside Organisation &
+// People. The two were one subject split in half: who this organisation is made
+// of, and who it deals with. An administrator installing one and not the other
+// got half a directory, and nothing in the store explained which half.
+//
+// So the register moved inside the organisation module, which owns the app's
+// identity, permissions and menu, and calls RegisterRoutes below. The table,
+// the routes and the screen are unchanged.
 func New(p nexus.Platform) *Module {
-	m := &Module{db: p.DB()}
-	nexus.Register(m)
-	return m
+	return &Module{db: p.DB(), perms: p.Permissions()}
 }
 
-func (m *Module) ID() string { return "io.gerege.nexus.contacts" }
-
-// MenuPermission and RoutePermissionPrefix are this module's half of
-// nexus.AccessPolicy — what the platform used to hold in a switch keyed by
-// app ID, stated here so it survives the module moving to another repository.
-func (m *Module) MenuPermission() string        { return "contacts.read" }
-func (m *Module) RoutePermissionPrefix() string { return "contacts" }
-func (m *Module) Name() string                  { return "Contacts" }
-func (m *Module) Version() string               { return "1.0.0" }
-
-func (m *Module) Dependencies() []nexus.Dependency {
-	return nil
-}
-
-func (m *Module) Permissions() []nexus.PermissionDefinition {
-	return []nexus.PermissionDefinition{
-		{Code: "contacts.read", Name: "Read Contacts", Description: "View contacts list"},
-		{Code: "contacts.manage", Name: "Manage Contacts", Description: "Create and edit contacts"},
-	}
-}
-
-func (m *Module) Menus() []nexus.MenuDefinition {
-	return []nexus.MenuDefinition{
-		{ID: "contacts", ParentID: "master_data", Label: "Contacts", Path: "/contacts", Icon: "users", Order: 10, Labels: map[string]string{"mn": "Харилцагчид", "ar": "جهات الاتصال", "zh": "联系人", "fr": "Contacts", "ru": "Контакты", "es": "Contactos"}},
-	}
-}
+// The permissions these routes are checked against — the organisation app's,
+// because that is the app these routes now belong to.
+//
+// They are asserted here, per route, rather than left to the platform. The
+// platform's blanket gate reads the *registered module's* route prefix, and the
+// module registered for these routes is now organisation, which declares no
+// prefix because it gates itself. Mounting this behind it without saying so
+// would have turned "contacts.manage required" into "any member of the tenant",
+// silently, in a diff about menus.
+const (
+	permRead   = "organisation.read"
+	permManage = "organisation.manage"
+)
 
 func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/v1/contacts", func(cr chi.Router) {
 		cr.Use(tenantAuthMiddleware)
-		cr.Get("/", m.listContactsHandler)
-		cr.Post("/", m.createContactHandler)
-		cr.Put("/{id}", m.updateContactHandler)
+		read := nexus.RequirePermission(m.perms, permRead)
+		manage := nexus.RequirePermission(m.perms, permManage)
+		cr.With(read).Get("/", m.listContactsHandler)
+		cr.With(manage).Post("/", m.createContactHandler)
+		cr.With(manage).Put("/{id}", m.updateContactHandler)
 	})
 }
 

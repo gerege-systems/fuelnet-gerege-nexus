@@ -25,7 +25,13 @@ type blueprint struct {
 }
 
 var blueprints = map[string]blueprint{
-	"io.gerege.nexus.contacts": {Slug: "contacts",
+	// The directory. Its three working screens — the organisation, its units,
+	// its people, and the contact register — are declared by the module itself
+	// and keep their own addresses; what is here is everything hanging off
+	// them, which is all contacts' after the merge. They point at
+	// /module/organisation/* now, because a menu built from a blueprint takes
+	// its path from the app's slug and there is one slug.
+	"io.gerege.nexus.organisation": {Slug: "organisation",
 		Modules: []futureMenu{
 			{ID: "segments", EN: "Segments", Icon: "users", Labels: map[string]string{
 				"mn": "Сегментүүд", "ar": "الشرائح", "zh": "客户分组", "fr": "Segments", "ru": "Сегменты", "es": "Segmentos"}},

@@ -100,13 +100,26 @@ func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 //
 // Built from DefaultApps rather than from a literal list, so adding a default
 // app does not silently fail every catalogue fixture in the package.
+// withDefaultApp prepends the apps this build refuses to run without, so a test
+// about something else does not fail on their absence.
+//
+// The version is read from the compiled module rather than typed here. It used
+// to be the literal "1.0.0", which agreed with every default app until one of
+// them shipped a 2.0.0 — and then two tests about external apps failed with a
+// message about a version mismatch in an app they had never mentioned, only
+// when the whole package ran and some other test had registered the module.
+// A number kept in step by hand is a number that goes out of step quietly.
 func withDefaultApp(apps ...catalog.CatalogApp) []catalog.CatalogApp {
 	full := make([]catalog.CatalogApp, 0, len(appinstaller.DefaultApps)+len(apps))
 	for _, id := range appinstaller.DefaultApps {
 		slug := id[strings.LastIndex(id, ".")+1:]
+		version := "1.0.0"
+		if mod, ok := nexus.Get(id); ok {
+			version = mod.Version()
+		}
 		full = append(full, catalog.CatalogApp{
-			ID: id, Slug: slug, Version: "1.0.0",
-			Manifest: catalog.Manifest{ID: id, Name: slug, Version: "1.0.0"},
+			ID: id, Slug: slug, Version: version,
+			Manifest: catalog.Manifest{ID: id, Name: slug, Version: version},
 		})
 	}
 	return append(full, apps...)

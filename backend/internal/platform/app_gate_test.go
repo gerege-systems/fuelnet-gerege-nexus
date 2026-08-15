@@ -162,11 +162,14 @@ func TestTheStateRegistryIsBehindItsAppAndContactsIsNot(t *testing.T) {
 		t.Fatalf("connections answered %d without the app installed; expected 403", res.Code)
 	}
 
-	// Contacts, on the other hand, is a different app and is unaffected by the
-	// state integration being absent. It is gated on its own installation, so
-	// installing it is enough to get past the gate — what matters here is that
-	// the answer does not depend on egov.
-	f.install(t, "io.gerege.nexus.contacts")
+	// Contacts, on the other hand, is unaffected by the state integration being
+	// absent. What matters here is that the answer does not depend on egov.
+	//
+	// The app installed to open that gate is the directory, not a contacts app:
+	// the contact register was absorbed into io.gerege.nexus.organisation, so
+	// that is the installation its routes are now gated on. The claim under
+	// test did not move with it.
+	f.install(t, "io.gerege.nexus.organisation")
 	if res := f.do(t, http.MethodGet, "/api/v1/contacts", ""); res.Code == http.StatusForbidden {
 		t.Fatalf("contacts was refused while the e-Government app was absent: %s", res.Body.String())
 	}
