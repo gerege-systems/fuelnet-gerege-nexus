@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	transport "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
@@ -568,4 +569,82 @@ func TestATaskCanBeRaisedAndKeptHere(t *testing.T) {
 	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/accept", nil, http.StatusOK)
 	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/complete", nil, http.StatusOK)
 	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/close", nil, http.StatusOK)
+}
+
+// ---------------------------------------------------------------- reports
+
+// poolQuerier is the read surface the engine hands a report, backed by the
+// pool. The engine's own is a transaction with a statement timeout on it; what
+// is under test here is the three queries, not the engine.
+type poolQuerier struct{ pool *pgxpool.Pool }
+
+func (q poolQuerier) Query(ctx context.Context, sql string, args ...any) (nexus.Rows, error) {
+	return q.pool.Query(ctx, sql, args...)
+}
+
+// The three reports run against a real schema, over real tasks.
+//
+// A report is SQL somebody else's engine executes, so the failure it has is a
+// column that does not exist or a scan that does not match — neither of which
+// the compiler sees. This is the check that does.
+func TestTheThreeReportsRun(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 27, "local.count")
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+	}, http.StatusCreated)
+	carry(t, parent, child)
+	work := child.tasks("incoming")[0]
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/accept", nil, http.StatusOK)
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/complete", nil, http.StatusOK)
+	carry(t, parent, child)
+
+	ctx := nexus.WithTenantID(context.Background(), parent.tenantID)
+	params := nexus.NewParams(map[string]any{
+		"period_from": time.Now().Add(-24 * time.Hour),
+		"period_to":   time.Now().Add(24 * time.Hour),
+	}, "mn")
+
+	// Two of the three have to have found something: a task was raised,
+	// completed and carried over a link inside the window. Only the SLA report
+	// is legitimately empty — nothing here was late.
+	expectRows := map[string]bool{
+		taskCompletion{}.Key(): true,
+		channelLoad{}.Key():    true,
+	}
+
+	for _, report := range []nexus.Report{taskCompletion{}, slaBreaches{}, channelLoad{}} {
+		t.Run(report.Key(), func(t *testing.T) {
+			result, err := report.Run(ctx, poolQuerier{pool}, params)
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if expectRows[report.Key()] && len(result.Rows) == 0 {
+				t.Fatal("the report found nothing, and there is work in the window")
+			}
+			// Every declared column has to appear on every row, or the export
+			// writes a blank cell under a header somebody is reading.
+			for _, row := range result.Rows {
+				for _, column := range report.Columns() {
+					if _, ok := row[column.Key]; !ok {
+						t.Errorf("row is missing the column %q", column.Key)
+					}
+				}
+			}
+		})
+	}
+
+	// Sharing is opt-in per scope. A report that cannot filter by counterparty
+	// must not offer to — a grant asking for it would otherwise quietly become
+	// a view of every subordinate.
+	for _, report := range []nexus.Report{taskCompletion{}, slaBreaches{}, channelLoad{}} {
+		if !reporting.SupportsScope(report, reporting.ScopeFull) {
+			t.Errorf("%s cannot be shared at all", report.Key())
+		}
+		if reporting.SupportsScope(report, reporting.ScopeCounterparty) {
+			t.Errorf("%s offers counterparty scope, and nothing in a task carries a counterparty reference",
+				report.Key())
+		}
+	}
 }

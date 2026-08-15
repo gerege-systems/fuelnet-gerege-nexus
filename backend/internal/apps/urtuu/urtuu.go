@@ -57,6 +57,7 @@ func New(p nexus.Platform, link *transport.Service) *Module {
 	nexus.Register(m)
 	link.Deliver(contract.KindTaskAssigned, m.receiveAssignment)
 	link.Deliver(contract.KindTaskUpdate, m.receiveUpdate)
+	registerReports()
 	return m
 }
 
