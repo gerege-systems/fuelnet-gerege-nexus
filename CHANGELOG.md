@@ -49,6 +49,45 @@ it is a deployment rather than a project.
   no routes and lists no menu.
 
 
+## [1.3.0] - 2026-08-15
+
+### Added — the reporting contract and the document capability, both so a module elsewhere can use them
+
+- **`nexus.Report` and the shapes around it** — `Querier`, `Rows`, `ParamSpec`,
+  `ColumnSpec`, `Params`, `Result`, plus `RegisterReport` and `UseReportSink`.
+  A module needs the authoring contract, not the engine; parameter binding,
+  totals, exports, schedules and cross-organisation grants stay inside the
+  platform where they can change without moving the ecosystem's floor.
+  `internal/platform/reporting` is now aliases onto these, so there is one set
+  of types rather than two kept in step by hand.
+
+  The sink buffers, unlike `UseAuditSink` which drops. A dropped audit line is
+  a gap in a log; a dropped report is a feature that silently does not exist,
+  indistinguishable from one nobody wrote. Buffering makes the order of a
+  distribution's `main()` stop mattering.
+
+- **`nexus.DocumentFiler`** — filing a document and following what becomes of
+  it, available to every module including those compiled elsewhere. There is
+  deliberately no `Sign`: a signature is an interactive ceremony performed by a
+  person in front of a screen, and a module that could sign would be a module
+  that could sign as somebody else. How many signatures a document needs is the
+  tenant's policy, not the caller's, so it is not a field on the draft.
+
+  Documents and esign stay in the platform. The dependency profile settles it:
+  esign reaches into the eID rail, the DAN rail, the HSM, the registry client,
+  quota and the async runner. It is not an app that happens to live here; it is
+  a platform capability wearing an app's clothes, the same shape as reporting.
+
+### Changed
+
+- **`invoices_created_total` is registered by the billing module**, not by the
+  platform, under the same name the dashboards already use. A platform that
+  ships a counter named after somebody else's domain has to be edited every
+  time that domain moves. A deployment without billing does not export the
+  series at all, which is truer than a zero that never moves.
+- `products`, `inventory` and `billing` no longer import anything under
+  `internal/`. That is what makes the commerce split possible.
+
 ## [1.2.0] - 2026-08-15
 
 ### Added — a module can now state its own access policy, and book a meeting
