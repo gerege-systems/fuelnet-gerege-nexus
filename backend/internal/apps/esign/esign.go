@@ -58,6 +58,21 @@ type Module struct {
 	exports FileExporter
 }
 
+// New builds the PDF rails. It does not register a module, and that is the
+// whole of what changed when the two cards became one.
+//
+// This was `io.gerege.nexus.esign`, a second app in the store beside
+// `io.gerege.nexus.documents`. Two cards, two installations, two menu entries,
+// two permission namespaces — for one question a person actually has, which is
+// "where are my documents and who has signed them". Nobody adopts a signature
+// on its own; they adopt it because something has to be signed.
+//
+// So the rails moved inside the documents module, which owns the app's
+// identity, permissions and menu, and calls RegisterRoutes below. Everything
+// here is unchanged apart from the permission codes: the paths under
+// /api/v1/esign, the tables, the HSM and eID ceremonies and the signature log
+// are all what they were, because none of them was ever the reason there were
+// two apps.
 func New(p nexus.Platform, hsm *gerege.EsignService, eid *eidmongolia.Service, exports FileExporter) *Module {
 	db := p.DB()
 	m := &Module{
@@ -68,29 +83,8 @@ func New(p nexus.Platform, hsm *gerege.EsignService, eid *eidmongolia.Service, e
 		perms:   p.Permissions(),
 		exports: exports,
 	}
-	nexus.Register(m)
 	registerReports()
 	return m
-}
-
-func (m *Module) ID() string      { return "io.gerege.nexus.esign" }
-func (m *Module) Name() string    { return "PDF E-Sign (Тоон гарын үсэг)" }
-func (m *Module) Version() string { return "2.0.0" }
-
-func (m *Module) Dependencies() []nexus.Dependency { return nil }
-
-func (m *Module) Permissions() []nexus.PermissionDefinition {
-	return []nexus.PermissionDefinition{
-		{Code: PermRead, Name: "View E-Sign Documents", Description: "View uploaded and signed PDF documents and the signature log"},
-		{Code: PermSign, Name: "Sign Documents", Description: "Sign PDF documents with a digital signature"},
-		{Code: PermManage, Name: "Manage E-Sign", Description: "Upload documents, run batches and configure signing"},
-	}
-}
-
-func (m *Module) Menus() []nexus.MenuDefinition {
-	return []nexus.MenuDefinition{
-		{ID: "esign", ParentID: "operations", Label: "PDF E-Sign", Path: "/esign", Icon: "pen-tool", Order: 55, Labels: map[string]string{"mn": "PDF цахим гарын үсэг", "ar": "توقيع PDF الإلكتروني", "zh": "PDF 电子签名", "fr": "Signature électronique PDF", "ru": "Электронная подпись PDF", "es": "Firma electrónica PDF"}},
-	}
 }
 
 func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {

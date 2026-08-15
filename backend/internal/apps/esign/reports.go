@@ -15,8 +15,12 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-// AppID is the module these reports belong to.
-const AppID = "io.gerege.nexus.esign"
+// AppID is the app these reports belong to.
+//
+// The documents app, since the merge — the reports list is filtered by which
+// apps a tenant has installed, and a report claiming an app nobody can install
+// is a report nobody can reach.
+const AppID = "io.gerege.nexus.documents"
 
 func registerReports() {
 	nexus.RegisterReport(signaturesByRail{})
@@ -39,7 +43,7 @@ func periodParam(window time.Duration) nexus.ParamSpec {
 
 type signaturesByRail struct{}
 
-func (signaturesByRail) Key() string { return "esign.signatures_by_rail" }
+func (signaturesByRail) Key() string { return "documents.signatures_by_rail" }
 func (signaturesByRail) App() string { return AppID }
 
 func (signaturesByRail) Titles() map[string]string {
@@ -135,7 +139,7 @@ func qualifiedLabel(rail, locale string) string {
 
 type signersActivity struct{}
 
-func (signersActivity) Key() string { return "esign.signer_activity" }
+func (signersActivity) Key() string { return "documents.signer_activity" }
 func (signersActivity) App() string { return AppID }
 
 func (signersActivity) Titles() map[string]string {

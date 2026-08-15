@@ -339,14 +339,20 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 			roleCode string
 			allowed  bool
 		}{
-			{roleCode: "manager", allowed: strings.HasSuffix(perm.Code, ".read") || strings.HasSuffix(perm.Code, ".manage") || perm.Code == "gov.process" || perm.Code == "gov.delegate" || perm.Code == "gov.verify" || perm.Code == "gov.report" || perm.Code == "esign.sign"},
-			// esign.sign reaches ordinary users deliberately. The authority
-			// to sign is the citizen's own — an eID signature is made with
-			// their PIN2 on their own phone, and the HSM rail makes them
-			// prove a certificate — so withholding it would only stop
-			// people signing their own documents. Uploading and configuring
-			// remain behind esign.manage.
-			{roleCode: "user", allowed: strings.HasSuffix(perm.Code, ".read") || perm.Code == "gov.apply" || perm.Code == "esign.sign"},
+			{roleCode: "manager", allowed: strings.HasSuffix(perm.Code, ".read") || strings.HasSuffix(perm.Code, ".manage") || perm.Code == "gov.process" || perm.Code == "gov.delegate" || perm.Code == "gov.verify" || perm.Code == "gov.report" || perm.Code == "documents.sign"},
+			// documents.sign reaches ordinary users deliberately. The
+			// authority to sign is the citizen's own — an eID signature is
+			// made with their PIN2 on their own phone, the HSM rail makes
+			// them prove a certificate, and an approval chain only counts a
+			// signature from somebody it names — so withholding it would
+			// only stop people signing their own documents. Uploading,
+			// routing and configuring remain behind documents.manage.
+			//
+			// It was esign.sign until the two apps became one. The rule
+			// widened with the rename: record signing, which had been
+			// admin-only by omission rather than by argument, is the same
+			// act on the same authority as signing a PDF was.
+			{roleCode: "user", allowed: strings.HasSuffix(perm.Code, ".read") || perm.Code == "gov.apply" || perm.Code == "documents.sign"},
 		} {
 			if !grant.allowed {
 				continue

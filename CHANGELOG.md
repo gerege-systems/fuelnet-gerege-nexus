@@ -15,6 +15,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Two cards became one app: PDF E-Sign moved inside Documents
+
+The store carried "Digital Documents & Signatures" and "PDF E-Sign" side by
+side. They answered one question — where are my documents and who has signed
+them — and nobody adopts a signature on its own; they adopt it because something
+has to be signed. So `io.gerege.nexus.esign` is gone and its rails are part of
+`io.gerege.nexus.documents`, now called **Documents** (mn: Баримт бичиг) at
+version 2.0.0.
+
+Nothing about how a document is signed changed. The eID and HSM rails, the
+signature log, batch signing, stamp placement, the HSM connection and the two
+reports are the same code reading the same tables.
+
+- **`esign` is no longer a module.** It registers nothing with `nexus`;
+  `documents.New` builds it and `documents.RegisterRoutes` mounts it. The
+  classification test in `internal/apps` grew a third category for exactly this
+  — a package that stops being a module has to say so somewhere, or its absence
+  from the table reads as an oversight.
+- **One permission namespace.** `esign.read/sign/manage` →
+  `documents.read/sign/manage`, one to one. Migration `00058` carries every
+  existing grant across before the old codes are dropped, so no administrator
+  is asked to reconstruct anything. An app with two namespaces would have made
+  someone grant the right to sign twice, in two places, with no way to tell
+  from the Access control screen which one the button obeys.
+- **`documents.sign` now reaches the default manager and user roles**, which
+  `esign.sign` did and record signing did not. The argument was always the
+  same one: the authority to sign is the citizen's own — PIN2 on their own
+  phone, or a certificate proved to the HSM — and an approval chain only counts
+  a signature from somebody it names. Withholding it only stopped people
+  signing their own documents.
+- **The API keeps `/api/v1/esign`.** A path is a contract with every client
+  already written against it, including the reference signing view the eID rail
+  mirrors. What merged is the product, not the wiring. The *screen* did move:
+  `/esign` permanently redirects to `/module/documents/pdf`, because one app has
+  one slug and every screen hangs off it.
+- **The menu gained the PDF entries** and lost a collision: two screens were
+  called "Signature policies". One is which channel a document *type* may be
+  signed through; the other, now "PDF signing rails", is which of the two PDF
+  machines is switched on.
+- Migration `00058` was run against a database holding the pre-merge shape —
+  a tenant with the PDF app and not the documents app, a manager role holding
+  all three old codes, a report schedule naming an old key — and then taken
+  down and up again. What the down cannot restore is which tenants had the PDF
+  app *separately*; that left with the deleted rows, so a rollback gives it back
+  to everyone holding Documents. The safe direction: an app to switch off rather
+  than work nobody can reach.
+- `catalog/chronicle/esign.json` is kept, marked retired rather than deleted.
+  Two versions really shipped, and removing them buys a tidier directory at the
+  price of a record that is no longer true.
+
 ### Changed — The image no longer knows its own name
 
 `lib/apiBase.ts` took the deployment's address out of the build. This takes its

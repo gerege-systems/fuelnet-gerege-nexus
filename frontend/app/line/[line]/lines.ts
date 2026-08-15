@@ -49,7 +49,7 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     actions: [
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
       { label: "Баримт", hint: "Боловсруулах, батлах, архивлах", href: "/documents", icon: "file" },
-      { label: "Гарын үсэг", hint: "eID болон HSM-ээр зурах", href: "/esign", icon: "pen" },
+      { label: "Гарын үсэг", hint: "eID болон HSM-ээр зурах", href: "/module/documents/pdf", icon: "pen" },
       { label: "Төрийн үйлчилгээ", hint: "Хүсэлт, цаг захиалга", href: "/gov-services", icon: "landmark" },
       { label: "Харилцагч", hint: "Байгууллага, хүмүүс", href: "/contacts", icon: "users" },
       { label: "Төхөөрөмжийн парк", hint: "Бүртгэсэн төхөөрөмжүүд", href: "/settings/devices", icon: "monitor" },
@@ -80,7 +80,7 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     alloyRGB: "14 154 167",
     actions: [
       { label: "Батлах хүлээж буй", hint: "Таны шийдвэр хүлээсэн баримт", href: "/documents", icon: "file" },
-      { label: "Гарын үсэг", hint: "Face ID-аар баталгаажуулж зурна", href: "/esign", icon: "pen" },
+      { label: "Гарын үсэг", hint: "Face ID-аар баталгаажуулж зурна", href: "/module/documents/pdf", icon: "pen" },
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
       { label: "Харилцагч", hint: "Хайх, залгах, бичих", href: "/contacts", icon: "users" },
     ],

@@ -128,41 +128,41 @@
   {
     "id": "io.gerege.nexus.documents",
     "slug": "documents",
-    "name": "Digital Documents & Signatures",
-    "description": "Enterprise document routing, digital signatures, and approval workflows.",
+    "name": "Documents",
+    "description": "One register for what an organisation writes down and what it signs: templates, approval chains, retention, and PDF signing over the eID and HSM rails.",
     "icon_url": "/icons/documents.png",
     "category": "Productivity",
     "visibility": "public",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "translations": {
       "mn": {
-        "name": "Цахим баримт ба гарын үсэг",
-        "description": "Байгууллагын баримт бичгийн урсгал, тоон гарын үсэг ба батламжийн процесс.",
+        "name": "Баримт бичиг",
+        "description": "Байгууллагын баримтын бүртгэл, загвар, батламжийн урсгал, хадгалалт — PDF болон бүртгэлийн тоон гарын үсэг eID, ДАН, HSM гурван сувгаар.",
         "category": "Бүтээмж"
       },
       "ar": {
-        "name": "المستندات والتوقيعات الرقمية",
-        "description": "توجيه مستندات المؤسسة والتوقيعات الرقمية وسير عمل الموافقات.",
+        "name": "المستندات",
+        "description": "سجل واحد لما تكتبه المؤسسة وما توقّعه: القوالب وسلاسل الموافقة والاحتفاظ وتوقيع PDF عبر مساري eID و HSM.",
         "category": "الإنتاجية"
       },
       "zh": {
-        "name": "数字文档与签名",
-        "description": "企业文档流转、数字签名与审批流程。",
+        "name": "文档",
+        "description": "一个登记册，涵盖组织所记录与所签署的一切：模板、审批链、保留策略，以及通过 eID 与 HSM 通道的 PDF 签名。",
         "category": "生产力"
       },
       "fr": {
-        "name": "Documents et signatures numériques",
-        "description": "Circulation des documents d'entreprise, signatures numériques et flux d'approbation.",
+        "name": "Documents",
+        "description": "Un seul registre pour ce qu'une organisation consigne et ce qu'elle signe : modèles, circuits d'approbation, conservation et signature PDF via les canaux eID et HSM.",
         "category": "Productivité"
       },
       "ru": {
-        "name": "Электронные документы и подписи",
-        "description": "Маршрутизация документов организации, цифровые подписи и процессы согласования.",
+        "name": "Документы",
+        "description": "Единый реестр того, что организация фиксирует и подписывает: шаблоны, цепочки согласования, хранение и подпись PDF по каналам eID и HSM.",
         "category": "Продуктивность"
       },
       "es": {
-        "name": "Documentos y firmas digitales",
-        "description": "Circulación de documentos corporativos, firmas digitales y flujos de aprobación.",
+        "name": "Documentos",
+        "description": "Un único registro de lo que una organización deja por escrito y de lo que firma: plantillas, cadenas de aprobación, conservación y firma de PDF por los canales eID y HSM.",
         "category": "Productividad"
       }
     }
@@ -206,48 +206,6 @@
         "name": "Clientes SSO",
         "description": "Registre los sistemas que inician sesión de personas a través de esta plataforma: clientes OAuth2 / OpenID Connect y sus credenciales.",
         "category": "Plataforma"
-      }
-    }
-  },
-  {
-    "id": "io.gerege.nexus.esign",
-    "slug": "esign",
-    "name": "PDF E-Sign",
-    "description": "Upload PDF documents and sign them with Mongolian digital signatures via the Gerege eSign HSM service.",
-    "icon_url": "/icons/esign.png",
-    "category": "Productivity",
-    "visibility": "public",
-    "version": "2.0.0",
-    "translations": {
-      "mn": {
-        "name": "PDF цахим гарын үсэг",
-        "description": "PDF баримт бичгийг Gerege eSign HSM үйлчилгээгээр тоон гарын үсгээр баталгаажуулах.",
-        "category": "Бүтээмж"
-      },
-      "ar": {
-        "name": "توقيع PDF الإلكتروني",
-        "description": "ارفع مستندات PDF ووقّعها بالتوقيع الرقمي المنغولي عبر خدمة Gerege eSign HSM.",
-        "category": "الإنتاجية"
-      },
-      "zh": {
-        "name": "PDF 电子签名",
-        "description": "上传 PDF 文档，通过 Gerege eSign HSM 服务使用蒙古数字签名进行签署。",
-        "category": "生产力"
-      },
-      "fr": {
-        "name": "Signature électronique PDF",
-        "description": "Téléversez des documents PDF et signez-les avec la signature numérique mongole via le service Gerege eSign HSM.",
-        "category": "Productivité"
-      },
-      "ru": {
-        "name": "Электронная подпись PDF",
-        "description": "Загружайте PDF-документы и подписывайте их монгольской цифровой подписью через сервис Gerege eSign HSM.",
-        "category": "Продуктивность"
-      },
-      "es": {
-        "name": "Firma electrónica PDF",
-        "description": "Suba documentos PDF y fírmelos con la firma digital mongola mediante el servicio Gerege eSign HSM.",
-        "category": "Productividad"
       }
     }
   },

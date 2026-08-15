@@ -14,13 +14,23 @@ import (
 	"time"
 )
 
-// Permissions declared by the module and enforced per route. The platform's
-// blanket app gate cannot express these — signing is not the same authority as
-// uploading — so every handler asserts one explicitly.
+// The permissions these routes are checked against. The platform's blanket app
+// gate cannot express them — signing is not the same authority as uploading —
+// so every handler asserts one explicitly.
+//
+// They read `documents.*` because these rails are part of the documents app
+// now, and an app with two permission namespaces would make an administrator
+// grant the right to sign twice, in two places, with no way to tell from the
+// Access control screen which of them the button in front of them obeys.
+//
+// The mapping is one to one — esign.read → documents.read, and so on — which is
+// what makes it a rename rather than a redesign, and what let migration 00056
+// carry every existing grant across without an administrator being asked to
+// reconstruct anything.
 const (
-	PermRead   = "esign.read"
-	PermSign   = "esign.sign"
-	PermManage = "esign.manage"
+	PermRead   = "documents.read"
+	PermSign   = "documents.sign"
+	PermManage = "documents.manage"
 )
 
 // Signing providers. HSM is the Gerege eSign hardware module, which stamps a

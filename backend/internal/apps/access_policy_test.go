@@ -7,7 +7,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
@@ -64,15 +63,27 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 }
 
 // The modules that deliberately declare nothing. organisation and reports are
-// visible to every member of a tenant that has them installed; esign registers
-// no menu of its own and gates every route in its handlers, the same way
-// documents does. Absent-because-considered and absent-because-forgotten look
-// identical in a table, so the difference is asserted rather than left to a
-// comment.
+// visible to every member of a tenant that has them installed.
+// Absent-because-considered and absent-because-forgotten look identical in a
+// table, so the difference is asserted rather than left to a comment.
 var policylessModules = map[string]nexus.Module{
 	"organisation": (*organisation.Module)(nil),
 	"reports":      (*reports.Module)(nil),
-	"esign":        (*esign.Module)(nil),
+}
+
+// Directories under internal/apps that hold no module at all.
+//
+// esign is one since the merge: it is the PDF rails of the documents app, built
+// by documents.New and mounted by its RegisterRoutes, and it registers nothing
+// with nexus. It appears here rather than being deleted from the classification
+// because the directory is still there, and the count below reads directories —
+// a package that stops being a module must say so somewhere, or the next person
+// reads its absence as an oversight.
+//
+// Its routes are gated: every handler asserts one of the documents permissions
+// through Module.require, which is the same way documents gates its own.
+var nonModulePackages = map[string]string{
+	"esign": "the documents app's PDF rails; documents.New builds it and mounts its routes",
 }
 
 func TestTheModulesWithNoPolicyAreTheOnesWeMeant(t *testing.T) {
@@ -112,14 +123,18 @@ func TestEveryModuleInThisRepositoryIsClassified(t *testing.T) {
 	for name := range policylessModules {
 		unseen[name] = true
 	}
+	for name := range nonModulePackages {
+		unseen[name] = true
+	}
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		if !unseen[entry.Name()] {
-			t.Errorf("internal/apps/%s is not classified — add it to corePolicies "+
-				"or to policylessModules, having decided what gates it", entry.Name())
+			t.Errorf("internal/apps/%s is not classified — add it to corePolicies, "+
+				"to policylessModules or to nonModulePackages, having decided "+
+				"what gates it", entry.Name())
 		}
 		delete(unseen, entry.Name())
 	}

@@ -1,5 +1,13 @@
 {
   "app_id": "io.gerege.nexus.esign",
+  "retired": {
+    "on": "2026-08-15",
+    "into": "io.gerege.nexus.documents",
+    "note": {
+      "mn": "Энэ апп 2026-08-15-нд Баримт бичиг аппын дотор орсон. Файл нь устгагдаагүй: доорх хоёр хувилбар үнэхээр гарсан, тэднийг арилгах нь илүү цэвэрхэн лавлах биш, худал лавлах болно. Цаашдын түүх catalog/chronicle/documents.json дотор.",
+      "en": "This app moved inside Documents on 2026-08-15. The file is kept rather than deleted: the two versions below really shipped, and removing them would buy a tidier directory at the price of a record that is no longer true. The history continues in catalog/chronicle/documents.json."
+    }
+  },
   "entries": [
     {
       "version": "2.0.0",

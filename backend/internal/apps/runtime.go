@@ -46,14 +46,17 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	// is their app-facing surface, and the thing contacts reaches through.
 	egov.New(p, xyp, rails)
 	contacts.New(p)
-	documents.New(p)
+	// The documents app and the PDF signing rails it absorbed. The rails are
+	// built first and handed in rather than registering themselves: there is one
+	// app here now, and only one thing may answer for io.gerege.nexus.documents.
+	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
+	documents.New(p, esignModule)
 	sso_clients.New(sso)
 	// The App Store's three modules used to be constructed here. They are a
 	// product of their own now — github.com/gerege-systems/appstore-gerege-nexus
 	// — and reach this list through platform.Options.Modules, the same way any
 	// distribution's do. Every other deployment stopped carrying them as dead
 	// weight the day they left.
-	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
 	// Last, and after every module that registers a report: the reports app
 	// serves the registry, and a module constructed after it would have its
 	// reports missing from the first listing until something else rebuilt it.

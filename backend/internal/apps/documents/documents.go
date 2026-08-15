@@ -23,6 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
@@ -146,6 +147,14 @@ type DocumentsModule struct {
 	// process, on the strength of one transient error.
 	collationKnown bool
 	hasICU         bool
+
+	// The PDF rails — upload a file, sign it with the HSM or with eID, keep the
+	// log. They used to be a second app in the store; see esign.New for why a
+	// signature is not a product somebody adopts on its own. Nil is allowed and
+	// means this deployment builds the module without them: the register, the
+	// approval chains and the record signing all work, and the PDF routes are
+	// simply not mounted.
+	pdf *esign.Module
 }
 
 // New builds the module and registers it in the compile-time app registry so
@@ -174,7 +183,8 @@ const (
 	signPushBurst         = maxChainSteps
 )
 
-func New(p nexus.Platform) *DocumentsModule {
+// pdf is the PDF signing rails, or nil on a deployment built without them.
+func New(p nexus.Platform, pdf *esign.Module) *DocumentsModule {
 	db := p.DB()
 	m := &DocumentsModule{
 		db:          db,
@@ -182,6 +192,7 @@ func New(p nexus.Platform) *DocumentsModule {
 		danSvc:      dan.NewDANService(),
 		perms:       p.Permissions(),
 		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
+		pdf:         pdf,
 	}
 	nexus.Register(m)
 	// The capability, published for every other module — see filer.go. Done
@@ -201,22 +212,34 @@ func (m *DocumentsModule) ID() string { return "io.gerege.nexus.documents" }
 // who it was shared with, not by the verb.
 func (m *DocumentsModule) MenuPermission() string        { return "documents.read" }
 func (m *DocumentsModule) RoutePermissionPrefix() string { return "" }
-func (m *DocumentsModule) Name() string                  { return "Digital Documents & Signatures" }
-func (m *DocumentsModule) Version() string               { return "1.0.0" }
+
+// Name is the object, not the verb.
+//
+// This app was "Digital Documents & Signatures" and sat in the store beside
+// "PDF E-Sign", which was the same shelf listed twice: nobody adopts a
+// signature on its own, they adopt it because something has to be signed. One
+// card now, and the name that survives is the thing being kept.
+func (m *DocumentsModule) Name() string { return "Documents" }
+
+// 2.0.0 because the app's shape changed, not because its code did. It absorbed
+// a module that was itself at 2.0.0, its permissions are what another app's
+// used to be, and a tenant that had one of the two now has both — none of which
+// a minor version would be telling the truth about.
+func (m *DocumentsModule) Version() string { return "2.0.0" }
 
 func (m *DocumentsModule) Dependencies() []nexus.Dependency { return nil }
 
 func (m *DocumentsModule) Permissions() []nexus.PermissionDefinition {
 	return []nexus.PermissionDefinition{
-		{Code: "documents.read", Name: "Read Documents", Description: "View documents and signature status"},
-		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents, route them for approval, and configure templates, approval chains, signature policies and retention rules"},
-		{Code: "documents.sign", Name: "Sign Documents", Description: "Apply an E-ID / DAN digital signature or reject a document"},
+		{Code: "documents.read", Name: "Read Documents", Description: "View documents, uploaded PDFs, signature status and the signature log"},
+		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents, upload PDFs, route them for approval, run signing batches, and configure templates, approval chains, signature policies, signing rails, stamp placement and retention rules"},
+		{Code: "documents.sign", Name: "Sign Documents", Description: "Apply an eID / DAN / HSM digital signature or reject a document"},
 	}
 }
 
 func (m *DocumentsModule) Menus() []nexus.MenuDefinition {
 	return []nexus.MenuDefinition{
-		{ID: "documents", ParentID: "operations", Label: "Documents & E-Sign", Path: "/documents", Icon: "file-text", Order: 30, Labels: map[string]string{"mn": "Баримт ба цахим гарын үсэг", "ar": "المستندات والتوقيع الإلكتروني", "zh": "文档与电子签名", "fr": "Documents et signature électronique", "ru": "Документы и электронная подпись", "es": "Documentos y firma electrónica"}},
+		{ID: "documents", ParentID: "operations", Label: "Documents", Path: "/documents", Icon: "file-text", Order: 30, Labels: map[string]string{"mn": "Баримт бичиг", "ar": "المستندات", "zh": "文档", "fr": "Documents", "ru": "Документы", "es": "Documentos"}},
 	}
 }
 
@@ -307,6 +330,18 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		}
 		dr.With(sign).Post("/{id}/sign/eid/poll", m.pollEIDSignatureHandler)
 	})
+
+	// The PDF rails, mounted by the app that now owns them.
+	//
+	// They keep their own prefix — /api/v1/esign — deliberately. A path is a
+	// contract with every client already written against it, including the
+	// reference signing view the eID rail mirrors, and moving one to make an
+	// internal reorganisation visible from outside is the sort of change that
+	// costs other people's afternoons and buys nothing. What merged was the
+	// product; the wires are where they were.
+	if m.pdf != nil {
+		m.pdf.RegisterRoutes(r, tenantAuthMiddleware)
+	}
 }
 
 func (m *DocumentsModule) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {

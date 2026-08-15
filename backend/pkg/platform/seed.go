@@ -82,7 +82,12 @@ var demoTenants = []struct {
 	apps []string
 }{
 	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"contacts", "documents", "egov"}},
-	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"contacts", "esign"}},
+	// This one asked for "esign" until the PDF app was absorbed into documents
+	// and that slug stopped naming anything — the same failure the note above
+	// describes, arriving from the other direction. The two tenants keep
+	// different sets: without egov, this one's sidebar is still visibly not the
+	// first one's.
+	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"contacts", "documents"}},
 }
 
 // seedingEnabled reports whether the documented demo account should be
