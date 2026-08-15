@@ -187,8 +187,12 @@ distribution-ийг бүгдийг нь суулгасан Түвшин 2-ын �
 
 ## 3. Апп сторын байр суурь
 
-Апп стор (тусдаа байгаа `appstore-gerege-mn` registry +
-`developer-gerege-nexus` console) нь экосистемийн **түгээлтийн төв**:
+Апп стор нь экосистемийн **түгээлтийн төв**. Тэр нь өөрөө Түвшин 2-ын эхний
+бүтээгдэхүүн болов: тусдаа байсан `appstore-gerege-mn` registry ба
+`developer-gerege-nexus` консол хоёрыг [appstore-gerege-nexus](https://github.com/gerege-systems/appstore-gerege-nexus)
+distribution залгамжилж, appstore.gerege.mn дээр Nexus платформ дээрээ
+ажиллаж байна. Түгээлтийн төв өөрөө платформын үйлчлүүлэгч байх нь санамсаргүй
+биш — стор ажиллахгүй бол экосистем ажиллахгүй гэдгийг хамгийн эрт мэдэх арга:
 
 - **Каталог бол repo хоорондын гэрээ** — deployment аль аппуудыг
   санал болгохоо гарын үсэгтэй каталогоос авна (`APP_CATALOG_URL` +
@@ -204,13 +208,35 @@ distribution-ийг бүгдийг нь суулгасан Түвшин 2-ын �
 
 ## 4. Хамтын дэд бүтэц (зуун repo-г нэг баг дааж чадах нөхцөл)
 
-- **Reusable CI**: GitHub Actions-ийн `workflow_call` — build/test/
-  publish workflow нэг `gerege-ci` repo-д нэг удаа бичигдэж, бүх
-  distribution нэг мөрөөр дуудна. CI засвар нэг газар хийгдэнэ.
+- **Reusable CI** ✅: `.github/workflows/distribution-ci.yml` ба
+  `distribution-security.yml` — цөмийн repo дотор `workflow_call`-аар. Тусдаа
+  `gerege-ci` repo нээгээгүй: distribution бүр цөмөөс аль хэдийн хамааралтай
+  тул шинэ repo нь хамаарал нэмэхээс өөр юу ч өгөхгүй (§1-ийн "эргэлзвэл доод
+  түвшнийг нь сонго" дүрэм өөрсдөд маань ч хамаатай). Distribution нэг мөрөөр
+  дуудна:
+
+  ```yaml
+  jobs:
+    ci:
+      uses: gerege-systems/open-gerege-nexus/.github/workflows/distribution-ci.yml@main
+  ```
+
+  Яагаад tag биш `@main` вэ: платформыг tag-аар түгжих нь суулгацын дор зан
+  байдал өөрчлөгдөхгүй байхын тулд. Дундын CI-ийн бүх утга учир нь эсрэгээрээ —
+  засвар release хүлээхгүй бүх repo-д хүрэх, эвдэрсэн pipeline чимээгүй
+  тарахгүй харагдах. Хоёр дүрэм өөр өөр зүйл хамгаалдаг тул өөр тийш заана.
+
+  Энэ нь гоо сайхны асуудал биш: апп сторын CI-г гараар хуулахад
+  `security.yml` нь дагаагүй бөгөөд нийтийн хост дээр ажилладаг цорын ганц
+  бүтээгдэхүүн яг тэр л сканнергүй үлдсэн. Хуулбар нь хийгдсэн тэр агшнаасаа
+  салж эхэлдэг.
 - **Template repo**: `gerege-platform-template` — Түвшин 2-ын скелет
-  (дээрх бүтэц + CI + README). Шинэ платформ = template-ээс үүсгэх +
-  нэр солих, хагас өдрийн ажил.
-- **Renovate**: бүх distribution-д цөмийн шинэ tag автомат PR.
+  (дээрх бүтэц + CI-г дуудах хоёр файл + README). Шинэ платформ =
+  template-ээс үүсгэх + нэр солих, хагас өдрийн ажил.
+- **Dependabot** ✅: хоёр repo-д `.github/dependabot.yml` — цөмийн шинэ tag
+  автомат PR (distribution-д платформ өөрийн бүлэгтэй), Go/npm/actions
+  долоо хоног тутам, бүлэглэсэн. Renovate биш: тэр нь суулгаж эрх олгох
+  шаардлагатай GitHub App, энэ нь merge хийхэд ажилладаг файл.
 - **go.work**: цөм + distribution зэрэг засах хөгжүүлэгчид local
   workspace (commit хийгдэхгүй).
 
@@ -227,13 +253,13 @@ distribution-ийг бүгдийг нь суулгасан Түвшин 2-ын �
 
 ## 6. Дараалал
 
-| Алхам | Ажил | Үр дүн |
-| --- | --- | --- |
-| 1 | `pkg/nexus` SDK гаргаж, дотоод 9 модулийг түүн рүү шилжүүлэх | Гадны repo модуль бичиж чаддаг болно |
-| 2 | Semver release журам + эхний `v1.0.0` tag | Dependency болж чадна |
-| 3 | Брэндийг runtime тохиргоо болгох + deploy config repo | Түвшин 1 бүрэн ажиллана |
-| 4 | `gerege-ci` reusable workflows + template repo | Шинэ платформ хагас өдөрт |
-| 5 | Каталог schema-г хувилбаржуулах, distribution-ий catalog profile publish урсгал | Апп стор экосистемийн төв болно |
+| Алхам | Ажил | Үр дүн | Байдал |
+| --- | --- | --- | --- |
+| 1 | `pkg/nexus` SDK гаргаж, дотоод модулиудыг түүн рүү шилжүүлэх | Гадны repo модуль бичиж чаддаг болно | ✅ SDK + `pkg/catalog` + `pkg/platform`; арван нэгэн модуль бүгд SDK-аар бүртгэгддэг |
+| 2 | Semver release журам + эхний `v1.0.0` tag | Dependency болж чадна | ✅ `docs/RELEASING.md`, `backend/v1.0.0`, `v1.1.0` |
+| 3 | Брэндийг runtime тохиргоо болгох + deploy config repo | Түвшин 1 бүрэн ажиллана | ❌ Дараагийн том ажил. `apiBase()` build-ээс салсан нь эхний хагас — образ өөрийн хаягийг мэдэхээ больсон; лого/өнгө/нэр хэвээр build-д |
+| 4 | Reusable workflows + template repo | Шинэ платформ хагас өдөрт | 🔶 CI бэлэн (`distribution-{ci,security}.yml`); template repo үлдсэн |
+| 5 | Каталог schema-г хувилбаржуулах, distribution-ий catalog profile publish урсгал | Апп стор экосистемийн төв болно | ❌ `pkg/catalog` гэрээг код болгосон ч JSON schema өөрөө хувилбаргүй |
 
 Энэ дарааллын 1-2 нь бусад бүхний урьдчилсан нөхцөл. Одоо fork хийчихсэн
 юм байвал (байгаа бол) эхний ажил нь буцааж distribution хэлбэрт оруулах.

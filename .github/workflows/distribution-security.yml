@@ -1,0 +1,98 @@
+name: Distribution Security
+
+# The scanning half of a distribution's CI. Separate from distribution-ci.yml
+# because a reusable workflow runs all of its jobs, and these two are called on
+# different rhythms: build-and-test on every push, scanning on every push *and*
+# on a weekly schedule. A vulnerability is not published when we happen to be
+# committing, so a repository with no cron is a repository that stopped looking.
+#
+# The schedule itself has to live in the caller — `on: schedule` is not
+# something a called workflow can declare for its caller.
+#
+# A distribution needs this more than the core does, not less: the core is a
+# library, and the distribution is what runs on a public host. It does not
+# inherit the core's scan either. The core's runs against the core's dependency
+# graph; what ships in a product is *its* graph, the pinned platform and the
+# product's own modules resolved together. GO-2026-6222 was in both and had to
+# be found twice.
+#
+# Usage:
+#
+#   on:
+#     schedule: [{cron: "20 9 * * 1"}]
+#     push: {branches: [main]}
+#     pull_request: {branches: [main]}
+#   jobs:
+#     security:
+#       uses: gerege-systems/open-gerege-nexus/.github/workflows/distribution-security.yml@main
+
+on:
+  workflow_call:
+    inputs:
+      module-directory:
+        description: "Directory holding go.mod, relative to the repository root"
+        type: string
+        default: "."
+      gosec-exclude:
+        description: "Rules to exclude from gosec"
+        type: string
+        # G104 (unchecked errors) is golangci-lint's job and duplicating it
+        # produces noise nobody reads. G404 (math/rand) is excluded because the
+        # core uses it for circuit-breaker jitter and never for anything a
+        # secret depends on; a distribution that reaches for math/rand should
+        # be held to the same reasoning, not a different rule.
+        default: "G104,G404"
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.module-directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ inputs.module-directory }}/go.mod
+          cache-dependency-path: ${{ inputs.module-directory }}/go.sum
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      # Reports only what the code can actually reach, so a fix here can be a
+      # dependency bump in the distribution's own go.mod — it does not have to
+      # wait for a core release to raise an indirect version.
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  gosec:
+    name: Static Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.module-directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ inputs.module-directory }}/go.mod
+          cache-dependency-path: ${{ inputs.module-directory }}/go.sum
+      # gosec answers a different question than govulncheck: govulncheck reads
+      # the vulnerability database and flags dependencies, gosec reads source
+      # and flags patterns — hardcoded credentials, weak crypto, unsafe file
+      # permissions.
+      #
+      # Built from source rather than run from the published action's
+      # container, which carries its own older Go and cannot compile a module
+      # targeting a newer language version. When that happens the scan reports
+      # "Issues: 0" and then exits non-zero on the compile errors: a red
+      # security scan that has found nothing, and a habit of ignoring it.
+      #
+      # Pinned to the version the core uses, so a finding means the same thing
+      # in every repository.
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8
+      - name: Run gosec
+        run: gosec -exclude=${{ inputs.gosec-exclude }} ./...

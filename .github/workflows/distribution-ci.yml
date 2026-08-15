@@ -1,0 +1,112 @@
+name: Distribution CI
+
+# The build-and-test half of a distribution's CI, written once and called by
+# every distribution repository.
+#
+# It exists because the first split proved the alternative does not work. The
+# App Store's CI was copied here by hand, and the copy silently arrived without
+# a security scan — the product that actually runs on a public host ended up
+# being the one nothing scanned, and it stayed that way until somebody went
+# looking. A copy diverges the moment it is made; the second and third
+# distribution would each diverge differently.
+#
+# What belongs in here is anything true of *every* distribution — the tag rule,
+# the toolchain choice, gofmt, the race detector. What does not belong is
+# anything one product needs and another does not; that stays in the caller.
+#
+# Callers reference this at @main rather than at a release tag. A distribution
+# pins the *platform* by tag because its behaviour must not change underneath a
+# deployment — but the point of shared CI is that a fix reaches every repository
+# without a release, and a broken pipeline is visible immediately rather than
+# shipped silently. The two rules point in opposite directions because they are
+# protecting different things.
+#
+# Usage:
+#
+#   jobs:
+#     ci:
+#       uses: gerege-systems/open-gerege-nexus/.github/workflows/distribution-ci.yml@main
+
+on:
+  workflow_call:
+    inputs:
+      module-directory:
+        description: "Directory holding go.mod, relative to the repository root"
+        type: string
+        default: "."
+      lint:
+        description: "Run golangci-lint. Off by default: a distribution's own .golangci.yml is its own business, and an unconfigured run is noise."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.module-directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # The toolchain comes from the module being built, never from a
+          # version written here — pinning "1.24" while go.mod requires 1.25
+          # breaks every job at once, in every repository that calls this.
+          go-version-file: ${{ inputs.module-directory }}/go.mod
+          cache-dependency-path: ${{ inputs.module-directory }}/go.sum
+
+      # The core is a dependency, not a checkout. A `replace` pointing at a
+      # local path or a branch makes CI pass against something no deployment
+      # will ever run — the ecosystem strategy, §5 rule 1. A pseudo-version is
+      # the same mistake wearing a version number: it names a commit, and a
+      # commit carries no promise about what it contains.
+      - name: The core is taken by tag
+        run: |
+          if grep -qE '^\s*replace\s' go.mod; then
+            echo "::error::go.mod has a replace directive; a distribution pins the core by tag"
+            exit 1
+          fi
+          version=$(go list -m -f '{{.Version}}' github.com/gerege-systems/open-gerege-nexus/backend)
+          echo "core: $version"
+          case "$version" in
+            v*.*.*-*) echo "::error::the core is pinned to a pseudo-version ($version); use a release tag"; exit 1 ;;
+          esac
+
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::not gofmt-clean:"; echo "$unformatted"; exit 1
+          fi
+
+  lint:
+    name: Lint
+    if: inputs.lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ inputs.module-directory }}/go.mod
+          cache-dependency-path: ${{ inputs.module-directory }}/go.sum
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1.6
+          working-directory: ${{ inputs.module-directory }}
+          # Built from source with the toolchain setup-go installed: the
+          # published binary is built with an older Go and refuses to analyse a
+          # module targeting a newer language version.
+          install-mode: goinstall
+          # Not cached. A restored cache once produced six false SA5011
+          # findings on unchanged, correct code in the core repository, and
+          # kept producing them across re-runs because the re-run restored the
+          # same poisoned entry. See ci.yml for the full account.
+          skip-cache: true
