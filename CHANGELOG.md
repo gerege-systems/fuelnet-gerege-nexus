@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — a module can now state its own access policy, and book a meeting
+
+Both are the same discovery from two directions: the platform held things a
+module should have held, and a module could not be moved until it did.
+
+- **`nexus.AccessPolicy`** — `MenuPermission()` and `RoutePermissionPrefix()`,
+  optional, empty being a real answer rather than an omission. The platform used
+  to hold this in two switch statements keyed by app ID, listing every app by
+  name. A module in another repository cannot add itself to a switch in this
+  one, and the failure would not have been a compile error: an extracted app
+  keeps working, keeps appearing in the sidebar, and stops being gated.
+  `products`, `inventory` and `billing` were in both switches, so a commerce
+  split done before this would have removed route permission checks entirely.
+  The switches are now assertions in `internal/apps/access_policy_test.go`.
+- **`nexus.MeetingBooker`, `MeetingConnector`, `Meeting`** — booking a
+  conferencing link, as a module sees it. `gov_services` declared its own
+  interface and inverted the dependency correctly, but the interface spoke in
+  `*integration.Connector` and `*integration.Meeting`, which are under
+  `internal/`. A dependency's *type* travels as far as the dependency does, so
+  that module could not be compiled outside this repository — and the connector
+  it could not do without is a fifteen-field storage record of which it reads
+  one field. `integration.AsMeetingBooker` adapts the manager to the contract.
+- Both additions are additive; a module compiled against 1.1.0 keeps compiling.
+
+`gov_services` now depends on `pkg/nexus` and nothing else from this
+repository, which is what makes the next split possible.
+
 ### Removed — the App Store left, and is a product of its own
 
 The first distribution split. `apps/appstore_registry`, `apps/publisher_studio`
