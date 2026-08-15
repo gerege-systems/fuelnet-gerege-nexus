@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-15
+
 ### Added — Apps can be published to named platforms instead of to all of them
 
 An app now declares a `visibility`: `public`, which every platform may be
