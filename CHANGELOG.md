@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-15
+
 ### Changed — Contacts left for the commerce distribution, and the sidebar was rearranged
 
 Three changes with one shape: putting each thing where it belongs.
