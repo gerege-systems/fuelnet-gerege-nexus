@@ -11,8 +11,8 @@ export const storefront = {
   "storefront.view.title_lead": { mn: "Байгууллагадаа хэрэгтэй", en: "Everything an organisation runs," },
   "storefront.view.title_highlight": { mn: "аппуудаа сонгоно уу", en: "one app at a time" },
   "storefront.view.lede": {
-    mn: "Gerege Nexus дээр ажилладаг аппуудын албан ёсны каталог. Апп бүр гарын үсэгтэй manifest-тэй ирдэг тул суулгац бүр юуг суулгаж байгаагаа шалгаж чадна.",
-    en: "The official catalogue of applications that run on Gerege Nexus. Every app arrives with a signed manifest, so an instance can verify what it is installing.",
+    mn: "{brand} дээр ажилладаг аппуудын албан ёсны каталог. Апп бүр гарын үсэгтэй manifest-тэй ирдэг тул суулгац бүр юуг суулгаж байгаагаа шалгаж чадна.",
+    en: "The official catalogue of applications that run on {brand}. Every app arrives with a signed manifest, so an instance can verify what it is installing.",
   },
   "storefront.action.browse": { mn: "Каталогийг үзэх", en: "Browse the catalogue" },
   "storefront.action.publish": { mn: "Апп нийтлэх", en: "Publish an app" },

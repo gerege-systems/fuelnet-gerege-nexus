@@ -25,6 +25,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
@@ -449,7 +450,7 @@ func reportSignInFailure(w http.ResponseWriter, err error) {
 		return
 	}
 	slog.Error("failed to link verified national identity", "error", err)
-	httpx.Error(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг Gerege Nexus бүртгэлтэй холбож чадсангүй")
+	httpx.Error(w, http.StatusInternalServerError, "Баталгаажсан eID хэрэглэгчийг "+config.BrandName()+" бүртгэлтэй холбож чадсангүй")
 }
 
 // eidLinkingDigest derives the stable, non-PII handle for an eID subject. It

@@ -108,7 +108,7 @@ func New(db *pgxpool.Pool) (*Service, error) {
 	rp := coreeid.NewClient(
 		os.Getenv("EID_BASE_URL"),
 		os.Getenv("EID_RP_UUID"),
-		firstNonEmpty(os.Getenv("EID_RP_NAME"), "Gerege Nexus"),
+		firstNonEmpty(os.Getenv("EID_RP_NAME"), config.BrandName()),
 		os.Getenv("EID_RP_SECRET"),
 		certLevel,
 	)
@@ -116,7 +116,7 @@ func New(db *pgxpool.Pool) (*Service, error) {
 	signer, err := signuc.NewUsecase(&stateStore{db: db}, signuc.Config{
 		V3BaseURL:     strings.TrimSuffix(firstNonEmpty(os.Getenv("EID_SIGN_BASE_URL"), os.Getenv("EID_BASE_URL"), "https://eidmongolia.mn/v3"), "/v3"),
 		RPUUID:        os.Getenv("EID_RP_UUID"),
-		RPName:        firstNonEmpty(os.Getenv("EID_RP_NAME"), "Gerege Nexus"),
+		RPName:        firstNonEmpty(os.Getenv("EID_RP_NAME"), config.BrandName()),
 		APISecret:     os.Getenv("EID_RP_SECRET"),
 		SignerCertPEM: pemFromEnv("EID_SIGN_SIGNER_CERT_PEM", "EID_SIGN_SIGNER_CERT_FILE"),
 		SignerKeyPEM:  pemFromEnv("EID_SIGN_SIGNER_KEY_PEM", "EID_SIGN_SIGNER_KEY_FILE"),

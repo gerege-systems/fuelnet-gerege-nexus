@@ -37,8 +37,8 @@ export const auth = {
   "auth.view.title_highlight": { mn: "Нэг удаагийн", en: "Sign in" },
   "auth.view.title_tail": { mn: "нэвтрэлт.", en: "once." },
   "auth.view.lede": {
-    mn: "eID Mongolia апп дээр хүсэлтийг зөвшөөрөхөд Gerege Nexus болон холбогдсон SSO аппууд таны баталгаажсан session-ийг ашиглана.",
-    en: "Approve the request in the eID Mongolia app and Gerege Nexus — along with every connected SSO app — uses that verified session.",
+    mn: "eID Mongolia апп дээр хүсэлтийг зөвшөөрөхөд {brand} болон холбогдсон SSO аппууд таны баталгаажсан session-ийг ашиглана.",
+    en: "Approve the request in the eID Mongolia app and {brand} — along with every connected SSO app — uses that verified session.",
   },
   "auth.view.point_push": { mn: "Регистрийн дугаараар push хүсэлт", en: "Push request by registration number" },
   "auth.view.point_qr": { mn: "QR болон mobile App2App", en: "QR and mobile App2App" },
@@ -46,10 +46,10 @@ export const auth = {
 
   // Нэгдсэн нэвтрэлтийн карт. Толгой мөр нь "хэн асууж байна"-г хэлнэ:
   // authorization хүсэлтээс ирсэн бол тухайн аппын нэр, эс бөгөөс платформ өөрөө.
-  "auth.view.platform_name": { mn: "Gerege Nexus", en: "Gerege Nexus" },
+  "auth.view.platform_name": { mn: "{brand}", en: "{brand}" },
   "auth.signin.asker_note": {
-    mn: "Gerege Nexus — нэгдсэн нэвтрэлтээр нэвтрэх гэж байна",
-    en: "Gerege Nexus — signing you in through the unified login",
+    mn: "{brand} — нэгдсэн нэвтрэлтээр нэвтрэх гэж байна",
+    en: "{brand} — signing you in through the unified login",
   },
   "auth.signin.title": { mn: "Нэвтрэх", en: "Sign in" },
   "auth.signin.lede": { mn: "eID Mongolia App-аар нэвтрэх", en: "Sign in with the eID Mongolia app" },
@@ -94,8 +94,8 @@ export const auth = {
   "auth.message.refused": { mn: "Та нэвтрэх хүсэлтийг татгалзлаа.", en: "You declined the sign-in request." },
   "auth.message.success": { mn: "Амжилттай. Систем рүү шилжиж байна…", en: "Signed in. Taking you to the platform…" },
   "auth.message.error_link": {
-    mn: "eID баталгаажуулалтыг Gerege Nexus хэрэглэгчтэй холбож чадсангүй",
-    en: "The eID verification could not be linked to a Gerege Nexus user",
+    mn: "eID баталгаажуулалтыг {brand} хэрэглэгчтэй холбож чадсангүй",
+    en: "The eID verification could not be linked to a {brand} user",
   },
   "auth.message.error_service": {
     mn: "eID Mongolia үйлчилгээтэй холбогдож чадсангүй",
@@ -211,8 +211,8 @@ export const auth = {
   "auth.bind.from_provider": { mn: "{provider}-ээс ирсэн", en: "From {provider}" },
   "auth.bind.from_eid": { mn: "eID Mongolia-гаас авах", en: "From eID Mongolia" },
   "auth.bind.consent_body": {
-    mn: "Эдгээр мэдээллийг Gerege Nexus-д хадгалж, таны профайл дээр харуулна. Хэн болохыг тань eID баталгаажуулна — энэ нь зөвхөн нэг удаа.",
-    en: "This is stored in Gerege Nexus and shown on your profile. eID confirms who you are — once only.",
+    mn: "Эдгээр мэдээллийг {brand}-д хадгалж, таны профайл дээр харуулна. Хэн болохыг тань eID баталгаажуулна — энэ нь зөвхөн нэг удаа.",
+    en: "This is stored in {brand} and shown on your profile. eID confirms who you are — once only.",
   },
   "auth.bind.agree": { mn: "Зөвшөөрч, үргэлжлүүлэх", en: "Agree and continue" },
   "auth.bind.verify_title": { mn: "eID-ээр баталгаажуулах", en: "Confirm with eID" },

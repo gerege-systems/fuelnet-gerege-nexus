@@ -15,6 +15,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — The image no longer knows its own name
+
+`lib/apiBase.ts` took the deployment's address out of the build. This takes its
+identity out, which is the second half of the same argument: one image, a
+different `.env`, a hundred deployments is only true when neither is baked in.
+
+Five values are read from the environment per request — `BRAND_NAME`,
+`BRAND_SHORT_NAME`, `BRAND_DESCRIPTION`, `BRAND_LOGO_URL`,
+`BRAND_THEME_COLOR` — and all of them are optional. Unset is Gerege Nexus, so
+nothing about nexus.gerege.mn changes. They reach the document title, the PWA
+manifest (which is what an installed copy keeps under its icon), the header, the
+sign-in and consent screens, the workarea footer, the operator console and the
+landing page's chrome.
+
+- **The product's name became a variable in the dictionary.** It was written
+  out in nineteen entries and their overlays in five more languages, which made
+  a rebrand a translation job in seven. `t()` now substitutes `{brand}` into
+  every string without being asked: a sentence that names the product is
+  ordinary prose, and requiring every call site to pass the value would mean the
+  one that forgot renders `{brand}` at somebody.
+- **The shell's HTML is rendered on demand rather than prebuilt.** That is the
+  price and it is the point — HTML produced by `next build` is a name travelling
+  inside the image. Little was lost: every screen under this layout is either
+  behind a session or already rendered per request, so what was being cached was
+  the empty frame around them. The root layout is a server component now and the
+  providers moved to `app/providers.tsx`; a comment there once called that split
+  larger than metadata warranted, which it was, for metadata.
+- **The mark is an address, not an import.** It used to arrive as a static
+  import with a hashed, permanently cacheable URL, which is the same thing as
+  belonging to the build. `BRAND_LOGO_URL` is validated as a path on this host
+  or an absolute http(s) URL and ignored otherwise — the value ends up in an
+  `img` tag, and a mistyped environment file should cost a logo rather than
+  anything else.
+- **The API reads `BRAND_NAME` too**, for the only two places it names the
+  product to a person: the message shown when a verified eID identity cannot be
+  linked, and the relying-party name eID Mongolia puts in front of a citizen
+  approving a request. Set it in both containers or in neither.
+- Not made configurable, deliberately: the icon set, which is files rather than
+  an address; the accent palette, which is a per-person, per-device preference
+  in Appearance and not a deployment's to seize; and the native shells, which
+  are signed bundles carrying their own name — the export script resolves
+  `{brand}` from `BRAND_NAME` so no placeholder reaches them.
+- The offline page lost the product's name instead of gaining a variable. It is
+  precached and served with no network, so nothing can tell it what this
+  deployment is called; it now says "this app", which is true everywhere and is
+  addressed to somebody staring at an icon they installed themselves.
+- The head tags moved from hand-written elements to Next's metadata API, which
+  a server component can use, and one of them nearly did not survive the move:
+  `appleWebApp.capable` emits only the unprefixed `mobile-web-app-capable`, and
+  Safari on iOS honours nothing but Apple's spelling for a standalone launch.
+  Written by hand alongside it, as it was before. An installed copy that came
+  back inside Safari's chrome would have been a strange thing to trace to a
+  refactor of the title.
+
+See `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.3 and §6.
+
 ### Removed — State Services left, and is a product of its own
 
 The second distribution split. `apps/gov_services` now lives in

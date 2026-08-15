@@ -5,6 +5,7 @@ import EIDLogin from "@/components/EIDLogin";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import {api} from "@/lib/api";
 import {useI18n} from "@/lib/i18n";
+import {useBrand} from "@/lib/brandContext";
 import {ShieldCheck} from "lucide-react";
 
 /**
@@ -14,7 +15,7 @@ import {ShieldCheck} from "lucide-react";
  * үзүүлж зөвшөөрөл авна — утсанд push мэдэгдэл ирсэн хойно тайлбарлах нь
  * оройтсон байна. Дараа нь eID. Бүртгэл нь хоёулаа биелсэн хойно үүснэ.
  */
-export default function BindPage(){const {t}=useI18n();
+export default function BindPage(){const {t}=useI18n();const brand=useBrand();
   const [binding,setBinding]=useState("");
   const [info,setInfo]=useState<{provider:string;email:string;name:string;consented:boolean;claims:Record<string,unknown>;eid_claims:string[]}|null>(null);
   const [error,setError]=useState("");
@@ -34,7 +35,7 @@ export default function BindPage(){const {t}=useI18n();
 
   return <main className="signin-shell">
     <header className="signin-shell__nav">
-      <Link href="/" className="gp-brand"><img src="/brand.webp" alt=""/><span>Gerege Nexus</span></Link>
+      <Link href="/" className="gp-brand"><img src={brand.logoUrl} alt=""/><span>{brand.name}</span></Link>
       <LanguageSwitcher/>
     </header>
     <section className="signin-shell__body">

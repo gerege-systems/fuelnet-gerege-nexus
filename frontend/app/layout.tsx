@@ -1,74 +1,57 @@
-"use client";
-
 import "./globals.css";
-import React, { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import Layout from "@/components/Layout";
-import { I18nProvider } from "@/lib/i18n";
-import { ThemeProvider } from "@/lib/theme";
-import InstallApp from "@/components/InstallApp";
+import type { Metadata, Viewport } from "next";
+import React from "react";
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  // Created per mount rather than at module scope so the cache is not shared
-  // across requests when the bundle is reused.
-  const [queryClient] = useState(() => new QueryClient());
+import Providers from "./providers";
+import { brandFromEnv } from "@/lib/brandEnv";
 
+/**
+ * Rendered per request, because the deployment's name is not the build's to
+ * know.
+ *
+ * Without this the shell's HTML — title, description, launcher name, chrome
+ * colour — would be produced by `next build` and carried inside the image, and
+ * an image carrying a name is an image one customer owns. It is the same
+ * reasoning `lib/apiBase.ts` sets out for the address, and it costs the same
+ * thing: the static HTML for these screens is no longer prebuilt. Cheap here,
+ * because there was little to prebuild. Every screen under this layout is
+ * either behind a session or already rendered per request (the landing page
+ * fetches the storefront on the server), so what was being cached was the empty
+ * frame around them.
+ */
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = brandFromEnv();
+  return {
+    title: brand.name,
+    description: brand.description,
+    // Apple reads none of the manifest: on iOS the name under the icon and the
+    // status bar are decided by these instead. The short name is what there is
+    // room for under an icon.
+    appleWebApp: { capable: true, title: brand.shortName, statusBarStyle: "default" },
+    icons: { apple: "/icons/apple-touch-icon.png" },
+    // Both spellings, because the standard one is not yet the only one that
+    // works. `appleWebApp.capable` above emits only `mobile-web-app-capable` —
+    // the name every current browser reads, and the one Chrome warns about the
+    // absence of. Safari on iOS still honours nothing but Apple's prefixed
+    // name for a standalone launch, and it is not written by anything in the
+    // metadata API, so it is written here. It can go when iOS reads the
+    // unprefixed name.
+    other: { "apple-mobile-web-app-capable": "yes" },
+  };
+}
+
+export function generateViewport(): Viewport {
+  return { themeColor: brandFromEnv().themeColor };
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // I18nProvider keeps <html lang> in step with the selected locale.
     <html lang="mn">
-      <head>
-        {/*
-          Only what Next does not already emit.
-
-          The manifest link and the viewport are its own — app/manifest.ts gets
-          a <link> for free, and a default viewport is always written — so
-          repeating either here put two of each in the served HTML.
-
-          Everything below is Apple's, which reads none of the manifest: on iOS
-          the icon, the name under it and the status bar are all decided by
-          these tags instead.
-        */}
-        <meta name="theme-color" content="#1869eb" />
-        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        {/*
-          Both spellings, because the standard one is not yet the only one that
-          works. `mobile-web-app-capable` is the name every current browser
-          reads and the one Chrome now warns about the absence of; Safari on iOS
-          still only honours Apple's prefixed name for standalone launch, and
-          dropping it would take the installed app back to a Safari chrome it
-          has not had. They can go when iOS reads the unprefixed name.
-        */}
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-title" content="Nexus" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-      </head>
       <body>
-        {/*
-          Next's metadata export is a server-component API and this root is a
-          client component, so the document title and description are rendered
-          as elements instead. React 19 hoists <title>/<meta> into <head> from
-          anywhere in the tree, which keeps the providers below untouched — the
-          alternative, splitting the root into a server layout plus a client
-          providers file, is a larger change than the metadata warrants.
-        */}
-        <title>Gerege Nexus</title>
-        <meta
-          name="description"
-          content="Төрийн болон хувийн хэвшлийн байгууллагын үйлчилгээ, үйл ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ."
-        />
-        <ThemeProvider>
-          <I18nProvider>
-            <QueryClientProvider client={queryClient}>
-              <Layout>{children}</Layout>
-              <InstallApp />
-            </QueryClientProvider>
-          </I18nProvider>
-        </ThemeProvider>
+        <Providers brand={brandFromEnv()}>{children}</Providers>
       </body>
     </html>
   );

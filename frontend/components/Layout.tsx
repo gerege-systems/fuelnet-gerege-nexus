@@ -2,12 +2,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import brandLogo from "@/public/brand.webp";
 import { usePathname, useRouter } from "next/navigation";
 import { api, APP_MENU_CHANGED_EVENT } from "@/lib/api";
 import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import { useBrand } from "@/lib/brandContext";
 import UserMenu from "@/components/UserMenu";
 import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantChoices";
 import AICopilot from "@/components/AICopilot";
@@ -124,7 +124,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   // with ids nobody has an opinion about yet, and the useful default for those
   // is the behaviour before this existed: open.
   const [closedGroups,setClosedGroups]=useState<string[]>([]);
-  const pathname=usePathname(),router=useRouter(),{t,locale}=useI18n(),theme=useTheme();
+  const pathname=usePathname(),router=useRouter(),{t,locale}=useI18n(),theme=useTheme(),brand=useBrand();
   const isPublic=isPublicPath(pathname);
 
   useEffect(()=>setPanelOpen(localStorage.getItem("gerege_sidebar_open")!=="false"),[]);
@@ -319,11 +319,15 @@ export default function Layout({children}:{children:React.ReactNode}){
     <PlatformNotices notices={user?.notices}/>
     <header className="gerege-topbar h-16 flex items-center border-b sticky top-0 z-50">
       <TenantSwitcher current={user?.tenant_id} currentName={user?.tenant_name}>
-        {theme.design==="gerege"?<img src={brandLogo.src} width={36} height={36} alt="Gerege Nexus" className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
+        {/* The mark used to arrive as a static import, which gave it a hashed,
+            permanently cacheable URL and made it part of the build. A logo the
+            build owns is a logo no deployment can change, so it is an address
+            now — see lib/brand.ts. */}
+        {theme.design==="gerege"?<img src={brand.logoUrl} width={36} height={36} alt={brand.name} className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
       </TenantSwitcher>
       <div className={`gerege-header-context h-full flex items-center gap-3 overflow-hidden transition-all duration-200 ${panelOpen?"is-open":""}`}>
         <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(iconMap[selected.icon]||<Package className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
-        <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">Gerege Nexus</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
+        <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">{brand.name}</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
       </div>
       <div className="gerege-menu-toggle h-full shrink-0 flex items-center justify-center gap-1">
         <button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={t("web.action.toggle_menu")} aria-expanded={mobileOpen}><MenuIcon className="w-5 h-5"/></button>
@@ -399,6 +403,7 @@ function RibbonBar({
   t: (key: any) => string;
   onLogout: () => void;
 }) {
+  const brand = useBrand();
   return (
     <div className="gerege-ribbon h-10 shrink-0 border-b border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-xs z-30 select-none">
       <div className="flex items-center gap-2.5 min-w-0">
@@ -406,7 +411,7 @@ function RibbonBar({
           {selected ? (iconMap[selected.icon] || <Package className="w-4 h-4" />) : <LayoutGrid className="w-4 h-4" />}
         </span>
         <div className="flex items-center gap-1.5 text-xs min-w-0">
-          <span className="font-bold text-slate-800 dark:text-slate-100">Gerege Nexus</span>
+          <span className="font-bold text-slate-800 dark:text-slate-100">{brand.name}</span>
           <span className="text-slate-300 dark:text-slate-600">/</span>
           <span className="font-semibold text-[var(--gerege-blue)] truncate">{brandTitle}</span>
         </div>
@@ -442,11 +447,12 @@ function RibbonBar({
 
 /** Ажлын мужийн хөл. Native footer нь цонхны мөр — энэ нь ажлын мужийнх. */
 function WorkareaFooter() {
+  const brand = useBrand();
   return (
     <footer className="gerege-footer h-7 shrink-0 border-t border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 select-none z-30">
       <span className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span>Gerege Nexus</span>
+        <span>{brand.name}</span>
       </span>
       <span className="hidden sm:inline-flex items-center gap-1 text-slate-400">
         <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />

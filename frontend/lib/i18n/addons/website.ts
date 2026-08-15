@@ -24,8 +24,8 @@ export const website = {
   "website.view.hero_title_highlight": { mn: "нэг цэгт", en: "meets in one" },
   "website.view.hero_title_tail": { mn: "уулзана", en: "place" },
   "website.view.hero_lede": {
-    mn: "Gerege Nexus нь байгууллагын үйлчилгээ, үйл ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ юм. Модулиуд нэг Go бинарид компиллогдож, тенант бүрт аль апп идэвхтэйг апп стор шийднэ.",
-    en: "Gerege Nexus is a modular platform that brings an organisation's services, operations, systems and data together. Modules compile into a single Go binary, and an app store decides which of them each tenant runs.",
+    mn: "{brand} нь байгууллагын үйлчилгээ, үйл ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ юм. Модулиуд нэг Go бинарид компиллогдож, тенант бүрт аль апп идэвхтэйг апп стор шийднэ.",
+    en: "{brand} is a modular platform that brings an organisation's services, operations, systems and data together. Modules compile into a single Go binary, and an app store decides which of them each tenant runs.",
   },
 
   // Three numbers that hold still. A count of tests or contributors would drift
@@ -41,8 +41,8 @@ export const website = {
     en: "Sign-in is not a screen, it is the floor the platform stands on",
   },
   "website.view.features_lede": {
-    mn: "Gerege Platform-ийн батлагдсан урсгалыг Gerege Nexus-ийн tenant, role, audit болон SSO загварт нэгтгэлээ.",
-    en: "The Gerege Platform's proven flow, folded into Gerege Nexus's tenants, roles, audit trail and SSO model.",
+    mn: "Gerege Platform-ийн батлагдсан урсгалыг {brand}-ийн tenant, role, audit болон SSO загварт нэгтгэлээ.",
+    en: "The Gerege Platform's proven flow, folded into {brand}'s tenants, roles, audit trail and SSO model.",
   },
 
   "website.feature.instant_title": { mn: "Цахим үнэмлэхээр хормын дотор", en: "Digital ID in seconds" },

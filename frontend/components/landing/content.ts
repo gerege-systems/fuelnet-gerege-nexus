@@ -56,7 +56,10 @@ export const TRUST_POINTS: TranslationKey[] = [
  * a request actually travels them.
  */
 export const TECHNOLOGY: {icon: Icon; name: string; body: TranslationKey}[] = [
-  {icon: Layers, name: "Gerege Nexus", body: "website.tech.erp_body"},
+  // The other two name products that are not ours, so this field is a
+  // literal. This one names the deployment, and takes the same {brand} the
+  // dictionary uses — Technology.tsx resolves it.
+  {icon: Layers, name: "{brand}", body: "website.tech.erp_body"},
   {icon: Fingerprint, name: "eID Mongolia", body: "website.tech.eid_body"},
   {icon: KeyRound, name: "OIDC / SSO", body: "website.tech.sso_body"},
 ];

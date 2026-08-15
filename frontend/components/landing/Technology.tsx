@@ -5,6 +5,7 @@ import {ArrowRight} from "lucide-react";
 
 import {TECHNOLOGY} from "@/components/landing/content";
 import {useI18n} from "@/lib/i18n";
+import {useBrand} from "@/lib/brandContext";
 
 /**
  * The three parts a sign-in passes through, separated by arrows.
@@ -16,6 +17,7 @@ import {useI18n} from "@/lib/i18n";
  */
 export default function Technology() {
   const {t} = useI18n();
+  const brand = useBrand();
 
   return (
     <section className="gp-tech" id="technology">
@@ -24,7 +26,7 @@ export default function Technology() {
           {index > 0 && <ArrowRight />}
           <div>
             <Icon />
-            <h3>{name}</h3>
+            <h3>{name.replace("{brand}", brand.name)}</h3>
             <p>{t(body)}</p>
           </div>
         </React.Fragment>

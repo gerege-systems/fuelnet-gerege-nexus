@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+import { DEFAULT_BRAND } from "../brand";
 import { base } from "./base";
 import { web } from "./web";
 import { access } from "./addons/access";
@@ -128,7 +129,27 @@ function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (ALL_CODES as string[]).includes(value);
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
+/**
+ * `brand` is the deployment's product name, and every translation may use it as
+ * `{brand}`.
+ *
+ * The name used to be written into the strings themselves — nineteen entries in
+ * the dictionary and their overlays in five more languages all said "Gerege
+ * Nexus" — which made a rebrand a translation job in seven languages. It is a
+ * variable now, and one nobody has to pass: a sentence that names the product
+ * is ordinary prose, and asking every caller to hand `t()` the same value would
+ * mean the one that forgot renders "{brand}" at somebody.
+ *
+ * It has a default so that a provider mounted without one — a test, a harness —
+ * still reads as this product rather than as plumbing.
+ */
+export function I18nProvider({
+  brand = DEFAULT_BRAND.name,
+  children,
+}: {
+  brand?: string;
+  children: React.ReactNode;
+}) {
   // Server and first client render must agree, so the stored preference is
   // applied in an effect rather than during initial state.
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
@@ -195,8 +216,17 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       // English source term rather than the key, as gettext does — an
       // untranslated screen reads as English, not as plumbing.
       let text: string = overlays[locale]?.[key] || (entry ? entry[locale] || entry.en : key);
-      if (vars) {
-        for (const [name, replacement] of Object.entries(vars)) {
+      // The brand is offered to every key, so a string that names the product
+      // needs nothing at the call site. A caller that passes its own `brand`
+      // still wins — the spread order says so — which is what a screen naming
+      // some *other* application would want.
+      //
+      // Guarded on a brace rather than run unconditionally: almost no entry
+      // has a placeholder, `t()` is called for every menu item on every render,
+      // and this used to build no regular expression at all when the caller
+      // passed no variables.
+      if (text.includes("{")) {
+        for (const [name, replacement] of Object.entries({ brand, ...(vars ?? {}) })) {
           text = text.replace(new RegExp(`\\{${name}\\}`, "g"), String(replacement));
         }
       }
@@ -204,7 +234,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     };
 
     return { locale, setLocale, availableLocales, setLocaleEnabled, t };
-  }, [locale, extraLocales]);
+  }, [locale, extraLocales, brand]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

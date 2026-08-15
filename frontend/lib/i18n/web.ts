@@ -41,7 +41,7 @@ export const web = {
   "web.view.coming_soon": { mn: "Удахгүй", en: "Coming soon" },
   "web.view.coming_soon_body": { mn: "Энэ хэсэг хөгжүүлэлтийн шатанд байна. Бэлэн болмогц энд харагдана.", en: "This screen is still being built. It will appear here once it ships." },
 
-  "web.message.loading_platform": { mn: "Платформыг ачаалж байна...", en: "Loading Gerege Nexus..." },
+  "web.message.loading_platform": { mn: "Платформыг ачаалж байна...", en: "Loading {brand}..." },
   "web.message.only_tenant": { mn: "Та зөвхөн энэ байгууллагад харьяалагдаж байна.", en: "You belong to this organisation only." },
   // Reading alongside is not switching, and the wording has to carry that or
   // somebody will tick a box expecting new records to land somewhere else.

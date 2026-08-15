@@ -7,6 +7,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import {api} from "@/lib/api";
 import {resetAccess} from "@/lib/access";
 import {useI18n} from "@/lib/i18n";
+import {useBrand} from "@/lib/brandContext";
 import type {TranslationKey} from "@/lib/i18n";
 import {ChevronDown,HelpCircle,Lock,Mail,ShieldCheck} from "lucide-react";
 import { GoogleMark } from "@/components/ProviderMark";
@@ -18,7 +19,7 @@ const SSO_ERRORS:Record<string,TranslationKey>={no_account:"auth.sso.error_no_ac
 
 /** Google-ийн албан ёсны дөрвөн өнгийн "G". */
 
-export default function LoginPage(){const router=useRouter();const {t}=useI18n();const [next,setNext]=useState("/profile"),[admin,setAdmin]=useState(false),[email,setEmail]=useState("admin@example.com"),[password,setPassword]=useState("Password123!"),[error,setError]=useState("");
+export default function LoginPage(){const router=useRouter();const {t}=useI18n();const brand=useBrand();const [next,setNext]=useState("/profile"),[admin,setAdmin]=useState(false),[email,setEmail]=useState("admin@example.com"),[password,setPassword]=useState("Password123!"),[error,setError]=useState("");
   // undefined = хараахан асуугаагүй. Энэ ялгаа чухал: асуухаас өмнө eID
   // хэлбэрийг зурчихвал холбоосон суулгац дээр хүн энд нэвтэрч болно гэж
   // хэсэг хугацаанд итгэж, дараа нь өөр рүү шилжсэн нь будлиантай.
@@ -63,7 +64,7 @@ export default function LoginPage(){const router=useRouter();const {t}=useI18n()
 
   return <main className="signin-shell">
     <header className="signin-shell__nav">
-      <Link href="/" className="gp-brand"><img src="/brand.webp" alt=""/><span>Gerege Nexus</span></Link>
+      <Link href="/" className="gp-brand"><img src={brand.logoUrl} alt=""/><span>{brand.name}</span></Link>
       <LanguageSwitcher/>
     </header>
     <section className="signin-shell__body">

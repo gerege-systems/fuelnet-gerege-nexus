@@ -5,6 +5,7 @@ import Link from "next/link";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import {DOCS_URL} from "@/components/landing/content";
 import {useI18n} from "@/lib/i18n";
+import {useBrand} from "@/lib/brandContext";
 
 /**
  * The public header.
@@ -17,12 +18,13 @@ import {useI18n} from "@/lib/i18n";
  */
 export default function SiteHeader() {
   const {t} = useI18n();
+  const brand = useBrand();
 
   return (
     <header className="gp-nav">
       <a href="#top" className="gp-brand">
-        <img src="/brand.webp" alt="" />
-        <span>Gerege Nexus</span>
+        <img src={brand.logoUrl} alt="" />
+        <span>{brand.name}</span>
       </a>
       <nav>
         <a href="#architecture">{t("website.menu.architecture")}</a>

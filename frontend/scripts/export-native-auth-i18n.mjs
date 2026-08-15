@@ -26,8 +26,19 @@ for (const locale of locales.slice(2)) {
   overlays[locale] = localeModule[locale] ?? {};
 }
 
+/**
+ * The web dictionary carries the product's name as `{brand}`, substituted at
+ * render time from the deployment's environment. Nothing on the other side of
+ * this script does that: an Android string resource, a .resx and an .xcstrings
+ * are read by a bundle that was signed with one name on it already. So the name
+ * is resolved here, at export, and a shell built for another brand exports its
+ * own strings with BRAND_NAME set — the same variable the server reads.
+ */
+const brand = (process.env.BRAND_NAME || "").trim() || "Gerege Nexus";
+const resolve = value => String(value).replaceAll("{brand}", brand);
+
 for (const locale of locales) {
-  const strings = Object.fromEntries(Object.entries(auth).map(([key, translations]) => [key, overlays[locale]?.[key] ?? translations[locale] ?? translations.en]));
+  const strings = Object.fromEntries(Object.entries(auth).map(([key, translations]) => [key, resolve(overlays[locale]?.[key] ?? translations[locale] ?? translations.en)]));
   await writeFile(path.join(out, `${locale}.json`), `${JSON.stringify(strings, null, 2)}\n`);
   const qualifier = locale === "mn" ? "values" : `values-${locale}`;
   await mkdir(path.join(androidRoot, qualifier), { recursive: true });

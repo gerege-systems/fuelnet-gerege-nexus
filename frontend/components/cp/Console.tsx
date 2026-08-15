@@ -29,6 +29,7 @@ import {
 
 import { cp, Unauthorized, type Operator } from "@/lib/cp";
 import { useI18n } from "@/lib/i18n";
+import { useBrand } from "@/lib/brandContext";
 
 interface ConsoleState {
   operator: Operator;
@@ -46,6 +47,7 @@ export function useConsole(): ConsoleState {
 
 export default function Console({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
+  const brand = useBrand();
   const [operator, setOperator] = useState<Operator | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -105,7 +107,7 @@ export default function Console({ children }: { children: React.ReactNode }) {
               <ShieldCheck className="w-5 h-5 text-amber-400" />
             </span>
             <span className="min-w-0">
-              <small className="block text-[11px] leading-4 text-slate-500">Gerege Nexus</small>
+              <small className="block text-[11px] leading-4 text-slate-500">{brand.name}</small>
               <strong className="block text-[15px] leading-5 truncate">{t("cp.view.title")}</strong>
             </span>
           </Link>

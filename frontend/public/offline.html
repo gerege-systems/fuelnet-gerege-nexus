@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Сүлжээгүй байна — Gerege Nexus</title>
+    <title>Сүлжээгүй байна · Offline</title>
     <!--
       Deliberately one file with no bundle behind it. This is what renders when
       nothing else can, so it cannot depend on the app booting, on a font
@@ -57,8 +57,12 @@
     <main>
       <img src="/icons/app-192.png" alt="" />
       <h1>Сүлжээнд холбогдож чадсангүй</h1>
-      <p>Gerege Nexus-д хандахын тулд интернэт холболт шаардлагатай.</p>
-      <p>Gerege Nexus needs a connection. Check yours and try again.</p>
+      <!-- Deliberately nameless. This page is precached and served with no
+           network, so it cannot be told what this deployment is called; the
+           person is looking at an app whose name and icon they already know.
+           See frontend/lib/brand.ts. -->
+      <p>Энэ аппад хандахын тулд интернэт холболт шаардлагатай.</p>
+      <p>This app needs a connection. Check yours and try again.</p>
       <button type="button" onclick="location.reload()">Дахин оролдох · Retry</button>
     </main>
   </body>
