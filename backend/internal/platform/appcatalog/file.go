@@ -71,6 +71,17 @@ func LoadFile(path string, platformVersion string) ([]catalog.CatalogApp, error)
 			manifest.ReleaseNotes = notes
 		}
 		app.Manifest = manifest
+		// One resolved answer for who may be offered this app, so nothing
+		// downstream has to read two fields and decide which it believes. The
+		// entry and the manifest are written by hand in two files; a private
+		// declaration in either is what survives (see CatalogApp.IsPrivate),
+		// and both halves are set to it so the API, the apps table and the
+		// store card cannot disagree about the same app.
+		if app.IsPrivate() {
+			app.Visibility, app.Manifest.Visibility = catalog.VisibilityPrivate, catalog.VisibilityPrivate
+		} else if app.Visibility == "" {
+			app.Visibility = catalog.VisibilityPublic
+		}
 		apps = append(apps, app)
 	}
 

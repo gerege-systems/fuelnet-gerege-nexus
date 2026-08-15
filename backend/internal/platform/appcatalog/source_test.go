@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
@@ -146,6 +147,64 @@ func TestASignedCatalogIsAcceptedAndCached(t *testing.T) {
 	}
 	if served != 2 {
 		t.Fatalf("expected two requests; got %d", served)
+	}
+}
+
+// A private app is kept from a platform by the registry, and the registry can
+// only do that if it knows which platform is asking.
+//
+// The request carried the platform version and the channel and nothing about
+// the deployment, which is exactly enough to answer "what may everybody see".
+// The credential is what makes the other question askable. It travels as a
+// bearer token rather than in the query, so it stays out of access logs and out
+// of the URL the ETag is keyed by.
+func TestTheDeploymentIdentifiesItselfToTheRegistry(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var seen string
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("Authorization")
+		if strings.Contains(r.URL.RawQuery, "token") {
+			t.Errorf("the credential must not be on the query string: %q", r.URL.RawQuery)
+		}
+		_, _ = w.Write(signedDocument(t, private, "2026-08-15T00:00:00Z", remoteApps("2.0.0")))
+	}))
+	defer registry.Close()
+
+	cfg := newConfig(t, public, registry.URL)
+	cfg.Token = "platform-42-secret"
+	if _, err := appcatalog.NewProvider(cfg).Load(context.Background()); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if seen != "Bearer platform-42-secret" {
+		t.Fatalf("Authorization header = %q, want the deployment's bearer token", seen)
+	}
+}
+
+// And a deployment with nothing to prove proves nothing. Most deployments have
+// no private apps, and sending an empty credential would make the registry's
+// logs read as though every one of them had been issued one.
+func TestADeploymentWithNoTokenSendsNoCredential(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen, present := "", false
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen, present = r.Header.Get("Authorization"), r.Header.Values("Authorization") != nil
+		_, _ = w.Write(signedDocument(t, private, "2026-08-15T00:00:00Z", remoteApps("2.0.0")))
+	}))
+	defer registry.Close()
+
+	if _, err := appcatalog.NewProvider(newConfig(t, public, registry.URL)).Load(context.Background()); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if present || seen != "" {
+		t.Fatalf("expected no Authorization header; got %q", seen)
 	}
 }
 

@@ -15,6 +15,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Apps can be published to named platforms instead of to all of them
+
+An app now declares a `visibility`: `public`, which every platform may be
+offered, or `private`, which only the platforms the registry names may be. Empty
+means public, so every manifest written before this marshals to the bytes it
+always did — the signed catalogue stays byte-reproducible across the two
+repositories that build it.
+
+**It is enforced by the registry, not by the platform**, and that is the whole
+design rather than a shortcut. A private app is kept from a platform by not
+being in the catalogue that platform is served. The alternative — ship every
+platform the same document and ask each to hide what it should not see — leaks
+the names of private apps to everyone holding the catalogue, and asks the party
+with the motive to look to be the party that decides.
+
+- **The declaration travels.** `visibility` moved onto the manifest.
+  `cmd/publish-catalog` submits exactly that struct, so a visibility that lived
+  only on the catalogue entry was a declaration the publisher made and nobody
+  downstream ever received. The entry keeps its field; a private declaration in
+  either half wins, because an app hidden by mistake is a support question and
+  an app published by mistake is not recallable.
+- **An unknown value is refused.** Not read as public, which would publish an
+  app on a typo — `Private`, `internal`, `restricted` — and not read as private,
+  which would hide one for a reason nobody could see.
+- **A deployment can now identify itself to the registry**: `APP_CATALOG_TOKEN`,
+  sent as a bearer token on the catalogue request. A signature says who wrote a
+  document; it says nothing about who should be reading it, and both matter once
+  an app is published to named platforms. A request without it is anonymous and
+  can only be answered with what everybody may see. Empty stays the normal case
+  — a deployment granted no private apps has nothing to prove — and the token is
+  never put on the query string and never written to the catalogue cache.
+- The store card says **Private** on an app that arrived by arrangement. Nothing
+  else on it distinguishes such an app from one anybody can install.
+
+The other half of this lives in
+[appstore-gerege-nexus](https://github.com/gerege-systems/appstore-gerege-nexus):
+which platform may see which private app, and `GET /catalog` answering per
+deployment. One trap to carry over — the ETag has to vary per deployment too, or
+a platform whose entitlement is withdrawn keeps its old catalogue on a 304.
+See `docs/ECOSYSTEM_GIT_STRATEGY.md` §3.1.
+
 ### Fixed — Installed apps listed four that this binary cannot run
 
 The settings screen read straight from `app_installations`, so it showed nine

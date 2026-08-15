@@ -38,6 +38,53 @@ func TestValidateManifest(t *testing.T) {
 			t.Fatal("expected platform constraint incompatibility to fail validation")
 		}
 	})
+
+	// Visibility decides which platforms are offered the app at all, so an
+	// unrecognised value is refused rather than read as one of the two. Read as
+	// public it would publish an app on a typo; read as private it would hide
+	// one for a reason nobody could see. Both are only noticed by the person
+	// they should not have reached.
+	t.Run("Visibility is public, private, or absent", func(t *testing.T) {
+		for _, ok := range []string{"", catalog.VisibilityPublic, catalog.VisibilityPrivate} {
+			m := validManifest
+			m.Visibility = ok
+			if err := catalog.ValidateManifest(m, "1.0.0"); err != nil {
+				t.Errorf("visibility %q should be accepted: %v", ok, err)
+			}
+		}
+		for _, bad := range []string{"Private", "internal", "restricted", "PUBLIC", "hidden"} {
+			m := validManifest
+			m.Visibility = bad
+			if err := catalog.ValidateManifest(m, "1.0.0"); err == nil {
+				t.Errorf("visibility %q should be refused, not guessed at", bad)
+			}
+		}
+	})
+
+	// An unset visibility is public, and the two halves of a catalogue entry
+	// are read together: a private declaration in either wins, because an app
+	// hidden by mistake is a support question and an app published by mistake
+	// is not recallable.
+	t.Run("Private is read from either half of a catalogue entry", func(t *testing.T) {
+		cases := []struct {
+			name          string
+			entry, mnfest string
+			private       bool
+		}{
+			{"both silent", "", "", false},
+			{"both public", catalog.VisibilityPublic, catalog.VisibilityPublic, false},
+			{"manifest private", "", catalog.VisibilityPrivate, true},
+			{"entry private", catalog.VisibilityPrivate, "", true},
+			{"entry private, manifest public", catalog.VisibilityPrivate, catalog.VisibilityPublic, true},
+			{"both private", catalog.VisibilityPrivate, catalog.VisibilityPrivate, true},
+		}
+		for _, c := range cases {
+			app := catalog.CatalogApp{Visibility: c.entry, Manifest: catalog.Manifest{Visibility: c.mnfest}}
+			if got := app.IsPrivate(); got != c.private {
+				t.Errorf("%s: IsPrivate() = %v, want %v", c.name, got, c.private)
+			}
+		}
+	})
 }
 
 func TestIsNewerVersion(t *testing.T) {

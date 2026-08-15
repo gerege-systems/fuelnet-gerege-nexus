@@ -18,6 +18,7 @@ import {
   Rows3,
   Sparkles,
   History,
+  Lock,
 } from "lucide-react";
 
 interface AppItem {
@@ -27,6 +28,9 @@ interface AppItem {
   description: string;
   icon_url: string;
   category: string;
+  // "public" or "private". A private app is one the registry offers to named
+  // platforms only; seeing it here means this deployment is one of them.
+  visibility?: string;
   version: string;
   installed: boolean;
   enabled: boolean;
@@ -423,6 +427,16 @@ export default function AppStorePage() {
                 <div className="flex items-baseline gap-2">
                   <h2 className="font-bold text-slate-900">{app.name}</h2>
                   <span className="text-xs font-medium text-indigo-600">{app.category}</span>
+                  {/* Said out loud, because an app in this list looks exactly
+                      like one every platform can get. Whoever is deciding to
+                      install it should know it arrived by arrangement — and
+                      that the platform next door does not see it. */}
+                  {app.visibility === "private" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                      <Lock className="w-3 h-3" />
+                      {t("app_store.label.private")}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-slate-600 truncate">{app.description}</p>
                 {renderReleaseNote(app)}

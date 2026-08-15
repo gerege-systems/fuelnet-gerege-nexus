@@ -69,6 +69,63 @@ type Manifest struct {
 	// ReleaseNotes is this version's chronicle entry, copied in as the
 	// catalogue is assembled. It is not authored here — see chronicle.go.
 	ReleaseNotes *ReleaseNote `json:"release_notes,omitempty"`
+
+	// Visibility is who may be offered this app: every platform, or only the
+	// ones the registry has been told to offer it to.
+	//
+	// It is on the manifest rather than only on the catalogue entry because the
+	// manifest is the document that travels. A catalogue entry is assembled
+	// where the catalogue is assembled; the manifest is what a publisher
+	// submits (cmd/publish-catalog sends exactly this struct), what the
+	// registry stores, and what the signature covers. A visibility that lived
+	// only in the entry would be a declaration the publisher made and nobody
+	// downstream ever received.
+	//
+	// Empty means public, which is why this is omitempty like everything else
+	// in v2.1: a manifest written before private apps existed marshals to the
+	// bytes it always did, and the signed catalogue stays byte-reproducible
+	// across the two repositories that build it.
+	//
+	// **Where this is enforced.** Not here. A private app is kept from a
+	// platform by not being in the catalogue that platform is served — the
+	// registry decides, per deployment, using the credential the deployment
+	// sends (APP_CATALOG_TOKEN; see appcatalog.Config). This field is the
+	// publisher's declaration and the reason the registry has something to act
+	// on; a platform that has received a private app has already been
+	// authorised to have it, and what it does with this field is label it.
+	//
+	// Anything else would be self-enforcement: shipping every platform the same
+	// document and asking each to hide what it should not see. That leaks the
+	// names of private apps to everyone holding the catalogue, and asks the
+	// party with the motive to look to be the party that decides.
+	Visibility string `json:"visibility,omitempty"`
+}
+
+// The two visibilities an app can be published with.
+//
+// An unknown third value is refused rather than treated as either. Reading it
+// as public would turn a typo — "Private", "internal", "restricted" — into a
+// silent publication, and reading it as private would hide an app for a reason
+// nobody could see. Both are the kind of failure that is only noticed by the
+// person it should not have reached.
+const (
+	VisibilityPublic  = "public"
+	VisibilityPrivate = "private"
+)
+
+// IsPrivate reports whether this app is offered only to the platforms the
+// registry names.
+func (m Manifest) IsPrivate() bool { return m.Visibility == VisibilityPrivate }
+
+// IsPrivate reports whether this catalogue entry is a private app.
+//
+// A private declaration in either half wins. The manifest is the document that
+// travels and the entry is assembled locally, so they should agree — and when
+// they do not, the one that hides the app is the safe reading: an app kept
+// private by mistake is a support question, and an app published by mistake is
+// not recallable.
+func (a CatalogApp) IsPrivate() bool {
+	return a.Visibility == VisibilityPrivate || a.Manifest.IsPrivate()
 }
 
 // ExternalSpec describes how to reach a third-party platform and how it signs
@@ -160,6 +217,13 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		if !constraint.Check(platVer) {
 			return fmt.Errorf("app %s version %s requires platform %s, current is %s", m.ID, m.Version, m.Platform, platformVersion)
 		}
+	}
+
+	switch m.Visibility {
+	case "", VisibilityPublic, VisibilityPrivate:
+	default:
+		return fmt.Errorf("app %s has an unknown visibility %q; expected %q or %q",
+			m.ID, m.Visibility, VisibilityPublic, VisibilityPrivate)
 	}
 
 	switch m.Type {

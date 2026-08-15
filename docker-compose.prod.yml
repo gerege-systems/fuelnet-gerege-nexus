@@ -233,6 +233,11 @@ services:
       # appcatalog.Provider — so turning this on is reversible by emptying it.
       APP_CATALOG_URL: ${APP_CATALOG_URL:-}
       APPSTORE_PUBLIC_KEY: ${APPSTORE_PUBLIC_KEY:-}
+      # What this deployment is to the registry, when the App Store has issued
+      # it a credential. It decides *which* catalogue comes back — the public
+      # one, or the public one plus the apps published to this platform by
+      # name. Empty asks anonymously and gets what everybody may see.
+      APP_CATALOG_TOKEN: ${APP_CATALOG_TOKEN:-}
       CATALOG_SYNC_INTERVAL: ${CATALOG_SYNC_INTERVAL:-1h}
       CATALOG_CACHE_PATH: /var/lib/nexus/catalog.cache.json
       # Observability. Both empty by default, and empty is genuinely off: no

@@ -133,4 +133,8 @@ export const app_store = {
     mn: "Энэ build-д компилчлагдсан хувилбар каталогийнхтай таарахгүй байна. Каталог хуучирсан эсвэл build зөрүүтэй.",
     en: "The compiled version does not match the catalogue. Either the catalogue is stale or the build is.",
   },
+  // A private app is offered to named platforms only. Seeing one here means
+  // this deployment is one of them — which is worth saying, because nothing
+  // else on the card distinguishes it from an app anybody can install.
+  "app_store.label.private": { mn: "Хаалттай", en: "Private" },
 } as const;

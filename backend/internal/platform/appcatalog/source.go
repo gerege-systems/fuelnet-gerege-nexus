@@ -61,6 +61,26 @@ type Config struct {
 	// Channel is the publication channel asked for; "stable" unless set.
 	Channel string
 
+	// Token is APP_CATALOG_TOKEN — what this deployment is to the registry.
+	//
+	// Without it a catalogue request is anonymous, and an anonymous request can
+	// only be answered with what every platform may see. That was the whole
+	// answer until private apps existed: one catalogue, served to everyone,
+	// verified by signature. A signature says who wrote a document; it says
+	// nothing about who should be reading it, and the two are different
+	// questions.
+	//
+	// So a deployment that has been granted a private app presents a credential
+	// and the registry answers with the catalogue that deployment is entitled
+	// to. The filtering happens there, not here: a platform cannot be trusted to
+	// hide from itself what it has already been handed, and a document that
+	// listed every private app for each reader to filter would have leaked
+	// their names to everyone by the time anybody filtered anything.
+	//
+	// Empty is the normal case and stays the normal case. It is not a
+	// degradation — a deployment with no private apps has nothing to prove.
+	Token string
+
 	// PlatformVersion is sent to the registry so it can answer with what this
 	// binary can actually run, and is what manifests are validated against.
 	PlatformVersion string
@@ -108,6 +128,7 @@ func ConfigFromEnv(filePath, platformVersion string) Config {
 		URL:             strings.TrimSuffix(strings.TrimSpace(os.Getenv("APP_CATALOG_URL")), "/"),
 		CachePath:       strings.TrimSpace(os.Getenv("CATALOG_CACHE_PATH")),
 		Channel:         strings.TrimSpace(os.Getenv("APP_CATALOG_CHANNEL")),
+		Token:           strings.TrimSpace(os.Getenv("APP_CATALOG_TOKEN")),
 		PlatformVersion: platformVersion,
 		SyncInterval:    DefaultSyncInterval,
 	}
@@ -292,6 +313,11 @@ func (p *Provider) fetch(ctx context.Context, etag string) (body []byte, newETag
 		return nil, "", false, err
 	}
 	req.Header.Set("Accept", "application/json")
+	// Who is asking. Never logged and never written to the cache file: the
+	// cache holds the answer, and an answer is not a credential.
+	if p.cfg.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+p.cfg.Token)
+	}
 	if etag != "" {
 		req.Header.Set("If-None-Match", etag)
 	}
