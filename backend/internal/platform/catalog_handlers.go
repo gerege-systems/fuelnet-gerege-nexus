@@ -196,6 +196,35 @@ func (s *Server) handleGetStoreApp(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(app.Localized(config.LocaleFromRequest(r)))
 }
 
+// presentableInstallation reports whether an installation row names an app this
+// deployment can actually run.
+//
+// It exists because the installed-apps screen was the one place the split was
+// still visible as a lie. The store stopped offering apps this binary cannot run
+// (see runnableHere); the list of what a tenant *has* went on showing four of
+// them — State Services, Products, Inventory, Billing — as installed, active,
+// with a button to disable them. They mount no routes and appear in no menu, so
+// nothing about them works; the row is all that is left, and a row that says
+// "Идэвхтэй" about an app with no code is worse than no row at all.
+//
+// Two questions, in this order. If the catalogue knows the app, runnableHere is
+// the same answer the store gives — one rule, so the two screens cannot
+// disagree. If the catalogue has never heard of it, a compiled module is enough:
+// a distribution's own module is real and working from the moment the binary
+// starts, and may reach the catalogue minutes later or never.
+//
+// The rows themselves are deliberately left in the database. Migration 00058's
+// note explains the reasoning where an app was absorbed; here the apps went to
+// distributions that this deployment may yet run, and deleting an installation
+// because the screen cannot render it is the wrong way round.
+func (s *Server) presentableInstallation(appID string) bool {
+	if app, ok := s.installer.GetAppByID(appID); ok {
+		return runnableHere(app)
+	}
+	_, compiled := lookupModule(appID)
+	return compiled
+}
+
 func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
@@ -254,6 +283,11 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 			&item.PinnedVersion, &heldFor, &heldReason); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "failed to read installed apps")
 			return
+		}
+		// An app that left this binary is not something this tenant has, whatever
+		// the row says. See presentableInstallation.
+		if !s.presentableInstallation(item.AppID) {
+			continue
 		}
 		// apps.name is the manifest's English name, and this was the one catalogue
 		// surface that answered with it: the store and the sidebar both resolve

@@ -3,6 +3,7 @@ package platform
 import (
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
@@ -47,6 +48,51 @@ func TestAnExternalAppIsOfferedWithoutAModule(t *testing.T) {
 	}
 	if !runnableHere(external) {
 		t.Error("an external app must be offered even though nothing compiled it")
+	}
+}
+
+// The same rule, applied to what a tenant already has rather than to what the
+// store offers.
+//
+// The screen that lists installed apps read straight from app_installations,
+// so on nexus.gerege.mn it showed nine rows under a banner saying the
+// catalogue has five: State Services, Products, Inventory and Billing were all
+// listed as installed and active months after their code left for other
+// repositories. Nothing about them worked — no routes, no menu entry — and the
+// row offered a button to disable an app that was not running.
+func TestTheInstalledListDropsAnAppThisBinaryCannotRun(t *testing.T) {
+	withModules(t, gatedModule{})
+
+	server := &Server{installer: appinstaller.NewAppInstaller(nil, []catalog.CatalogApp{
+		{ID: "io.gerege.test.gated", Slug: "gated", Version: "1.0.0"},
+		// Advertised by the signed catalogue, built from another repository.
+		{ID: "io.gerege.nexus.gov_services", Slug: "gov-services", Version: "1.1.0"},
+	}, "1.0.0")}
+
+	if !server.presentableInstallation("io.gerege.test.gated") {
+		t.Error("an app with a compiled module must stay on the list")
+	}
+	if server.presentableInstallation("io.gerege.nexus.gov_services") {
+		t.Error("an app that left this binary must not be listed as installed")
+	}
+	// Never heard of by the catalogue and not compiled either: the four rows
+	// this test is named after, after their manifests were dropped from
+	// catalog/apps.json.
+	if server.presentableInstallation("io.gerege.nexus.billing") {
+		t.Error("an app in neither the catalogue nor the binary must not be listed")
+	}
+}
+
+// A distribution's own module is real from the moment the binary starts, and
+// the catalogue may learn about it minutes later or never — a deployment can
+// run from a file-mode catalogue that names nothing it did not write itself.
+// Hiding it until a document catches up would hide a working app.
+func TestAnInstalledModuleTheCatalogueHasNotHeardOfIsKept(t *testing.T) {
+	withModules(t, gatedModule{})
+
+	server := &Server{installer: appinstaller.NewAppInstaller(nil, nil, "1.0.0")}
+	if !server.presentableInstallation("io.gerege.test.gated") {
+		t.Error("a compiled module must be listed even when the catalogue is silent about it")
 	}
 }
 

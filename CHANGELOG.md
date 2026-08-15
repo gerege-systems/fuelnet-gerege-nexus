@@ -15,6 +15,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Installed apps listed four that this binary cannot run
+
+The settings screen read straight from `app_installations`, so it showed nine
+rows under its own banner saying the catalogue has five. State Services,
+Products, Inventory and Billing were all listed as installed and active —
+months after their code left for `gov-gerege-nexus` and
+`commerce-gerege-nexus` — each with a button offering to disable an app that
+was not running. Nothing about them worked: no routes mounted, no menu entry,
+and the compile-time check refuses them at install. The row was all that was
+left, and a row that says "Active" about an app with no code is worse than no
+row.
+
+The store already had this rule (`runnableHere`, added when State Services
+left); the list of what a tenant *has* never got it. Both screens ask the same
+question now: if the catalogue knows the app, it has to be runnable here; if the
+catalogue has never heard of it, a compiled module is enough — a distribution's
+own module is real from the moment the binary starts and may reach a catalogue
+minutes later or never.
+
+The rows stay in the database. The apps went to distributions this deployment
+may yet run, and deleting an installation because a screen cannot render it is
+the wrong way round.
+
 ### Changed — Two cards became one app: Contacts moved inside the Directory
 
 "Organisation & People" and "Contacts" were one subject cut in half — who this
