@@ -83,12 +83,21 @@ func (s *Server) appReadPermission(appID string) string {
 	return appReadPermission(appID)
 }
 
+// lookupModule is nexus.Get behind a seam.
+//
+// The seam is for tests. Both functions below resolve an app ID to a module,
+// and a test that wants to assert on a made-up module would otherwise have to
+// put it in the global registry — where the next test to build a Server finds
+// it and tries to mount its routes. That is not hypothetical: it is how this
+// variable came to exist.
+var lookupModule = nexus.Get
+
 // appReadPermission asks the module. It used to be a switch listing every app
 // by name, which meant a module in another repository could not answer for
 // itself — and losing the entry was silent, so an extracted app would keep
 // appearing in everyone's sidebar. See nexus.AccessPolicy.
 func appReadPermission(appID string) string {
-	mod, found := nexus.Get(appID)
+	mod, found := lookupModule(appID)
 	if !found {
 		return ""
 	}

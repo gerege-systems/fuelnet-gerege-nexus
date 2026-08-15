@@ -38,9 +38,29 @@ func (selfGatedModule) ID() string                    { return "io.gerege.test.s
 func (selfGatedModule) MenuPermission() string        { return "selfgated.read" }
 func (selfGatedModule) RoutePermissionPrefix() string { return "" }
 
+// withModules points the lookup at a fixed set for the duration of one test.
+//
+// Not nexus.Register: the registry is global and has no remove, so a fake left
+// in it is found by the next test that builds a Server, which mounts the routes
+// of everything registered and dereferences the fake's embedded nil Module. The
+// first version of this file did exactly that, and it passed locally — the test
+// it broke needs a database and had quietly skipped.
+func withModules(t *testing.T, mods ...nexus.Module) {
+	t.Helper()
+	byID := make(map[string]nexus.Module, len(mods))
+	for _, m := range mods {
+		byID[m.ID()] = m
+	}
+	previous := lookupModule
+	lookupModule = func(id string) (nexus.Module, bool) {
+		m, ok := byID[id]
+		return m, ok
+	}
+	t.Cleanup(func() { lookupModule = previous })
+}
+
 func TestAppRequestPermission(t *testing.T) {
-	nexus.Register(gatedModule{})
-	nexus.Register(selfGatedModule{})
+	withModules(t, gatedModule{}, selfGatedModule{})
 
 	if got := appRequestPermission("io.gerege.test.gated", "GET", "/x"); got != "gated.read" {
 		t.Fatalf("got %q", got)
@@ -72,7 +92,7 @@ type policylessModule struct{ nexus.Module }
 func (policylessModule) ID() string { return "io.gerege.test.policyless" }
 
 func TestAModuleWithoutAnAccessPolicyIsNotGated(t *testing.T) {
-	nexus.Register(policylessModule{})
+	withModules(t, policylessModule{})
 	if got := appRequestPermission("io.gerege.test.policyless", "POST", "/x"); got != "" {
 		t.Fatalf("got %q", got)
 	}

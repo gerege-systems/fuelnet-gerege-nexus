@@ -143,7 +143,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 // map, and falling out of the map means no permission is required. See
 // nexus.AccessPolicy for why the answer now travels with the module.
 func appRequestPermission(appID, method, path string) string {
-	mod, found := nexus.Get(appID)
+	mod, found := lookupModule(appID)
 	if !found {
 		return ""
 	}
