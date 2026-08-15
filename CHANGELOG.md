@@ -49,7 +49,7 @@ it is a deployment rather than a project.
   no routes and lists no menu.
 
 
-## [Unreleased]
+## [1.4.0] - 2026-08-15
 
 ### Removed — Commerce left, and is a product of its own
 
