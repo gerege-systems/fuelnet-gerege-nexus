@@ -13,9 +13,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { GitBranch, History, Route } from "lucide-react";
+import { FileSignature, GitBranch, History, Route } from "lucide-react";
 
-import { api, type UrtuuTask, type UrtuuTaskEvent } from "@/lib/api";
+import { api, type UrtuuEvidence, type UrtuuTask, type UrtuuTaskEvent } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Chip, ErrorNote, Loading, Panel, Screen } from "@/components/module/kit";
 import { OverdueMark, StatusChip, useStatusLabel } from "../../shared";
@@ -37,6 +37,7 @@ export default function UrtuuTaskPage() {
   const [task, setTask] = useState<UrtuuTask | null>(null);
   const [events, setEvents] = useState<UrtuuTaskEvent[]>([]);
   const [branches, setBranches] = useState<UrtuuTask[]>([]);
+  const [evidence, setEvidence] = useState<UrtuuEvidence[]>([]);
   const [next, setNext] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
@@ -48,6 +49,7 @@ export default function UrtuuTaskPage() {
       setTask(answer.task);
       setEvents(answer.events || []);
       setBranches(answer.branches || []);
+      setEvidence(answer.evidence || []);
       setNext(answer.next || []);
       setFailure("");
     } catch (err) {
@@ -114,6 +116,44 @@ export default function UrtuuTaskPage() {
           <pre className="text-xs font-mono text-slate-600 whitespace-pre-wrap break-all">
             {JSON.stringify(task.payload, null, 2)}
           </pre>
+        </Panel>
+      )}
+
+      {/* The order behind the work. A reference, not the document: it stays in
+          the documents app of whoever filed it, and is signed there. */}
+      {evidence.length > 0 && (
+        <Panel className="p-4">
+          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2 mb-2">
+            <FileSignature className="w-4 h-4 text-indigo-500" />
+            {t("urtuu.section.evidence")}
+          </h2>
+          <ul className="space-y-2 text-sm">
+            {evidence.map((item) => (
+              <li
+                key={`${item.installation}:${item.ref}`}
+                className="flex flex-wrap items-baseline justify-between gap-2"
+              >
+                <span className="text-slate-800">{item.title}</span>
+                <span className="flex items-center gap-2">
+                  <Chip tone={item.signed ? "emerald" : "amber"}>
+                    {t("urtuu.message.signed", {
+                      count: item.signatures,
+                      required: item.required_signatures,
+                    })}
+                  </Chip>
+                  {/* Filed here: the link opens it. Filed elsewhere: there is
+                      nothing here to open, and saying so is the honest answer. */}
+                  {task.direction === "incoming" ? (
+                    <span className="text-xs text-slate-500">{t("urtuu.message.filed_elsewhere")}</span>
+                  ) : (
+                    <Link href={`/module/documents/${item.ref}`} className="text-xs text-indigo-700 hover:underline">
+                      {t("base.action.open")}
+                    </Link>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
         </Panel>
       )}
 

@@ -445,6 +445,25 @@ export interface UrtuuTask {
   updated_at: string;
 }
 
+/**
+ * A reference to an official document behind a task.
+ *
+ * A reference and never the document: it stays in the documents app of the
+ * organisation that filed it, under that organisation's retention and access
+ * policy. `installation` says whose `ref` this is — an id is local to whoever
+ * filed it, and one quoted without an owner is an id the reader could look up
+ * in their own database and find something else under.
+ */
+export interface UrtuuEvidence {
+  kind: string;
+  ref: string;
+  installation: string;
+  title: string;
+  signatures: number;
+  required_signatures: number;
+  signed: boolean;
+}
+
 export interface UrtuuTaskEvent {
   from_status?: string;
   to_status: string;
@@ -1297,6 +1316,7 @@ export const api = {
       task: UrtuuTask;
       events: UrtuuTaskEvent[];
       branches: UrtuuTask[];
+      evidence: UrtuuEvidence[];
       next: string[];
     }>(`/urtuu/tasks/${id}`),
 
@@ -1316,6 +1336,8 @@ export const api = {
     deadline?: string | null;
     peer_ids?: string[];
     note?: string;
+    /** The official document behind the work: one already filed, or one to file now. */
+    document?: { document_id?: string; title?: string; type?: string };
   }) => fetcher<{ id: string; status: string }>("/urtuu/tasks", {
     method: "POST",
     body: JSON.stringify(input),

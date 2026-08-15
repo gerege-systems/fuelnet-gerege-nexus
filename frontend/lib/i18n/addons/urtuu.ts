@@ -170,6 +170,18 @@ export const urtuu = {
   "urtuu.message.moved": { mn: "Даалгаврын төлөв өөрчлөгдлөө", en: "The task has moved" },
   "urtuu.message.no_deadline": { mn: "Хугацаагүй", en: "No deadline" },
   "urtuu.message.pick_code": { mn: "Хүсэлтийн код сонгоно уу", en: "Choose a request code" },
+  "urtuu.section.evidence": { mn: "Албан бичиг", en: "Official document" },
+  "urtuu.field.document_title": { mn: "Албан бичгийн гарчиг", en: "Document title" },
+  "urtuu.field.document_type": { mn: "Төрөл", en: "Type" },
+  "urtuu.message.signed": { mn: "Гарын үсэг {count}/{required}", en: "Signed {count} of {required}" },
+  "urtuu.message.filed_elsewhere": {
+    mn: "Илгээгч тал дээр бүртгэлтэй. Баримт өөрөө дамждаггүй — зөвхөн лавлагаа.",
+    en: "Filed at the sending installation. The document itself never travels — only the reference.",
+  },
+  "urtuu.hint.document": {
+    mn: "Заавал биш. Бөглөвөл Баримт бичиг апп дээр бүртгэгдэж, тэндээ eID-ээр гарын үсэг зурагдана; даалгаварт зөвхөн лавлагаа нь хавсрагдана.",
+    en: "Optional. Filling it files a document in the Documents app, where it is signed with eID; the task carries only the reference.",
+  },
   "urtuu.message.no_open_links": {
     mn: "Идэвхтэй доод холбоос алга. Тохиргоо → Өртөө дээр эхлээд холбоос үүсгэнэ.",
     en: "No live subordinate links. Establish one in Settings → Өртөө first.",

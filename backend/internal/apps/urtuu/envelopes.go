@@ -44,6 +44,9 @@ type assignment struct {
 	// OriginChain is every installation this work has passed through. It is the
 	// cycle guard (§9) and it is why a graph rather than a tree is safe.
 	OriginChain []string `json:"origin_chain"`
+	// Evidence is what backs the work up — in practice a signed order, filed at
+	// the installation that raised it. References only; see evidence.go.
+	Evidence []contract.Evidence `json:"evidence,omitempty"`
 }
 
 // update is the payload of a task.update envelope.
@@ -79,11 +82,11 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
 		    (tenant_id, code, title, payload, target_peer_id, parent_task_id,
-		     origin_chain, status, deadline, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'RECEIVED', $8, NULLIF($9, '')::uuid)
+		     origin_chain, status, deadline, evidence, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'RECEIVED', $8, $9, NULLIF($10, '')::uuid)
 		RETURNING id`,
 		tenantID, parent.Code, parent.Title, parent.Payload, peerID, parent.ID,
-		parent.OriginChain, deadline, actorUserID).Scan(&mirrorID); err != nil {
+		parent.OriginChain, deadline, parent.Evidence, actorUserID).Scan(&mirrorID); err != nil {
 		return err
 	}
 	if err := m.record(ctx, tx, tenantID, mirrorID, string(contract.StatusReceived), actorUserID, "", ""); err != nil {
@@ -97,6 +100,7 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 		Payload:     parent.Payload,
 		Deadline:    deadline,
 		OriginChain: parent.OriginChain,
+		Evidence:    readEvidence(parent.Evidence),
 	}, peerID)
 	return err
 }
@@ -111,11 +115,22 @@ func (m *Module) reportUp(ctx context.Context, tenantID string, task Task, note 
 	if task.OriginPeerID == "" || task.OriginTaskRef() == "" {
 		return
 	}
+	// Refreshed before it is sent, and written back. A completion report is
+	// signed while the task is already moving, so the count that travels has to
+	// be the one as of now rather than the one as of when the document was
+	// first attached.
+	evidence := m.refreshEvidence(ctx, tenantID, readEvidence(task.Evidence))
+	m.saveEvidence(ctx, tenantID, task.ID, evidence)
+	encoded, err := evidenceJSON(evidence)
+	if err != nil {
+		slog.Warn("urtuu: could not render a task's attachments", "task_id", task.ID, "error", err)
+		return
+	}
 	if _, err := m.link.Enqueue(ctx, tenantID, contract.KindTaskUpdate, update{
 		TaskID:   task.OriginTaskRef(),
 		Status:   task.Status,
 		Note:     note,
-		Evidence: task.Evidence,
+		Evidence: encoded,
 	}, task.OriginPeerID); err != nil {
 		slog.Warn("urtuu: could not report a task's state upward",
 			"task_id", task.ID, "status", task.Status, "error", err)
@@ -169,13 +184,20 @@ func (m *Module) receiveAssignment(ctx context.Context, message transport.Receiv
 	// envelope's stamp — the sender's clock, because that is the moment the
 	// work was promised against.
 	deadline := deadlineFor(code, work.Deadline, message.CreatedAt)
+	// Stored exactly as it arrived. These references are to documents at the
+	// sending installation and cannot be read from here; a count re-derived
+	// locally would be a lie with a number in it.
+	incomingEvidence, err := evidenceJSON(work.Evidence)
+	if err != nil {
+		return err
+	}
 
 	var taskID string
 	err = tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
 		    (tenant_id, code, title, payload, origin_peer_id, origin_task_id,
-		     origin_chain, status, deadline)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'RECEIVED', $8)
+		     origin_chain, status, deadline, evidence)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'RECEIVED', $8, $9)
 		-- The unique index on (origin_peer_id, origin_task_id). A reader has to
 		-- be safe to repeat: the envelope is идемпотент by message id, but the
 		-- write that marks it read can fail after this one succeeded.
@@ -183,7 +205,7 @@ func (m *Module) receiveAssignment(ctx context.Context, message transport.Receiv
 		RETURNING id`,
 		message.TenantID, work.Code, work.Title, payloadOrEmpty(work.Payload),
 		message.PeerID, work.TaskID, append(work.OriginChain, m.link.InstallationID()),
-		deadline).Scan(&taskID)
+		deadline, incomingEvidence).Scan(&taskID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Already here. Nothing to do and nothing wrong.
 		return nil

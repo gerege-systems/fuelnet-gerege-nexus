@@ -134,6 +134,7 @@ function RaiseDialog({
     payload?: unknown;
     deadline?: string | null;
     peer_ids?: string[];
+    document?: { document_id?: string; title?: string; type?: string };
   }) => Promise<void>;
   onClose: () => void;
 }) {
@@ -143,6 +144,8 @@ function RaiseDialog({
   const [deadline, setDeadline] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [targets, setTargets] = useState<string[]>([]);
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentType, setDocumentType] = useState("APPROVAL");
   const [busy, setBusy] = useState(false);
 
   const chosen = codes.find((entry) => entry.code === code);
@@ -165,6 +168,12 @@ function RaiseDialog({
               // not the same one.
               deadline: deadline ? new Date(deadline + "T23:59:59").toISOString() : null,
               peer_ids: targets,
+              // Empty means no paperwork, which is most work. Filling it files
+              // a document in the Documents app — where it is signed with eID —
+              // and the task carries only the reference.
+              document: documentTitle.trim()
+                ? { title: documentTitle.trim(), type: documentType }
+                : undefined,
             });
           } finally {
             setBusy(false);
@@ -224,6 +233,28 @@ function RaiseDialog({
             className="w-full mt-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
           />
         </label>
+
+        <fieldset className="block text-xs font-semibold text-slate-600">
+          <legend>{t("urtuu.section.evidence")}</legend>
+          <p className="mt-1 mb-1 font-normal text-slate-500">{t("urtuu.hint.document")}</p>
+          <input
+            value={documentTitle}
+            onChange={(event) => setDocumentTitle(event.target.value)}
+            placeholder={t("urtuu.field.document_title")}
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-normal"
+          />
+          {documentTitle.trim() !== "" && (
+            <select
+              value={documentType}
+              onChange={(event) => setDocumentType(event.target.value)}
+              className="w-full mt-1 px-3 py-2 text-sm border border-slate-300 rounded-lg font-normal"
+            >
+              <option value="APPROVAL">APPROVAL</option>
+              <option value="CONTRACT">CONTRACT</option>
+              <option value="REQUEST">REQUEST</option>
+            </select>
+          )}
+        </fieldset>
 
         <fieldset className="block text-xs font-semibold text-slate-600">
           <legend>{t("urtuu.field.targets")}</legend>

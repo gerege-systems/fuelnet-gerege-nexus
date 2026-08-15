@@ -183,3 +183,42 @@ func (c RequestCode) LocalizedName(locale string) string {
 func KnownSource(source string) bool {
 	return source == SourceRing || source == SourceLink || source == SourceLocal
 }
+
+// ------------------------------------------------------------- evidence
+
+// Evidence is a reference to something that backs a task up — in practice an
+// official document, signed with eID, filed at the installation that raised or
+// answered the work.
+//
+// A reference and never the thing itself. The proposal's fourth design decision
+// (§2.4) is that data does not move, work does: a document stays in the
+// documents app of the organisation that filed it, under that organisation's
+// retention and access policy, and what crosses the link is the fact that it
+// exists, what it is called, and whether it has been signed. An installation
+// receiving a task learns that there is a signed order behind it; it does not
+// receive the order.
+//
+// Which is also why Installation is here. A document id is local to the
+// installation that filed it — quoting one without saying whose it is would be
+// an identifier the reader could look up in their own database and find
+// somebody else's document under.
+type Evidence struct {
+	// Kind is what the reference points at. One kind so far; the field exists
+	// because the second one — a photograph, a measurement, a signed dataset —
+	// must not require every existing envelope to be reinterpreted.
+	Kind string `json:"kind"`
+	// Ref is the document's id at the installation that filed it.
+	Ref string `json:"ref"`
+	// Installation is whose id that is.
+	Installation string `json:"installation"`
+	Title        string `json:"title"`
+	// The signature state as it was when this was sent. A snapshot, not a live
+	// reading: the far side cannot query the near side's documents app, and a
+	// count that silently aged would be worse than one that is dated.
+	Signatures         int  `json:"signatures"`
+	RequiredSignatures int  `json:"required_signatures"`
+	Signed             bool `json:"signed"`
+}
+
+// EvidenceDocument is the one kind of reference there is so far.
+const EvidenceDocument = "document"

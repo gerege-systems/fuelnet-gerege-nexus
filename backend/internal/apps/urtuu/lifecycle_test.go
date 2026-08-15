@@ -20,6 +20,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -646,5 +647,148 @@ func TestTheThreeReportsRun(t *testing.T) {
 			t.Errorf("%s offers counterparty scope, and nothing in a task carries a counterparty reference",
 				report.Key())
 		}
+	}
+}
+
+// ---------------------------------------------------------------- evidence
+
+// oneDocument is a document store in the smallest form that answers the
+// contract. The real one is the documents app; what is under test here is what
+// Өртөө does with what it is handed, not how a signature ceremony works.
+type oneDocument struct {
+	id         string
+	title      string
+	signatures int
+}
+
+func (d *oneDocument) File(_ context.Context, _ string, draft nexus.DocumentDraft) (nexus.FiledDocument, error) {
+	d.id, d.title = uuid.NewString(), draft.Title
+	return d.filed(), nil
+}
+
+func (d *oneDocument) Document(_ context.Context, _, id string) (nexus.FiledDocument, error) {
+	if id != d.id {
+		return nexus.FiledDocument{}, errors.New("no such document")
+	}
+	return d.filed(), nil
+}
+
+func (d *oneDocument) filed() nexus.FiledDocument {
+	return nexus.FiledDocument{
+		ID: d.id, Title: d.title, Type: "APPROVAL",
+		SignatureCount: d.signatures, RequiredSignatures: 2,
+	}
+}
+
+// A task can be accompanied by an official document, and what crosses the link
+// is a reference to it — never the document.
+func TestATaskCarriesAReferenceToItsOrderAndNotTheOrder(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 28, "local.count")
+
+	store := &oneDocument{}
+	nexus.UseDocumentFiler(store)
+	t.Cleanup(func() { nexus.UseDocumentFiler(nil) })
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code":     "local.count",
+		"peer_ids": []string{parentPeerID},
+		"document": map[string]string{"title": "Тооллого явуулах тухай тушаал", "type": "APPROVAL"},
+	}, http.StatusCreated)
+	if store.id == "" {
+		t.Fatal("no document was filed")
+	}
+
+	carry(t, parent, child)
+
+	detail := child.call(http.MethodGet, "/api/v1/urtuu/tasks/"+child.tasks("incoming")[0].ID, nil, http.StatusOK)
+	evidence, _ := detail["evidence"].([]any)
+	if len(evidence) != 1 {
+		t.Fatalf("the child sees %d attachments, want 1", len(evidence))
+	}
+	reference, _ := evidence[0].(map[string]any)
+	if reference["ref"] != store.id {
+		t.Errorf("ref = %v, want the sender's document id", reference["ref"])
+	}
+	// Whose id it is. Without this the child has an identifier it could look up
+	// in its own database and find a different document under.
+	if reference["installation"] != parent.link.InstallationID() {
+		t.Errorf("installation = %v, want the sender's", reference["installation"])
+	}
+	if reference["title"] != "Тооллого явуулах тухай тушаал" {
+		t.Errorf("title = %v", reference["title"])
+	}
+	if reference["signed"] != false {
+		t.Error("an unsigned order arrived marked as signed")
+	}
+
+	// The signature count on the child's copy is a snapshot of what it was
+	// told. Signing at the sender does not silently rewrite it — but the
+	// sender's own screen reads the current state.
+	store.signatures = 2
+	senderDetail := parent.call(http.MethodGet,
+		"/api/v1/urtuu/tasks/"+parent.tasks("outgoing")[0].ParentTaskID, nil, http.StatusOK)
+	senderEvidence, _ := senderDetail["evidence"].([]any)
+	if len(senderEvidence) != 1 {
+		t.Fatalf("the sender sees %d attachments, want 1", len(senderEvidence))
+	}
+	if signed, _ := senderEvidence[0].(map[string]any)["signed"].(bool); !signed {
+		t.Error("the sender's screen does not show the order as signed once it has been")
+	}
+}
+
+// The completion report is the other direction: a child files what it did,
+// signs it, and the reference travels up with the update.
+func TestACompletionCanCarryItsOwnSignedReport(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 29, "local.count")
+
+	store := &oneDocument{signatures: 2}
+	nexus.UseDocumentFiler(store)
+	t.Cleanup(func() { nexus.UseDocumentFiler(nil) })
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+	}, http.StatusCreated)
+	carry(t, parent, child)
+
+	work := child.tasks("incoming")[0]
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/accept", nil, http.StatusOK)
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/complete", map[string]any{
+		"note":     "дууслаа",
+		"document": map[string]string{"title": "Тооллогын тайлан", "type": "APPROVAL"},
+	}, http.StatusOK)
+	carry(t, parent, child)
+
+	mirror := parent.tasks("outgoing")[0]
+	detail := parent.call(http.MethodGet, "/api/v1/urtuu/tasks/"+mirror.ID, nil, http.StatusOK)
+	evidence, _ := detail["evidence"].([]any)
+	if len(evidence) != 1 {
+		t.Fatalf("the parent sees %d attachments on the completed branch, want 1", len(evidence))
+	}
+	reference, _ := evidence[0].(map[string]any)
+	if reference["installation"] != child.link.InstallationID() {
+		t.Errorf("installation = %v, want the child's — the report is filed there", reference["installation"])
+	}
+	if signed, _ := reference["signed"].(bool); !signed {
+		t.Error("the signed report did not arrive as signed")
+	}
+}
+
+// A deployment with no document store must refuse the attachment rather than
+// dropping it: a task saying "see the attached order" with no order is worse
+// than one that was refused at the point of raising it.
+func TestAnAttachmentIsRefusedWithoutADocumentStore(t *testing.T) {
+	pool := openPool(t)
+	parent, _, parentPeerID := linked(t, pool, 30, "local.count")
+	nexus.UseDocumentFiler(nil)
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+		"document": map[string]string{"title": "Тушаал"},
+	}, http.StatusBadRequest)
+
+	if got := len(parent.tasks("local")); got != 0 {
+		t.Errorf("a refused attachment left %d tasks behind", got)
 	}
 }

@@ -88,6 +88,11 @@ func (m *Module) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The attachments as they stand now, for anything filed here. What the
+	// other installation was told is on the row; what the person looking at
+	// this screen needs is the current signature count.
+	evidence := m.refreshEvidence(r.Context(), tenantID, readEvidence(task.Evidence))
+
 	events, err := m.taskEvents(r.Context(), tenantID, id)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not read the task's history")
@@ -100,7 +105,7 @@ func (m *Module) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nexus.JSON(w, http.StatusOK, map[string]any{
-		"task": task, "events": events, "branches": branches,
+		"task": task, "events": events, "branches": branches, "evidence": evidence,
 		// What this task may do next, so the screen offers buttons rather than
 		// guessing at the state machine a second time.
 		"next": contract.TaskStatus(task.Status).Next(),
@@ -117,6 +122,11 @@ type createRequest struct {
 	// task under a code so that it is counted and timed like any other.
 	PeerIDs []string `json:"peer_ids"`
 	Note    string   `json:"note"`
+	// Document attaches the official paperwork — an order that has been signed
+	// with eID, or one filed here and now so that it can be. Optional: most
+	// work needs no instrument, and the ones that do are the ones that have to
+	// be able to prove it.
+	Document *documentRequest `json:"document"`
 }
 
 // handleCreateTask raises work and, if it names any links, sends it.
@@ -157,6 +167,25 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Before the transaction, because filing a document is somebody else's
+	// write and must not be inside one this handler might roll back — a task
+	// that failed to send would otherwise leave an orphan document in the
+	// register with nothing pointing at it.
+	var attached []contract.Evidence
+	if !request.Document.empty() {
+		evidence, err := m.attachDocument(r.Context(), tenantID, request.Document)
+		if err != nil {
+			nexus.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		attached = append(attached, evidence)
+	}
+	encodedEvidence, err := evidenceJSON(attached)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not record the attachment")
+		return
+	}
+
 	now := time.Now()
 	root := Task{
 		Code:    code.Code,
@@ -166,6 +195,7 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		// itself, and any that finds itself already on it refuses.
 		OriginChain: []string{m.link.InstallationID()},
 	}
+	root.Evidence = encodedEvidence
 	deadline := deadlineFor(code, request.Deadline, now)
 
 	// A task with branches is delegated from birth; one kept here starts where
@@ -187,11 +217,13 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	actor := actorOf(r)
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, title, payload, origin_chain, status, deadline, note, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, '')::uuid)
+		    (tenant_id, code, title, payload, origin_chain, status, deadline, note,
+		     evidence, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, '')::uuid)
 		RETURNING id`,
 		tenantID, root.Code, root.Title, root.Payload, root.OriginChain,
-		string(status), deadline, strings.TrimSpace(request.Note), actor).Scan(&root.ID); err != nil {
+		string(status), deadline, strings.TrimSpace(request.Note),
+		encodedEvidence, actor).Scan(&root.ID); err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not raise the task")
 		return
 	}
@@ -394,8 +426,10 @@ func (m *Module) transition(w http.ResponseWriter, r *http.Request,
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxTaskBody)
 	var request struct {
-		Note     string          `json:"note"`
-		Evidence json.RawMessage `json:"evidence"`
+		Note string `json:"note"`
+		// Document is how a completion carries its proof: the report that was
+		// signed, filed here and referenced by the update that goes upward.
+		Document *documentRequest `json:"document"`
 	}
 	// An empty body is a legitimate accept, so a decode failure on no body is
 	// not an error worth answering with.
@@ -405,11 +439,26 @@ func (m *Module) transition(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	if len(request.Evidence) > 0 {
+	if !request.Document.empty() {
+		evidence, err := m.attachDocument(r.Context(), tenantID, request.Document)
+		if err != nil {
+			nexus.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		existing, err := m.getTask(r.Context(), tenantID, id)
+		if err != nil {
+			nexus.Error(w, http.StatusNotFound, "no such task")
+			return
+		}
+		encoded, err := withEvidence(existing.Evidence, evidence)
+		if err != nil {
+			nexus.Error(w, http.StatusInternalServerError, "could not record the attachment")
+			return
+		}
 		if _, err := m.db.Exec(nexus.WithTenantID(r.Context(), tenantID),
 			`UPDATE urtuu_tasks SET evidence = $2, updated_at = NOW() WHERE id = $1`,
-			id, []byte(request.Evidence)); err != nil {
-			nexus.Error(w, http.StatusBadRequest, "invalid evidence")
+			id, encoded); err != nil {
+			nexus.Error(w, http.StatusInternalServerError, "could not record the attachment")
 			return
 		}
 	}
