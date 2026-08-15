@@ -50,6 +50,19 @@ updates:
           - react
           - react-dom
           - "@types/react*"
+    # Tailwind 4 is a migration, not a bump: the PostCSS plugin moved to its own
+    # package and the configuration file becomes CSS. It arrived inside a group
+    # of six on 2026-08-15 (#145), failed the build for exactly that reason, and
+    # took the five updates beside it down with it.
+    #
+    # Ignored until somebody does the migration deliberately. Without this the
+    # same broken pull request returns every Monday, which is the review queue
+    # nobody reads that the note at the top of this file is about. Only the
+    # major is held back — 4.x patches will still arrive once it is on 4.
+    ignore:
+      - dependency-name: tailwindcss
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: "deps"
 
