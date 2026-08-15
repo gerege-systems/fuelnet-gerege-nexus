@@ -67,10 +67,12 @@ Spanish) — seven in total.
 | [`APPSTORE_OPERATIONS.md`](APPSTORE_OPERATIONS.md) | EN | Апп сторын каталог нийтлэх, хувилбар шилжүүлэх ажиллагаа |
 | [`REPORTS.md`](REPORTS.md) | MN | Тайлангийн хөдөлгүүр: шинэ тайлан нэмэх, хамгаалалт, товлосон илгээлт |
 | [`REPORT_SHARING.md`](REPORT_SHARING.md) | MN | Тенант дамнасан тайлан: grant, counterparty хүрээ, хоёр талын audit |
+| [`URTUU.md`](URTUU.md) | MN | «Өртөө» — платформ хоорондын даалгаврын суваг: тохиргоо, холбоос байгуулах, runbook |
 | [`MONITORING.md`](MONITORING.md) | MN | Ажиглалтын стек: асаах, Grafana, лог хайх, шинэ хэмжүүр нэмэх |
 | [`RUNBOOKS.md`](RUNBOOKS.md) | MN | Дохио бүрд: юу болсон, юу шалгах, яаж засах, хэзээ өргөжүүлэх |
 | [`CONTROL_PLANE.md`](CONTROL_PLANE.md) | MN | Операторын консол: босгох, эрх, анхны оператор үүсгэх, аюулгүй байдлын дүрмүүд |
 | [`MONITORING_AND_REPORTING_PROPOSAL.md`](MONITORING_AND_REPORTING_PROPOSAL.md) | MN | Ажиглалт ба тайлангийн давхаргын дизайны санал |
+| [`URTUU_PROPOSAL.md`](URTUU_PROPOSAL.md) | MN | «Өртөө» сувгийн дизайны санал ба үе шатууд |
 | [`CONTROL_PLANE_PLAN.md`](CONTROL_PLANE_PLAN.md) | MN | Операторын консолын дизайн ба үе шатуудын төлөвлөгөө |
 | [`TRANSLATION_GUIDE.md`](TRANSLATION_GUIDE.md) | MN | Долоон хэлний толь бичиг, орчуулга нэмэх урсгал |
 
