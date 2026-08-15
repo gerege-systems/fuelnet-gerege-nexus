@@ -7,6 +7,16 @@
   DB.QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
   Dependency.ID string
   Dependency.VersionConstraint string
+  Meeting.ExternalID string
+  Meeting.IntegrationID string
+  Meeting.IntegrationName string
+  Meeting.JoinURL string
+  Meeting.Provider string
+  MeetingBooker.CreateMeeting(ctx context.Context, tenantID, integrationID, title string, startsAt time.Time, duration time.Duration, reference string) (*Meeting, error)
+  MeetingBooker.FirstMeetingConnector(ctx context.Context, tenantID string) (*MeetingConnector, error)
+  MeetingConnector.ID string
+  MeetingConnector.Name string
+  MeetingConnector.Provider string
   MenuDefinition.AppID string
   MenuDefinition.AppName string
   MenuDefinition.ExternalURL string
@@ -63,6 +73,9 @@ type AccessPolicy interface
 type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 type DB interface
 type Dependency struct
+type Meeting struct
+type MeetingBooker interface
+type MeetingConnector struct
 type MenuDefinition struct
 type Module interface
 type PermissionDefinition struct

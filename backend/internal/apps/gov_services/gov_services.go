@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -128,11 +127,11 @@ type Appointment struct {
 // An interface rather than the concrete manager so the appointment tests do
 // not need a Google account, and so the dependency reads as what gov_services
 // wants — a way to get a joining link — rather than as "integrations".
-type MeetingBooker interface {
-	FirstMeetingConnector(ctx context.Context, tenantID string) (*integration.Connector, error)
-	CreateMeeting(ctx context.Context, tenantID, integrationID, title string,
-		startsAt time.Time, duration time.Duration, reference string) (*integration.Meeting, error)
-}
+// MeetingBooker is nexus.MeetingBooker. The alias is kept because this
+// module's constructor and tests name the type, and because the interface was
+// this module's idea before it was the SDK's — it moved there so that the
+// types it speaks in stopped being internal ones. See pkg/nexus/meetings.go.
+type MeetingBooker = nexus.MeetingBooker
 
 type Module struct {
 	db       nexus.DB
