@@ -107,10 +107,7 @@ func (e *Engine) Run(ctx context.Context, tenantID string, report Report, params
 // internal/platform/dbguard). Taking it from the context rather than from a
 // parameter is what makes a consolidated run possible without a report knowing
 // it is in one.
-func TenantOf(ctx context.Context) string {
-	tenantID, _ := tenant.FromContext(ctx)
-	return tenantID
-}
+func TenantOf(ctx context.Context) string { return nexus.TenantOf(ctx) }
 
 // computeTotals sums the columns that asked for it.
 //
@@ -175,26 +172,3 @@ func (q *txQuerier) Query(ctx context.Context, sql string, args ...any) (Rows, e
 type pgxRows struct{ pgx.Rows }
 
 func (r pgxRows) Close() { r.Rows.Close() }
-
-// Collect reads a cursor into result rows using a per-row scanner.
-//
-// Every report ends with the same twelve lines — iterate, scan into locals,
-// build a map, check rows.Err — and every one of them is a place to forget the
-// Err check, which is how a query that failed halfway through becomes a report
-// that quietly shows the first eight rows.
-func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error) {
-	defer rows.Close()
-
-	collected := make([]map[string]any, 0, 64)
-	for rows.Next() {
-		row, err := scan()
-		if err != nil {
-			return nil, fmt.Errorf("read a report row: %w", err)
-		}
-		collected = append(collected, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read the report: %w", err)
-	}
-	return collected, nil
-}

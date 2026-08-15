@@ -53,6 +53,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -178,6 +179,12 @@ func Run(opts Options) error {
 	// while the platform's own reached the table, which is the worst of the
 	// three possible states because the trail would look complete.
 	nexus.UseAuditSink(audit.Record)
+	// Reports arrive the same way and for the same reason: a module declares
+	// one against the SDK's contract, and the engine that runs it is inside the
+	// platform. Registrations made before this point are buffered and delivered
+	// here, so a distribution's main() may construct its modules in whatever
+	// order it likes.
+	nexus.UseReportSink(reporting.Register)
 
 	databaseReachable := db.Ping(ctx) == nil
 	if !databaseReachable {

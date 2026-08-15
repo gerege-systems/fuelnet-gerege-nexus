@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -150,7 +149,7 @@ func (m *BillingModule) CreateInvoice(ctx context.Context, tenantID, contactName
 		return nil, fmt.Errorf("create invoice: %w", err)
 	}
 
-	observability.RecordInvoiceCreated()
+	invoicesCreated.Inc()
 	return &inv, nil
 }
 

@@ -12,12 +12,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 func registerReports() {
-	reporting.Register(userActivity{})
-	reporting.Register(headcountByUnit{})
+	nexus.RegisterReport(userActivity{})
+	nexus.RegisterReport(headcountByUnit{})
 }
 
 // ------------------------------------------------------- user activity
@@ -39,11 +39,11 @@ func (userActivity) Titles() map[string]string {
 	}
 }
 
-func (userActivity) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{
+func (userActivity) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{
 		{
 			Key:  "period",
-			Kind: reporting.ParamDateRange,
+			Kind: nexus.ParamDateRange,
 			Titles: map[string]string{
 				"mn": "Хугацаа", "en": "Period", "ru": "Период",
 				"zh": "期间", "fr": "Période", "es": "Periodo", "ar": "الفترة",
@@ -53,15 +53,15 @@ func (userActivity) Params() []reporting.ParamSpec {
 	}
 }
 
-func (userActivity) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
-		{Key: "person", Kind: reporting.ColumnText, Chart: reporting.ChartCategory,
+func (userActivity) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
+		{Key: "person", Kind: nexus.ColumnText, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Хэрэглэгч", "en": "User", "ru": "Пользователь", "zh": "用户", "fr": "Utilisateur", "es": "Usuario", "ar": "المستخدم"}},
-		{Key: "actions", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "actions", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Үйлдлийн тоо", "en": "Actions", "ru": "Действий", "zh": "操作数", "fr": "Actions", "es": "Acciones", "ar": "الإجراءات"}},
-		{Key: "distinct_actions", Kind: reporting.ColumnNumber,
+		{Key: "distinct_actions", Kind: nexus.ColumnNumber,
 			Titles: map[string]string{"mn": "Төрлийн тоо", "en": "Action kinds", "ru": "Типов действий", "zh": "操作类型", "fr": "Types d'actions", "es": "Tipos", "ar": "أنواع الإجراءات"}},
-		{Key: "last_seen", Kind: reporting.ColumnDate,
+		{Key: "last_seen", Kind: nexus.ColumnDate,
 			Titles: map[string]string{"mn": "Сүүлд", "en": "Last seen", "ru": "Последняя активность", "zh": "最近活动", "fr": "Dernière activité", "es": "Última actividad", "ar": "آخر نشاط"}},
 	}
 }
@@ -74,7 +74,7 @@ func (userActivity) Columns() []reporting.ColumnSpec {
 // since removed from the organisation still counts, and an actor that is not a
 // user at all (the device handlers record `device:<id>`) is shown as itself
 // rather than dropped.
-func (userActivity) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (userActivity) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT coalesce(nullif(u.name, ''), u.email, a.user_id, '—') AS person,
 		       count(*)                                              AS actions,
@@ -90,12 +90,12 @@ func (userActivity) Run(ctx context.Context, q reporting.Querier, p reporting.Pa
 		 LIMIT 500`
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
+		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var person string
 		var actions, kinds int64
 		var last time.Time
@@ -108,15 +108,15 @@ func (userActivity) Run(ctx context.Context, q reporting.Querier, p reporting.Pa
 		}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	result := reporting.Result{Rows: collected}
+	result := nexus.Result{Rows: collected}
 	// A limit that is not said is a lie. Five hundred people is past every
 	// tenant this platform has, but a report that silently stopped there would
 	// be read as the whole organisation.
 	if len(collected) == 500 {
-		result.Notes = append(result.Notes, reporting.Note{
+		result.Notes = append(result.Notes, nexus.Note{
 			Level:   "warning",
 			Message: "Хамгийн идэвхтэй 500 хэрэглэгчийг харуулав; жагсаалт таслагдсан.",
 		})
@@ -143,13 +143,13 @@ func (headcountByUnit) Titles() map[string]string {
 	}
 }
 
-func (headcountByUnit) Params() []reporting.ParamSpec { return nil }
+func (headcountByUnit) Params() []nexus.ParamSpec { return nil }
 
-func (headcountByUnit) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
-		{Key: "unit", Kind: reporting.ColumnText, Chart: reporting.ChartCategory,
+func (headcountByUnit) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
+		{Key: "unit", Kind: nexus.ColumnText, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Нэгж", "en": "Unit", "ru": "Подразделение", "zh": "部门", "fr": "Unité", "es": "Unidad", "ar": "الوحدة"}},
-		{Key: "people", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "people", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Хүний тоо", "en": "People", "ru": "Сотрудников", "zh": "人数", "fr": "Personnes", "es": "Personas", "ar": "الأشخاص"}},
 	}
 }
@@ -158,7 +158,7 @@ func (headcountByUnit) Columns() []reporting.ColumnSpec {
 //
 // The "no unit" row is the point of the report as often as the others are: it
 // is where somebody who joined and was never assigned shows up.
-func (headcountByUnit) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (headcountByUnit) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT coalesce(d.name, $2) AS unit,
 		       count(m.id)          AS people
@@ -174,12 +174,12 @@ func (headcountByUnit) Run(ctx context.Context, q reporting.Querier, p reporting
 		unassigned = "No unit"
 	}
 
-	rows, err := q.Query(ctx, query, reporting.TenantOf(ctx), unassigned)
+	rows, err := q.Query(ctx, query, nexus.TenantOf(ctx), unassigned)
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var unit string
 		var people int64
 		if err := rows.Scan(&unit, &people); err != nil {
@@ -188,7 +188,7 @@ func (headcountByUnit) Run(ctx context.Context, q reporting.Querier, p reporting
 		return map[string]any{"unit": unit, "people": people}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }

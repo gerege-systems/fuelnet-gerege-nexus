@@ -12,21 +12,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // AppID is the module these reports belong to.
 const AppID = "io.gerege.nexus.esign"
 
 func registerReports() {
-	reporting.Register(signaturesByRail{})
-	reporting.Register(signersActivity{})
+	nexus.RegisterReport(signaturesByRail{})
+	nexus.RegisterReport(signersActivity{})
 }
 
-func periodParam(window time.Duration) reporting.ParamSpec {
-	return reporting.ParamSpec{
+func periodParam(window time.Duration) nexus.ParamSpec {
+	return nexus.ParamSpec{
 		Key:  "period",
-		Kind: reporting.ParamDateRange,
+		Kind: nexus.ParamDateRange,
 		Titles: map[string]string{
 			"mn": "Хугацаа", "en": "Period", "ru": "Период",
 			"zh": "期间", "fr": "Période", "es": "Periodo", "ar": "الفترة",
@@ -54,19 +54,19 @@ func (signaturesByRail) Titles() map[string]string {
 	}
 }
 
-func (signaturesByRail) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{periodParam(365 * 24 * time.Hour)}
+func (signaturesByRail) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{periodParam(365 * 24 * time.Hour)}
 }
 
-func (signaturesByRail) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
-		{Key: "month", Kind: reporting.ColumnMonth, Chart: reporting.ChartCategory,
+func (signaturesByRail) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
+		{Key: "month", Kind: nexus.ColumnMonth, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Сар", "en": "Month", "ru": "Месяц", "zh": "月份", "fr": "Mois", "es": "Mes", "ar": "الشهر"}},
-		{Key: "rail", Kind: reporting.ColumnText,
+		{Key: "rail", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Гарын үсгийн зам", "en": "Rail", "ru": "Канал", "zh": "签署方式", "fr": "Canal", "es": "Canal", "ar": "القناة"}},
-		{Key: "qualified", Kind: reporting.ColumnText,
+		{Key: "qualified", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Баталгаажсан эсэх", "en": "Qualified", "ru": "Квалифицированная", "zh": "合格签名", "fr": "Qualifiée", "es": "Cualificada", "ar": "مؤهلة"}},
-		{Key: "signed", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "signed", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Гарын үсэг зурсан", "en": "Signed", "ru": "Подписано", "zh": "已签署", "fr": "Signés", "es": "Firmados", "ar": "موقعة"}},
 	}
 }
@@ -78,7 +78,7 @@ func (signaturesByRail) Columns() []reporting.ColumnSpec {
 // A report that counted both together would answer "how many documents were
 // signed" and quietly not answer "how many were signed in a way that stands up",
 // which is the question a compliance reader is actually asking.
-func (signaturesByRail) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (signaturesByRail) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT date_trunc('month', signed_at)::date AS month,
 		       coalesce(provider, 'UNKNOWN')        AS rail,
@@ -92,13 +92,13 @@ func (signaturesByRail) Run(ctx context.Context, q reporting.Querier, p reportin
 		 ORDER BY 1, 2`
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
+		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
 	locale := p.Locale()
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var month time.Time
 		var rail string
 		var signed int64
@@ -112,9 +112,9 @@ func (signaturesByRail) Run(ctx context.Context, q reporting.Querier, p reportin
 		}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }
 
 func qualifiedLabel(rail, locale string) string {
@@ -150,17 +150,17 @@ func (signersActivity) Titles() map[string]string {
 	}
 }
 
-func (signersActivity) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{periodParam(90 * 24 * time.Hour)}
+func (signersActivity) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{periodParam(90 * 24 * time.Hour)}
 }
 
-func (signersActivity) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
-		{Key: "signer", Kind: reporting.ColumnText, Chart: reporting.ChartCategory,
+func (signersActivity) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
+		{Key: "signer", Kind: nexus.ColumnText, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Гарын үсэг зурагч", "en": "Signer", "ru": "Подписант", "zh": "签署人", "fr": "Signataire", "es": "Firmante", "ar": "الموقّع"}},
-		{Key: "signed", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "signed", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Баримтын тоо", "en": "Documents", "ru": "Документов", "zh": "文件数", "fr": "Documents", "es": "Documentos", "ar": "المستندات"}},
-		{Key: "last_signed", Kind: reporting.ColumnDate,
+		{Key: "last_signed", Kind: nexus.ColumnDate,
 			Titles: map[string]string{"mn": "Сүүлд зурсан", "en": "Last signed", "ru": "Последняя подпись", "zh": "最后签署", "fr": "Dernière signature", "es": "Última firma", "ar": "آخر توقيع"}},
 	}
 }
@@ -172,7 +172,7 @@ func (signersActivity) Columns() []reporting.ColumnSpec {
 // that gets exported to a spreadsheet, mailed to a list of addresses on a
 // schedule, and left in a downloads folder. The name answers "who has been
 // signing" without putting an identifier in all three places.
-func (signersActivity) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (signersActivity) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT coalesce(nullif(signer_name, ''), '—') AS signer,
 		       count(*)                               AS signed,
@@ -186,12 +186,12 @@ func (signersActivity) Run(ctx context.Context, q reporting.Querier, p reporting
 		 ORDER BY 2 DESC, 1`
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
+		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var signer string
 		var signed int64
 		var last time.Time
@@ -201,7 +201,7 @@ func (signersActivity) Run(ctx context.Context, q reporting.Querier, p reporting
 		return map[string]any{"signer": signer, "signed": signed, "last_signed": last}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }

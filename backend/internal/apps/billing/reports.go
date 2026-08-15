@@ -12,7 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // AppID is what a report declares itself as belonging to. A tenant without this
@@ -23,8 +23,8 @@ const AppID = "io.gerege.nexus.billing"
 // file knows what billing_invoices means and the reports app does not, which is
 // the whole reason a Report is an interface rather than a row in a table.
 func registerReports() {
-	reporting.Register(revenueByMonth{})
-	reporting.Register(invoiceStatus{})
+	nexus.RegisterReport(revenueByMonth{})
+	nexus.RegisterReport(invoiceStatus{})
 }
 
 // Sharing. Both billing reports opt in to ScopeFull and neither to
@@ -43,8 +43,8 @@ func registerReports() {
 // A module whose rows do carry a counterparty registration number — the
 // transport case the proposal describes — declares both and filters on
 // p.Counterparty(). See docs/REPORT_SHARING.md.
-func (revenueByMonth) Scopes() []string { return []string{reporting.ScopeFull} }
-func (invoiceStatus) Scopes() []string  { return []string{reporting.ScopeFull} }
+func (revenueByMonth) Scopes() []string { return []string{nexus.ReportScopeFull} }
+func (invoiceStatus) Scopes() []string  { return []string{nexus.ReportScopeFull} }
 
 // ---------------------------------------------------------------- revenue
 
@@ -65,11 +65,11 @@ func (revenueByMonth) Titles() map[string]string {
 	}
 }
 
-func (revenueByMonth) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{
+func (revenueByMonth) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{
 		{
 			Key:  "period",
-			Kind: reporting.ParamDateRange,
+			Kind: nexus.ParamDateRange,
 			Titles: map[string]string{
 				"mn": "Хугацаа", "en": "Period", "ru": "Период",
 				"zh": "期间", "fr": "Période", "es": "Periodo", "ar": "الفترة",
@@ -80,12 +80,12 @@ func (revenueByMonth) Params() []reporting.ParamSpec {
 		},
 		{
 			Key:  "status",
-			Kind: reporting.ParamSelect,
+			Kind: nexus.ParamSelect,
 			Titles: map[string]string{
 				"mn": "Төлөв", "en": "Status", "ru": "Статус",
 				"zh": "状态", "fr": "Statut", "es": "Estado", "ar": "الحالة",
 			},
-			Options: []reporting.ParamOption{
+			Options: []nexus.ParamOption{
 				{Value: "ALL", Titles: map[string]string{"mn": "Бүгд", "en": "All"}},
 				{Value: "PAID", Titles: map[string]string{"mn": "Төлөгдсөн", "en": "Paid"}},
 				{Value: "PENDING", Titles: map[string]string{"mn": "Хүлээгдэж буй", "en": "Pending"}},
@@ -96,37 +96,37 @@ func (revenueByMonth) Params() []reporting.ParamSpec {
 	}
 }
 
-func (revenueByMonth) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
+func (revenueByMonth) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
 		{
 			Key:    "month",
-			Kind:   reporting.ColumnMonth,
-			Chart:  reporting.ChartCategory,
+			Kind:   nexus.ColumnMonth,
+			Chart:  nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Сар", "en": "Month", "ru": "Месяц", "zh": "月份", "fr": "Mois", "es": "Mes", "ar": "الشهر"},
 		},
 		{
 			Key:    "invoices",
-			Kind:   reporting.ColumnNumber,
+			Kind:   nexus.ColumnNumber,
 			Total:  true,
 			Titles: map[string]string{"mn": "Нэхэмжлэхийн тоо", "en": "Invoices", "ru": "Счетов", "zh": "发票数", "fr": "Factures", "es": "Facturas", "ar": "الفواتير"},
 		},
 		{
 			Key:    "net",
-			Kind:   reporting.ColumnMoney,
-			Chart:  reporting.ChartValue,
+			Kind:   nexus.ColumnMoney,
+			Chart:  nexus.ChartValue,
 			Total:  true,
 			Titles: map[string]string{"mn": "Дүн (НӨАТ-гүй)", "en": "Net amount", "ru": "Сумма без НДС", "zh": "净额", "fr": "Montant HT", "es": "Importe neto", "ar": "المبلغ الصافي"},
 		},
 		{
 			Key:    "vat",
-			Kind:   reporting.ColumnMoney,
+			Kind:   nexus.ColumnMoney,
 			Total:  true,
 			Titles: map[string]string{"mn": "НӨАТ", "en": "VAT", "ru": "НДС", "zh": "增值税", "fr": "TVA", "es": "IVA", "ar": "ضريبة القيمة المضافة"},
 		},
 		{
 			Key:    "gross",
-			Kind:   reporting.ColumnMoney,
-			Chart:  reporting.ChartValue,
+			Kind:   nexus.ColumnMoney,
+			Chart:  nexus.ChartValue,
 			Total:  true,
 			Titles: map[string]string{"mn": "Нийт дүн", "en": "Gross amount", "ru": "Итого", "zh": "总额", "fr": "Montant TTC", "es": "Importe bruto", "ar": "الإجمالي"},
 		},
@@ -143,8 +143,8 @@ func (revenueByMonth) Columns() []reporting.ColumnSpec {
 // clause is `tenant_id = $1`, exactly as every other query in this codebase
 // writes it, and the row-level policy underneath is the second layer. Passing
 // the tenant as a parameter is also what makes a consolidated run work
-// unchanged — see reporting.Engine.Run.
-func (r revenueByMonth) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+// unchanged — see nexus.Engine.Run.
+func (r revenueByMonth) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT date_trunc('month', created_at)::date AS month,
 		       count(*)                              AS invoices,
@@ -164,12 +164,12 @@ func (r revenueByMonth) Run(ctx context.Context, q reporting.Querier, p reportin
 	}
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"), status)
+		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"), status)
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var month time.Time
 		var invoices int64
 		var net, vat, gross float64
@@ -182,9 +182,9 @@ func (r revenueByMonth) Run(ctx context.Context, q reporting.Querier, p reportin
 		}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }
 
 // ---------------------------------------------------------------- status
@@ -206,11 +206,11 @@ func (invoiceStatus) Titles() map[string]string {
 	}
 }
 
-func (invoiceStatus) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{
+func (invoiceStatus) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{
 		{
 			Key:  "period",
-			Kind: reporting.ParamDateRange,
+			Kind: nexus.ParamDateRange,
 			Titles: map[string]string{
 				"mn": "Хугацаа", "en": "Period", "ru": "Период",
 				"zh": "期间", "fr": "Période", "es": "Periodo", "ar": "الفترة",
@@ -220,36 +220,36 @@ func (invoiceStatus) Params() []reporting.ParamSpec {
 	}
 }
 
-func (invoiceStatus) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
+func (invoiceStatus) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
 		{
 			Key:    "status",
-			Kind:   reporting.ColumnText,
-			Chart:  reporting.ChartCategory,
+			Kind:   nexus.ColumnText,
+			Chart:  nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Төлөв", "en": "Status", "ru": "Статус", "zh": "状态", "fr": "Statut", "es": "Estado", "ar": "الحالة"},
 		},
 		{
 			Key:    "ebarimt_status",
-			Kind:   reporting.ColumnText,
+			Kind:   nexus.ColumnText,
 			Titles: map[string]string{"mn": "И-Баримт", "en": "E-Barimt", "ru": "E-Barimt", "zh": "电子票据", "fr": "E-Barimt", "es": "E-Barimt", "ar": "الإيصال الإلكتروني"},
 		},
 		{
 			Key:    "invoices",
-			Kind:   reporting.ColumnNumber,
-			Chart:  reporting.ChartValue,
+			Kind:   nexus.ColumnNumber,
+			Chart:  nexus.ChartValue,
 			Total:  true,
 			Titles: map[string]string{"mn": "Тоо", "en": "Count", "ru": "Количество", "zh": "数量", "fr": "Nombre", "es": "Cantidad", "ar": "العدد"},
 		},
 		{
 			Key:    "gross",
-			Kind:   reporting.ColumnMoney,
+			Kind:   nexus.ColumnMoney,
 			Total:  true,
 			Titles: map[string]string{"mn": "Нийт дүн", "en": "Gross amount", "ru": "Сумма", "zh": "总额", "fr": "Montant TTC", "es": "Importe", "ar": "الإجمالي"},
 		},
 	}
 }
 
-func (invoiceStatus) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (invoiceStatus) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT status, ebarimt_status,
 		       count(*)                              AS invoices,
@@ -261,12 +261,12 @@ func (invoiceStatus) Run(ctx context.Context, q reporting.Querier, p reporting.P
 		 ORDER BY 3 DESC`
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
+		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var status, ebarimt string
 		var invoices int64
 		var gross float64
@@ -279,7 +279,7 @@ func (invoiceStatus) Run(ctx context.Context, q reporting.Querier, p reporting.P
 		}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }

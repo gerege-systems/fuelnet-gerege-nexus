@@ -28,13 +28,12 @@ var (
 		[]string{"method", "result"},
 	)
 
-	// InvoicesCreatedTotal counts invoices issued.
-	InvoicesCreatedTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "invoices_created_total",
-			Help: "Invoices issued across all tenants",
-		},
-	)
+	// invoices_created_total is not here. It counts a billing event, and
+	// billing is a distribution module — a platform that ships a counter named
+	// after somebody else's domain has to be edited every time that domain
+	// moves. The metric keeps its name and is registered by the module that
+	// knows when an invoice happens; a deployment without billing simply does
+	// not export it, which is the truth rather than a permanent zero.
 
 	// DocumentsSignedTotal counts completed signature ceremonies.
 	// rail: EID|DAN|HSM. result: success|failure.
@@ -92,7 +91,7 @@ const (
 )
 
 func init() {
-	prometheus.MustRegister(LoginsTotal, CPLoginAttemptsTotal, InvoicesCreatedTotal,
+	prometheus.MustRegister(LoginsTotal, CPLoginAttemptsTotal,
 		DocumentsSignedTotal, AIRequestsTotal)
 }
 
@@ -105,9 +104,6 @@ func RecordLogin(method string, ok bool) {
 func RecordControlPlaneLogin(result string) {
 	CPLoginAttemptsTotal.WithLabelValues(result).Inc()
 }
-
-// RecordInvoiceCreated counts one issued invoice.
-func RecordInvoiceCreated() { InvoicesCreatedTotal.Inc() }
 
 // RecordDocumentSigned counts one signature ceremony reaching its end.
 func RecordDocumentSigned(rail string, ok bool) {

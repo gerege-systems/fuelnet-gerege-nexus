@@ -10,6 +10,8 @@
 package reporting
 
 import (
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"context"
 	"errors"
 	"fmt"
@@ -29,7 +31,7 @@ const (
 	ScopeCounterparty = "counterparty"
 	// ScopeFull is the hierarchical case: a parent organisation consolidating
 	// a subsidiary it owns. The whole report, unfiltered.
-	ScopeFull = "full"
+	ScopeFull = nexus.ReportScopeFull
 )
 
 // Shareable is the opt-in a report makes before it can be granted at all.
@@ -73,18 +75,13 @@ func SupportsScope(report Report, scope string) bool {
 // the engine to check that it did — the filter lives inside the report's own
 // SQL — so it is stated here, tested per report, and is the reason the scope is
 // opt-in rather than assumed.
-func (p Params) Counterparty() string {
-	value, _ := p.values[counterpartyKey].(string)
-	return value
-}
-
-const counterpartyKey = "__counterparty"
+const counterpartyKey = nexus.ReportCounterpartyKey
 
 // withCounterparty returns a copy of the parameters carrying the reference.
-func (p Params) withCounterparty(ref string) Params {
+func withCounterparty(p Params, ref string) Params {
 	values := p.Raw()
 	values[counterpartyKey] = ref
-	return Params{values: values, locale: p.locale}
+	return nexus.NewParams(values, p.Locale())
 }
 
 // Grant is one live permission, as the engine reads it.
@@ -241,7 +238,7 @@ func (e *Engine) runOneGrant(ctx context.Context, grant Grant, report Report, pa
 		if grant.CounterpartyRef == "" {
 			return nil, errors.New("the grant has no counterparty reference")
 		}
-		scoped = params.withCounterparty(grant.CounterpartyRef)
+		scoped = withCounterparty(params, grant.CounterpartyRef)
 	} else if !SupportsScope(report, ScopeFull) {
 		return nil, errors.New("this report does not support full scope")
 	}

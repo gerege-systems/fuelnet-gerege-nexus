@@ -9,6 +9,8 @@
 package reporting
 
 import (
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"fmt"
 	"strconv"
 	"strings"
@@ -16,63 +18,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-// Params is a validated parameter set.
-//
-// It is built by Bind, which is the only constructor: a report is handed
-// Params it cannot have been given raw request data through. Every accessor
-// returns a typed value, and every value went through the validation for the
-// kind its spec declared — so a report's SQL takes p.UUID("warehouse_id") as a
-// query argument and there is no path by which that is a string a caller chose.
-type Params struct {
-	values map[string]any
-	locale string
-}
-
-// Locale is the caller's language, for a report that formats something itself.
-func (p Params) Locale() string {
-	if p.locale == "" {
-		return "mn"
-	}
-	return p.locale
-}
-
-// Time returns a date parameter. A date range declared as `period` is read as
-// Time("period_from") and Time("period_to").
-func (p Params) Time(key string) time.Time {
-	value, _ := p.values[key].(time.Time)
-	return value
-}
-
-// UUID returns a reference parameter, or the empty string when it was not
-// given. A report treats empty as "all", which is what an unset dropdown means.
-func (p Params) UUID(key string) string {
-	value, _ := p.values[key].(string)
-	return value
-}
-
-// String returns a select or text parameter.
-func (p Params) String(key string) string {
-	value, _ := p.values[key].(string)
-	return value
-}
-
-// Bool returns a checkbox parameter.
-func (p Params) Bool(key string) bool {
-	value, _ := p.values[key].(bool)
-	return value
-}
-
-// Raw is the validated set, for the engine and for a schedule row. Not for
-// reports — a report that reaches for this is reaching around its own
-// declaration.
-func (p Params) Raw() map[string]any {
-	copied := make(map[string]any, len(p.values))
-	for key, value := range p.values {
-		copied[key] = value
-	}
-	return copied
-}
 
 // maxTextParam bounds a free-text parameter. It is a query argument rather than
 // interpolated SQL, so length is not an injection question — it is a "do not
@@ -103,13 +48,13 @@ func Bind(report Report, raw map[string]string, locale string) (Params, error) {
 			given := strings.TrimSpace(raw[spec.Key])
 			if given == "" {
 				if spec.Required {
-					return Params{}, fmt.Errorf("%s is required", spec.Key)
+					return nexus.Params{}, fmt.Errorf("%s is required", spec.Key)
 				}
 				values[spec.Key] = ""
 				continue
 			}
 			if _, err := uuid.Parse(given); err != nil {
-				return Params{}, fmt.Errorf("%s is not a valid identifier", spec.Key)
+				return nexus.Params{}, fmt.Errorf("%s is not a valid identifier", spec.Key)
 			}
 			values[spec.Key] = given
 
@@ -117,24 +62,24 @@ func Bind(report Report, raw map[string]string, locale string) (Params, error) {
 			given := strings.TrimSpace(raw[spec.Key])
 			if given == "" {
 				if spec.Required {
-					return Params{}, fmt.Errorf("%s is required", spec.Key)
+					return nexus.Params{}, fmt.Errorf("%s is required", spec.Key)
 				}
 				if fallback, ok := spec.Default.(string); ok {
 					given = fallback
 				}
 			}
 			if given != "" && !hasOption(spec.Options, given) {
-				return Params{}, fmt.Errorf("%s is not one of the values %s accepts", given, spec.Key)
+				return nexus.Params{}, fmt.Errorf("%s is not one of the values %s accepts", given, spec.Key)
 			}
 			values[spec.Key] = given
 
 		case ParamText:
 			given := strings.TrimSpace(raw[spec.Key])
 			if given == "" && spec.Required {
-				return Params{}, fmt.Errorf("%s is required", spec.Key)
+				return nexus.Params{}, fmt.Errorf("%s is required", spec.Key)
 			}
 			if len(given) > maxTextParam {
-				return Params{}, fmt.Errorf("%s is too long", spec.Key)
+				return nexus.Params{}, fmt.Errorf("%s is too long", spec.Key)
 			}
 			values[spec.Key] = given
 
@@ -150,16 +95,16 @@ func Bind(report Report, raw map[string]string, locale string) (Params, error) {
 			}
 			parsed, err := strconv.ParseBool(given)
 			if err != nil {
-				return Params{}, fmt.Errorf("%s must be true or false", spec.Key)
+				return nexus.Params{}, fmt.Errorf("%s must be true or false", spec.Key)
 			}
 			values[spec.Key] = parsed
 
 		default:
-			return Params{}, fmt.Errorf("%s declares an unknown parameter kind %q", spec.Key, spec.Kind)
+			return nexus.Params{}, fmt.Errorf("%s declares an unknown parameter kind %q", spec.Key, spec.Kind)
 		}
 	}
 
-	return Params{values: values, locale: locale}, nil
+	return nexus.NewParams(values, locale), nil
 }
 
 // defaultWindow is how far back a date range reaches when the caller gives no

@@ -12,24 +12,24 @@ import (
 	"context"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // AppID is the module these reports belong to.
 const AppID = "io.gerege.nexus.inventory"
 
 func registerReports() {
-	reporting.Register(stockByWarehouse{})
-	reporting.Register(movementSummary{})
+	nexus.RegisterReport(stockByWarehouse{})
+	nexus.RegisterReport(movementSummary{})
 }
 
 // warehouseParam is shared by both reports. The dropdown is filled by running
 // OptionsQuery under the caller's tenant binding, so a tenant is offered its
 // own warehouses and no others — the list is not a place to leak a name.
-func warehouseParam() reporting.ParamSpec {
-	return reporting.ParamSpec{
+func warehouseParam() nexus.ParamSpec {
+	return nexus.ParamSpec{
 		Key:  "warehouse_id",
-		Kind: reporting.ParamUUID,
+		Kind: nexus.ParamUUID,
 		Titles: map[string]string{
 			"mn": "Агуулах", "en": "Warehouse", "ru": "Склад",
 			"zh": "仓库", "fr": "Entrepôt", "es": "Almacén", "ar": "المستودع",
@@ -58,12 +58,12 @@ func (stockByWarehouse) Titles() map[string]string {
 	}
 }
 
-func (stockByWarehouse) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{
+func (stockByWarehouse) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{
 		warehouseParam(),
 		{
 			Key:  "hide_empty",
-			Kind: reporting.ParamBool,
+			Kind: nexus.ParamBool,
 			Titles: map[string]string{
 				"mn": "Тэг үлдэгдлийг нуух", "en": "Hide zero balances",
 				"ru": "Скрыть нулевые остатки", "zh": "隐藏零库存",
@@ -75,17 +75,17 @@ func (stockByWarehouse) Params() []reporting.ParamSpec {
 	}
 }
 
-func (stockByWarehouse) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
-		{Key: "warehouse", Kind: reporting.ColumnText, Chart: reporting.ChartCategory,
+func (stockByWarehouse) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
+		{Key: "warehouse", Kind: nexus.ColumnText, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Агуулах", "en": "Warehouse", "ru": "Склад", "zh": "仓库", "fr": "Entrepôt", "es": "Almacén", "ar": "المستودع"}},
-		{Key: "sku", Kind: reporting.ColumnText,
+		{Key: "sku", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Код", "en": "SKU", "ru": "Артикул", "zh": "编码", "fr": "Référence", "es": "SKU", "ar": "الرمز"}},
-		{Key: "product", Kind: reporting.ColumnText,
+		{Key: "product", Kind: nexus.ColumnText,
 			Titles: map[string]string{"mn": "Бараа", "en": "Product", "ru": "Товар", "zh": "商品", "fr": "Produit", "es": "Producto", "ar": "المنتج"}},
-		{Key: "quantity", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "quantity", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Тоо хэмжээ", "en": "Quantity", "ru": "Количество", "zh": "数量", "fr": "Quantité", "es": "Cantidad", "ar": "الكمية"}},
-		{Key: "value", Kind: reporting.ColumnMoney, Total: true,
+		{Key: "value", Kind: nexus.ColumnMoney, Total: true,
 			Titles: map[string]string{"mn": "Үнийн дүн", "en": "Value", "ru": "Стоимость", "zh": "金额", "fr": "Valeur", "es": "Valor", "ar": "القيمة"}},
 	}
 }
@@ -96,7 +96,7 @@ func (stockByWarehouse) Columns() []reporting.ColumnSpec {
 // than hidden here: this platform keeps no cost price and no valuation history,
 // so "value" is what the goods would sell for today, not what they cost. A
 // weighted-average cost would need a purchase-price column that does not exist.
-func (stockByWarehouse) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (stockByWarehouse) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT w.code || ' — ' || w.name AS warehouse,
 		       pr.sku, pr.name           AS product,
@@ -111,12 +111,12 @@ func (stockByWarehouse) Run(ctx context.Context, q reporting.Querier, p reportin
 		 ORDER BY w.code, pr.sku`
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), nullableUUID(p.UUID("warehouse_id")), p.Bool("hide_empty"))
+		nexus.TenantOf(ctx), nullableUUID(p.UUID("warehouse_id")), p.Bool("hide_empty"))
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var warehouse, sku, product string
 		var quantity, value float64
 		if err := rows.Scan(&warehouse, &sku, &product, &quantity, &value); err != nil {
@@ -128,9 +128,9 @@ func (stockByWarehouse) Run(ctx context.Context, q reporting.Querier, p reportin
 		}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }
 
 // ------------------------------------------------------------- movements
@@ -152,11 +152,11 @@ func (movementSummary) Titles() map[string]string {
 	}
 }
 
-func (movementSummary) Params() []reporting.ParamSpec {
-	return []reporting.ParamSpec{
+func (movementSummary) Params() []nexus.ParamSpec {
+	return []nexus.ParamSpec{
 		{
 			Key:  "period",
-			Kind: reporting.ParamDateRange,
+			Kind: nexus.ParamDateRange,
 			Titles: map[string]string{
 				"mn": "Хугацаа", "en": "Period", "ru": "Период",
 				"zh": "期间", "fr": "Période", "es": "Periodo", "ar": "الفترة",
@@ -167,17 +167,17 @@ func (movementSummary) Params() []reporting.ParamSpec {
 	}
 }
 
-func (movementSummary) Columns() []reporting.ColumnSpec {
-	return []reporting.ColumnSpec{
-		{Key: "warehouse", Kind: reporting.ColumnText, Chart: reporting.ChartCategory,
+func (movementSummary) Columns() []nexus.ColumnSpec {
+	return []nexus.ColumnSpec{
+		{Key: "warehouse", Kind: nexus.ColumnText, Chart: nexus.ChartCategory,
 			Titles: map[string]string{"mn": "Агуулах", "en": "Warehouse", "ru": "Склад", "zh": "仓库", "fr": "Entrepôt", "es": "Almacén", "ar": "المستودع"}},
-		{Key: "movements", Kind: reporting.ColumnNumber, Total: true,
+		{Key: "movements", Kind: nexus.ColumnNumber, Total: true,
 			Titles: map[string]string{"mn": "Гүйлгээний тоо", "en": "Movements", "ru": "Движений", "zh": "变动次数", "fr": "Mouvements", "es": "Movimientos", "ar": "الحركات"}},
-		{Key: "received", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "received", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Орлого", "en": "Received", "ru": "Приход", "zh": "入库", "fr": "Entrées", "es": "Entradas", "ar": "الوارد"}},
-		{Key: "issued", Kind: reporting.ColumnNumber, Chart: reporting.ChartValue, Total: true,
+		{Key: "issued", Kind: nexus.ColumnNumber, Chart: nexus.ChartValue, Total: true,
 			Titles: map[string]string{"mn": "Зарлага", "en": "Issued", "ru": "Расход", "zh": "出库", "fr": "Sorties", "es": "Salidas", "ar": "الصادر"}},
-		{Key: "net", Kind: reporting.ColumnNumber, Total: true,
+		{Key: "net", Kind: nexus.ColumnNumber, Total: true,
 			Titles: map[string]string{"mn": "Цэвэр өөрчлөлт", "en": "Net change", "ru": "Изменение", "zh": "净变动", "fr": "Variation nette", "es": "Cambio neto", "ar": "صافي التغيير"}},
 	}
 }
@@ -188,7 +188,7 @@ func (movementSummary) Columns() []reporting.ColumnSpec {
 // stock is negative — and a column headed "Issued" showing -400 is read wrong
 // by everybody once. abs() at the query, so both directions read as amounts and
 // the net column carries the sign.
-func (movementSummary) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
+func (movementSummary) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT w.code || ' — ' || w.name AS warehouse,
 		       count(*)                                                            AS movements,
@@ -204,13 +204,13 @@ func (movementSummary) Run(ctx context.Context, q reporting.Querier, p reporting
 		 ORDER BY 1`
 
 	rows, err := q.Query(ctx, query,
-		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"),
+		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"),
 		nullableUUID(p.UUID("warehouse_id")))
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
 
-	collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
 		var warehouse string
 		var movements int64
 		var received, issued, net float64
@@ -223,9 +223,9 @@ func (movementSummary) Run(ctx context.Context, q reporting.Querier, p reporting
 		}, nil
 	})
 	if err != nil {
-		return reporting.Result{}, err
+		return nexus.Result{}, err
 	}
-	return reporting.Result{Rows: collected}, nil
+	return nexus.Result{Rows: collected}, nil
 }
 
 // nullableUUID turns "no warehouse chosen" into SQL NULL, which the queries
