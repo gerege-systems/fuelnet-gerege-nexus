@@ -11,6 +11,7 @@
  * exactly one file, and a bad run can be thrown away wholesale.
  */
 export const zh: Record<string, string> = {
+  "cp.job.urtuu_relay": "驿站 — 平台间通道",
   "access.action.create_role": "添加 Role",
   "access.field.code_placeholder": "sales_manager",
   "access.field.description_placeholder": "描述",

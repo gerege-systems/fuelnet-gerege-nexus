@@ -276,11 +276,16 @@ func (m *Module) move(ctx context.Context, tenantID, id string, to contract.Task
 	if err := tx.Commit(ctx); err != nil {
 		return Task{}, err
 	}
+	tasksTotal.WithLabelValues(string(to)).Inc()
 	return m.getTask(ctx, tenantID, id)
 }
 
 // record writes an event with no transition behind it — the birth of a task.
 func (m *Module) record(ctx context.Context, tx pgx.Tx, tenantID, taskID, status, actorUserID, actorPeerID, note string) error {
+	// Counted with the transitions: a task being raised is a task reaching
+	// RECEIVED, and a series that only counted moves would undercount the
+	// intake by exactly the tasks that were never moved.
+	tasksTotal.WithLabelValues(status).Inc()
 	_, err := tx.Exec(ctx, `
 		INSERT INTO urtuu_task_events
 		    (tenant_id, task_id, from_status, to_status, actor_user_id, actor_peer_id, note)

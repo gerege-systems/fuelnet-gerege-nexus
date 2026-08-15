@@ -9,12 +9,13 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Route } from "lucide-react";
 
-import { api, type UrtuuTally, type UrtuuTask } from "@/lib/api";
+import { api, type UrtuuLinkHealth, type UrtuuTally, type UrtuuTask, type UrtuuTreeProgress } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { ErrorNote, Loading, Panel, Screen } from "@/components/module/kit";
-import { TaskQueue, useStatusLabel } from "./shared";
+import { Chip, ErrorNote, Loading, Panel, Screen } from "@/components/module/kit";
+import { TaskQueue, useLiveRefresh, useStatusLabel } from "./shared";
 
 export default function UrtuuBoardPage() {
   const { t } = useI18n();
@@ -22,6 +23,8 @@ export default function UrtuuBoardPage() {
 
   const [counts, setCounts] = useState<UrtuuTally[]>([]);
   const [overdue, setOverdue] = useState<UrtuuTask[]>([]);
+  const [links, setLinks] = useState<UrtuuLinkHealth[]>([]);
+  const [trees, setTrees] = useState<UrtuuTreeProgress[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
@@ -31,6 +34,8 @@ export default function UrtuuBoardPage() {
       const board = await api.getUrtuuBoard();
       setCounts(board.counts || []);
       setOverdue(board.overdue || []);
+      setLinks(board.links || []);
+      setTrees(board.trees || []);
       setEnabled(board.enabled);
       setFailure("");
     } catch (err) {
@@ -43,6 +48,7 @@ export default function UrtuuBoardPage() {
   useEffect(() => {
     load();
   }, [load]);
+  useLiveRefresh(load);
 
   if (loading) return <Loading label={t("base.message.loading")} />;
 
@@ -67,6 +73,71 @@ export default function UrtuuBoardPage() {
         <Tally title={t("urtuu.incoming.title")} rows={incoming} label={statusLabel} />
         <Tally title={t("urtuu.outgoing.title")} rows={outgoing} label={statusLabel} />
       </div>
+
+      {/* How far each fan-out has got. The question a ministry actually has is
+          not "how many tasks" but "of the twenty-one provinces, who is done". */}
+      {trees.length > 0 && (
+        <Panel className="p-4">
+          <h2 className="text-sm font-semibold text-slate-800 mb-2">{t("urtuu.section.branches")}</h2>
+          <ul className="space-y-2">
+            {trees.map((tree) => (
+              <li key={tree.id} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2 text-sm">
+                  <Link href={`/module/urtuu/tasks/${tree.id}`} className="text-indigo-700 hover:underline">
+                    {tree.title || tree.code}
+                  </Link>
+                  <span className="text-xs tabular-nums text-slate-600">
+                    {tree.done}/{tree.total}
+                    {tree.late > 0 && (
+                      <span className="ml-2 text-rose-600">
+                        {tree.late} {t("urtuu.message.overdue")}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${tree.late > 0 ? "bg-rose-400" : "bg-emerald-500"}`}
+                    style={{ width: `${tree.total ? Math.round((tree.done / tree.total) * 100) : 0}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      {/* The channel underneath. A queue that has stopped moving is usually a
+          link that has stopped talking, and this is where that shows. */}
+      {links.length > 0 && (
+        <Panel className="p-4">
+          <h2 className="text-sm font-semibold text-slate-800 mb-2">{t("urtuu.section.links")}</h2>
+          <ul className="space-y-1 text-sm">
+            {links.map((link) => (
+              <li key={link.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-slate-700">
+                  {link.name || link.id.slice(0, 8)}
+                  <span className="text-xs text-slate-400 ml-2">
+                    {link.role === "parent" ? t("urtuu.role.parent") : t("urtuu.role.child")}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2 text-xs">
+                  {link.undelivered > 0 && (
+                    <Chip tone="amber">
+                      {t("urtuu.message.undelivered", { count: link.undelivered })}
+                    </Chip>
+                  )}
+                  <span className="text-slate-500">
+                    {link.last_seen_at
+                      ? new Date(link.last_seen_at).toLocaleString()
+                      : t("urtuu.message.never")}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
     </Screen>
   );
 }

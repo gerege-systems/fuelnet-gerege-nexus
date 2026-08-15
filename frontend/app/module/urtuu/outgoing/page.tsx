@@ -19,7 +19,7 @@ import { Plus, Send } from "lucide-react";
 import { api, type UrtuuCode, type UrtuuPeer, type UrtuuTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ErrorNote, Loading, Modal, Screen } from "@/components/module/kit";
-import { TaskQueue } from "../shared";
+import { TaskQueue, useLiveRefresh } from "../shared";
 
 /** The properties a code's schema declares, as a flat list of field names. */
 function fieldsOf(schema: unknown): { name: string; title: string }[] {
@@ -62,6 +62,7 @@ export default function OutgoingTasksPage() {
   useEffect(() => {
     load();
   }, [load]);
+  useLiveRefresh(load);
 
   const codeName = (code: UrtuuCode) =>
     code.names?.[locale] || code.names?.mn || code.names?.en || code.code;

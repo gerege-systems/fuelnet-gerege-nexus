@@ -42,6 +42,27 @@ async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 export const APP_MENU_CHANGED_EVENT = "gerege:app-menu-changed";
 
+/**
+ * Fired when something on the Өртөө board has moved because of an action taken
+ * in this tab.
+ *
+ * The same shape as APP_MENU_CHANGED_EVENT and for the same reason: the screens
+ * sit under a layout that is not re-rendered by a route refresh, so a task
+ * accepted on the detail page has to tell the queue behind it. It is a
+ * complement to polling, not a replacement — what arrives from another
+ * installation arrives without any tab doing anything, and only the poll sees
+ * that. No WebSocket: a push from a subordinate lands in a database, and a
+ * fifteen-second poll is a truthful description of how fresh that is.
+ */
+export const URTUU_CHANGED_EVENT = "gerege:urtuu-changed";
+
+function urtuuChanged<T>(result: T): T {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(URTUU_CHANGED_EVENT));
+  }
+  return result;
+}
+
 /** What kind of change a release was. The store colours by it. */
 export type ReleaseKind = "feature" | "fix" | "security" | "breaking" | "docs";
 
@@ -430,6 +451,29 @@ export interface UrtuuTaskEvent {
   actor_name?: string;
   peer_name?: string;
   note?: string;
+  created_at: string;
+}
+
+/** One channel on the board: is it speaking, and is anything stuck behind it. */
+export interface UrtuuLinkHealth {
+  id: string;
+  name: string;
+  role: "parent" | "child";
+  status: string;
+  last_seen_at?: string;
+  undelivered: number;
+  last_error?: string;
+}
+
+/** One delegated task and how far its branches have got. */
+export interface UrtuuTreeProgress {
+  id: string;
+  title: string;
+  code: string;
+  done: number;
+  total: number;
+  late: number;
+  deadline?: string;
   created_at: string;
 }
 
@@ -1257,7 +1301,13 @@ export const api = {
     }>(`/urtuu/tasks/${id}`),
 
   getUrtuuBoard: () =>
-    fetcher<{ counts: UrtuuTally[]; overdue: UrtuuTask[]; enabled: boolean }>("/urtuu/tasks/board"),
+    fetcher<{
+      counts: UrtuuTally[];
+      overdue: UrtuuTask[];
+      links: UrtuuLinkHealth[];
+      trees: UrtuuTreeProgress[];
+      enabled: boolean;
+    }>("/urtuu/tasks/board"),
 
   createUrtuuTask: (input: {
     code: string;
@@ -1269,7 +1319,7 @@ export const api = {
   }) => fetcher<{ id: string; status: string }>("/urtuu/tasks", {
     method: "POST",
     body: JSON.stringify(input),
-  }),
+  }).then(urtuuChanged),
 
   /**
    * One move. The verb is a path segment rather than a status in the body, so a
@@ -1282,7 +1332,7 @@ export const api = {
   ) => fetcher<{ id: string; status: string }>(`/urtuu/tasks/${id}/${action}`, {
     method: "POST",
     body: JSON.stringify(body),
-  }),
+  }).then(urtuuChanged),
 
   // Billing App (io.gerege.nexus.billing)
   getInvoices: () =>

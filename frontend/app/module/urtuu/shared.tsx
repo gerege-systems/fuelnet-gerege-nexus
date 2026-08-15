@@ -8,12 +8,42 @@
  * in which end of the link they name and what they let you do.
  */
 
+import React, { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
-import type { UrtuuTask } from "@/lib/api";
+import { URTUU_CHANGED_EVENT, type UrtuuTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Chip, Empty, Panel } from "@/components/module/kit";
+
+/**
+ * refreshInterval is how stale the board is allowed to be.
+ *
+ * Work arriving from another installation lands in a database with no browser
+ * involved, so nothing but a poll can see it. Fifteen seconds is a truthful
+ * description of "real time" for work measured in days, and it is what the
+ * proposal asked for instead of a WebSocket tier nobody would operate.
+ */
+const refreshInterval = 15_000;
+
+/**
+ * useLiveRefresh reloads on a timer, and immediately when this tab has just
+ * changed something.
+ *
+ * Two triggers because there are two ways the board goes stale: somebody here
+ * pressed Accept — instant, and the event says so — or a subordinate pushed an
+ * update, which no tab knows about until it asks.
+ */
+export function useLiveRefresh(reload: () => void) {
+  useEffect(() => {
+    const timer = setInterval(reload, refreshInterval);
+    window.addEventListener(URTUU_CHANGED_EVENT, reload);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(URTUU_CHANGED_EVENT, reload);
+    };
+  }, [reload]);
+}
 
 /** The seven statuses, coloured by what they mean rather than by order. */
 const STATUS_TONE: Record<string, "slate" | "blue" | "amber" | "emerald" | "rose"> = {

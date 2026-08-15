@@ -11,6 +11,7 @@
  * exactly one file, and a bad run can be thrown away wholesale.
  */
 export const fr: Record<string, string> = {
+  "cp.job.urtuu_relay": "Urtuu — le canal entre installations",
   "access.action.create_role": "Ajouter un rôle",
   "access.field.code_placeholder": "sales_manager",
   "access.field.description_placeholder": "Description",

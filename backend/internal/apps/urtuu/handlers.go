@@ -14,6 +14,7 @@
 package urtuu
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -488,11 +489,113 @@ func (m *Module) handleBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	links, err := m.linkHealth(ctx, tenantID)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the links")
+		return
+	}
+	trees, err := m.treeProgress(ctx, tenantID)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the delegated tasks")
+		return
+	}
+
 	nexus.JSON(w, http.StatusOK, map[string]any{
 		"counts":  counts,
 		"overdue": overdue,
+		"links":   links,
+		"trees":   trees,
 		"enabled": m.link.Enabled(),
 	})
+}
+
+// LinkHealth is one channel as the board shows it: is it speaking, and is
+// anything stuck behind it.
+type LinkHealth struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Role        string     `json:"role"`
+	Status      string     `json:"status"`
+	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
+	Undelivered int        `json:"undelivered"`
+	LastError   string     `json:"last_error,omitempty"`
+}
+
+// linkHealth reads the channel's own tables directly.
+//
+// The transport owns them and the app reads them, which is the same
+// arrangement the code lookup uses: the two packages are one product split by
+// layer, sharing one schema and one tenant binding, and an accessor between
+// them would be a second description of five columns.
+func (m *Module) linkHealth(ctx context.Context, tenantID string) ([]LinkHealth, error) {
+	rows, err := m.db.Query(ctx, `
+		SELECT p.id::text, p.name, p.role, p.status, p.last_seen_at, p.last_error,
+		       (SELECT count(*) FROM urtuu_deliveries d
+		         WHERE d.peer_id = p.id AND d.delivered_at IS NULL)
+		  FROM urtuu_peers p
+		 WHERE p.tenant_id = $1 AND p.revoked_at IS NULL
+		 ORDER BY p.name`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	links := make([]LinkHealth, 0, 16)
+	for rows.Next() {
+		var link LinkHealth
+		if err := rows.Scan(&link.ID, &link.Name, &link.Role, &link.Status,
+			&link.LastSeenAt, &link.LastError, &link.Undelivered); err != nil {
+			return nil, err
+		}
+		links = append(links, link)
+	}
+	return links, rows.Err()
+}
+
+// TreeProgress is one delegated task and how far its branches have got.
+type TreeProgress struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Code  string `json:"code"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	// Late counts the branches past their own deadline. A tree can be nearly
+	// finished and still be the one to worry about.
+	Late      int        `json:"late"`
+	Deadline  *time.Time `json:"deadline,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// treeProgress answers the question the ministry actually has: of the
+// twenty-one provinces, how many have finished and how many are late.
+func (m *Module) treeProgress(ctx context.Context, tenantID string) ([]TreeProgress, error) {
+	rows, err := m.db.Query(ctx, `
+		SELECT t.id::text, t.title, t.code, t.deadline, t.created_at,
+		       count(b.id) FILTER (WHERE b.status = 'COMPLETED'),
+		       count(b.id),
+		       count(b.id) FILTER (WHERE b.deadline IS NOT NULL AND b.deadline < NOW()
+		                             AND b.status <> 'CLOSED')
+		  FROM urtuu_tasks t
+		  JOIN urtuu_tasks b ON b.parent_task_id = t.id AND b.target_peer_id IS NOT NULL
+		 WHERE t.tenant_id = $1 AND t.status = 'DELEGATED'
+		 GROUP BY t.id
+		 ORDER BY t.created_at DESC
+		 LIMIT 50`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	trees := make([]TreeProgress, 0, 16)
+	for rows.Next() {
+		var tree TreeProgress
+		if err := rows.Scan(&tree.ID, &tree.Title, &tree.Code, &tree.Deadline,
+			&tree.CreatedAt, &tree.Done, &tree.Total, &tree.Late); err != nil {
+			return nil, err
+		}
+		trees = append(trees, tree)
+	}
+	return trees, rows.Err()
 }
 
 // ------------------------------------------------------------------ helpers

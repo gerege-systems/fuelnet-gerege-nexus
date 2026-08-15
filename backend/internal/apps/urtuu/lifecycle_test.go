@@ -382,6 +382,50 @@ func TestWorkGoesDownAndTheAnswerComesBack(t *testing.T) {
 	}
 }
 
+// The board is the app's front page and the one screen an operator opens in the
+// morning, so what it counts has to be what is actually there.
+func TestTheBoardCountsTheTreeAndTheChannel(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 26, "local.count")
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+	}, http.StatusCreated)
+	carry(t, parent, child)
+
+	board := parent.call(http.MethodGet, "/api/v1/urtuu/tasks/board", nil, http.StatusOK)
+
+	trees, _ := board["trees"].([]any)
+	if len(trees) != 1 {
+		t.Fatalf("the board shows %d delegated tasks, want 1", len(trees))
+	}
+	tree, _ := trees[0].(map[string]any)
+	if tree["total"] != float64(1) || tree["done"] != float64(0) {
+		t.Errorf("branch progress = %v/%v, want 0/1", tree["done"], tree["total"])
+	}
+
+	// The channel underneath. A queue that has stopped moving is usually a link
+	// that has stopped talking, and the board is where that has to show.
+	links, _ := board["links"].([]any)
+	if len(links) != 1 {
+		t.Fatalf("the board shows %d links, want 1", len(links))
+	}
+	if seen, _ := links[0].(map[string]any)["last_seen_at"].(string); seen == "" {
+		t.Error("the link has spoken but the board does not say when")
+	}
+
+	// And once the branch finishes, the tree does.
+	work := child.tasks("incoming")[0]
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/accept", nil, http.StatusOK)
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/complete", nil, http.StatusOK)
+	carry(t, parent, child)
+
+	after := parent.call(http.MethodGet, "/api/v1/urtuu/tasks/board", nil, http.StatusOK)
+	if remaining, _ := after["trees"].([]any); len(remaining) != 0 {
+		t.Errorf("a fully completed tree is still listed as delegated: %v", remaining)
+	}
+}
+
 // A refusal has to travel as clearly as an acceptance, reason included.
 func TestAReturnedTaskCarriesItsReasonBack(t *testing.T) {
 	pool := openPool(t)

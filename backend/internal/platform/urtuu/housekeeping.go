@@ -93,6 +93,10 @@ func (s *Service) exchangeLoop(ctx context.Context) {
 		// child pushing, and a parent has no child links to poll. The round
 		// happens whether or not there was anything to talk to.
 		s.ProcessInbox(ctx)
+		// The gauge an alert reads. On this loop rather than on the hourly
+		// sweep: a number describing whether a link has gone quiet has to move
+		// at the pace of the link.
+		s.refreshPeerGauge(ctx)
 
 		select {
 		case <-ctx.Done():

@@ -295,18 +295,26 @@ func (s *Service) markDelivered(ctx context.Context, peer peerRow, messageIDs []
 	if len(messageIDs) == 0 {
 		return nil
 	}
-	_, err := s.db.Exec(nexus.WithTenantID(ctx, peer.TenantID), `
+	tag, err := s.db.Exec(nexus.WithTenantID(ctx, peer.TenantID), `
 		UPDATE urtuu_deliveries d
 		   SET delivered_at = NOW(), last_error = ''
 		  FROM urtuu_outbox o
 		 WHERE d.outbox_id = o.id AND d.peer_id = $1 AND d.delivered_at IS NULL
 		   AND o.message_id = ANY($2)`, peer.ID, messageIDs)
+	if err == nil && tag.RowsAffected() > 0 {
+		// Counted here rather than where the envelope was sent, because this is
+		// the moment it is actually settled: the other side has said it holds
+		// it. A count taken at the send would include every attempt that was
+		// then retried.
+		deliveriesTotal.WithLabelValues(deliveryOK).Add(float64(tag.RowsAffected()))
+	}
 	return err
 }
 
 // noteFailure records why a link is not moving, on the link itself. The screen
 // reads this: "not delivered" without a reason is a support ticket.
 func (s *Service) noteFailure(ctx context.Context, peer peerRow, reason string) {
+	deliveriesTotal.WithLabelValues(deliveryFailed).Inc()
 	_, _ = s.db.Exec(nexus.WithTenantID(ctx, peer.TenantID),
 		`UPDATE urtuu_peers SET last_error = $2, updated_at = NOW() WHERE id = $1`, peer.ID, reason)
 }

@@ -14,7 +14,7 @@ import { Inbox } from "lucide-react";
 import { api, type UrtuuTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ErrorNote, Loading, Screen } from "@/components/module/kit";
-import { TaskQueue } from "../shared";
+import { TaskQueue, useLiveRefresh } from "../shared";
 
 export default function IncomingTasksPage() {
   const { t } = useI18n();
@@ -23,8 +23,10 @@ export default function IncomingTasksPage() {
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState("");
 
+  // Not setLoading(true) here: this runs every fifteen seconds as well as on
+  // the first paint, and a table that blanks itself on a poll is a table
+  // nobody can read while it is refreshing.
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const answer = await api.getUrtuuTasks({ direction: "incoming", overdue: overdueOnly });
       setTasks(answer.tasks || []);
@@ -39,6 +41,7 @@ export default function IncomingTasksPage() {
   useEffect(() => {
     load();
   }, [load]);
+  useLiveRefresh(load);
 
   return (
     <Screen

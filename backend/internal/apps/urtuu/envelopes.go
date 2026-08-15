@@ -292,6 +292,7 @@ func (m *Module) receiveUpdate(ctx context.Context, message transport.Received) 
 		message.TenantID, news.TaskID, from, news.Status, message.PeerID, news.Note); err != nil {
 		return err
 	}
+	tasksTotal.WithLabelValues(news.Status).Inc()
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}

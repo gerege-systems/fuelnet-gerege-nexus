@@ -378,6 +378,8 @@ function jobName(name: string, t: Translate): string {
       return t("cp.job.catalog_sync");
     case "deletion_sweep":
       return t("cp.job.deletion_sweep");
+    case "urtuu_relay":
+      return t("cp.job.urtuu_relay");
     default:
       return name;
   }
