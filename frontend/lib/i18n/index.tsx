@@ -28,6 +28,7 @@ import { inventory } from "./addons/inventory";
 import { products } from "./addons/products";
 import { reports } from "./addons/reports";
 import { reportSharing } from "./addons/sharing";
+import { urtuu } from "./addons/urtuu";
 import { website } from "./addons/website";
 import { overlays } from "./locales";
 
@@ -106,6 +107,7 @@ const dictionary = {
   ...products,
   ...reports,
   ...reportSharing,
+  ...urtuu,
   ...website,
 } as const;
 

@@ -13,7 +13,7 @@ import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantCho
 import AICopilot from "@/components/AICopilot";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
-import { BarChart3, Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, MonitorCog, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { BarChart3, Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, MonitorCog, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Link2, Send } from "lucide-react";
 
 interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number }
 // path is a route in this application; external_url is somewhere else. An app
@@ -59,6 +59,9 @@ const iconMap: Record<string, React.ReactNode> = {
   // sso clients
   "key-round":<KeyRound className="w-5 h-5"/>, "key-square":<KeySquare className="w-5 h-5"/>, webhook:<Webhook className="w-5 h-5"/>,
   // gov services
+  // urtuu — Өртөө. route and inbox were already here for other apps; a link
+  // and a dispatch going out are what the channel adds.
+  link:<Link2 className="w-5 h-5"/>, send:<Send className="w-5 h-5"/>,
   inbox:<Inbox className="w-5 h-5"/>, "calendar-clock":<CalendarClock className="w-5 h-5"/>, timer:<Timer className="w-5 h-5"/>,
 };
 // Routes that render without the ERP chrome. /oauth/consent is signed-in but
@@ -286,6 +289,12 @@ export default function Layout({children}:{children:React.ReactNode}){
     {/* Issuing a key that sends mail in the tenant's name is administrative, and
         the API behind this screen is admin-only, so the link follows it. */}
     {user?.is_admin&&<NavLink href="/settings/email-verification" active={pathname==="/settings/email-verification"} icon={<MailCheck className="w-5 h-5"/>} label={t("web.menu.email_verification")}/>}
+    {/* Өртөө: the channel to the installations above and below this one.
+        Under Settings rather than Modules because it is configuration that has
+        to outlive the task board being uninstalled — the links carry work for
+        whatever module asks, and the app is only one of them. Administrator
+        only, like the API behind it. */}
+    {user?.is_admin&&<NavLink href="/settings/urtuu" active={pathname==="/settings/urtuu"} icon={<Route className="w-5 h-5"/>} label={t("web.menu.urtuu")}/>}
     {user?.is_admin&&<NavLink href="/settings/access" active={pathname==="/settings/access"} icon={<ShieldCheck className="w-5 h-5"/>} label={t("access.view.title")}/>}
   </MenuGroup></>;
 

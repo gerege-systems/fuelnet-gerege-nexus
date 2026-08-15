@@ -14,10 +14,12 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
+	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 )
 
 type BackgroundModule interface {
@@ -35,7 +37,7 @@ type InstalledApps = reports.InstalledApps
 
 func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmongolia.Service,
 	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails egov.Rails,
-	installedApps InstalledApps) Runtime {
+	link *urtuu.Service, installedApps InstalledApps) Runtime {
 	// First, and not merely in order: organisation is what the others assume. It
 	// is the organisation, the people in it and how it is arranged — the module
 	// Odoo calls base.
@@ -54,6 +56,11 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
 	documents.New(p, esignModule)
 	sso_clients.New(sso)
+	// Өртөө: the task board over the platform's channel to other installations.
+	// Constructed whether or not this deployment has a signing key — the module
+	// registers the readers for the task envelopes, and a deployment given a key
+	// later must not need a second restart before its backlog is read.
+	appurtuu.New(p, link)
 	// The App Store's three modules used to be constructed here. They are a
 	// product of their own now — github.com/gerege-systems/appstore-gerege-nexus
 	// — and reach this list through platform.Options.Modules, the same way any
