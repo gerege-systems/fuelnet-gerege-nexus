@@ -9,11 +9,19 @@ import { redirect } from "next/navigation";
  *
  * This stays because an address people have bookmarked, pinned to a kiosk, or
  * written into a device line's home screen is not ours to invalidate for a
- * reorganisation they did not ask for. A permanent redirect says so: the old
- * address is not gone, it has a forwarding note.
+ * reorganisation they did not ask for. The old address is not gone; it has a
+ * forwarding note.
  *
- * The API kept its own prefix (`/api/v1/esign`) for the same reason, and needed
- * no note — see documents.RegisterRoutes.
+ * The note itself is served by `proxy.ts`, which answers 308 before any of this
+ * renders. It has to be, and this file is the evidence: a redirect from a page
+ * under a streaming root layout arrives after the response has begun, so Next
+ * can only finish it as a client-side navigation — a 200 with an instruction
+ * in it. Browsers follow that; crawlers and link checkers read the 200.
+ *
+ * What is left here is the backstop for anything that reaches rendering anyway.
+ *
+ * The API kept its own prefix (`/api/v1/esign`) and needed no note at all —
+ * see documents.RegisterRoutes.
  */
 export default function ESignMoved() {
   redirect("/module/documents/pdf");

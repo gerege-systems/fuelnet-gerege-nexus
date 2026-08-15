@@ -82,8 +82,16 @@ reports are the same code reading the same tables.
 - **The API keeps `/api/v1/esign`.** A path is a contract with every client
   already written against it, including the reference signing view the eID rail
   mirrors. What merged is the product, not the wiring. The *screen* did move:
-  `/esign` permanently redirects to `/module/documents/pdf`, because one app has
-  one slug and every screen hangs off it.
+  `/esign` answers 308 to `/module/documents/pdf`, because one app has one slug
+  and every screen hangs off it.
+
+  The forwarding note is served by `proxy.ts` rather than by a page calling
+  `redirect()`, and the difference is not academic: the root layout is rendered
+  per request and streams, so a nested page asking for a redirect gets a 200
+  carrying a client-side instruction — fine for a browser, useless to a crawler
+  or anything reading the status code, which is most of what a permanent move
+  is announced to. This was shipped the wrong way round first and found by
+  curling production.
 - **The menu gained the PDF entries** and lost a collision: two screens were
   called "Signature policies". One is which channel a document *type* may be
   signed through; the other, now "PDF signing rails", is which of the two PDF

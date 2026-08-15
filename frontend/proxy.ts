@@ -30,7 +30,34 @@ import { DEVICE_LINE_HEADER, deviceLineFromHost, lineHomePath } from "@/lib/devi
  *    ижил зам дээр өөр өөр агуулга үйлчилдэг тул үүнгүйгээр CDN нэг шугамын
  *    хариуг нөгөөд өгөх боломжтой.
  */
+/**
+ * Screens that changed address when two apps became one.
+ *
+ * Handled here rather than by a page that calls `redirect()`, because a page
+ * cannot. The root layout is rendered per request and streams, so by the time a
+ * nested page asks for a redirect the response has already begun and Next can
+ * only finish it with a client-side navigation: a 200 carrying an instruction.
+ * That is fine for a browser and no use to a crawler, a link checker, or
+ * anything reading the status code — which is most of what a permanent move is
+ * announced to. Middleware runs before any of that and can answer 308.
+ *
+ * The old page files stay as a backstop for anything that reaches rendering
+ * anyway; this is what actually answers.
+ */
+const MOVED: Record<string, string> = {
+  // PDF signing moved inside Documents. See documents.RegisterRoutes — the API
+  // kept its own prefix, and only the screen has a forwarding note.
+  "/esign": "/module/documents/pdf",
+};
+
 export function proxy(request: NextRequest) {
+  const moved = MOVED[request.nextUrl.pathname];
+  if (moved) {
+    const target = request.nextUrl.clone();
+    target.pathname = moved;
+    return NextResponse.redirect(target, 308);
+  }
+
   const line = deviceLineFromHost(request.headers.get("host"));
   if (!line) return NextResponse.next();
 
