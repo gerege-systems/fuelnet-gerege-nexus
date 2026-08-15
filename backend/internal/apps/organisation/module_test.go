@@ -82,9 +82,7 @@ func newFixture(t *testing.T) *fixture {
 
 	// The module's own router, with the tenant and the caller already resolved:
 	// what is under test is the module, not the middleware in front of it.
-	// nil contacts: what is under test is the organisation's own routes, and a
-	// module built without the register simply does not mount /api/v1/contacts.
-	module := organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)), nil)
+	module := organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

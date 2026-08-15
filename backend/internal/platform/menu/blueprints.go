@@ -25,23 +25,12 @@ type blueprint struct {
 }
 
 var blueprints = map[string]blueprint{
-	// The directory. Its three working screens — the organisation, its units,
-	// its people, and the contact register — are declared by the module itself
-	// and keep their own addresses; what is here is everything hanging off
-	// them, which is all contacts' after the merge. They point at
-	// /module/organisation/* now, because a menu built from a blueprint takes
-	// its path from the app's slug and there is one slug.
-	"io.gerege.nexus.organisation": {Slug: "organisation",
-		Modules: []futureMenu{
-			{ID: "segments", EN: "Segments", Icon: "users", Labels: map[string]string{
-				"mn": "Сегментүүд", "ar": "الشرائح", "zh": "客户分组", "fr": "Segments", "ru": "Сегменты", "es": "Segmentos"}},
-			{ID: "duplicates", EN: "Duplicates", Icon: "copy", Labels: map[string]string{
-				"mn": "Давхардал", "ar": "التكرارات", "zh": "重复记录", "fr": "Doublons", "ru": "Дубликаты", "es": "Duplicados"}},
-		},
-		Settings: []futureMenu{
-			{ID: "import", EN: "Import contacts", Icon: "upload", Labels: map[string]string{
-				"mn": "Импорт", "ar": "استيراد جهات الاتصال", "zh": "导入联系人", "fr": "Importer des contacts", "ru": "Импорт контактов", "es": "Importar contactos"}},
-		}},
+	// organisation has no blueprint. Its two screens — departments and people —
+	// are declared by the module itself, and the three that used to be here
+	// (segments, duplicates, import) went with the contact register to
+	// commerce-gerege-nexus, where that module declares them with their paths.
+	// A blueprint is keyed by app id in the platform, so a distribution cannot
+	// add to one: the entries a product ships are the product's to name.
 
 	// products has one working screen and nothing else to stand on: the table
 	// holds sku, name, price and active, so categories, price lists, units,

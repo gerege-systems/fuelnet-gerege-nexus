@@ -8,7 +8,6 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/contacts"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
@@ -37,14 +36,14 @@ type InstalledApps = reports.InstalledApps
 func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmongolia.Service,
 	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails egov.Rails,
 	installedApps InstalledApps) Runtime {
-	// First, and not merely in order: the directory is what the others assume.
-	// It is the organisation, the people in it, how it is arranged, and the
-	// register of everyone it deals with — the module Odoo calls base.
+	// First, and not merely in order: organisation is what the others assume. It
+	// is the organisation, the people in it and how it is arranged — the module
+	// Odoo calls base.
 	//
-	// The contacts half is built first and handed in rather than registering
-	// itself: there is one app here now, and only one thing may answer for
-	// io.gerege.nexus.organisation.
-	organisation.New(p, contacts.New(p))
+	// The contact register was briefly part of it and is not: it went to
+	// commerce-gerege-nexus, because everybody has departments and only a
+	// business has customers.
+	organisation.New(p)
 	// The state's systems, as an app rather than as two handlers in the
 	// platform's route table. The low-level clients stay where they are; this
 	// is their app-facing surface, and the thing contacts reaches through.

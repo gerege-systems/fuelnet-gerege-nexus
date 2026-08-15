@@ -2,6 +2,22 @@
   "app_id": "io.gerege.nexus.organisation",
   "entries": [
     {
+      "version": "3.0.0",
+      "released_at": "2026-08-15",
+      "kind": "breaking",
+      "summary": {
+        "mn": "Харилцагчийн бүртгэл commerce distribution руу гарч, энэ апп дахин байгууллага боллоо.",
+        "en": "The contact register left for the commerce distribution; this app is the organisation again."
+      },
+      "details": {
+        "mn": "2.0.0 дээр харилцагчийг энэ аппын дотор оруулсан нь \"хэн бүрддэг вэ, хэнтэй харьцдаг вэ\" хоёрыг нэг сэдэв гэж үзсэн. Тэр нь хагасаараа зөв байв: хэлтэс, ажилтан бол байгууллага бүрд байдаг, харилцагч бол худалддаг бизнест байдаг. Эхнийх нь платформынх, хоёр дахь нь distribution-ых. Тиймээс бүртгэл commerce-gerege-nexus руу нүүж, `io.gerege.nexus.contacts` дахин өөрийн апп боллоо. `contacts` хүснэгт байрандаа (00003 миграц талбарт ажилласан), дэлгэцүүд бүрхүүлд байрандаа — модульгүйгээр цэсэнд гарахгүй, API нь 403 хариулна. Хувилбар 1.0.0 руу буцахгүй: 2.0.0 нийтлэгдсэн.",
+        "en": "2.0.0 folded contacts in, on the argument that who an organisation is made of and who it deals with are one subject. That was half right: departments and staff are something every organisation has, and customers are something a business has — the first belongs to the platform, the second to a distribution. So the register moved to commerce-gerege-nexus and io.gerege.nexus.contacts is its own app again. The contacts table stays (migration 00003 has run in the field) and the screens stay in the shell, inert without the module: unlisted in the menu and refused by the API. The version does not go back to 1.0.0 — 2.0.0 was published."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    },
+    {
       "version": "2.0.0",
       "released_at": "2026-08-15",
       "kind": "feature",

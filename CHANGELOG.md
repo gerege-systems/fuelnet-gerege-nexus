@@ -15,6 +15,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Contacts left for the commerce distribution, and the sidebar was rearranged
+
+Three changes with one shape: putting each thing where it belongs.
+
+**The contact register is a product's, not a platform's.** Migration `00059`
+folded Contacts into the Directory this morning, on the argument that who an
+organisation is made of and who it deals with are one subject. That was half
+right, and the wrong half is the half that decides where code lives: departments
+and staff are something every organisation has; customers are something a
+*business* has. So `io.gerege.nexus.contacts` is an app again — built and
+shipped by
+[commerce-gerege-nexus](https://github.com/gerege-systems/commerce-gerege-nexus)
+— and `io.gerege.nexus.organisation` is the organisation again at 3.0.0, under
+the name it had before the merge.
+
+- The version does not go back to 1.0.0. 2.0.0 was published and deployments
+  installed it; a catalogue offering 1.0.0 to them would be offering a
+  downgrade nothing knows how to apply.
+- **The `contacts` table stays**, for the reason applied migrations always
+  stay: `00003` has run on every deployment in the field, and the module
+  reading it is the same code at a different import path.
+- **The grants stay.** `00059` gave `organisation.read/manage` to every role
+  that held `contacts.read/manage`; taking them back would remove a permission
+  from roles that may have been edited since. An administrator can drop one they
+  do not want and cannot restore one nobody told them had gone. Migration
+  `00060` fixes the only thing that was actually wrong — the two descriptions
+  `00059` widened to mention contacts.
+- **The screens stay in the shell** and moved back to `/module/contacts/*`,
+  where the module now points its own menu entries. A blueprint is keyed by app
+  id inside the platform, so a distribution cannot add to one — which is right:
+  the platform should not carry a list of screens for products it does not ship.
+
+**The sidebar says where things are.** Installed apps sat under Modules while
+its page is at `/settings/apps`, which asked somebody to hold two answers for
+where the same screen lives; it is under Settings now. The organisation moved
+the other way, up into Modules, because it is a thing you look at and edit
+rather than a switch that changes how the platform behaves — and its two
+screens, departments and people, are indented beneath it instead of listed
+beside the App Store as though the three were unrelated destinations.
+
 ## [1.6.0] - 2026-08-15
 
 ### Added — A distribution can read its own catalogue

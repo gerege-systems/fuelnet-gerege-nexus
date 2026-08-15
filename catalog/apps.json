@@ -2,41 +2,41 @@
   {
     "id": "io.gerege.nexus.organisation",
     "slug": "organisation",
-    "name": "Directory",
-    "description": "Who this organisation is made of and who it deals with: its departments, its people, and the register of customers, suppliers and partners.",
+    "name": "Organisation",
+    "description": "The organisation itself: its legal identity, its departments, and the people who work in it.",
     "icon_url": "/icons/organisation.png",
     "category": "Platform",
     "visibility": "public",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "translations": {
       "mn": {
-        "name": "Бүртгэл",
-        "description": "Байгууллагын хэлтэс нэгж, ажилтнууд, түүнчлэн харилцагч, үйлчлүүлэгч, нийлүүлэгчдийн бүртгэл — дотор, гадна хоёр тал нэг дор.",
+        "name": "Байгууллага",
+        "description": "Байгууллагын хуулийн мэдээлэл, хэлтэс нэгж, ажилтнуудын бүртгэл.",
         "category": "Платформ"
       },
       "ar": {
-        "name": "الدليل",
-        "description": "أقسام المؤسسة وموظفوها، وكذلك عملاؤها ومورّدوها وشركاؤها — الداخل والخارج في مكان واحد.",
+        "name": "المؤسسة",
+        "description": "الهوية القانونية للمؤسسة وأقسامها والعاملون فيها.",
         "category": "المنصة"
       },
       "zh": {
-        "name": "名录",
-        "description": "组织的部门与人员，以及它的客户、供应商与合作方——内部与外部同在一处。",
+        "name": "组织",
+        "description": "组织的法律信息、部门结构与人员名录。",
         "category": "平台"
       },
       "fr": {
-        "name": "Annuaire",
-        "description": "Les services et les personnes de l'organisation, ainsi que ses clients, fournisseurs et partenaires — le dedans et le dehors au même endroit.",
+        "name": "Organisation",
+        "description": "L'identité légale de l'organisation, ses départements et les personnes qui y travaillent.",
         "category": "Plateforme"
       },
       "ru": {
-        "name": "Справочник",
-        "description": "Подразделения и сотрудники организации, а также её клиенты, поставщики и партнёры — внутреннее и внешнее в одном месте.",
+        "name": "Организация",
+        "description": "Юридические данные организации, её подразделения и сотрудники.",
         "category": "Платформа"
       },
       "es": {
-        "name": "Directorio",
-        "description": "Los departamentos y las personas de la organización, junto a sus clientes, proveedores y socios: dentro y fuera en un mismo lugar.",
+        "name": "Organización",
+        "description": "La identidad legal de la organización, sus departamentos y las personas que trabajan en ella.",
         "category": "Plataforma"
       }
     }

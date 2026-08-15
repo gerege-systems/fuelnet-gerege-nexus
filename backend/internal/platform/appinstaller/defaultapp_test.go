@@ -39,7 +39,7 @@ func newSweptTenant(t *testing.T) (*appinstaller.AppInstaller, string) {
 
 	// The module has to be registered for a module-type app to install at all;
 	// in the running server this is apps.Bootstrap.
-	organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)), nil)
+	organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
 
 	var tenantID string
 	if err := pool.QueryRow(ctx,
