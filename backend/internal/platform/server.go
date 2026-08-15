@@ -207,6 +207,17 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// the e-Government screen reports is what the platform actually holds.
 	geregeSvc, eidSvc, danSvc := gerege.NewGeregeService(), eid.NewEIDService(), dan.NewDANService()
 
+	permissions := rbac.NewSQLPermissionStore(db)
+	// The Өртөө channel, built before the modules because the Өртөө app is
+	// handed it: the app registers the readers for the task envelopes, and a
+	// reader registered after the exchange loop had started would have let a
+	// round of arrivals sit unread.
+	//
+	// Switched off — with a log line — on every deployment that has not been
+	// given a signing key, which is all of them until somebody establishes a
+	// link. The app is still constructed; see apps.Bootstrap.
+	urtuuLink := urtuu.New(db, permissions)
+
 	modulePlatform := newModulePlatform(db)
 	// A distribution's modules register themselves here, beside the platform's
 	// own, so appregistry sees one list and the store, the menu and the gate
@@ -229,6 +240,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 				{ID: "dan", Name: "ДАН", Mode: danSvc.Mode(), Endpoint: danSvc.Endpoint()},
 			}
 		},
+		urtuuLink,
 		func(ctx context.Context, tenantID string) (map[string]bool, error) {
 			return server.installedAppSet(ctx, tenantID)
 		})
@@ -323,7 +335,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		googleLogin:    googleLogin,
 		geregeSvc:      geregeSvc,
 		integrationMgr: integrationMgr,
-		permissions:    rbac.NewSQLPermissionStore(db),
+		urtuuLink:      urtuuLink,
+		permissions:    permissions,
 		appGate:        memo.New[bool](appGateTTL),
 		suspended:      memo.New[bool](suspendedTTL),
 		settings:       settings.NewStore(db),
@@ -335,12 +348,6 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 
 	// And now the closure above has something to call.
 	server = s
-
-	// The Өртөө channel. Built after the permission store because it gates its
-	// own administrative routes with it, and switched off — with a log line —
-	// on every deployment that has not been given a signing key, which is all
-	// of them until somebody establishes a link.
-	s.urtuuLink = urtuu.New(db, s.permissions)
 
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.

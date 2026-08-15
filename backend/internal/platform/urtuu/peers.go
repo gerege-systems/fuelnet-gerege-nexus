@@ -116,11 +116,12 @@ func (s *Service) handleInvite(w http.ResponseWriter, r *http.Request) {
 
 	var id string
 	err = s.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
-		INSERT INTO urtuu_peers (tenant_id, name, role, status, invite_code_hash, invite_expires_at, created_by)
-		VALUES ($1, $2, 'parent', 'pending', $3, NOW() + $4::interval, NULLIF($5, '')::uuid)
+		INSERT INTO urtuu_peers
+		    (tenant_id, name, role, status, invite_code_hash, invite_expires_at, installation_id, created_by)
+		VALUES ($1, $2, 'parent', 'pending', $3, NOW() + $4::interval, $5, NULLIF($6, '')::uuid)
 		RETURNING id`,
 		tenantID, strings.TrimSpace(request.Name), inviteHash(code),
-		fmt.Sprintf("%d seconds", int(inviteWindow.Seconds())), actorOf(r)).Scan(&id)
+		fmt.Sprintf("%d seconds", int(inviteWindow.Seconds())), s.installationID, actorOf(r)).Scan(&id)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not create an invitation")
 		return
@@ -183,10 +184,12 @@ func (s *Service) handleJoin(w http.ResponseWriter, r *http.Request) {
 	ctx := nexus.WithTenantID(r.Context(), tenantID)
 	var id string
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO urtuu_peers (tenant_id, name, role, base_url, peer_public_key, status, created_by)
-		VALUES ($1, $2, 'child', $3, $4, 'pending', NULLIF($5, '')::uuid)
+		INSERT INTO urtuu_peers
+		    (tenant_id, name, role, base_url, peer_public_key, status, installation_id, created_by)
+		VALUES ($1, $2, 'child', $3, $4, 'pending', $5, NULLIF($6, '')::uuid)
 		RETURNING id`,
-		tenantID, strings.TrimSpace(request.Name), baseURL, parent.PublicKey, actorOf(r)).Scan(&id)
+		tenantID, strings.TrimSpace(request.Name), baseURL, parent.PublicKey,
+		s.installationID, actorOf(r)).Scan(&id)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not record the link")
 		return

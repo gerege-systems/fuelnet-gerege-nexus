@@ -92,7 +92,7 @@ func (s *Service) exchangeLoop(ctx context.Context) {
 		// because it has to run on both sides: a parent's inbox is filled by a
 		// child pushing, and a parent has no child links to poll. The round
 		// happens whether or not there was anything to talk to.
-		s.processInbox(ctx)
+		s.ProcessInbox(ctx)
 
 		select {
 		case <-ctx.Done():
@@ -100,6 +100,30 @@ func (s *Service) exchangeLoop(ctx context.Context) {
 		case <-time.After(exchangePause):
 		}
 	}
+}
+
+// ExchangeNow runs one round without holding any connection open, and drains
+// whatever it brought back.
+//
+// The background loop does the same work on its own schedule with the poll held
+// open; this is for a caller that has to have caught up before it looks — an
+// operator pressing "sync now" on the links screen, and the integration tests,
+// which would otherwise spend twenty-five seconds proving an empty queue is
+// empty.
+func (s *Service) ExchangeNow(ctx context.Context) error {
+	links, err := s.activeChildLinks(ctx)
+	if err != nil {
+		return err
+	}
+	var failure error
+	for _, link := range links {
+		if err := s.exchangeOnce(ctx, link, 0); err != nil {
+			s.noteFailure(ctx, link, err.Error())
+			failure = err
+		}
+	}
+	s.ProcessInbox(ctx)
+	return failure
 }
 
 func (s *Service) exchangeRound(ctx context.Context, links []peerRow) {
@@ -115,7 +139,7 @@ func (s *Service) exchangeRound(ctx context.Context, links []peerRow) {
 		go func(peer peerRow) {
 			defer wait.Done()
 			defer func() { <-slots }()
-			if err := s.exchangeOnce(ctx, peer); err != nil && ctx.Err() == nil {
+			if err := s.exchangeOnce(ctx, peer, pullWindow); err != nil && ctx.Err() == nil {
 				// On the link rather than only in the log: an administrator
 				// looking at Settings → Өртөө has to be able to see why
 				// nothing is moving.

@@ -74,20 +74,25 @@ func (s *Service) readerFor(kind string) (Reader, bool) {
 // is a round in which nothing else on the loop happens.
 const inboxBatch = 100
 
-// processInbox hands every unread envelope to its reader.
+// ProcessInbox hands every unread envelope to its reader.
+//
+// Exported because an installation at the top of a chain dials nobody: it has
+// no child links, so an exchange round does nothing for it and reading what
+// its subordinates have pushed is the whole of its half of the conversation.
+// The loop calls it every round; ExchangeNow calls it too.
 //
 // It crosses organisations deliberately — an envelope belongs to whichever
 // tenant's link brought it — so the listing runs on the platform path and each
 // reader is called inside its own envelope's tenant.
-func (s *Service) processInbox(ctx context.Context) {
+func (s *Service) ProcessInbox(ctx context.Context) {
 	rows, err := s.db.Query(nexus.WithoutTenant(ctx), `
 		SELECT i.id::text, i.tenant_id::text, i.peer_id::text, coalesce(p.name, ''),
 		       i.message_id, i.kind, i.created_at, i.payload
 		  FROM urtuu_inbox i
-		  LEFT JOIN urtuu_peers p ON p.id = i.peer_id
-		 WHERE i.processed_at IS NULL
+		  JOIN urtuu_peers p ON p.id = i.peer_id
+		 WHERE i.processed_at IS NULL AND p.installation_id = $1
 		 ORDER BY i.received_at
-		 LIMIT $1`, inboxBatch)
+		 LIMIT $2`, s.installationID, inboxBatch)
 	if err != nil {
 		slog.Warn("urtuu: could not read the inbox", "error", err)
 		return

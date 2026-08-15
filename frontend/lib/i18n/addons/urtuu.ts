@@ -106,4 +106,72 @@ export const urtuu = {
   "urtuu.modal.join": { mn: "Дээд платформд холбогдох", en: "Join a parent" },
   "urtuu.modal.code": { mn: "Локал код бүртгэх", en: "Register a local code" },
   "urtuu.modal.open_codes": { mn: "{name} холбоос дээр нээх кодууд", en: "Codes open on the link to {name}" },
+  // ---- The task board (io.gerege.nexus.urtuu). The statuses carry the names
+  // the proposal uses; the values behind them are Latin and live in
+  // pkg/urtuu/status.go, where the reason for that is written down.
+  "urtuu.board.title": { mn: "Өртөө — самбар", en: "Urtuu board" },
+  "urtuu.board.subtitle": {
+    mn: "Ирсэн, илгээсэн даалгаврын тойм, хугацаа хэтэрсэн ажлын улаан бүс.",
+    en: "What is queued in both directions, and the red zone of work that is late.",
+  },
+  "urtuu.incoming.title": { mn: "Ирсэн даалгавар", en: "Incoming tasks" },
+  "urtuu.incoming.subtitle": {
+    mn: "Дээд платформоос ирсэн ажил. Хүлээн авах, хариуцагч оноох, доошоо задлах, эсвэл шалтгаантай буцаах.",
+    en: "Work given to this organisation. Take it on, assign somebody, split it further, or return it with a reason.",
+  },
+  "urtuu.outgoing.title": { mn: "Илгээсэн даалгавар", en: "Sent tasks" },
+  "urtuu.outgoing.subtitle": {
+    mn: "Доод платформ руу илгээсэн ажил. Төлөв нь тэдний мэдэгдлээр хөдөлнө.",
+    en: "Work given to subordinate installations. Each moves when they say it has.",
+  },
+  "urtuu.links.title": { mn: "Холбоосууд", en: "Links" },
+  "urtuu.links.subtitle": {
+    mn: "Дээд, доод платформтой холбогдсон суваг бүрийн эрүүл мэнд. Холбоос үүсгэх нь Тохиргоо → Өртөө дээр.",
+    en: "The health of every channel to an installation above or below. Establishing one is in Settings → Өртөө.",
+  },
+
+  "urtuu.status.RECEIVED": { mn: "Ирсэн", en: "Received" },
+  "urtuu.status.ACCEPTED": { mn: "Хүлээн авсан", en: "Accepted" },
+  "urtuu.status.IN_PROGRESS": { mn: "Хийгдэж байгаа", en: "In progress" },
+  "urtuu.status.DELEGATED": { mn: "Задалсан", en: "Delegated" },
+  "urtuu.status.COMPLETED": { mn: "Биелсэн", en: "Completed" },
+  "urtuu.status.RETURNED": { mn: "Буцаасан", en: "Returned" },
+  "urtuu.status.CLOSED": { mn: "Хаагдсан", en: "Closed" },
+
+  "urtuu.action.new_task": { mn: "Даалгавар үүсгэх", en: "Raise a task" },
+  "urtuu.action.accept": { mn: "Хүлээн авах", en: "Accept" },
+  "urtuu.action.return": { mn: "Буцаах", en: "Return" },
+  "urtuu.action.complete": { mn: "Биелүүлсэн", en: "Complete" },
+  "urtuu.action.close": { mn: "Хаах", en: "Close" },
+  "urtuu.action.delegate": { mn: "Доошоо задлах", en: "Delegate" },
+  "urtuu.action.send": { mn: "Илгээх", en: "Send" },
+
+  "urtuu.field.title": { mn: "Гарчиг", en: "Title" },
+  "urtuu.field.deadline": { mn: "Хугацаа", en: "Due" },
+  "urtuu.field.from": { mn: "Хаанаас", en: "From" },
+  "urtuu.field.to": { mn: "Хаашаа", en: "To" },
+  "urtuu.field.note": { mn: "Тайлбар", en: "Note" },
+  "urtuu.field.reason": { mn: "Буцаах шалтгаан", en: "Reason for returning" },
+  "urtuu.field.targets": { mn: "Зорьсон доод платформууд", en: "Subordinate installations" },
+  "urtuu.field.payload": { mn: "Агуулга", en: "Body" },
+
+  "urtuu.filter.all": { mn: "Бүгд", en: "All" },
+  "urtuu.filter.overdue": { mn: "Зөвхөн хоцорсон", en: "Late only" },
+
+  "urtuu.section.timeline": { mn: "Түүх", en: "History" },
+  "urtuu.section.branches": { mn: "Задаргаа", en: "Branches" },
+  "urtuu.section.chain": { mn: "Дамжсан зам", en: "Where it has been" },
+  "urtuu.section.overdue": { mn: "Хугацаа хэтэрсэн", en: "Past due" },
+
+  "urtuu.message.overdue": { mn: "Хоцорсон", en: "Late" },
+  "urtuu.message.no_tasks": { mn: "Даалгавар алга", en: "No tasks" },
+  "urtuu.message.no_overdue": { mn: "Хугацаа хэтэрсэн ажил алга", en: "Nothing is late" },
+  "urtuu.message.task_created": { mn: "Даалгавар үүсч, илгээгдлээ", en: "The task is raised and on its way" },
+  "urtuu.message.moved": { mn: "Даалгаврын төлөв өөрчлөгдлөө", en: "The task has moved" },
+  "urtuu.message.no_deadline": { mn: "Хугацаагүй", en: "No deadline" },
+  "urtuu.message.pick_code": { mn: "Хүсэлтийн код сонгоно уу", en: "Choose a request code" },
+  "urtuu.message.no_open_links": {
+    mn: "Идэвхтэй доод холбоос алга. Тохиргоо → Өртөө дээр эхлээд холбоос үүсгэнэ.",
+    en: "No live subordinate links. Establish one in Settings → Өртөө first.",
+  },
 } as const;

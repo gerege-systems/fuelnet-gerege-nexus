@@ -393,6 +393,53 @@ export interface UrtuuCode {
   updated_at: string;
 }
 
+/**
+ * One task at this installation.
+ *
+ * `direction` is derived by the server: "incoming" is work this organisation
+ * owes somebody, "outgoing" is this side's mirror of work it gave to a
+ * subordinate, and "local" is its own. `overdue` is computed on every read
+ * rather than stored, so an edited deadline never leaves a stale flag.
+ */
+export interface UrtuuTask {
+  id: string;
+  code: string;
+  title: string;
+  payload?: unknown;
+  direction: "incoming" | "outgoing" | "local";
+  origin_peer_id?: string;
+  origin_peer_name?: string;
+  target_peer_id?: string;
+  target_peer_name?: string;
+  parent_task_id?: string;
+  origin_chain: string[];
+  status: string;
+  deadline?: string;
+  overdue: boolean;
+  assigned_user_id?: string;
+  assigned_name?: string;
+  note?: string;
+  evidence?: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UrtuuTaskEvent {
+  from_status?: string;
+  to_status: string;
+  actor_name?: string;
+  peer_name?: string;
+  note?: string;
+  created_at: string;
+}
+
+export interface UrtuuTally {
+  direction: "incoming" | "outgoing" | "local";
+  status: string;
+  count: number;
+  overdue: number;
+}
+
 export interface ReportGrantRequest {
   grantor_registration_number: string;
   report_key: string;
@@ -1183,6 +1230,59 @@ export const api = {
 
   syncUrtuuRing: () =>
     fetcher<{ imported: number }>("/urtuu/codes/ring-sync", { method: "POST" }),
+
+  // The Өртөө app (io.gerege.nexus.urtuu): the task board over the channel.
+  getUrtuuTasks: (filter: {
+    direction?: "incoming" | "outgoing" | "local";
+    status?: string;
+    code?: string;
+    overdue?: boolean;
+  } = {}) => {
+    const query = new URLSearchParams();
+    if (filter.direction) query.set("direction", filter.direction);
+    if (filter.status) query.set("status", filter.status);
+    if (filter.code) query.set("code", filter.code);
+    if (filter.overdue) query.set("overdue", "true");
+    const suffix = query.toString();
+    return fetcher<{ tasks: UrtuuTask[] }>(`/urtuu/tasks${suffix ? `?${suffix}` : ""}`);
+  },
+
+  /** The task, its whole history and its branches together — see handleGetTask. */
+  getUrtuuTask: (id: string) =>
+    fetcher<{
+      task: UrtuuTask;
+      events: UrtuuTaskEvent[];
+      branches: UrtuuTask[];
+      next: string[];
+    }>(`/urtuu/tasks/${id}`),
+
+  getUrtuuBoard: () =>
+    fetcher<{ counts: UrtuuTally[]; overdue: UrtuuTask[]; enabled: boolean }>("/urtuu/tasks/board"),
+
+  createUrtuuTask: (input: {
+    code: string;
+    title?: string;
+    payload?: unknown;
+    deadline?: string | null;
+    peer_ids?: string[];
+    note?: string;
+  }) => fetcher<{ id: string; status: string }>("/urtuu/tasks", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+
+  /**
+   * One move. The verb is a path segment rather than a status in the body, so a
+   * client cannot ask for a transition the server has no handler for.
+   */
+  moveUrtuuTask: (
+    id: string,
+    action: "accept" | "return" | "complete" | "close" | "assign" | "delegate",
+    body: Record<string, unknown> = {},
+  ) => fetcher<{ id: string; status: string }>(`/urtuu/tasks/${id}/${action}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
 
   // Billing App (io.gerege.nexus.billing)
   getInvoices: () =>

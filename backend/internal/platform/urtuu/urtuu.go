@@ -92,11 +92,6 @@ type Service struct {
 	// envelope that arrives.
 	readersMu sync.RWMutex
 	readers   map[string]Reader
-
-	// pollWindow is how long HandlePull holds a connection open with nothing to
-	// say. A field rather than the constant alone so the integration tests do
-	// not spend twenty-five seconds proving that an empty queue is empty.
-	pollWindow time.Duration
 }
 
 // New builds the transport from the environment.
@@ -113,8 +108,7 @@ func New(db *pgxpool.Pool, perms nexus.PermissionStore) *Service {
 		// The exchange loop bounds each call with a context as well; this is
 		// the backstop for a peer that accepts a connection and then says
 		// nothing at all.
-		client:     &http.Client{Timeout: pullWindow + 20*time.Second},
-		pollWindow: pullWindow,
+		client: &http.Client{Timeout: pullWindow + 20*time.Second},
 	}
 
 	raw := strings.TrimSpace(os.Getenv(signingKeyEnv))

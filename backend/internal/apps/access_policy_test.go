@@ -9,6 +9,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -42,6 +43,13 @@ var corePolicies = map[string]struct {
 		"who may read a document depends on who it was shared with"},
 	"egov": {(*egov.Module)(nil), "egov.read", "",
 		"a citizen-registry lookup is a GET that must not be a read every member holds"},
+	// Өртөө gates itself for the same shape of reason as the other two, but a
+	// sharper one: accepting a task and sending a task are both POSTs and are
+	// different authorities held by different people — urtuu.process answers
+	// for work this organisation has been given, urtuu.manage commits somebody
+	// else's time. A prefix rule keyed on the verb would collapse them into one.
+	"urtuu": {(*urtuu.Module)(nil), "urtuu.read", "",
+		"accepting work and commissioning work are both POSTs and are not the same authority"},
 }
 
 func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {

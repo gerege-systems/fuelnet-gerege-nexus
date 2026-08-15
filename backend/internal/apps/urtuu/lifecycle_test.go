@@ -1,0 +1,527 @@
+package urtuu
+
+// A task's whole life, across two installations, over the real channel.
+//
+// The transport's own tests prove an envelope survives the journey. These prove
+// what the journey is for: that work raised in one organisation becomes work in
+// another, that its answer comes back, that a fan-out completes by itself when
+// its branches do, and that a task which finds itself back where it started is
+// refused rather than carried round for ever.
+//
+// Everything goes over HTTP through the real routers, including the handshake.
+// Calling the handlers directly would have tested the handlers; what is being
+// tested is the arrangement.
+//
+//	URTUU_TEST_DATABASE_URL=postgres://... go test ./internal/apps/urtuu/...
+
+import (
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
+	transport "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func openPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("URTUU_TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = os.Getenv("DATABASE_URL")
+	}
+	if dsn == "" {
+		t.Skip("neither URTUU_TEST_DATABASE_URL nor DATABASE_URL is set")
+	}
+
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("parse dsn: %v", err)
+	}
+	// The same guard the server installs, so the handlers under test are bound
+	// to a tenant the way they are in production.
+	guard := &dbguard.Guard{}
+	guard.Install(config)
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		t.Skipf("database unreachable: %v", err)
+	}
+	probeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := guard.Probe(probeCtx, pool); err != nil {
+		pool.Close()
+		t.Skipf("row-level isolation could not be enabled: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+// everyPermission stands in for the RBAC store. What the routes are gated on is
+// asserted in internal/apps/access_policy_test.go and in the module's own
+// declaration; here the question is whether the work flows, so the caller holds
+// everything.
+type everyPermission struct{}
+
+func (everyPermission) GetUserPermissions(_ context.Context, _, _ string) (map[string]bool, error) {
+	return map[string]bool{"urtuu.read": true, "urtuu.manage": true, "urtuu.process": true}, nil
+}
+
+// site is one installation: an organisation, a signing key, the channel, the
+// app, and an address the other one can reach.
+type site struct {
+	link     *transport.Service
+	mod      *Module
+	server   *httptest.Server
+	tenantID string
+	t        *testing.T
+}
+
+func newSite(t *testing.T, pool *pgxpool.Pool, name string, seed byte) *site {
+	t.Helper()
+
+	key := make([]byte, ed25519.SeedSize)
+	for i := range key {
+		key[i] = seed + byte(i)
+	}
+	t.Setenv("URTUU_SIGNING_KEY", base64.StdEncoding.EncodeToString(key))
+	t.Setenv("URTUU_ALLOW_INSECURE_PEERS", "1")
+
+	link := transport.New(pool, everyPermission{})
+	if !link.Enabled() {
+		t.Fatal("the installation has no Өртөө identity")
+	}
+
+	tenantID := uuid.NewString()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
+		tenantID, "Өртөө test "+name, strings.ToLower(name)+"-"+tenantID[:8]); err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID)
+	})
+
+	// A real person, because created_by is a foreign key and because a
+	// permission check refuses a request with no caller at all — which is what
+	// it should do.
+	userID := uuid.NewString()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO users (id, email, password_hash, name) VALUES ($1, $2, '', $3)`,
+		userID, userID+"@urtuu.test", "Өртөө "+name); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1, $2)`,
+		tenantID, userID); err != nil {
+		t.Fatalf("create membership: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
+	})
+
+	module := New(nexus.NewPlatform(pool, everyPermission{}), link)
+
+	// The session middleware, in miniature: everything below it acts for this
+	// organisation as one of its members.
+	asMember := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := nexus.WithTenantID(r.Context(), tenantID)
+			ctx = nexus.WithUser(ctx, nexus.UserClaims{UserID: userID, TenantID: tenantID})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+
+	router := chi.NewRouter()
+	router.Get("/.well-known/urtuu.json", link.HandleWellKnown)
+	router.Post("/api/v1/urtuu/peers/redeem", link.HandleRedeem)
+	router.Get("/api/v1/urtuu/exchange/pull", link.HandlePull)
+	router.Post("/api/v1/urtuu/exchange/push", link.HandlePush)
+	router.Route("/api/v1", func(api chi.Router) {
+		api.Use(asMember)
+		link.TenantRoutes(api)
+	})
+	module.RegisterRoutes(router, asMember)
+
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
+
+	return &site{link: link, mod: module, server: server, tenantID: tenantID, t: t}
+}
+
+// call makes one request to this installation's own API and decodes the answer.
+func (s *site) call(method, path string, body any, want int) map[string]any {
+	s.t.Helper()
+
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			s.t.Fatalf("marshal: %v", err)
+		}
+		reader = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequest(method, s.server.URL+path, reader)
+	if err != nil {
+		s.t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := s.server.Client().Do(req)
+	if err != nil {
+		s.t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode != want {
+		s.t.Fatalf("%s %s = %d (want %d): %s", method, path, res.StatusCode, want, raw)
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	var answer map[string]any
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		s.t.Fatalf("decode %s: %v", raw, err)
+	}
+	return answer
+}
+
+// tasks reads this installation's queue in one direction.
+func (s *site) tasks(direction string) []Task {
+	s.t.Helper()
+	answer := s.call(http.MethodGet, "/api/v1/urtuu/tasks?direction="+direction, nil, http.StatusOK)
+	encoded, err := json.Marshal(answer["tasks"])
+	if err != nil {
+		s.t.Fatalf("marshal: %v", err)
+	}
+	var tasks []Task
+	if err := json.Unmarshal(encoded, &tasks); err != nil {
+		s.t.Fatalf("decode tasks: %v", err)
+	}
+	return tasks
+}
+
+func (s *site) task(id string) Task {
+	s.t.Helper()
+	answer := s.call(http.MethodGet, "/api/v1/urtuu/tasks/"+id, nil, http.StatusOK)
+	encoded, err := json.Marshal(answer["task"])
+	if err != nil {
+		s.t.Fatalf("marshal: %v", err)
+	}
+	var task Task
+	if err := json.Unmarshal(encoded, &task); err != nil {
+		s.t.Fatalf("decode task: %v", err)
+	}
+	return task
+}
+
+// linked establishes a confirmed link and opens one local code on it.
+func linked(t *testing.T, pool *pgxpool.Pool, seed byte, code string) (*site, *site, string) {
+	t.Helper()
+	parent := newSite(t, pool, "parent", seed)
+	child := newSite(t, pool, "child", seed+100)
+
+	invitation := parent.call(http.MethodPost, "/api/v1/urtuu/peers/invite",
+		map[string]string{"name": "Ховд аймаг"}, http.StatusCreated)
+	parentPeerID := invitation["id"].(string)
+
+	child.call(http.MethodPost, "/api/v1/urtuu/peers", map[string]string{
+		"invite_code": invitation["invite_code"].(string),
+		"base_url":    parent.server.URL,
+		"name":        "Боловсролын яам",
+	}, http.StatusCreated)
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/peers/"+parentPeerID+"/confirm", nil, http.StatusOK)
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/codes", map[string]any{
+		"code":                code,
+		"names":               map[string]string{"mn": "Тооллого", "en": "Count"},
+		"schema":              json.RawMessage(`{"type":"object"}`),
+		"default_sla_seconds": 7 * 24 * 3600,
+	}, http.StatusCreated)
+	parent.call(http.MethodPut, "/api/v1/urtuu/peers/"+parentPeerID+"/codes",
+		map[string]any{"codes": []string{code}}, http.StatusOK)
+
+	return parent, child, parentPeerID
+}
+
+// carry moves everything queued in both directions and lets both sides read it.
+//
+// Twice, because one round delivers and the next acknowledges — and an
+// acknowledgement is what stops the same envelope being offered again.
+func carry(t *testing.T, parent, child *site) {
+	t.Helper()
+	for range 2 {
+		// Only the child dials, here as in production. The parent's half is to
+		// read what was pushed to it — and in this test it matters more than
+		// usual: both installations share one database, so a parent running the
+		// exchange loop would find the child's own link in it and try to speak
+		// for it with the wrong key.
+		if err := child.link.ExchangeNow(context.Background()); err != nil {
+			t.Fatalf("exchange: %v", err)
+		}
+		parent.link.ProcessInbox(context.Background())
+	}
+}
+
+// refusalTo reads the update the child sent back, out of the parent's inbox —
+// the far end of the journey rather than the near one, because a refusal that
+// was queued and never arrived is not a refusal anybody acted on.
+func refusalTo(t *testing.T, pool *pgxpool.Pool, parent *site) string {
+	t.Helper()
+	var payload string
+	if err := pool.QueryRow(nexus.WithTenantID(context.Background(), parent.tenantID),
+		`SELECT payload FROM urtuu_inbox WHERE tenant_id = $1 AND kind = $2`,
+		parent.tenantID, contract.KindTaskUpdate).Scan(&payload); err != nil {
+		t.Fatalf("nothing came back to the parent: %v", err)
+	}
+	if !strings.Contains(payload, string(contract.StatusReturned)) {
+		t.Errorf("what came back is not a refusal: %s", payload)
+	}
+	return payload
+}
+
+// The journey the whole system exists for.
+func TestWorkGoesDownAndTheAnswerComesBack(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 20, "local.count")
+
+	created := parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code":     "local.count",
+		"payload":  map[string]string{"period": "2026 H1"},
+		"peer_ids": []string{parentPeerID},
+	}, http.StatusCreated)
+	rootID := created["id"].(string)
+
+	// The root is delegated from birth and has one branch: the proposal's rule
+	// is a separate task per subordinate, joined by parent_task_id.
+	if got := parent.task(rootID).Status; got != string(contract.StatusDelegated) {
+		t.Errorf("the raised task is %q, want DELEGATED", got)
+	}
+	sent := parent.tasks("outgoing")
+	if len(sent) != 1 {
+		t.Fatalf("the parent has %d branches, want 1", len(sent))
+	}
+	if sent[0].ParentTaskID != rootID {
+		t.Error("the branch is not joined to the task it came from")
+	}
+
+	carry(t, parent, child)
+
+	arrived := child.tasks("incoming")
+	if len(arrived) != 1 {
+		t.Fatalf("the child holds %d tasks, want 1", len(arrived))
+	}
+	work := arrived[0]
+	if work.Status != string(contract.StatusReceived) {
+		t.Errorf("the arrived task is %q, want RECEIVED", work.Status)
+	}
+	if work.Code != "local.count" {
+		t.Errorf("code = %q", work.Code)
+	}
+	// The code's own norm, applied at the receiving end from the sender's
+	// stamp. Without it a task would arrive with no deadline at all.
+	if work.Deadline == nil {
+		t.Error("the task arrived with no deadline; the code names a seven-day norm")
+	}
+	// The chain now names both installations, which is what makes the cycle
+	// guard able to say anything.
+	if len(work.OriginChain) != 2 {
+		t.Errorf("origin chain = %v, want both installations", work.OriginChain)
+	}
+
+	// Accepting is a commitment, and it travels.
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/accept",
+		map[string]string{"note": "хүлээн авлаа"}, http.StatusOK)
+	carry(t, parent, child)
+	if got := parent.tasks("outgoing")[0].Status; got != string(contract.StatusAccepted) {
+		t.Errorf("the parent's mirror is %q, want ACCEPTED", got)
+	}
+
+	// And so does finishing it — which finishes the whole delegated task above,
+	// with nobody having to notice.
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/complete",
+		map[string]string{"note": "дууслаа"}, http.StatusOK)
+	carry(t, parent, child)
+
+	if got := parent.tasks("outgoing")[0].Status; got != string(contract.StatusCompleted) {
+		t.Errorf("the parent's mirror is %q, want COMPLETED", got)
+	}
+	if got := parent.task(rootID).Status; got != string(contract.StatusCompleted) {
+		t.Errorf("the delegated task is %q, want COMPLETED — every branch is done", got)
+	}
+
+	// The history is the point of the whole thing: who moved it, when, and why.
+	detail := parent.call(http.MethodGet, "/api/v1/urtuu/tasks/"+rootID, nil, http.StatusOK)
+	events, _ := detail["events"].([]any)
+	if len(events) < 2 {
+		t.Errorf("the task's history has %d entries; a delegated task that completed has at least two", len(events))
+	}
+
+	// And the originator closes it, which is the one move only this side makes.
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+rootID+"/close", nil, http.StatusOK)
+	if got := parent.task(rootID).Status; got != string(contract.StatusClosed) {
+		t.Errorf("the task is %q after being closed", got)
+	}
+}
+
+// A refusal has to travel as clearly as an acceptance, reason included.
+func TestAReturnedTaskCarriesItsReasonBack(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 21, "local.count")
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+	}, http.StatusCreated)
+	carry(t, parent, child)
+
+	work := child.tasks("incoming")[0]
+	// A refusal with no reason turns a channel into a telephone call.
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/return",
+		map[string]string{}, http.StatusBadRequest)
+	child.call(http.MethodPost, "/api/v1/urtuu/tasks/"+work.ID+"/return",
+		map[string]string{"note": "энэ ажил манай харьяалалд биш"}, http.StatusOK)
+	carry(t, parent, child)
+
+	mirror := parent.tasks("outgoing")[0]
+	if mirror.Status != string(contract.StatusReturned) {
+		t.Errorf("the parent's mirror is %q, want RETURNED", mirror.Status)
+	}
+	if !strings.Contains(mirror.Note, "харьяалалд") {
+		t.Errorf("the reason did not travel: %q", mirror.Note)
+	}
+	// A returned branch must not complete the task above it. Somebody has to
+	// read the reason and decide, which is the whole difference between a
+	// refusal and a delay.
+	root := parent.task(mirror.ParentTaskID)
+	if root.Status == string(contract.StatusCompleted) {
+		t.Error("a returned branch completed the task it came from")
+	}
+}
+
+// The cycle guard (§9). A→Б→А is a legitimate shape for a peer graph — two
+// ministries can each be above the other for different kinds of work — so it is
+// the task that must not go round, not the link that must not exist.
+func TestATaskThatComesBackToItselfIsRefused(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 22, "local.count")
+
+	// An assignment whose chain already names the child. That is exactly what a
+	// task would look like arriving on the third hop of A→Б→А, and building it
+	// here rather than standing up three installations keeps the test about the
+	// guard instead of about the topology.
+	sent, err := parent.link.Enqueue(context.Background(), parent.tenantID,
+		contract.KindTaskAssigned, assignment{
+			TaskID:      uuid.NewString(),
+			Code:        "local.count",
+			Title:       "Эргэлдсэн даалгавар",
+			Payload:     json.RawMessage(`{}`),
+			OriginChain: []string{"some-other-installation", child.link.InstallationID()},
+		}, parentPeerID)
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	if sent == "" {
+		t.Fatal("nothing was queued")
+	}
+
+	carry(t, parent, child)
+
+	if got := len(child.tasks("incoming")); got != 0 {
+		t.Fatalf("the child created %d tasks from work that had already been through it", got)
+	}
+
+	// Refused, not dropped. The parent has to learn why, or the work simply
+	// stops with nobody able to say where — so the refusal is asserted where it
+	// actually lands, in the parent's inbox.
+	if !strings.Contains(refusalTo(t, pool, parent), "origin chain") {
+		t.Error("the refusal that reached the parent does not name the cycle")
+	}
+}
+
+// A code the receiving installation has never been told about is refused for
+// the same reason and by the same path — which is what makes announcing the
+// vocabulary worth doing.
+func TestATaskUnderAnUnknownCodeIsRefused(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := linked(t, pool, 23, "local.count")
+
+	// Sent before the vocabulary reaches the child: the announcement is queued
+	// but nothing has carried it yet.
+	if _, err := parent.link.Enqueue(context.Background(), parent.tenantID,
+		contract.KindTaskAssigned, assignment{
+			TaskID: uuid.NewString(), Code: "local.unknown", Title: "Танихгүй код",
+			Payload: json.RawMessage(`{}`), OriginChain: []string{parent.link.InstallationID()},
+		}, parentPeerID); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	carry(t, parent, child)
+
+	if got := len(child.tasks("incoming")); got != 0 {
+		t.Fatalf("the child created %d tasks under a code it does not have", got)
+	}
+	if !strings.Contains(refusalTo(t, pool, parent), "local.unknown") {
+		t.Error("the refusal that reached the parent does not name the code")
+	}
+}
+
+// Sending work under a code that was never opened on that link is refused here,
+// before anything leaves — the child would otherwise be asked for something it
+// has no definition of.
+func TestWorkCannotBeSentUnderACodeTheLinkWasNeverGiven(t *testing.T) {
+	pool := openPool(t)
+	parent, _, parentPeerID := linked(t, pool, 24, "local.count")
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/codes", map[string]any{
+		"code": "local.private", "names": map[string]string{"mn": "Зөвхөн дотоод"},
+	}, http.StatusCreated)
+
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.private", "peer_ids": []string{parentPeerID},
+	}, http.StatusBadRequest)
+
+	// And nothing half-happened: the failed fan-out rolled the whole thing
+	// back, root included.
+	if got := len(parent.tasks("local")); got != 0 {
+		t.Errorf("a refused fan-out left %d tasks behind", got)
+	}
+}
+
+// Work an organisation raises for itself is a real case — it is how a task gets
+// counted and timed like any other — and it needs no channel at all.
+func TestATaskCanBeRaisedAndKeptHere(t *testing.T) {
+	pool := openPool(t)
+	parent, _, _ := linked(t, pool, 25, "local.count")
+
+	created := parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count",
+	}, http.StatusCreated)
+	id := created["id"].(string)
+
+	if got := parent.task(id).Status; got != string(contract.StatusReceived) {
+		t.Errorf("a locally raised task is %q, want RECEIVED", got)
+	}
+	// The state machine still applies, and skipping a step is refused with a
+	// 409 rather than quietly allowed.
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/close", nil, http.StatusConflict)
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/accept", nil, http.StatusOK)
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/complete", nil, http.StatusOK)
+	parent.call(http.MethodPost, "/api/v1/urtuu/tasks/"+id+"/close", nil, http.StatusOK)
+}

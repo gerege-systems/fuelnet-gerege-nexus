@@ -87,7 +87,13 @@ func (s *Service) peerByToken(ctx context.Context, token string) (peerRow, error
 	err := s.db.QueryRow(nexus.WithoutTenant(ctx), `
 		SELECT id::text, tenant_id::text, name, role, base_url, peer_public_key, status
 		  FROM urtuu_peers
-		 WHERE token_hash = $1 AND revoked_at IS NULL`, tokenHash(token)).
+		 -- installation_id: a token is only this installation's to honour if the
+		 -- link was established with this installation's key. One database holds
+		 -- one installation in the field, so this is normally a constant — but it
+		 -- is the clause that makes "whose link is this" answerable at all, and
+		 -- it is what a key rotation shows up in.
+		 WHERE token_hash = $1 AND installation_id = $2 AND revoked_at IS NULL`,
+		tokenHash(token), s.installationID).
 		Scan(&row.ID, &row.TenantID, &row.Name, &row.Role, &row.BaseURL, &key, &row.Status)
 	if err != nil {
 		return peerRow{}, err
@@ -104,7 +110,12 @@ func (s *Service) activeChildLinks(ctx context.Context) ([]peerRow, error) {
 	rows, err := s.db.Query(nexus.WithoutTenant(ctx), `
 		SELECT id::text, tenant_id::text, name, role, base_url, peer_public_key, status
 		  FROM urtuu_peers
-		 WHERE role = 'child' AND status = 'active' AND revoked_at IS NULL AND base_url <> ''`)
+		 WHERE role = 'child' AND status = 'active' AND revoked_at IS NULL AND base_url <> ''
+		   -- Only links this installation can actually speak for: the bearer
+		   -- token on each is derived from this installation's signing key, so a
+		   -- row established under another one would be dialled with a
+		   -- credential the far end has never seen.
+		   AND installation_id = $1`, s.installationID)
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +155,7 @@ func (s *Service) Enqueue(ctx context.Context, tenantID, kind string, payload an
 		return "", errors.New("urtuu: an envelope with no destination")
 	}
 
-	envelope, err := urtuu.New(uuid.NewString(), kind, time.Now(), payload)
-	if err != nil {
-		return "", err
-	}
-	envelope, err = urtuu.Sign(s.signing, envelope)
+	envelope, err := s.sign(kind, payload)
 	if err != nil {
 		return "", err
 	}
@@ -160,6 +167,51 @@ func (s *Service) Enqueue(ctx context.Context, tenantID, kind string, payload an
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := s.queue(ctx, tx, tenantID, envelope, peerIDs); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return envelope.MessageID, nil
+}
+
+// EnqueueTx is Enqueue inside somebody else's transaction.
+//
+// It exists for one specific correctness problem, which the Өртөө app hits on
+// every fan-out: the app writes the rows that stand for work sent downward and
+// queues the envelopes that actually send it, and those two facts must land
+// together. With a transaction of its own here, an app transaction that rolled
+// back afterwards would leave envelopes queued for work no row remembers — and
+// the other installation would do it.
+func (s *Service) EnqueueTx(ctx context.Context, tx pgx.Tx, tenantID, kind string, payload any, peerIDs ...string) (string, error) {
+	if !s.Enabled() {
+		return "", errors.New("urtuu: this installation has no signing key")
+	}
+	if len(peerIDs) == 0 {
+		return "", errors.New("urtuu: an envelope with no destination")
+	}
+	envelope, err := s.sign(kind, payload)
+	if err != nil {
+		return "", err
+	}
+	if err := s.queue(ctx, tx, tenantID, envelope, peerIDs); err != nil {
+		return "", err
+	}
+	return envelope.MessageID, nil
+}
+
+// sign builds and signs one envelope.
+func (s *Service) sign(kind string, payload any) (urtuu.Envelope, error) {
+	envelope, err := urtuu.New(uuid.NewString(), kind, time.Now(), payload)
+	if err != nil {
+		return urtuu.Envelope{}, err
+	}
+	return urtuu.Sign(s.signing, envelope)
+}
+
+// queue writes one signed envelope and a delivery row per live link.
+func (s *Service) queue(ctx context.Context, tx pgx.Tx, tenantID string, envelope urtuu.Envelope, peerIDs []string) error {
 	var outboxID string
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_outbox (tenant_id, message_id, kind, created_at, payload, signature)
@@ -167,7 +219,7 @@ func (s *Service) Enqueue(ctx context.Context, tenantID, kind string, payload an
 		RETURNING id`,
 		tenantID, envelope.MessageID, envelope.Kind, envelope.CreatedAt,
 		string(envelope.Payload), envelope.Signature).Scan(&outboxID); err != nil {
-		return "", err
+		return err
 	}
 
 	for _, peerID := range peerIDs {
@@ -176,14 +228,10 @@ func (s *Service) Enqueue(ctx context.Context, tenantID, kind string, payload an
 			SELECT $1, $2, id FROM urtuu_peers
 			 WHERE id = $3 AND tenant_id = $1 AND status = 'active' AND revoked_at IS NULL`,
 			tenantID, outboxID, peerID); err != nil {
-			return "", err
+			return err
 		}
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return "", err
-	}
-	return envelope.MessageID, nil
+	return nil
 }
 
 // dueEnvelopes takes what is waiting for one link and books the next attempt in

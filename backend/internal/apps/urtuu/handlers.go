@@ -1,0 +1,543 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Distributed under the Apache 2.0 License.
+ *
+ * The board's HTTP surface.
+ *
+ * Every handler that moves a task does the same three things in the same order:
+ * move it locally, tell the installation that gave it to us, and answer. The
+ * order matters — the local move is the fact, and the envelope is the report of
+ * it, so a channel that is down delays the news rather than the work.
+ */
+
+package urtuu
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+// maxTaskBody bounds a task body. The payload is a filled-in form, and the
+// contract's own envelope ceiling is what it has to fit inside anyway.
+const maxTaskBody = contract.MaxPayloadBytes
+
+func (m *Module) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := nexus.RequireTenant(w, r)
+	if !ok {
+		return
+	}
+
+	query := r.URL.Query()
+	filter := taskFilter{
+		Direction: query.Get("direction"),
+		Status:    strings.ToUpper(strings.TrimSpace(query.Get("status"))),
+		Code:      strings.TrimSpace(query.Get("code")),
+		Overdue:   query.Get("overdue") == "true",
+		ParentID:  strings.TrimSpace(query.Get("parent_id")),
+	}
+	// A status the machine does not know would match nothing and read as "there
+	// is no work", which is the wrong answer to a typo.
+	if filter.Status != "" && !contract.KnownStatus(contract.TaskStatus(filter.Status)) {
+		nexus.Error(w, http.StatusBadRequest, "no such status: "+filter.Status)
+		return
+	}
+	if filter.ParentID != "" {
+		if _, err := uuid.Parse(filter.ParentID); err != nil {
+			nexus.Error(w, http.StatusBadRequest, "invalid parent id")
+			return
+		}
+	}
+
+	tasks, err := m.listTasks(r.Context(), tenantID, filter)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the tasks")
+		return
+	}
+	nexus.JSON(w, http.StatusOK, map[string]any{"tasks": tasks})
+}
+
+// handleGetTask answers with the task, its whole history and its branches.
+//
+// Three things in one response because the detail screen shows all three and a
+// timeline fetched separately is a timeline that can be a version behind the
+// status above it.
+func (m *Module) handleGetTask(w http.ResponseWriter, r *http.Request) {
+	tenantID, id, ok := m.taskParty(w, r)
+	if !ok {
+		return
+	}
+
+	task, err := m.getTask(r.Context(), tenantID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		nexus.Error(w, http.StatusNotFound, "no such task")
+		return
+	}
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the task")
+		return
+	}
+
+	events, err := m.taskEvents(r.Context(), tenantID, id)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the task's history")
+		return
+	}
+	branches, err := m.listTasks(r.Context(), tenantID, taskFilter{ParentID: id})
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the task's branches")
+		return
+	}
+
+	nexus.JSON(w, http.StatusOK, map[string]any{
+		"task": task, "events": events, "branches": branches,
+		// What this task may do next, so the screen offers buttons rather than
+		// guessing at the state machine a second time.
+		"next": contract.TaskStatus(task.Status).Next(),
+	})
+}
+
+type createRequest struct {
+	Code     string          `json:"code"`
+	Title    string          `json:"title"`
+	Payload  json.RawMessage `json:"payload"`
+	Deadline *time.Time      `json:"deadline"`
+	// PeerIDs are the subordinate links this is being sent to. Empty means the
+	// work stays here, which is a real case — an organisation raising its own
+	// task under a code so that it is counted and timed like any other.
+	PeerIDs []string `json:"peer_ids"`
+	Note    string   `json:"note"`
+}
+
+// handleCreateTask raises work and, if it names any links, sends it.
+//
+// One transaction for the root, the mirrors and the envelopes together: a
+// fan-out that half happened would leave provinces doing work the ministry has
+// no record of asking for.
+func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := nexus.RequireTenant(w, r)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxTaskBody)
+	var request createRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		nexus.Error(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	// A task kept here needs no channel at all, which is why this is checked
+	// against what was asked for rather than at the door.
+	if len(request.PeerIDs) > 0 && !m.link.Enabled() {
+		nexus.Error(w, http.StatusServiceUnavailable, "Өртөө is not configured on this installation")
+		return
+	}
+
+	code, err := m.lookupCode(r.Context(), tenantID, strings.TrimSpace(request.Code))
+	if errors.Is(err, pgx.ErrNoRows) {
+		nexus.Error(w, http.StatusBadRequest, "no such request code")
+		return
+	}
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the request code")
+		return
+	}
+	if !code.Active {
+		nexus.Error(w, http.StatusBadRequest, "that request code is not in use")
+		return
+	}
+
+	now := time.Now()
+	root := Task{
+		Code:    code.Code,
+		Title:   titleFor(code, request.Title, localeOf(r)),
+		Payload: payloadOrEmpty(request.Payload),
+		// The chain starts here. Every installation this work reaches adds
+		// itself, and any that finds itself already on it refuses.
+		OriginChain: []string{m.link.InstallationID()},
+	}
+	deadline := deadlineFor(code, request.Deadline, now)
+
+	// A task with branches is delegated from birth; one kept here starts where
+	// every task starts. Neither is a transition — this is the initial state,
+	// which is why it is written rather than moved to.
+	status := contract.StatusReceived
+	if len(request.PeerIDs) > 0 {
+		status = contract.StatusDelegated
+	}
+
+	ctx := nexus.WithTenantID(r.Context(), tenantID)
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not raise the task")
+		return
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	actor := actorOf(r)
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO urtuu_tasks
+		    (tenant_id, code, title, payload, origin_chain, status, deadline, note, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, '')::uuid)
+		RETURNING id`,
+		tenantID, root.Code, root.Title, root.Payload, root.OriginChain,
+		string(status), deadline, strings.TrimSpace(request.Note), actor).Scan(&root.ID); err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not raise the task")
+		return
+	}
+	if err := m.record(ctx, tx, tenantID, root.ID, string(status), actor, "", request.Note); err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not record the task")
+		return
+	}
+
+	for _, peerID := range request.PeerIDs {
+		if _, err := uuid.Parse(peerID); err != nil {
+			nexus.Error(w, http.StatusBadRequest, "invalid link id")
+			return
+		}
+		if err := m.sendDown(ctx, tx, tenantID, actor, root, peerID, deadline); err != nil {
+			nexus.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not raise the task")
+		return
+	}
+
+	nexus.Audit(r.Context(), tenantID, actor, "urtuu.task_raised", "urtuu_task",
+		map[string]any{"task_id": root.ID, "code": root.Code, "links": len(request.PeerIDs)})
+	nexus.JSON(w, http.StatusCreated, map[string]any{"id": root.ID, "status": status})
+}
+
+// handleDelegate splits a task this organisation was given, downward.
+//
+// The task itself moves to DELEGATED and one branch is created per link, which
+// is the proposal's own rule (§4): a separate task per subordinate, joined to
+// this one by parent_task_id, so the tree shows which province has finished and
+// which has not.
+func (m *Module) handleDelegate(w http.ResponseWriter, r *http.Request) {
+	tenantID, id, ok := m.taskParty(w, r)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxTaskBody)
+	var request struct {
+		PeerIDs  []string   `json:"peer_ids"`
+		Deadline *time.Time `json:"deadline"`
+		Note     string     `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		nexus.Error(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if len(request.PeerIDs) == 0 {
+		nexus.Error(w, http.StatusBadRequest, "delegating to nobody is not delegating")
+		return
+	}
+
+	task, err := m.getTask(r.Context(), tenantID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		nexus.Error(w, http.StatusNotFound, "no such task")
+		return
+	}
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the task")
+		return
+	}
+
+	// The branches inherit this task's deadline unless a tighter one is set:
+	// a province cannot be given longer than the ministry gave the agency.
+	deadline := task.Deadline
+	if request.Deadline != nil {
+		deadline = request.Deadline
+	}
+
+	ctx := nexus.WithTenantID(r.Context(), tenantID)
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not delegate the task")
+		return
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	actor := actorOf(r)
+	for _, peerID := range request.PeerIDs {
+		if _, err := uuid.Parse(peerID); err != nil {
+			nexus.Error(w, http.StatusBadRequest, "invalid link id")
+			return
+		}
+		if err := m.sendDown(ctx, tx, tenantID, actor, task, peerID, deadline); err != nil {
+			nexus.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not delegate the task")
+		return
+	}
+
+	// After the branches, not before: a task that said DELEGATED with nothing
+	// under it would be a lie the tree could not correct.
+	moved, err := m.move(r.Context(), tenantID, id, contract.StatusDelegated, actor, "", request.Note)
+	if err != nil {
+		m.refuse(w, err)
+		return
+	}
+	m.reportUp(r.Context(), tenantID, moved, request.Note)
+
+	nexus.Audit(r.Context(), tenantID, actor, "urtuu.task_delegated", "urtuu_task",
+		map[string]any{"task_id": id, "links": len(request.PeerIDs)})
+	nexus.JSON(w, http.StatusOK, map[string]any{"id": id, "status": moved.Status})
+}
+
+// The four moves an organisation makes on work it has been given, and the one
+// the originator makes at the end. All five share a shape, so they share a
+// helper — what differs is the target status and whether a note is required.
+
+func (m *Module) handleAccept(w http.ResponseWriter, r *http.Request) {
+	m.transition(w, r, contract.StatusAccepted, false, "urtuu.task_accepted")
+}
+
+// Returning demands a reason. A refusal with no reason is one the parent can
+// only answer by asking, which turns a channel into a telephone call.
+func (m *Module) handleReturn(w http.ResponseWriter, r *http.Request) {
+	m.transition(w, r, contract.StatusReturned, true, "urtuu.task_returned")
+}
+
+func (m *Module) handleComplete(w http.ResponseWriter, r *http.Request) {
+	m.transition(w, r, contract.StatusCompleted, false, "urtuu.task_completed")
+}
+
+// Closing is the originator accepting the outcome, so it never reports upward:
+// there is nobody above the side that closes.
+func (m *Module) handleClose(w http.ResponseWriter, r *http.Request) {
+	m.transition(w, r, contract.StatusClosed, false, "urtuu.task_closed")
+}
+
+// handleAssign names who here is doing the work, which moves it to IN_PROGRESS.
+//
+// The person never travels. Who inside an organisation is doing something is
+// that organisation's business (§2.4) — the parent learns that the work is in
+// progress and nothing more.
+func (m *Module) handleAssign(w http.ResponseWriter, r *http.Request) {
+	tenantID, id, ok := m.taskParty(w, r)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxTaskBody)
+	var request struct {
+		UserID string `json:"user_id"`
+		Note   string `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		nexus.Error(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if _, err := uuid.Parse(request.UserID); err != nil {
+		nexus.Error(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	// Membership rather than existence: a user id from another organisation
+	// would otherwise be assignable, and the row-level policy does not cover
+	// users — people belong to several organisations by design.
+	var member bool
+	if err := m.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
+		SELECT EXISTS (SELECT 1 FROM memberships
+		                WHERE tenant_id = $1 AND user_id = $2 AND active)`,
+		tenantID, request.UserID).Scan(&member); err != nil || !member {
+		nexus.Error(w, http.StatusBadRequest, "that person is not a member of this organisation")
+		return
+	}
+
+	if _, err := m.db.Exec(nexus.WithTenantID(r.Context(), tenantID),
+		`UPDATE urtuu_tasks SET assigned_user_id = $2, updated_at = NOW() WHERE id = $1`,
+		id, request.UserID); err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not assign the task")
+		return
+	}
+
+	moved, err := m.move(r.Context(), tenantID, id, contract.StatusInProgress, actorOf(r), "", request.Note)
+	if err != nil {
+		m.refuse(w, err)
+		return
+	}
+	m.reportUp(r.Context(), tenantID, moved, "")
+
+	nexus.Audit(r.Context(), tenantID, actorOf(r), "urtuu.task_assigned", "urtuu_task",
+		map[string]any{"task_id": id})
+	nexus.JSON(w, http.StatusOK, map[string]any{"id": id, "status": moved.Status})
+}
+
+// transition is the shared body of accept, return, complete and close.
+func (m *Module) transition(w http.ResponseWriter, r *http.Request,
+	to contract.TaskStatus, requireNote bool, action string) {
+
+	tenantID, id, ok := m.taskParty(w, r)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxTaskBody)
+	var request struct {
+		Note     string          `json:"note"`
+		Evidence json.RawMessage `json:"evidence"`
+	}
+	// An empty body is a legitimate accept, so a decode failure on no body is
+	// not an error worth answering with.
+	_ = json.NewDecoder(r.Body).Decode(&request)
+	if requireNote && strings.TrimSpace(request.Note) == "" {
+		nexus.Error(w, http.StatusBadRequest, "a reason is required")
+		return
+	}
+
+	if len(request.Evidence) > 0 {
+		if _, err := m.db.Exec(nexus.WithTenantID(r.Context(), tenantID),
+			`UPDATE urtuu_tasks SET evidence = $2, updated_at = NOW() WHERE id = $1`,
+			id, []byte(request.Evidence)); err != nil {
+			nexus.Error(w, http.StatusBadRequest, "invalid evidence")
+			return
+		}
+	}
+
+	moved, err := m.move(r.Context(), tenantID, id, to, actorOf(r), "", request.Note)
+	if err != nil {
+		m.refuse(w, err)
+		return
+	}
+	m.reportUp(r.Context(), tenantID, moved, request.Note)
+
+	// Completing a branch may be what finishes the whole tree above it.
+	if to == contract.StatusCompleted && moved.ParentTaskID != "" {
+		m.rollUp(r.Context(), tenantID, moved.ParentTaskID)
+	}
+
+	nexus.Audit(r.Context(), tenantID, actorOf(r), action, "urtuu_task",
+		map[string]any{"task_id": id, "status": string(to)})
+	nexus.JSON(w, http.StatusOK, map[string]any{"id": id, "status": moved.Status})
+}
+
+// ------------------------------------------------------------------- board
+
+// handleBoard is the app's front page: what is queued, what is late, and
+// whether the links are carrying anything.
+func (m *Module) handleBoard(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := nexus.RequireTenant(w, r)
+	if !ok {
+		return
+	}
+	ctx := nexus.WithTenantID(r.Context(), tenantID)
+
+	// Counts by status and direction in one pass. Two queries would be two
+	// moments, and a board that adds up to a different total than its own rows
+	// is a board nobody trusts twice.
+	rows, err := m.db.Query(ctx, `
+		SELECT CASE WHEN origin_peer_id IS NOT NULL THEN 'incoming'
+		            WHEN target_peer_id IS NOT NULL THEN 'outgoing'
+		            ELSE 'local' END AS direction,
+		       status,
+		       count(*),
+		       count(*) FILTER (WHERE deadline IS NOT NULL AND deadline < NOW() AND status <> 'CLOSED')
+		  FROM urtuu_tasks
+		 WHERE tenant_id = $1
+		 GROUP BY 1, 2`, tenantID)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the board")
+		return
+	}
+	defer rows.Close()
+
+	type tally struct {
+		Direction string `json:"direction"`
+		Status    string `json:"status"`
+		Count     int    `json:"count"`
+		Overdue   int    `json:"overdue"`
+	}
+	counts := make([]tally, 0, 16)
+	for rows.Next() {
+		var item tally
+		if err := rows.Scan(&item.Direction, &item.Status, &item.Count, &item.Overdue); err != nil {
+			nexus.Error(w, http.StatusInternalServerError, "could not read the board")
+			return
+		}
+		counts = append(counts, item)
+	}
+	if err := rows.Err(); err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the board")
+		return
+	}
+
+	// The red zone: what is late, soonest-overdue first, because that is the
+	// order somebody would work through it.
+	overdue, err := m.listTasks(r.Context(), tenantID, taskFilter{Overdue: true})
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the overdue tasks")
+		return
+	}
+
+	nexus.JSON(w, http.StatusOK, map[string]any{
+		"counts":  counts,
+		"overdue": overdue,
+		"enabled": m.link.Enabled(),
+	})
+}
+
+// ------------------------------------------------------------------ helpers
+
+func (m *Module) taskParty(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	tenantID, ok := nexus.RequireTenant(w, r)
+	if !ok {
+		return "", "", false
+	}
+	id := chi.URLParam(r, "id")
+	if _, err := uuid.Parse(id); err != nil {
+		nexus.Error(w, http.StatusBadRequest, "invalid task id")
+		return "", "", false
+	}
+	return tenantID, id, true
+}
+
+// refuse turns a move failure into the right status.
+//
+// A refused transition is 409 and not 400: the request was well formed and the
+// task is simply not where the caller thought it was — usually because
+// somebody else, or a subordinate's envelope, moved it first.
+func (m *Module) refuse(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrTransition):
+		nexus.Error(w, http.StatusConflict, err.Error())
+	case errors.Is(err, pgx.ErrNoRows):
+		nexus.Error(w, http.StatusNotFound, "no such task")
+	default:
+		nexus.Error(w, http.StatusInternalServerError, "could not move the task")
+	}
+}
+
+func actorOf(r *http.Request) string {
+	if claims, err := nexus.UserFromContext(r.Context()); err == nil {
+		return claims.UserID
+	}
+	return ""
+}
+
+// localeOf is what language a task's title is taken in when nobody typed one.
+func localeOf(r *http.Request) string {
+	locale := strings.TrimSpace(r.Header.Get("Accept-Language"))
+	if len(locale) >= 2 {
+		return strings.ToLower(locale[:2])
+	}
+	return "mn"
+}

@@ -91,10 +91,6 @@ func newInstallation(t *testing.T, pool *pgxpool.Pool, name string, seed byte) *
 	if !service.Enabled() {
 		t.Fatal("the installation has no Өртөө identity")
 	}
-	// An empty poll would otherwise take the full production window, which is
-	// twenty-five seconds this test has no reason to spend.
-	service.pollWindow = 200 * time.Millisecond
-
 	router := chi.NewRouter()
 	router.Get("/.well-known/urtuu.json", service.HandleWellKnown)
 	router.Post("/api/v1/urtuu/peers/redeem", service.HandleRedeem)
@@ -304,7 +300,7 @@ func TestNothingMovesUntilTheParentConfirms(t *testing.T) {
 	parentPeerID, childPeerID := handshake(t, parent, child)
 	link := child.childLink(t, childPeerID)
 
-	if err := child.svc.exchangeOnce(context.Background(), link); err == nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err == nil {
 		t.Fatal("the channel carried traffic before the parent had confirmed the link")
 	} else if !strings.Contains(err.Error(), "403") {
 		t.Errorf("error = %v, want a 403 — an unconfirmed link is not an unknown one", err)
@@ -314,7 +310,7 @@ func TestNothingMovesUntilTheParentConfirms(t *testing.T) {
 	if confirmed.Code != http.StatusOK {
 		t.Fatalf("confirm = %d %s", confirmed.Code, confirmed.Body)
 	}
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("exchange after confirmation: %v", err)
 	}
 }
@@ -338,7 +334,7 @@ func TestWorkTravelsDownAndAnAnswerComesBack(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
 	if got := child.inboxCount(t); got != 1 {
@@ -355,7 +351,7 @@ func TestWorkTravelsDownAndAnAnswerComesBack(t *testing.T) {
 
 	// Second round: the acknowledgement lands, and the same envelope arriving
 	// again costs nothing.
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("second exchange: %v", err)
 	}
 	if got := parent.undelivered(t); got != 0 {
@@ -379,7 +375,7 @@ func TestWorkTravelsDownAndAnAnswerComesBack(t *testing.T) {
 		contract.KindTaskUpdate, map[string]string{"status": "ACCEPTED"}, childPeerID); err != nil {
 		t.Fatalf("enqueue upward: %v", err)
 	}
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("third exchange: %v", err)
 	}
 	if got := parent.inboxCount(t); got != 1 {
@@ -413,7 +409,7 @@ func TestAnEditedEnvelopeIsRefusedEvenOverAGoodLink(t *testing.T) {
 		t.Fatalf("tamper: %v", err)
 	}
 
-	if err := child.svc.exchangeOnce(context.Background(), link); err == nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err == nil {
 		t.Fatal("an edited envelope was accepted")
 	}
 	if got := child.inboxCount(t); got != 0 {
@@ -432,7 +428,7 @@ func TestARevokedLinkStopsAnswering(t *testing.T) {
 	parentPeerID, childPeerID := handshake(t, parent, child)
 	parent.adminCall(t, parent.svc.handleConfirm, nil, parentPeerID)
 	link := child.childLink(t, childPeerID)
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("the link did not work before it was revoked: %v", err)
 	}
 
@@ -441,7 +437,7 @@ func TestARevokedLinkStopsAnswering(t *testing.T) {
 		t.Fatalf("revoke = %d %s", revoked.Code, revoked.Body)
 	}
 
-	err := child.svc.exchangeOnce(context.Background(), link)
+	err := child.svc.exchangeOnce(context.Background(), link, 0)
 	if err == nil {
 		t.Fatal("a revoked link still carried traffic")
 	}

@@ -36,16 +36,16 @@ func linkedPair(t *testing.T, pool *pgxpool.Pool, seed byte) (*installation, *in
 func carry(t *testing.T, parent, child *installation, childPeerID string) {
 	t.Helper()
 	link := child.childLink(t, childPeerID)
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
-	child.svc.processInbox(context.Background())
+	child.svc.ProcessInbox(context.Background())
 	// A second round so the acknowledgement lands and the parent's own queue
 	// stops offering what has already been read.
-	if err := child.svc.exchangeOnce(context.Background(), link); err != nil {
+	if err := child.svc.exchangeOnce(context.Background(), link, 0); err != nil {
 		t.Fatalf("second exchange: %v", err)
 	}
-	parent.svc.processInbox(context.Background())
+	parent.svc.ProcessInbox(context.Background())
 }
 
 func (i *installation) codes(t *testing.T) map[string]Code {

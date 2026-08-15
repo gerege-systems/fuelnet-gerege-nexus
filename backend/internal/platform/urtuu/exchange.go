@@ -18,9 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -99,7 +101,11 @@ func (s *Service) HandlePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deadline := time.Now().Add(s.pollWindow)
+	// How long the caller is willing to wait, clamped to what this side will
+	// hold a connection open for. A client that wants an immediate answer —
+	// an operator pressing "sync now", a test — asks for zero and gets one;
+	// the exchange loop asks for the full window and the connection is held.
+	deadline := time.Now().Add(waitFor(r))
 	for {
 		count, err := s.pendingCount(r.Context(), peer)
 		if err != nil {
@@ -229,11 +235,32 @@ func (s *Service) accept(ctx context.Context, peer peerRow, envelopes []urtuu.En
 // Push first so that acknowledgements owed from the previous cycle are settled
 // before the parent decides what to offer again — otherwise every cycle would
 // be handed the same envelopes until one happened to push.
-func (s *Service) exchangeOnce(ctx context.Context, peer peerRow) error {
+func (s *Service) exchangeOnce(ctx context.Context, peer peerRow, wait time.Duration) error {
 	if err := s.push(ctx, peer); err != nil {
 		return err
 	}
-	return s.pull(ctx, peer)
+	return s.pull(ctx, peer, wait)
+}
+
+// waitFor reads the poll window the caller asked for, in seconds.
+//
+// Absent or unreadable means the full window, which is what every version of
+// this client sends and what a peer that has not been upgraded will keep
+// sending. Above the window is clamped: how long this installation will hold a
+// connection open is its own decision, not the caller's.
+func waitFor(r *http.Request) time.Duration {
+	raw := strings.TrimSpace(r.URL.Query().Get("wait"))
+	if raw == "" {
+		return pullWindow
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds < 0 {
+		return pullWindow
+	}
+	if asked := time.Duration(seconds) * time.Second; asked < pullWindow {
+		return asked
+	}
+	return pullWindow
 }
 
 func (s *Service) push(ctx context.Context, peer peerRow) error {
@@ -272,8 +299,9 @@ func (s *Service) push(ctx context.Context, peer peerRow) error {
 	return s.markAcked(ctx, peer, acks)
 }
 
-func (s *Service) pull(ctx context.Context, peer peerRow) error {
-	response, err := s.call(ctx, peer, http.MethodGet, "/api/v1/urtuu/exchange/pull", nil)
+func (s *Service) pull(ctx context.Context, peer peerRow, wait time.Duration) error {
+	response, err := s.call(ctx, peer, http.MethodGet,
+		fmt.Sprintf("/api/v1/urtuu/exchange/pull?wait=%d", int(wait.Seconds())), nil)
 	if err != nil {
 		return err
 	}
@@ -301,7 +329,7 @@ func (s *Service) pull(ctx context.Context, peer peerRow) error {
 func (s *Service) call(ctx context.Context, peer peerRow, method, path string, body []byte) ([]byte, error) {
 	// A little more than the parent will hold a poll open for, so an empty
 	// answer arrives as an empty answer rather than as a timeout.
-	ctx, cancel := context.WithTimeout(ctx, s.pollWindow+10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, pullWindow+10*time.Second)
 	defer cancel()
 
 	var reader io.Reader
@@ -324,7 +352,11 @@ func (s *Service) call(ctx context.Context, peer peerRow, method, path string, b
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return nil, errors.New("the parent answered " + res.Status)
+		// The parent's own words, bounded. A link that has stopped working with
+		// nothing but a status code behind it is a support ticket; the reason
+		// is what the administrator reads off the links screen.
+		reason, _ := io.ReadAll(io.LimitReader(res.Body, 512))
+		return nil, fmt.Errorf("the parent answered %s: %s", res.Status, strings.TrimSpace(string(reason)))
 	}
 	return io.ReadAll(io.LimitReader(res.Body, maxBatchBytes))
 }
