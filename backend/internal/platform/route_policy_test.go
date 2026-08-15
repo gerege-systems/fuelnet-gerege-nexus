@@ -121,6 +121,19 @@ var publicRoutes = []string{
 	// handleVerifyLanded.
 	"/api/v1/integrations/oauth/callback",
 	"/api/v1/verify/landed",
+
+	// The Өртөө channel. All three are reached by another Gerege Nexus
+	// installation rather than by a person, so a session is not something the
+	// caller could hold. Each carries its own authority: the redemption is
+	// authorised by a single-use invitation code (24 hours, hashed, cleared on
+	// use), and the two exchange endpoints by the link's bearer token — on top
+	// of which every envelope that crosses them is verified against the public
+	// key the two installations swapped when the link was made.
+	"/api/v1/urtuu/peers/redeem",
+	"/api/v1/urtuu/exchange/pull",
+	"/api/v1/urtuu/exchange/push",
+	// The installation's own public key, read before any link exists.
+	"/.well-known/urtuu.json",
 }
 
 // isPublic reports whether a chi pattern is on the list.

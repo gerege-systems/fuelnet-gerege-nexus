@@ -47,6 +47,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -104,8 +105,13 @@ type Server struct {
 	googleLogin    *ssoclient.Client
 	geregeSvc      *gerege.GeregeService
 	integrationMgr *integration.Manager
-	permissions    *rbac.SQLPermissionStore
-	appGate        *memo.Cache[bool]
+	// urtuuLink is the Өртөө channel: the links to other installations and the
+	// queues in both directions. A platform service rather than part of the
+	// Өртөө app, because the channel is infrastructure any module may reach for
+	// and the task board is a product a tenant chooses to install.
+	urtuuLink   *urtuu.Service
+	permissions *rbac.SQLPermissionStore
+	appGate     *memo.Cache[bool]
 	// settings and featureFlags are the two things the console can change
 	// without a deployment. Both are memory with a timer behind them; both are
 	// on the invalidation bus so a change is felt on every replica at once.
@@ -330,6 +336,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// And now the closure above has something to call.
 	server = s
 
+	// The Өртөө channel. Built after the permission store because it gates its
+	// own administrative routes with it, and switched off — with a log line —
+	// on every deployment that has not been given a signing key, which is all
+	// of them until somebody establishes a link.
+	s.urtuuLink = urtuu.New(db, s.permissions)
+
 	// The authorization endpoint has to know who is signing in, which is the
 	// platform session rather than anything OAuth owns.
 	ssoProvider.AttachSessions(s.sessions)
@@ -530,6 +542,10 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 	// Abandoned connect attempts and the delivery log are the two integration
 	// tables that only ever grow.
 	s.integrationMgr.StartHousekeeping(ctx)
+	// The Өртөө exchange: one loop keeping every link this installation is the
+	// child on in conversation with its parent, and the sweep behind it. Both
+	// return immediately and do nothing at all where Өртөө is unconfigured.
+	s.urtuuLink.StartHousekeeping(ctx)
 	// Links nobody followed have to stop being reported as outstanding, and the
 	// verification trail is an audit record with a retention window, not a
 	// mailing list.
@@ -779,6 +795,13 @@ func (s *Server) setupRoutes() {
 	// proxy has to route them to this service explicitly.
 	r.Get("/.well-known/openid-configuration", s.ssoProvider.HandleOIDCDiscovery)
 	r.Get("/.well-known/jwks.json", s.ssoProvider.HandleJWKS)
+
+	// This installation's Өртөө identity: the public key a subordinate
+	// installation verifies its parent's envelopes with. At the root and public
+	// by necessity — it is read before any relationship exists, by a server
+	// that has nothing to authenticate with yet. It carries no secret and
+	// nothing tenant-scoped, and answers 404 where Өртөө is not configured.
+	r.Get("/.well-known/urtuu.json", s.urtuuLink.HandleWellKnown)
 	// The authorization endpoint is a browser destination: it reads the
 	// session cookie itself and answers with redirects, so it must not sit
 	// behind the API's bearer-token middleware.
@@ -810,7 +833,27 @@ func (s *Server) setupRoutes() {
 			recovery.Get("/auth/credential", s.handleCredentialCheck)
 			recovery.Post("/auth/credential/redeem", s.handleCredentialRedeem)
 			recovery.Post("/auth/impersonation/redeem", s.handleImpersonationRedeem)
+			// Redeeming an Өртөө invitation. Session-less for the same reason
+			// the three above are — the caller is another installation, not a
+			// person — and on the sign-in budget for the same reason too: a
+			// single-use code that can be guessed quickly is a code that can be
+			// guessed. See internal/platform/urtuu/peers.go.
+			recovery.Post("/urtuu/peers/redeem", s.urtuuLink.HandleRedeem)
 		})
+
+		// The exchange itself. Authenticated by the link's bearer token, which
+		// authMiddleware knows nothing about, so these sit outside it — and
+		// every envelope inside is checked again against the peer's public key,
+		// because a token says who is speaking and only a signature says who
+		// wrote what was said.
+		//
+		// Deliberately not on the poll limiter: the caller is a server holding
+		// a credential this deployment issued, not somebody's browser, and one
+		// child catching up after a week of downtime must not throttle another
+		// out of the channel. What bounds it is batchLimit and the long-poll
+		// window on the other side of the call.
+		api.Get("/urtuu/exchange/pull", s.urtuuLink.HandlePull)
+		api.Post("/urtuu/exchange/push", s.urtuuLink.HandlePush)
 		// Auth with rate limiting
 		// Every path by which this deployment establishes an identity of its
 		// own. On a deployment that federates, requireLocalLogin closes all of
@@ -958,6 +1001,13 @@ func (s *Server) setupRoutes() {
 				ac.Put("/roles/{id}/permissions", s.handleSetRolePermissions)
 				ac.Put("/memberships/{id}/roles", s.handleSetMembershipRoles)
 			})
+
+			// Settings → Өртөө: the links this organisation has to other
+			// installations. A platform screen rather than an app one, because
+			// a channel established by an administrator has to outlive any app
+			// being uninstalled — the tasks in flight over it do not stop
+			// existing because somebody removed the board they are shown on.
+			s.urtuuLink.TenantRoutes(pr)
 
 			// Asking the verification service to write to an address spends a
 			// credential the whole platform shares, so it is a signed-in act.
