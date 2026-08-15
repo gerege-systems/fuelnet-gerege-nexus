@@ -113,22 +113,6 @@ var blueprints = map[string]blueprint{
 			{ID: "signing-keys", EN: "Signing keys", Icon: "key-square", Labels: map[string]string{
 				"mn": "Гарын үсгийн түлхүүр", "ar": "مفاتيح التوقيع", "zh": "签名密钥", "fr": "Clés de signature", "ru": "Ключи подписи", "es": "Claves de firma"}},
 		}},
-
-	"io.gerege.nexus.gov_services": {Slug: "gov-services",
-		Modules: []futureMenu{
-			{ID: "requests", EN: "Service requests", Icon: "inbox", Labels: map[string]string{
-				"mn": "Үйлчилгээний хүсэлт", "ar": "طلبات الخدمة", "zh": "服务申请", "fr": "Demandes de service", "ru": "Заявки на услуги", "es": "Solicitudes de servicio"}},
-			{ID: "appointments", EN: "Appointments", Icon: "calendar-clock", Labels: map[string]string{
-				"mn": "Цаг захиалга", "ar": "المواعيد", "zh": "预约", "fr": "Rendez-vous", "ru": "Записи на приём", "es": "Citas"}},
-		},
-		Settings: []futureMenu{
-			{ID: "catalog", EN: "Service catalog", Icon: "landmark", Labels: map[string]string{
-				"mn": "Үйлчилгээний каталог", "ar": "كتالوج الخدمات", "zh": "服务目录", "fr": "Catalogue de services", "ru": "Каталог услуг", "es": "Catálogo de servicios"}},
-			{ID: "workflow", EN: "Decision workflow", Icon: "workflow", Labels: map[string]string{
-				"mn": "Шийдвэрлэх урсгал", "ar": "سير اتخاذ القرار", "zh": "决策流程", "fr": "Flux de décision", "ru": "Процесс принятия решений", "es": "Flujo de decisión"}},
-			{ID: "sla", EN: "Service levels", Icon: "timer", Labels: map[string]string{
-				"mn": "Үйлчилгээний түвшин", "ar": "مستويات الخدمة", "zh": "服务级别", "fr": "Niveaux de service", "ru": "Уровни обслуживания", "es": "Niveles de servicio"}},
-		}},
 }
 
 // The two group headers every app's menu hangs under.

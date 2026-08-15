@@ -8,7 +8,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
@@ -33,7 +32,7 @@ import (
 // defined, once here — and the two have to agree.
 //
 // The modules are nil pointers. None of these methods touches a field, and
-// constructing eleven modules would drag in a database, an HTTP client and the
+// constructing ten modules would drag in a database, an HTTP client and the
 // government integration manager to ask each of them a constant.
 var corePolicies = map[string]struct {
 	module         nexus.Module
@@ -46,13 +45,11 @@ var corePolicies = map[string]struct {
 	"billing":     {(*billing.BillingModule)(nil), "billing.read", "billing", ""},
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
 
-	// The three that gate themselves, and why the verb is not enough for them.
+	// The two that gate themselves, and why the verb is not enough for them.
 	"documents": {(*documents.DocumentsModule)(nil), "documents.read", "",
 		"who may read a document depends on who it was shared with"},
 	"egov": {(*egov.Module)(nil), "egov.read", "",
 		"a citizen-registry lookup is a GET that must not be a read every member holds"},
-	"gov_services": {(*gov_services.Module)(nil), "gov.read", "",
-		"an approval depends on the applicant's unit and the workflow step"},
 }
 
 func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
@@ -100,8 +97,8 @@ func TestTheModulesWithNoPolicyAreTheOnesWeMeant(t *testing.T) {
 // entry in internal/apps has to be classified in one of the two tables above
 // before this passes.
 func TestEveryModuleInThisRepositoryIsClassified(t *testing.T) {
-	const classified = 8 + 3 // corePolicies + the deliberately-empty ones
-	const inRepository = 11  // directories under internal/apps holding a module
+	const classified = 7 + 3 // corePolicies + the deliberately-empty ones
+	const inRepository = 10  // directories under internal/apps holding a module
 
 	if classified != inRepository {
 		t.Fatalf("%d modules classified, %d in the repository — a new module "+

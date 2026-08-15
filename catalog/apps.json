@@ -336,48 +336,6 @@
     }
   },
   {
-    "id": "io.gerege.nexus.gov_services",
-    "slug": "gov-services",
-    "name": "State Services",
-    "description": "Configurable government service requests: organizational hierarchy, versioned workflows, delegation and verification.",
-    "icon_url": "/icons/gov_services.png",
-    "category": "Public Service",
-    "visibility": "public",
-    "version": "1.1.0",
-    "translations": {
-      "mn": {
-        "name": "Төрийн үйлчилгээ",
-        "description": "Тохируулж болох төрийн үйлчилгээний хүсэлт: байгууллагын бүтэц, хувилбартай урсгал, шилжүүлэлт ба баталгаажуулалт.",
-        "category": "Төрийн үйлчилгээ"
-      },
-      "ar": {
-        "name": "الخدمات الحكومية",
-        "description": "طلبات الخدمات الحكومية القابلة للتهيئة: الهيكل التنظيمي وسير العمل بإصدارات والتفويض والتحقق.",
-        "category": "الخدمة العامة"
-      },
-      "zh": {
-        "name": "政务服务",
-        "description": "可配置的政务服务申请：组织层级、版本化流程、委派与核验。",
-        "category": "公共服务"
-      },
-      "fr": {
-        "name": "Services publics",
-        "description": "Demandes de services publics configurables : hiérarchie organisationnelle, flux versionnés, délégation et vérification.",
-        "category": "Service public"
-      },
-      "ru": {
-        "name": "Государственные услуги",
-        "description": "Настраиваемые заявки на государственные услуги: организационная иерархия, версионные процессы, делегирование и проверка.",
-        "category": "Государственная служба"
-      },
-      "es": {
-        "name": "Servicios públicos",
-        "description": "Solicitudes de servicios públicos configurables: jerarquía organizativa, flujos versionados, delegación y verificación.",
-        "category": "Servicio público"
-      }
-    }
-  },
-  {
     "id": "io.gerege.nexus.esign",
     "slug": "esign",
     "name": "PDF E-Sign",

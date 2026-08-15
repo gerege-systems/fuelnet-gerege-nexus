@@ -13,6 +13,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Removed — State Services left, and is a product of its own
+
+The second distribution split. `apps/gov_services` now lives in
+[gov-gerege-nexus](https://github.com/gerege-systems/gov-gerege-nexus).
+
+**No composition image, and nexus.gerege.mn simply stops offering the app.**
+That was not the plan an hour before it shipped; the plan was a repository whose
+only job is to build core-plus-verticals into one image for this deployment.
+Production answered the question instead. It carries two tenants; the app is
+installed on one of them and disabled there; `gov_services`, `gov_applications`
+and `gov_appointments` hold zero rows between them. A repository, a pipeline and
+their maintenance, to keep showing an app nobody has switched on. The ecosystem
+strategy tells distributions to choose the lower level when in doubt (§1), and
+the rule reads the same when it is pointed at us.
+
+The distribution exists and is green, so the day somebody wants State Services
+it is a deployment rather than a project.
+
+- Gone from here: the module package, `catalog/manifests/gov-services.json`,
+  its chronicle, its entry in `catalog/apps.json`, and its menu blueprint.
+- **Migrations `00006` and `00007` stay**, for the reason `00038` stayed when
+  the App Store left: they have run on every deployment in the field, and
+  removing an applied migration buys a tidier directory at the price of a
+  history that no longer describes the database.
+- **The frontend pages stay** — `app/module/gov-services/*` and
+  `components/gov/*`. The shell is one image serving every deployment, so it
+  carries the union of first-party screens; without the module behind them the
+  pages are inert, unlisted in the menu because menus are built from registered
+  modules, and refused by the API. See `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.3.
+- The stale `app_installations` row on that one tenant is harmless: the
+  compile-time check runs on install, not at boot, so a row without code mounts
+  no routes and lists no menu.
+
+
 ## [1.2.0] - 2026-08-15
 
 ### Added — a module can now state its own access policy, and book a meeting

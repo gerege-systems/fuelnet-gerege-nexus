@@ -13,7 +13,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/gov_services"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/inventory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/products"
@@ -54,7 +53,6 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	inventory.New(p, false)
 	billing.New(p)
 	documents.New(p)
-	gov_services.New(p, integration.AsMeetingBooker(integrations))
 	sso_clients.New(sso)
 	// The App Store's three modules used to be constructed here. They are a
 	// product of their own now — github.com/gerege-systems/appstore-gerege-nexus
