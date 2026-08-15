@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A distribution can read its own catalogue
+
+`catalog.LoadFile` and the pieces under it — `LoadEntries`, `Assemble`,
+`LoadManifest`, `LoadChronicleFile`, `ReleaseNotesFor` — moved from
+`internal/platform/appcatalog` into the contract package.
+
+The App Store found this the way these things are always found. A test wanting
+to check its bundled catalogue against the modules compiled beside it could not
+read the catalogue: the loader was in `internal/`, which is the rule that makes
+distributions possible, working exactly as designed and against the product it
+was designed for. The alternative was a second implementation of "how a
+catalogue is read" — a second answer to whether a manifest is valid, agreeing
+with the first until the day a deployment and the store it publishes to
+disagreed about an app nobody had touched.
+
+The platform's own loader is now three lines over the public one, keeping the
+one thing that is genuinely this repository's: the deprecated app-id renames,
+which no distribution should inherit.
+
 ## [1.5.0] - 2026-08-15
 
 ### Added — Apps can be published to named platforms instead of to all of them
