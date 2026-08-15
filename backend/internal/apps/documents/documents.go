@@ -184,6 +184,11 @@ func New(p nexus.Platform) *DocumentsModule {
 		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
 	}
 	nexus.Register(m)
+	// The capability, published for every other module — see filer.go. Done
+	// here rather than in the platform's boot so that a distribution which
+	// constructs this module gets it too, and one that does not gets the
+	// honest ErrNoDocumentFiler.
+	nexus.UseDocumentFiler(filer{m})
 	return m
 }
 

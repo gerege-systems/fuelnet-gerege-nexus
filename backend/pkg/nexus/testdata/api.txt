@@ -12,6 +12,17 @@
   DB.QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
   Dependency.ID string
   Dependency.VersionConstraint string
+  DocumentDraft.Title string
+  DocumentDraft.Type string
+  DocumentFiler.Document(ctx context.Context, tenantID, documentID string) (FiledDocument, error)
+  DocumentFiler.File(ctx context.Context, tenantID string, draft DocumentDraft) (FiledDocument, error)
+  FiledDocument.ID string
+  FiledDocument.RequiredSignatures int
+  FiledDocument.SignatureCount int
+  FiledDocument.SignedAt *time.Time
+  FiledDocument.Status string
+  FiledDocument.Title string
+  FiledDocument.Type string
   Meeting.ExternalID string
   Meeting.IntegrationID string
   Meeting.IntegrationName string
@@ -96,6 +107,7 @@ const ParamText
 const ParamUUID
 const ReportCounterpartyKey
 const ReportScopeFull
+func (FiledDocument) Signed() bool
 func (MenuDefinition) LocalizedLabel(locale string) string
 func (Params) Bool(key string) bool
 func (Params) Counterparty() string
@@ -107,6 +119,7 @@ func (Params) UUID(key string) string
 func AllowedTenants(ctx context.Context) []string
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error)
+func Documents() (DocumentFiler, error)
 func Error(w http.ResponseWriter, status int, message string)
 func Get(id string) (Module, bool)
 func JSON(w http.ResponseWriter, status int, value any)
@@ -123,6 +136,7 @@ func RoutePermissionPrefixOf(m Module) string
 func TenantID(ctx context.Context) (string, error)
 func TenantOf(ctx context.Context) string
 func UseAuditSink(sink AuditSink)
+func UseDocumentFiler(filer DocumentFiler)
 func UseReportSink(sink func(Report))
 func UserFromContext(ctx context.Context) (UserClaims, error)
 func VerifyModuleExists(id string) error
@@ -137,6 +151,9 @@ type ColumnKind string
 type ColumnSpec struct
 type DB interface
 type Dependency struct
+type DocumentDraft struct
+type DocumentFiler interface
+type FiledDocument struct
 type Meeting struct
 type MeetingBooker interface
 type MeetingConnector struct
@@ -156,5 +173,6 @@ type Result struct
 type Rows interface
 type UserClaims struct
 var ErrForbidden
+var ErrNoDocumentFiler
 var ErrTenantMissing
 var ErrUnauthenticated
