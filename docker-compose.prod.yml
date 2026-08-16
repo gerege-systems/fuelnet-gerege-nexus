@@ -240,6 +240,39 @@ services:
       APP_CATALOG_TOKEN: ${APP_CATALOG_TOKEN:-}
       CATALOG_SYNC_INTERVAL: ${CATALOG_SYNC_INTERVAL:-1h}
       CATALOG_CACHE_PATH: /var/lib/nexus/catalog.cache.json
+      # «Өртөө» — платформ хоорондын даалгаврын суваг (docs/URTUU.md).
+      #
+      # Түлхүүргүй бол суваг УНТРААЛТТАЙ бөгөөд платформ хэвийн асна: холбоос
+      # үүсгэх боломжгүй, /.well-known/urtuu.json нь "энэ суулгац Өртөө
+      # ажиллуулдаггүй" гэж хариулна. Тавьсан цагаас эхлэн энэ суулгац
+      # өөрийн мөртэй болно — түлхүүрээс гарах суулгацын ID нь даалгаврын
+      # мөчлөгийн хамгаалалт, холбоос бүрийн token хоёрын үндэс.
+      #
+      # Үүсгэх: openssl rand -base64 32
+      #
+      # СОЛИХГҮЙ. Түлхүүр солигдвол суулгацын ID өөрчлөгдөж, одоо байгаа
+      # холбоос бүрийн token хүчингүй болж, нөгөө талын хадгалсан нийтийн
+      # түлхүүр буруу болно. Холбоосын мөр бүр installation_id-тай тул
+      # тэдгээр нь чимээгүй унтрахгүй — аль нь хуучин түлхүүрээрх болохыг
+      # нэрлэнэ — гэхдээ дахин байгуулах хэрэгтэй болно.
+      URTUU_SIGNING_KEY: ${URTUU_SIGNING_KEY:-}
+      # http:// хаягтай холбоос зөвшөөрөх эсэх. Анхдагчаар хаалттай: холбоосын
+      # token нь Authorization толгойгоор явдаг тул http дээр байгуулсан
+      # холбоос түүнийг замд байгаа бүх хүнд өгнө. Төрийн хаалттай сүлжээн
+      # дэх суулгацууд л зориудаар асаана.
+      URTUU_ALLOW_INSECURE_PEERS: ${URTUU_ALLOW_INSECURE_PEERS:-false}
+      # Хүсэлтийн кодын эх сурвалж — ring.dgov.mn (docs/RING_STANDARD.md).
+      # Гурвуулаа хоосон бол импорт унтраалттай, локал кодууд ажиллана.
+      # RING_PUBLIC_KEY-гүй бол импорт БАЙХГҮЙ: шалгагдаагүй бүртгэл нь бүх
+      # суулгац дээрх кодын утга, хугацааны нормыг өөрчлөх эрхтэй баримт.
+      RING_BASE_URL: ${RING_BASE_URL:-}
+      RING_API_KEY: ${RING_API_KEY:-}
+      RING_PUBLIC_KEY: ${RING_PUBLIC_KEY:-}
+      # Агшинг ӨДӨР болгож бууруулах цагийн бүс: хэрэглээний тоолуур, тайлангийн
+      # огнооны муж, cron-ий цаг, бүртгэлийн дугаарын он. Хадгалалт хөндөгдөхгүй
+      # — багана бүр timestamptz хэвээр. Өгөгдлийн сангийн session мөн үүгээр
+      # тохируулагдана (dbguard), тиймээс Go болон SQL хоёр нэг календарь уншина.
+      PLATFORM_TIMEZONE: ${PLATFORM_TIMEZONE:-Asia/Ulaanbaatar}
       # Observability. Both empty by default, and empty is genuinely off: no
       # exporter, no batch processor, no background goroutine. The monitoring
       # stack (deploy/docker-compose.monitoring.yml) runs the Tempo this points
