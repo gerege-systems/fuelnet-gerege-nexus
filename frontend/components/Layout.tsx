@@ -106,6 +106,12 @@ function currentPath(pathname:string,paths:string[]){
   return best;
 }
 
+// The organisation app, named because the shell treats it differently: its
+// screens are rendered in the platform's own menu group instead of behind a
+// tile in the app rail. It is the organisation you are signed in to, not one of
+// the things installed into it.
+const ORGANISATION_APP="io.gerege.nexus.organisation";
+
 const APP_ORDER=["io.gerege.nexus.organisation","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.sso_clients","io.gerege.nexus.gov_services"];
 
 export default function Layout({children}:{children:React.ReactNode}){
@@ -204,7 +210,19 @@ export default function Layout({children}:{children:React.ReactNode}){
       return[{id,name:first.label||first.app_name||id,icon:first.icon,path:first.path||first.external_url!,externalUrl:first.path?undefined:first.external_url,menus:sorted}];
     }).sort((a,b)=>{const ai=APP_ORDER.indexOf(a.id),bi=APP_ORDER.indexOf(b.id);return (ai<0?999:ai)-(bi<0?999:bi)||a.id.localeCompare(b.id)});
   },[menus]);
-  const selected=apps.find(app=>app.menus.some(m=>m.path&&isUnder(pathname,m.path)))||null;
+  // The organisation is presented by the platform rather than as an app in the
+  // rail, and this is the line that makes that true rather than merely drawn.
+  //
+  // Its screens are still the module's — the server sends them only when the
+  // app is installed and enabled, which is what keeps the links honest on a
+  // tenant that has removed it — but they are rendered inside the platform's
+  // own group. Left in the rail as well, clicking one of them selected the app,
+  // and selecting an app replaces the whole sidebar: the menu you clicked in
+  // disappeared and you were somewhere else. The screens are the same; where
+  // you are should not change under you for opening one.
+  const organisation=apps.find(app=>app.id===ORGANISATION_APP)||null;
+  const railApps=useMemo(()=>apps.filter(app=>app.id!==ORGANISATION_APP),[apps]);
+  const selected=railApps.find(app=>app.menus.some(m=>m.path&&isUnder(pathname,m.path)))||null;
   const platformActive=!selected;
   const searchIndex=useMemo(()=>[
     {label:t("web.menu.app_store"),app:t("web.label.platform"),path:"/apps",icon:"grid"},
@@ -248,7 +266,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",external:false,active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},
-    ...apps.map(app=>({id:app.id,href:app.path,external:!!app.externalUrl,active:selected?.id===app.id,label:app.name,icon:iconMap[app.icon]||<Package className="w-5 h-5"/>})),
+    ...railApps.map(app=>({id:app.id,href:app.path,external:!!app.externalUrl,active:selected?.id===app.id,label:app.name,icon:iconMap[app.icon]||<Package className="w-5 h-5"/>})),
   ];
   const hasMobileMore=mobileAppTabs.length>5;
   const primaryMobileTabs=hasMobileMore?mobileAppTabs.slice(0,4):mobileAppTabs;
@@ -267,13 +285,17 @@ export default function Layout({children}:{children:React.ReactNode}){
         and edit — the organisation itself — not a switch that changes how the
         platform behaves. */}
     <NavLink href="/organisation" active={pathname==="/organisation"} icon={<Building2 className="w-5 h-5"/>} label={t("web.menu.organisation")}/>
-    {/* Its two screens, next in the list rather than nested under it. They were
+    {/* Its screens, next in the list rather than nested under it. They were
         indented for a while, which made them look like a second level this
         sidebar does not otherwise have — one entry with children, in a menu
         where nothing else has any. Ordinary rows in the order you would open
-        them: the organisation, how it is arranged, who is in it. */}
-    <NavLink href="/organisation/departments" active={pathname==="/organisation/departments"} icon={<Network className="w-5 h-5"/>} label={t("web.menu.departments")}/>
-    <NavLink href="/organisation/people" active={pathname==="/organisation/people"} icon={<Users className="w-5 h-5"/>} label={t("web.menu.people")}/>
+        them: the organisation, how it is arranged, who is in it.
+        Taken from the server rather than written out here, so a tenant that
+        has removed the app sees the profile screen and not two links to 403s —
+        and so the labels stay in the seven languages the module declares. */}
+    {organisation?.menus.filter(item=>item.path).map(item=>
+      <NavLink key={item.id} href={item.path!} active={item.path===pathname}
+        icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}
   </MenuGroup><MenuGroup id={PLATFORM_GROUPS.settings} title={t("web.group.settings")} closed={closedGroups.includes(PLATFORM_GROUPS.settings)} onToggle={toggleGroup}>
     {/* Under Settings, where its screen already lives: /settings/apps is what
         the address bar says, and a sidebar that files it under Modules asks
@@ -311,7 +333,7 @@ export default function Layout({children}:{children:React.ReactNode}){
       <div className="gerege-sidebar bottom-0 left-0 z-40 flex overflow-hidden is-desktop-open">
         <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
-          {apps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+          {railApps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
         </nav>
         <aside className="gerege-menu-panel overflow-hidden">
           <div className="w-56 py-4"><nav className="space-y-1 px-2">
@@ -382,7 +404,7 @@ export default function Layout({children}:{children:React.ReactNode}){
       <div className={`gerege-sidebar top-16 bottom-0 left-0 z-40 flex overflow-hidden ${mobileOpen?"is-mobile-open":""} ${panelOpen?"is-desktop-open":""}`}>
         <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
-          {apps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+          {railApps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
         </nav>
         <aside className="gerege-menu-panel overflow-hidden">
           <div className="w-56 py-4">

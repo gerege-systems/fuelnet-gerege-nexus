@@ -12,11 +12,6 @@ export const web = {
   "web.menu.integrations": { mn: "Интеграцууд", en: "Integrations" },
   "web.menu.settings": { mn: "Тохиргоо", en: "Settings" },
   "web.menu.organisation": { mn: "Байгууллага", en: "Organisation" },
-  // The two screens that hang under it. Their labels also reach the sidebar
-  // from the module, in seven languages, when the app itself is selected —
-  // these are the platform sidebar's copy, where there is no module to ask.
-  "web.menu.departments": { mn: "Хэлтэс, нэгж", en: "Departments" },
-  "web.menu.people": { mn: "Ажилтнууд", en: "People" },
   "web.menu.appearance": { mn: "Харагдац", en: "Appearance" },
   "web.menu.preferences": { mn: "Тохиргоо", en: "Preferences" },
   "web.menu.ai_settings": { mn: "AI тохиргоо", en: "AI settings" },
