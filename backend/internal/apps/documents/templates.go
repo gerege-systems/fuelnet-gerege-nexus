@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/go-chi/chi/v5"
@@ -86,7 +87,7 @@ func resolveTitlePattern(pattern string, now time.Time) string {
 	replacements := []string{
 		"{year}", strconv.Itoa(now.Year()),
 		"{month}", fmt.Sprintf("%02d", int(now.Month())),
-		"{date}", now.Format("2006-01-02"),
+		"{date}", now.In(config.Location()).Format("2006-01-02"),
 	}
 	return strings.NewReplacer(replacements...).Replace(pattern)
 }

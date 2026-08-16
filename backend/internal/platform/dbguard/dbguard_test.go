@@ -5,7 +5,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/google/uuid"
@@ -272,5 +274,40 @@ func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
 	}
 	if alone != 1 {
 		t.Fatalf("a session with no active set saw %d organisations' rows", alone)
+	}
+}
+
+// Every connection this pool hands out reads a calendar on the platform's
+// clock.
+//
+// This is what makes `created_at::date`, `CURRENT_DATE` and `date_trunc` agree
+// with the Go side across the whole codebase, and it is asserted here because
+// Install is the one place every pool in this repository is configured — the
+// production one and every database-backed test's. A pool built without it
+// would answer with the server's default, which is UTC, and every daily figure
+// would belong to a day that ends at eight in the morning in Ulaanbaatar.
+func TestConnectionsReadTheCalendarOnThePlatformsClock(t *testing.T) {
+	pool := openGuardedPool(t)
+
+	var zone string
+	if err := pool.QueryRow(context.Background(), `SELECT current_setting('timezone')`).Scan(&zone); err != nil {
+		t.Fatalf("read the session timezone: %v", err)
+	}
+	if zone != config.TimezoneName() {
+		t.Errorf("connections are in %q, want the platform's %q", zone, config.TimezoneName())
+	}
+
+	// And the reduction that matters actually follows it: the same instant, in
+	// two zones twenty-six hours apart, is one date to the database.
+	instant := time.Date(2026, 8, 16, 3, 0, 0, 0, time.UTC)
+	var east, west string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT ($1::timestamptz)::date::text, ($2::timestamptz)::date::text`,
+		instant.In(time.FixedZone("east", 14*3600)),
+		instant.In(time.FixedZone("west", -12*3600))).Scan(&east, &west); err != nil {
+		t.Fatalf("reduce an instant to a date: %v", err)
+	}
+	if east != west {
+		t.Errorf("one instant became two dates (%s and %s); the reduction is following the caller's zone", east, west)
 	}
 }

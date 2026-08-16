@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,6 +119,26 @@ type Guard struct {
 // or a later change that reaches for the current hook would silently switch
 // this one off, and the isolation would be gone with nothing to show for it.
 func (g *Guard) Install(cfg *pgxpool.Config) {
+	// The platform's clock, on every connection this pool hands out.
+	//
+	// It sits here rather than beside the pool because this is the one place
+	// every pool in this codebase is configured — production's in
+	// pkg/platform/run.go and every database-backed test's — and a second call
+	// somebody has to remember is how a timezone bug comes back. It is a
+	// connection parameter rather than a statement, so it is set once when the
+	// connection is made and costs nothing per query.
+	//
+	// What it decides: `created_at::date`, `CURRENT_DATE`, `date_trunc` and
+	// every other reduction of an instant to a calendar. Postgres stores
+	// timestamptz as an instant; the session's zone is what reads it. Left to
+	// the server's default the answer would be UTC, and a daily figure for a
+	// Mongolian office would end at eight in the morning — see
+	// internal/platform/config/timezone.go.
+	if cfg.ConnConfig.RuntimeParams == nil {
+		cfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	cfg.ConnConfig.RuntimeParams["timezone"] = config.TimezoneName()
+
 	cfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
 		if !g.enabled.Load() {
 			return true, nil

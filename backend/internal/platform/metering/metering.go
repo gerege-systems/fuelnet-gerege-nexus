@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -100,6 +101,10 @@ func (c *Collector) Start(ctx context.Context) {
 const collectionHour = 1
 
 func untilNextRun(now time.Time) time.Duration {
+	// On the platform's clock, so "a little after midnight" is the midnight the
+	// people using this platform have rather than the one the container was
+	// built with.
+	now = now.In(config.Location())
 	next := time.Date(now.Year(), now.Month(), now.Day(), collectionHour, 10, 0, 0, now.Location())
 	if !next.After(now) {
 		next = next.AddDate(0, 0, 1)
@@ -116,14 +121,14 @@ func (c *Collector) CollectDay(ctx context.Context, day time.Time) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	date := day.Format("2006-01-02")
 	for metric, query := range queries {
-		if err := c.collect(ctx, metric, query, date); err != nil {
+		if err := c.collect(ctx, metric, query, day); err != nil {
 			// One metric failing must not stop the others: a platform whose
 			// storage query is slow should still know how many people signed
 			// in.
 			slog.Warn("metering: could not collect a metric",
-				"metric", metric, "day", date, "error", err)
+				"metric", metric, "day", day.In(config.Location()).Format("2006-01-02"),
+				"error", err)
 		}
 	}
 }
@@ -133,6 +138,14 @@ func (c *Collector) CollectDay(ctx context.Context, day time.Time) {
 // Each takes the day as $1 and produces (tenant_id, value). They run on the
 // platform path — the collector is not anybody's request — and every one of
 // them is a plain aggregate over a table that carries a tenant_id.
+//
+// `$1::timestamptz::date` and not `$1::date`, and the difference is the whole
+// bug this once had. A bare `$1::date` lets Postgres infer the parameter as a
+// date, so the driver reduces the Go value to a calendar date using *its own*
+// zone before the database ever sees it — which is the process's zone, not the
+// platform's. Casting through timestamptz forces the parameter to be an
+// instant, and the reduction then happens in the session's zone, the same one
+// `created_at::date` uses. One rule, applied on one side of the wire.
 var queries = map[string]string{
 	// Somebody whose session was used that day. `last_seen_at` rather than
 	// created_at: a person who signed in on Monday and worked through Friday
@@ -141,26 +154,26 @@ var queries = map[string]string{
 	ActiveUsers: `
 		SELECT tenant_id, count(DISTINCT user_id)
 		  FROM sessions
-		 WHERE last_seen_at::date = $1::date
+		 WHERE last_seen_at::date = $1::timestamptz::date
 		 GROUP BY tenant_id`,
 
 	Actions: `
 		SELECT tenant_id, count(*)
 		  FROM audit_events
-		 WHERE created_at::date = $1::date AND tenant_id IS NOT NULL
+		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		 GROUP BY tenant_id`,
 
 	AICalls: `
 		SELECT tenant_id, count(*)
 		  FROM audit_events
-		 WHERE created_at::date = $1::date AND tenant_id IS NOT NULL
+		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		   AND action LIKE 'ai.%'
 		 GROUP BY tenant_id`,
 
 	ReportsSent: `
 		SELECT tenant_id, count(*)
 		  FROM audit_events
-		 WHERE created_at::date = $1::date AND tenant_id IS NOT NULL
+		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		   AND action LIKE 'reports.%'
 		 GROUP BY tenant_id`,
 
@@ -183,16 +196,23 @@ var queries = map[string]string{
 // The day and the metric name are parameters of the *outer* statement, so a
 // counting query is free to ignore the day — the storage one does, because it
 // measures what is being kept now rather than what happened then.
-func (c *Collector) collect(ctx context.Context, metric, query, date string) error {
+//
+// The day is passed as an *instant* and reduced to a date by Postgres, not
+// formatted here — see the note on `queries` for why the cast has to go through
+// timestamptz for that to actually be true. Formatting it in Go used the
+// process's zone while `created_at::date` used the database's, so on a machine
+// east of UTC the collector spent the small hours counting a day the database
+// had not reached: every figure came back zero, and nothing said why.
+func (c *Collector) collect(ctx context.Context, metric, query string, day time.Time) error {
 	// The insert and the count in one statement: the alternative reads every
 	// row into Go to write it straight back, which is a round trip per
 	// organisation for no reason.
 	_, err := c.db.Exec(ctx, fmt.Sprintf(`
 		INSERT INTO usage_events (tenant_id, day, metric, value, recorded_at)
-		SELECT tenant_id, $1::date, $2, value, NOW() FROM (%s) AS counted(tenant_id, value)
+		SELECT tenant_id, $1::timestamptz::date, $2, value, NOW() FROM (%s) AS counted(tenant_id, value)
 		ON CONFLICT (tenant_id, day, metric)
 		DO UPDATE SET value = EXCLUDED.value, recorded_at = NOW()`, query),
-		date, metric)
+		day, metric)
 	return err
 }
 

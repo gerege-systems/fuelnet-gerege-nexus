@@ -9,6 +9,7 @@
 package reporting
 
 import (
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"fmt"
@@ -153,7 +154,11 @@ func parseDate(given string, fallback time.Time) (time.Time, error) {
 	if given == "" {
 		return time.Date(fallback.Year(), fallback.Month(), fallback.Day(), 0, 0, 0, 0, fallback.Location()), nil
 	}
-	return time.ParseInLocation("2006-01-02", given, time.Local)
+	// The platform's clock, not the process's. "2026-08-16" typed into a report
+	// form means that day in Ulaanbaatar; on a UTC container time.Local would
+	// have made it a window shifted by eight hours, quietly dropping the
+	// evening's rows out of one report and into the next.
+	return time.ParseInLocation("2006-01-02", given, config.Location())
 }
 
 func hasOption(options []ParamOption, value string) bool {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -84,7 +85,11 @@ func (s *Scheduler) sweep(ctx context.Context) {
 	sweepCtx, cancel := context.WithTimeout(ctx, 55*time.Second)
 	defer cancel()
 
-	due, err := s.claimDue(sweepCtx, time.Now())
+	// On the platform's clock: "0 8 * * 1" means eight on Monday morning in
+	// Ulaanbaatar, which is what the person who typed it meant. Matches reads
+	// the wall-clock fields of whatever it is given, so the zone has to be
+	// decided here rather than left to the container's.
+	due, err := s.claimDue(sweepCtx, config.Now())
 	if err != nil {
 		slog.Error("reports: could not read the schedules", "error", err)
 		return
@@ -303,7 +308,7 @@ func (s *Scheduler) produceAndDeliver(ctx context.Context, schedule dueSchedule)
 	}
 	body := fmt.Sprintf(
 		"%s\n\nХугацаа: %s\nМөрийн тоо: %d\n\nЭнэ бол Gerege Nexus-ийн товлосон тайлан. Хавсралтыг үзнэ үү.\n",
-		title, time.Now().Format("2006-01-02 15:04"), len(result.Rows))
+		title, config.Now().Format("2006-01-02 15:04"), len(result.Rows))
 
 	return s.deliverer.Deliver(ctx, schedule.Recipients, subject, body,
 		Filename(report.Key(), schedule.Format), payload)

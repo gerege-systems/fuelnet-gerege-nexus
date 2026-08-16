@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 )
 
@@ -182,3 +183,58 @@ type writerTo struct{ into *strings.Builder }
 func (w *writerTo) Header() http.Header         { return http.Header{} }
 func (w *writerTo) Write(p []byte) (int, error) { return w.into.Write(p) }
 func (w *writerTo) WriteHeader(int)             {}
+
+// A figure belongs to a day on the platform's clock, whatever zone the caller
+// happens to be holding.
+//
+// The regression this pins: the collector used to format the day in Go, so the
+// date it counted was the *process's* calendar while `created_at::date` was the
+// database's. On a machine east of UTC the two disagreed for eight hours every
+// night — every figure came back zero and nothing said why.
+//
+// The caller's zone is *constructed* rather than picked, so this is not a
+// lottery that only fails at certain hours: it is whichever thirteen-hour shift
+// puts this instant on a different calendar date from the platform's. The row
+// then has to land on the platform's date and carry the count — with the day
+// taken from the caller instead, the query would look for a date the audit row
+// is not on and write nothing at all.
+func TestUsageBelongsToADayOnThePlatformsClock(t *testing.T) {
+	pool := openPool(t)
+	tenantID, _ := newTenant(t, pool)
+	userID, _ := newPerson(t, pool, tenantID)
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO audit_events (tenant_id, user_id, action, resource)
+		 VALUES ($1::uuid, $2, 'contacts.create', 'test')`, tenantID, userID); err != nil {
+		t.Fatalf("write an audit row: %v", err)
+	}
+
+	here := config.Now()
+	shift := 13 * time.Hour
+	if here.Hour() < 11 {
+		shift = -shift
+	}
+	_, offset := here.Zone()
+	elsewhere := here.In(time.FixedZone("elsewhere", offset+int(shift.Seconds())))
+	if elsewhere.Day() == here.Day() {
+		t.Fatalf("the test built a zone that does not move the date (%s vs %s)",
+			elsewhere.Format(time.RFC3339), here.Format(time.RFC3339))
+	}
+
+	metering.New(pool).CollectDay(ctx, elsewhere)
+
+	var day time.Time
+	var value int64
+	if err := pool.QueryRow(ctx,
+		`SELECT day, value FROM usage_events WHERE tenant_id = $1::uuid AND metric = $2`,
+		tenantID, metering.Actions).Scan(&day, &value); err != nil {
+		t.Fatalf("the collection wrote nothing; it counted the caller's day rather than the platform's: %v", err)
+	}
+	if got, want := day.Format("2006-01-02"), here.Format("2006-01-02"); got != want {
+		t.Errorf("the figure was filed under %s, want the platform's %s", got, want)
+	}
+	if value != 1 {
+		t.Errorf("actions counted %d, want 1", value)
+	}
+}
