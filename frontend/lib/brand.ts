@@ -36,6 +36,33 @@ export type Brand = {
   logoUrl: string;
   /** The browser and launcher chrome colour, as a CSS hex colour. */
   themeColor: string;
+  /**
+   * The icon a launcher, a tab and a home screen use — the tab favicon, the
+   * Apple touch icon and the manifest's own entry, all from one address.
+   *
+   * A separate value from the logo because they are different pictures doing
+   * different jobs: the logo sits in a header beside a name, at 36 pixels, on
+   * the page's own background; the icon stands alone at 512 on somebody's home
+   * screen and needs its own ground under it. A deployment that has only one
+   * image can point both here.
+   *
+   * Empty means the icons this image was built with — which is the honest
+   * default: an icon set is files, and a deployment that has not supplied one
+   * has not got one.
+   */
+  iconUrl: string;
+  /**
+   * The same icon drawn for a launcher that crops it — Android's adaptive
+   * icons, which cut a circle or a squircle out of whatever they are given.
+   *
+   * Separate and optional because a maskable icon is not a resize: the artwork
+   * has to bleed to the edge and keep everything that matters inside a safe
+   * zone, so declaring an ordinary square icon maskable gets its corners cut
+   * off. Unset means no maskable entry is published at all, and the launcher
+   * masks the ordinary one itself — which is the same picture, and visibly
+   * cropped rather than silently wrong.
+   */
+  maskableIconUrl: string;
 };
 
 export const DEFAULT_BRAND: Brand = {
@@ -45,4 +72,8 @@ export const DEFAULT_BRAND: Brand = {
     "Төрийн болон хувийн хэвшлийн байгууллагын үйлчилгээ, үйл ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ.",
   logoUrl: "/brand.webp",
   themeColor: "#1869eb",
+  // The icons that ship in the image. See app/manifest.ts for why the maskable
+  // one is separate artwork rather than the same file relabelled.
+  iconUrl: "",
+  maskableIconUrl: "",
 };

@@ -15,6 +15,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — A deployment can supply its own app icon
+
+`BRAND_ICON_URL` and `BRAND_MASKABLE_ICON_URL` join the brand: the tab favicon,
+the Apple touch icon and the manifest's icon all follow the first, and the
+second is published only when a deployment has artwork drawn for cropping.
+
+When the brand work landed, icons were the one thing deliberately left in the
+image — "the logo is an address, the icons are files". That was half true. The
+*files* cannot be handed to a built image; the *addresses* can, exactly as the
+logo's is, and a deployment serving its own logo already has somewhere to put
+one. Nothing is resized or generated here: the platform points at what it is
+given.
+
+- **Two variables, not one**, because a maskable icon is not a resize. Android
+  crops an adaptive icon to a circle, so artwork that does not bleed to the edge
+  with its subject inside a safe zone comes out with its corners missing.
+  Unset publishes no maskable entry at all, and the launcher crops the ordinary
+  icon itself — visibly a crop rather than quietly wrong.
+- A supplied icon is declared `sizes: "any"`. The deployment's file is whatever
+  size it is and nothing here can measure it; claiming 512×512 over a 144-pixel
+  picture is a claim the browser believes and then draws blurred.
+- **The favicon moved from `app/favicon.ico` to `public/`.** As a file
+  convention Next emits a `<link rel="icon">` for it unconditionally, so a
+  deployment that named its own ended up with two icon links and which one the
+  browser drew was a coin toss. In `public/` it is an ordinary file at the same
+  address, named in the metadata when nothing overrides it — exactly one link
+  either way.
+
 ### Fixed — Гарын үсэг зурагдсан мөр наносекундаа алдаж байсныг зассан
 
 Гарах дугтуйн `created_at` нь TIMESTAMPTZ баганад хадгалагдаж, илгээхээр

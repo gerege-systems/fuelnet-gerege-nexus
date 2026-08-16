@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { brandFromEnv } from "@/lib/brandEnv";
+import type { Brand } from "@/lib/brand";
 
 /**
  * What the browser needs before it will offer to install this as an app.
@@ -18,6 +19,46 @@ import { brandFromEnv } from "@/lib/brandEnv";
 // name of whoever built the image. This is the file where that would show
 // hardest — an installed app keeps what the manifest said.
 export const dynamic = "force-dynamic";
+
+// What a launcher installs.
+//
+// The icons that ship in the image unless the deployment named its own. A
+// deployment can point at an address; it cannot put a file inside an image that
+// was built without it, which is the whole reason this is an address and not an
+// upload.
+//
+// `sizes: "any"` for a supplied icon, because the deployment's file is whatever
+// size it is and this cannot measure it. Declaring 512x512 over a 144-pixel
+// picture would be a claim the browser believes and then draws blurred; "any"
+// is the truthful answer and is what an SVG entry says too.
+function icons(brand: Brand): MetadataRoute.Manifest["icons"] {
+  if (!brand.iconUrl) {
+    return [
+      { src: "/icons/app-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/app-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      // Separate artwork, not the same file relabelled. A launcher that crops
+      // to a circle would otherwise cut the corners off the card and leave four
+      // pale notches; this one bleeds to the edge and keeps the emblem inside
+      // the safe zone.
+      {
+        src: "/icons/app-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+    ];
+  }
+  const supplied: NonNullable<MetadataRoute.Manifest["icons"]> = [
+    { src: brand.iconUrl, sizes: "any", purpose: "any" },
+  ];
+  // Only when the deployment supplied artwork drawn for cropping. Relabelling
+  // the ordinary icon maskable is how a logo loses its corners on Android and
+  // nobody can say when.
+  if (brand.maskableIconUrl) {
+    supplied.push({ src: brand.maskableIconUrl, sizes: "any", purpose: "maskable" });
+  }
+  return supplied;
+}
 
 export default function manifest(): MetadataRoute.Manifest {
   const brand = brandFromEnv();
@@ -42,20 +83,7 @@ export default function manifest(): MetadataRoute.Manifest {
     // the brand blue: the icon is blue, and blue on blue loses its edges.
     background_color: "#f9fafc",
     theme_color: brand.themeColor,
-    icons: [
-      { src: "/icons/app-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icons/app-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      // Separate artwork, not the same file relabelled. A launcher that crops
-      // to a circle would otherwise cut the corners off the card and leave four
-      // pale notches; this one bleeds to the edge and keeps the emblem inside
-      // the safe zone.
-      {
-        src: "/icons/app-maskable-512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
-      },
-    ],
+    icons: icons(brand),
     // The screens people open first. A shortcut is a long-press on the icon,
     // so this is a small list of destinations rather than a second menu.
     shortcuts: [

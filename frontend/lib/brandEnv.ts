@@ -14,6 +14,8 @@ export function brandFromEnv(env: NodeJS.ProcessEnv = process.env): Brand {
     description: text(env.BRAND_DESCRIPTION) || DEFAULT_BRAND.description,
     logoUrl: assetURL(text(env.BRAND_LOGO_URL)) || DEFAULT_BRAND.logoUrl,
     themeColor: hexColour(text(env.BRAND_THEME_COLOR)) || DEFAULT_BRAND.themeColor,
+    iconUrl: assetURL(text(env.BRAND_ICON_URL)),
+    maskableIconUrl: assetURL(text(env.BRAND_MASKABLE_ICON_URL)),
   };
 }
 

@@ -30,7 +30,19 @@ export async function generateMetadata(): Promise<Metadata> {
     // status bar are decided by these instead. The short name is what there is
     // room for under an icon.
     appleWebApp: { capable: true, title: brand.shortName, statusBarStyle: "default" },
-    icons: { apple: "/icons/apple-touch-icon.png" },
+    // The tab icon and the one iOS puts on a home screen. A deployment that
+    // named its own gets it in both places; one that did not keeps the files
+    // this image was built with.
+    //
+    // The favicon moved from app/favicon.ico to public/ for this. As a file
+    // convention Next emits a <link rel="icon"> for it unconditionally, so a
+    // deployment that named its own ended up with two of them — the built-in
+    // one and the brand's — and which the browser drew was a coin toss. In
+    // public/ it is an ordinary file at the same address, named here when
+    // nothing overrides it, so there is exactly one either way.
+    icons: brand.iconUrl
+      ? { icon: brand.iconUrl, apple: brand.iconUrl }
+      : { icon: "/favicon.ico", apple: "/icons/apple-touch-icon.png" },
     // Both spellings, because the standard one is not yet the only one that
     // works. `appleWebApp.capable` above emits only `mobile-web-app-capable` —
     // the name every current browser reads, and the one Chrome warns about the

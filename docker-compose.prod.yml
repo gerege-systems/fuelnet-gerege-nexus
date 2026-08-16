@@ -342,6 +342,10 @@ services:
       BRAND_DESCRIPTION: ${BRAND_DESCRIPTION:-}
       BRAND_LOGO_URL: ${BRAND_LOGO_URL:-}
       BRAND_THEME_COLOR: ${BRAND_THEME_COLOR:-}
+      # The icon a tab and a home screen use. Empty keeps the icons the image
+      # was built with — see .env.example for why the maskable one is separate.
+      BRAND_ICON_URL: ${BRAND_ICON_URL:-}
+      BRAND_MASKABLE_ICON_URL: ${BRAND_MASKABLE_ICON_URL:-}
     ports:
       - "127.0.0.1:3008:3000"
     depends_on:
