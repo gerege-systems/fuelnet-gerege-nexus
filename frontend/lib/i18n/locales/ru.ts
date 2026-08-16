@@ -1345,6 +1345,7 @@ export const ru: Record<string, string> = {
   "website.menu.docs": "Документация",
   "website.menu.trust": "Безопасность",
   "website.message.footer_note": "На основе eID · Открытые стандарты · Secure by design",
+  "website.message.powered_by": "На основе Gerege Nexus",
   "website.stat.apps": "приложений в комплекте",
   "website.stat.binary": "бинарник для развёртывания",
   "website.stat.languages": "языков: монгольский и шесть языков ООН",

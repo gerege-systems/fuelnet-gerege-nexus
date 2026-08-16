@@ -1345,6 +1345,7 @@ export const fr: Record<string, string> = {
   "website.menu.docs": "Documentation",
   "website.menu.trust": "Sécurité",
   "website.message.footer_note": "Basé sur eID · Standards ouverts · Sécurité dès la conception",
+  "website.message.powered_by": "Propulsé par Gerege Nexus",
   "website.stat.apps": "applications incluses",
   "website.stat.binary": "binaire à déployer",
   "website.stat.languages": "langues : le mongol et les six de l'ONU",

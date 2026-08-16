@@ -181,4 +181,14 @@ export const website = {
     mn: "eID-д суурилсан · Нээлттэй стандарт · Secure by design",
     en: "Built on eID · Open standards · Secure by design",
   },
+
+  // Shown only by a deployment running under its own name — see SiteFooter.
+  //
+  // Deliberately not `{brand}`: this sentence names the platform underneath,
+  // and interpolating the deployment's own name would have Gerege Salus
+  // announcing that it is powered by Gerege Salus.
+  "website.message.powered_by": {
+    mn: "Gerege Nexus дээр суурилсан",
+    en: "Powered by Gerege Nexus",
+  },
 } as const;

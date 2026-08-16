@@ -1345,6 +1345,7 @@ export const zh: Record<string, string> = {
   "website.menu.docs": "文档",
   "website.menu.trust": "安全",
   "website.message.footer_note": "基于 eID · 开放标准 · 安全设计",
+  "website.message.powered_by": "基于 Gerege Nexus",
   "website.stat.apps": "内置应用",
   "website.stat.binary": "个待部署的二进制",
   "website.stat.languages": "种语言：蒙古语加联合国六种",

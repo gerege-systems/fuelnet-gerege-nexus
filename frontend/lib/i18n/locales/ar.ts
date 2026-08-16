@@ -1345,6 +1345,7 @@ export const ar: Record<string, string> = {
   "website.menu.docs": "التوثيق",
   "website.menu.trust": "الأمان",
   "website.message.footer_note": "مبني على eID · معايير مفتوحة · Secure by design",
+  "website.message.powered_by": "مبني على Gerege Nexus",
   "website.stat.apps": "تطبيقات مضمَّنة",
   "website.stat.binary": "ملف تنفيذي واحد للنشر",
   "website.stat.languages": "لغات: المنغولية ولغات الأمم المتحدة الست",
