@@ -15,6 +15,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — The commerce distribution is Gerege Business
+
+`commerce-gerege-nexus` is
+[`business-gerege-nexus`](https://github.com/gerege-systems/business-gerege-nexus),
+the product is **Gerege Business**, and it answers at `business.gerege.mn`. The
+repository, the Go module path, the deployment names and the domain all moved
+together; the module ids did not, because an id is what an installation row, a
+manifest and a menu key are all keyed by, and a product changing its name is no
+reason for a database to lose track of an app.
+
+Two names were deliberately left as they were, both for the same reason — they
+are not labels for the product, they are records of what has already happened:
+
+- the **Postgres volume**, still `commerce-nexus_…`, now pinned `external` in
+  the compose file. Compose derives a volume name from the project, so renaming
+  the project without pinning brings Postgres up on an empty data directory:
+  healthy container, initdb, migrations, no tenants — a deployment that looks
+  like it lost everything, because it has;
+- the **`goose_db_version_commerce`** table. It records what has run on that
+  database; renaming it would show goose an empty history and have it apply the
+  product's first migration a second time.
+
+Nothing in the platform depends on either name. This entry is here because the
+next distribution to be renamed will face both.
+
 ### Added — A deployment can supply its own app icon
 
 `BRAND_ICON_URL` and `BRAND_MASKABLE_ICON_URL` join the brand: the tab favicon,
