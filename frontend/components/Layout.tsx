@@ -267,12 +267,13 @@ export default function Layout({children}:{children:React.ReactNode}){
         and edit — the organisation itself — not a switch that changes how the
         platform behaves. */}
     <NavLink href="/organisation" active={pathname==="/organisation"} icon={<Building2 className="w-5 h-5"/>} label={t("web.menu.organisation")}/>
-    {/* Its two screens, indented under it rather than listed beside it. They
-        are the same organisation — how it is arranged and who is in it — and a
-        flat list put them at the same level as the App Store, which reads as
-        three unrelated destinations instead of one subject with two views. */}
-    <SubNavLink href="/organisation/departments" active={pathname==="/organisation/departments"} icon={<Network className="w-4 h-4"/>} label={t("web.menu.departments")}/>
-    <SubNavLink href="/organisation/people" active={pathname==="/organisation/people"} icon={<Users className="w-4 h-4"/>} label={t("web.menu.people")}/>
+    {/* Its two screens, next in the list rather than nested under it. They were
+        indented for a while, which made them look like a second level this
+        sidebar does not otherwise have — one entry with children, in a menu
+        where nothing else has any. Ordinary rows in the order you would open
+        them: the organisation, how it is arranged, who is in it. */}
+    <NavLink href="/organisation/departments" active={pathname==="/organisation/departments"} icon={<Network className="w-5 h-5"/>} label={t("web.menu.departments")}/>
+    <NavLink href="/organisation/people" active={pathname==="/organisation/people"} icon={<Users className="w-5 h-5"/>} label={t("web.menu.people")}/>
   </MenuGroup><MenuGroup id={PLATFORM_GROUPS.settings} title={t("web.group.settings")} closed={closedGroups.includes(PLATFORM_GROUPS.settings)} onToggle={toggleGroup}>
     {/* Under Settings, where its screen already lives: /settings/apps is what
         the address bar says, and a sidebar that files it under Modules asks
@@ -546,11 +547,6 @@ function MobileMoreApp({href,external,active,label,icon}:{href:string;external?:
   return <Link href={href} aria-current={active?"page":undefined} className={className}><span>{icon}</span><strong>{label}</strong></Link>;
 }
 function NavLink({href,active,icon,label}:{href:string;active:boolean;icon:React.ReactNode;label:string}){return <Link href={href} className={`gerege-nav-link flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition ${active?"gerege-nav-link-active font-semibold":""}`}><span className="gerege-nav-icon">{icon}</span><span>{label}</span></Link>}
-// A NavLink one level in. The indent is the whole difference: these rows belong
-// to the row above them, and nothing else in this sidebar says so — the app
-// menus get their nesting from group headings, which is not what a single
-// entry with two screens under it wants.
-function SubNavLink({href,active,icon,label}:{href:string;active:boolean;icon:React.ReactNode;label:string}){return <Link href={href} className={`gerege-nav-link flex items-center gap-3 pl-9 pr-3 py-2 text-[13px] font-medium transition ${active?"gerege-nav-link-active font-semibold":""}`}><span className="gerege-nav-icon">{icon}</span><span>{label}</span></Link>}
 // The same row as a NavLink, minus the highlight: an external destination has
 // no path under this application, so nothing it opens can ever be "the page
 // you are on".
