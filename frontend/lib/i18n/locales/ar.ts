@@ -1257,6 +1257,7 @@ export const ar: Record<string, string> = {
   "urtuu.message.no_answer_yet": "لا جواب بعد",
   "urtuu.field.line": "الخط",
   "urtuu.field.number": "رقم القيد",
+  "urtuu.message.ring_unchanged": "لم ينشر ring.dgov.mn شيئاً جديداً؛ الرموز كما هي.",
   "web.action.close_menu": "إغلاق القائمة",
   "web.action.close_more": "إغلاق المزيد من التطبيقات",
   "web.action.collapse_all": "طي الكل",

@@ -1257,6 +1257,7 @@ export const fr: Record<string, string> = {
   "urtuu.message.no_answer_yet": "Pas encore de réponse",
   "urtuu.field.line": "Ligne",
   "urtuu.field.number": "Numéro d'enregistrement",
+  "urtuu.message.ring_unchanged": "ring.dgov.mn n'a rien publié de nouveau ; les codes sont inchangés.",
   "web.action.close_menu": "Fermer le menu",
   "web.action.close_more": "Fermer plus d'applications",
   "web.action.collapse_all": "Tout réduire",

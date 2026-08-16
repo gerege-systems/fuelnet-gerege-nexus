@@ -283,7 +283,13 @@ export default function UrtuuSettingsPage() {
               onClick={() =>
                 act(async () => {
                   const result = await api.syncUrtuuRing();
-                  setNotice(t("urtuu.message.imported", { count: result.imported }));
+                  // Nothing new is an answer, not a failure: the register
+                  // publishes rarely and this button is pressed often.
+                  setNotice(
+                    result.unchanged
+                      ? t("urtuu.message.ring_unchanged")
+                      : t("urtuu.message.imported", { count: result.imported }),
+                  );
                 }, t("urtuu.message.imported", { count: 0 }))
               }
               className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"

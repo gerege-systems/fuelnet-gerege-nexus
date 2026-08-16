@@ -68,6 +68,7 @@ Spanish) — seven in total.
 | [`REPORTS.md`](REPORTS.md) | MN | Тайлангийн хөдөлгүүр: шинэ тайлан нэмэх, хамгаалалт, товлосон илгээлт |
 | [`REPORT_SHARING.md`](REPORT_SHARING.md) | MN | Тенант дамнасан тайлан: grant, counterparty хүрээ, хоёр талын audit |
 | [`URTUU.md`](URTUU.md) | MN | «Өртөө» — платформ хоорондын даалгаврын суваг: тохиргоо, холбоос байгуулах, runbook |
+| [`RING_STANDARD.md`](RING_STANDARD.md) | MN | Үйлчилгээний процессын бүртгэлийн формат — ring.dgov.mn-д санал болгож буй гэрээ |
 | [`MONITORING.md`](MONITORING.md) | MN | Ажиглалтын стек: асаах, Grafana, лог хайх, шинэ хэмжүүр нэмэх |
 | [`RUNBOOKS.md`](RUNBOOKS.md) | MN | Дохио бүрд: юу болсон, юу шалгах, яаж засах, хэзээ өргөжүүлэх |
 | [`CONTROL_PLANE.md`](CONTROL_PLANE.md) | MN | Операторын консол: босгох, эрх, анхны оператор үүсгэх, аюулгүй байдлын дүрмүүд |

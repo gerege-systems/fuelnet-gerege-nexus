@@ -1326,8 +1326,9 @@ export const api = {
     body: JSON.stringify(input),
   }),
 
+  /** `unchanged` means the register published nothing new — an answer, not a failure. */
   syncUrtuuRing: () =>
-    fetcher<{ imported: number }>("/urtuu/codes/ring-sync", { method: "POST" }),
+    fetcher<{ imported: number; unchanged?: boolean }>("/urtuu/codes/ring-sync", { method: "POST" }),
 
   // The Өртөө app (io.gerege.nexus.urtuu): the task board over the channel.
   getUrtuuTasks: (filter: {

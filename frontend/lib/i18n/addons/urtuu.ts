@@ -43,6 +43,10 @@ export const urtuu = {
   "urtuu.message.code_created": { mn: "Код бүртгэгдлээ", en: "The code is registered" },
   "urtuu.message.code_updated": { mn: "Код шинэчлэгдлээ", en: "The code is updated" },
   "urtuu.message.imported": { mn: "{count} код ring.dgov.mn-ээс импортлогдлоо", en: "{count} codes imported from ring.dgov.mn" },
+  "urtuu.message.ring_unchanged": {
+    mn: "ring.dgov.mn дээр шинэ зүйл алга — кодууд хэвээрээ.",
+    en: "ring.dgov.mn has published nothing new; the codes are unchanged.",
+  },
   "urtuu.message.ring_off": {
     mn: "ring.dgov.mn тохируулагдаагүй (RING_BASE_URL). Кодуудыг гараар local. угтвартай үүсгэж болно.",
     en: "ring.dgov.mn is not configured (RING_BASE_URL). Codes can still be authored by hand under the local. prefix.",

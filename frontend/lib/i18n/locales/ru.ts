@@ -1257,6 +1257,7 @@ export const ru: Record<string, string> = {
   "urtuu.message.no_answer_yet": "Ответа пока нет",
   "urtuu.field.line": "Линия",
   "urtuu.field.number": "Регистрационный номер",
+  "urtuu.message.ring_unchanged": "На ring.dgov.mn нет ничего нового — коды без изменений.",
   "web.action.close_menu": "Закрыть меню",
   "web.action.close_more": "Закрыть другие приложения",
   "web.action.collapse_all": "Свернуть все",
