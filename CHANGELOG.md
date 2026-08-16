@@ -15,6 +15,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — The installation ring and the platform's clock are SDK capabilities
+
+Two things a module could only reach by living in this repository are published
+now, and the Өртөө app — the first caller of both — imports nothing from
+`internal/` as a result.
+
+**`nexus.Link`** is the Өртөө ring: enqueue a signed message for another
+installation, in the caller's transaction, and register a reader for what
+arrives. The transport stays in the platform for the same reason document
+filing does — one signing key, one outbox, one retry schedule and one set of
+peers per *installation*, not per app. Two apps growing their own would stop the
+ring being one ring the first time they disagreed about retries. What is
+deliberately absent: peering. Who this deployment is linked to is an operator's
+decision, and a module that could add a peer could arrange its own audience.
+
+**`nexus.Location`**, with `Now`, `Today`, `TimezoneName` and
+`DefaultTimezone`, moved out of `internal/platform/config`, which now delegates
+to them. A module makes calendar decisions of its own — a register number
+carries a year, a report covers days, a schedule fires at an hour — and one
+reaching for `time.Now()` in the process's zone would put a Mongolian office's
+Monday morning on Sunday.
+
+The Өртөө app took `*urtuu.Service`, a platform type, and used five of its
+methods; that was the whole of what stood between it and a repository of its
+own. It takes `nexus.Link` now.
+
 ### Added — The core's shape is a test now, not a paragraph
 
 Four apps have left this repository, and every one of those decisions was made

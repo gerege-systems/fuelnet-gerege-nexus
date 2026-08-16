@@ -23,6 +23,18 @@
   FiledDocument.Status string
   FiledDocument.Title string
   FiledDocument.Type string
+  Link.Deliver(kind string, reader LinkReader)
+  Link.Enabled() bool
+  Link.Enqueue(ctx context.Context, tenantID, kind string, payload any, peerIDs ...string) (string, error)
+  Link.EnqueueTx(ctx context.Context, tx pgx.Tx, tenantID, kind string, payload any, peerIDs ...string) (string, error)
+  Link.InstallationID() string
+  LinkMessage.CreatedAt time.Time
+  LinkMessage.Kind string
+  LinkMessage.MessageID string
+  LinkMessage.Payload []byte
+  LinkMessage.PeerID string
+  LinkMessage.PeerName string
+  LinkMessage.TenantID string
   Meeting.ExternalID string
   Meeting.IntegrationID string
   Meeting.IntegrationName string
@@ -100,6 +112,7 @@ const ColumnMonth
 const ColumnNumber
 const ColumnPercent
 const ColumnText
+const DefaultTimezone
 const ParamBool
 const ParamDateRange
 const ParamSelect
@@ -125,18 +138,24 @@ func Get(id string) (Module, bool)
 func JSON(w http.ResponseWriter, status int, value any)
 func List() []Module
 func LocalizedTitle(titles map[string]string, locale, fallback string) string
+func Location() *time.Location
 func MenuPermissionOf(m Module) string
 func NewParams(values map[string]any, locale string) Params
 func NewPlatform(db DB, permissions PermissionStore) Platform
+func Now() time.Time
 func Register(m Module)
 func RegisterReport(report Report)
 func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler
 func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool)
+func Ring() (Link, error)
 func RoutePermissionPrefixOf(m Module) string
 func TenantID(ctx context.Context) (string, error)
 func TenantOf(ctx context.Context) string
+func TimezoneName() string
+func Today() time.Time
 func UseAuditSink(sink AuditSink)
 func UseDocumentFiler(filer DocumentFiler)
+func UseLink(l Link)
 func UseReportSink(sink func(Report))
 func UserFromContext(ctx context.Context) (UserClaims, error)
 func VerifyModuleExists(id string) error
@@ -154,6 +173,9 @@ type Dependency struct
 type DocumentDraft struct
 type DocumentFiler interface
 type FiledDocument struct
+type Link interface
+type LinkMessage struct
+type LinkReader func(ctx context.Context, message LinkMessage) error
 type Meeting struct
 type MeetingBooker interface
 type MeetingConnector struct
@@ -174,5 +196,6 @@ type Rows interface
 type UserClaims struct
 var ErrForbidden
 var ErrNoDocumentFiler
+var ErrNoLink
 var ErrTenantMissing
 var ErrUnauthenticated

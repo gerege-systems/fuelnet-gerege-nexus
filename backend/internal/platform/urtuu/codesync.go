@@ -26,44 +26,28 @@ import (
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 )
 
-// Received is one verified envelope, handed to whatever reads its kind.
+// The message and the reader are pkg/nexus's shapes, not this package's.
 //
-// The payload is bytes rather than a decoded value: the reader knows what its
-// own kind carries and this package does not, which is the whole reason the
-// transport could be written before any of the kinds existed.
-type Received struct {
-	TenantID  string
-	PeerID    string
-	PeerName  string
-	MessageID string
-	Kind      string
-	// CreatedAt is the *sender's* clock. Deadlines are measured from it by
-	// design (§9) — the receiving installation's clock is not the one the work
-	// was promised against.
-	CreatedAt time.Time
-	Payload   []byte
-}
-
-// Reader consumes one envelope. Returning an error leaves the envelope
-// unprocessed, so it is offered again on the next round: a reader that fails
-// because the database was briefly unavailable must not lose the work.
-type Reader func(ctx context.Context, message Received) error
+// They were declared here and the Өртөө app imported them, which is fine
+// while the app is compiled from this repository and impossible the moment it
+// is not: a distribution cannot import internal/. Declaring them in the SDK
+// costs this package two type names and buys the app the ability to leave.
 
 // Deliver registers a reader for one kind.
 //
 // Called during construction — by this package for its own kind, and by the
 // Өртөө app for the task kinds. One reader per kind: two would make "was this
 // processed" a question with two answers.
-func (s *Service) Deliver(kind string, reader Reader) {
+func (s *Service) Deliver(kind string, reader nexus.LinkReader) {
 	s.readersMu.Lock()
 	defer s.readersMu.Unlock()
 	if s.readers == nil {
-		s.readers = map[string]Reader{}
+		s.readers = map[string]nexus.LinkReader{}
 	}
 	s.readers[kind] = reader
 }
 
-func (s *Service) readerFor(kind string) (Reader, bool) {
+func (s *Service) readerFor(kind string) (nexus.LinkReader, bool) {
 	s.readersMu.RLock()
 	defer s.readersMu.RUnlock()
 	reader, ok := s.readers[kind]
@@ -100,7 +84,7 @@ func (s *Service) ProcessInbox(ctx context.Context) {
 
 	type pending struct {
 		id      string
-		message Received
+		message nexus.LinkMessage
 	}
 	batch := make([]pending, 0, inboxBatch)
 	for rows.Next() {
@@ -200,7 +184,7 @@ func (s *Service) announceCodes(ctx context.Context, tenantID, peerID string) er
 // or updated, and codes this link announced before and no longer does are
 // removed. Only this link's codes are touched — a sibling parent's
 // announcement, and anything authored here, are not that parent's to withdraw.
-func (s *Service) receiveCodeSync(ctx context.Context, message Received) error {
+func (s *Service) receiveCodeSync(ctx context.Context, message nexus.LinkMessage) error {
 	var announcement codeSync
 	if err := json.Unmarshal(message.Payload, &announcement); err != nil {
 		// Malformed, from a verified sender. Marking it read is the right

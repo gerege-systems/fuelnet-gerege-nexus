@@ -23,7 +23,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/jackc/pgx/v5"
 )
@@ -59,7 +60,7 @@ func nextNumber(ctx context.Context, tx pgx.Tx, tenantID, line string, when time
 	// Ulaanbaatar on the first of January belongs to the new year's register,
 	// and on a UTC container `when.Year()` would have filed it under the old
 	// one — for eight hours every New Year, on the numbers people audit.
-	year := when.In(config.Location()).Year()
+	year := when.In(nexus.Location()).Year()
 
 	var sequence int
 	if err := tx.QueryRow(ctx, `

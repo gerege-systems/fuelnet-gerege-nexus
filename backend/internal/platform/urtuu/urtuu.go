@@ -91,7 +91,7 @@ type Service struct {
 	// it is written a handful of times during construction and read once per
 	// envelope that arrives.
 	readersMu sync.RWMutex
-	readers   map[string]Reader
+	readers   map[string]nexus.LinkReader
 }
 
 // New builds the transport from the environment.

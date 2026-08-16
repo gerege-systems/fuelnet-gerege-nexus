@@ -24,7 +24,6 @@ package urtuu
 import (
 	"net/http"
 
-	transport "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/go-chi/chi/v5"
@@ -42,7 +41,7 @@ const ID = "io.gerege.nexus.urtuu"
 type Module struct {
 	db    nexus.DB
 	perms nexus.PermissionStore
-	link  *transport.Service
+	link  nexus.Link
 }
 
 // New builds the module and registers what it reads.
@@ -52,7 +51,13 @@ type Module struct {
 // depend on configuration, or an installation that is given a key later would
 // need a restart before its readers existed — which is exactly the sort of
 // thing that is discovered by a backlog nobody processed.
-func New(p nexus.Platform, link *transport.Service) *Module {
+// link is the installation ring, as pkg/nexus publishes it.
+//
+// The interface rather than the platform's own *transport.Service: this app is
+// meant to be able to leave for a distribution of its own, and a distribution
+// cannot import internal/. Five methods is all it ever used, which is what made
+// the capability worth publishing — see nexus.Link.
+func New(p nexus.Platform, link nexus.Link) *Module {
 	m := &Module{db: p.DB(), perms: p.Permissions(), link: link}
 	nexus.Register(m)
 	link.Deliver(contract.KindTaskAssigned, m.receiveAssignment)

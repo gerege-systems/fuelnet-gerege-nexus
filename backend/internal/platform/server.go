@@ -217,6 +217,10 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// given a signing key, which is all of them until somebody establishes a
 	// link. The app is still constructed; see apps.Bootstrap.
 	urtuuLink := urtuu.New(db, permissions)
+	// Published for every module, not handed to one. The Өртөө app is its first
+	// caller and should not be its only one: any module with something to say to
+	// another installation asks nexus.Ring() for it. See pkg/nexus/link.go.
+	nexus.UseLink(urtuuLink)
 
 	modulePlatform := newModulePlatform(db)
 	// A distribution's modules register themselves here, beside the platform's

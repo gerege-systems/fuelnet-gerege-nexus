@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	transport "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/jackc/pgx/v5"
@@ -181,7 +180,7 @@ func (m *Module) reportUp(ctx context.Context, tenantID string, task Task, note 
 // refused because a task that cannot be read is a task nobody can do. In both
 // cases the parent is told, with a reason, which is the whole difference
 // between a refusal and a silence.
-func (m *Module) receiveAssignment(ctx context.Context, message transport.Received) error {
+func (m *Module) receiveAssignment(ctx context.Context, message nexus.LinkMessage) error {
 	var work assignment
 	if err := json.Unmarshal(message.Payload, &work); err != nil {
 		// From a verified sender, so retrying will not make it parse. Marked
@@ -264,7 +263,7 @@ func (m *Module) receiveAssignment(ctx context.Context, message transport.Receiv
 }
 
 // refuseAssignment returns the reason this task cannot be taken, or empty.
-func (m *Module) refuseAssignment(ctx context.Context, message transport.Received, work assignment) string {
+func (m *Module) refuseAssignment(ctx context.Context, message nexus.LinkMessage, work assignment) string {
 	// The cycle guard. A→Б→А is a legitimate shape for a peer graph — two
 	// ministries can each be above the other for different kinds of work — so
 	// it is the *task* that must not go round, not the link that must not
@@ -296,7 +295,7 @@ func (m *Module) refuseAssignment(ctx context.Context, message transport.Receive
 // ------------------------------------------------------------- receiving back
 
 // receiveUpdate applies a subordinate's news to the mirror this side keeps.
-func (m *Module) receiveUpdate(ctx context.Context, message transport.Received) error {
+func (m *Module) receiveUpdate(ctx context.Context, message nexus.LinkMessage) error {
 	var news update
 	if err := json.Unmarshal(message.Payload, &news); err != nil {
 		slog.Warn("urtuu: an update could not be read", "peer_id", message.PeerID, "error", err)
