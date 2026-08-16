@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -63,32 +64,18 @@ type Registry interface {
 	Company(ctx context.Context, companyReg string) (*gerege.CompanyInfo, error)
 }
 
-// Rail is one connection to a state system, as this deployment is configured.
-type Rail struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	// Mode is "live", "mock" or "unconfigured". Three states rather than a
-	// boolean, because a mock rail answers every question and none of the
-	// answers is authoritative — reporting that as "connected" is how a test
-	// fixture ends up on a government form.
-	Mode     string `json:"mode"`
-	Endpoint string `json:"endpoint,omitempty"`
-}
-
-// Rails is how the platform tells this module what it is wired to. A function
-// rather than a snapshot: the answer is read from the process's configuration,
-// and reading it per request keeps the screen honest if that ever stops being
-// fixed at boot.
-type Rails func() []Rail
+// Rail and Rails moved to internal/platform/staterail: the platform builds the
+// value and the platform is not allowed to import an app to name its type. See
+// that package, and internal/apps/boundaries_test.go for the rule.
 
 type Module struct {
 	db    nexus.DB
 	xyp   *gerege.GeregeService
-	rails Rails
+	rails staterail.Rails
 	perms nexus.PermissionStore
 }
 
-func New(p nexus.Platform, xyp *gerege.GeregeService, rails Rails) *Module {
+func New(p nexus.Platform, xyp *gerege.GeregeService, rails staterail.Rails) *Module {
 	m := &Module{db: p.DB(), xyp: xyp, rails: rails, perms: p.Permissions()}
 	nexus.Register(m)
 	return m
@@ -251,7 +238,7 @@ func (m *Module) handleConnections(w http.ResponseWriter, r *http.Request) {
 	if _, ok := nexus.RequireTenant(w, r); !ok {
 		return
 	}
-	rails := []Rail{}
+	rails := []staterail.Rail{}
 	if m.rails != nil {
 		rails = m.rails()
 	}

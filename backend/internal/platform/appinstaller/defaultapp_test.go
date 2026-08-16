@@ -2,14 +2,15 @@ package appinstaller_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 )
 
@@ -22,13 +23,41 @@ import (
 //	TEST_DATABASE_URL=postgres://... go test ./internal/platform/appinstaller/...
 func organisationCatalogApp() catalog.CatalogApp {
 	manifest := catalog.Manifest{
-		ID: organisation.ID, Name: "Organisation & People", Version: "1.0.0", Platform: ">=1.0.0",
+		ID: defaultAppID, Name: "Organisation & People", Version: "1.0.0", Platform: ">=1.0.0",
 	}
 	return catalog.CatalogApp{
-		ID: organisation.ID, Slug: "organisation", Name: manifest.Name,
+		ID: defaultAppID, Slug: "organisation", Name: manifest.Name,
 		Version: "1.0.0", Visibility: "public", Manifest: manifest,
 	}
 }
+
+// The app this deployment installs for every tenant without being asked. Named
+// here as a string rather than taken from the module, so this package does not
+// import an app to learn one constant.
+const defaultAppID = "io.gerege.nexus.organisation"
+
+// defaultAppModule stands in for whatever module answers for that id. Its two
+// permissions are the organisation's, because the assertion downstream is that
+// a default app's permissions reach the tenant's roles — the names have to be
+// something, and something real reads better in a failure message.
+type defaultAppModule struct{}
+
+func (defaultAppModule) ID() string      { return defaultAppID }
+func (defaultAppModule) Name() string    { return "Organisation" }
+func (defaultAppModule) Version() string { return "1.0.0" }
+
+func (defaultAppModule) Dependencies() []nexus.Dependency { return nil }
+
+func (defaultAppModule) Permissions() []nexus.PermissionDefinition {
+	return []nexus.PermissionDefinition{
+		{Code: "organisation.read", Name: "Read Organisation"},
+		{Code: "organisation.manage", Name: "Manage Organisation"},
+	}
+}
+
+func (defaultAppModule) Menus() []nexus.MenuDefinition { return nil }
+
+func (defaultAppModule) RegisterRoutes(chi.Router, func(http.Handler) http.Handler) {}
 
 // newSweptTenant makes a tenant, runs the catalogue and the default-app sweep
 // over it, and returns the tenant and the installer both tests then work on.
@@ -39,7 +68,15 @@ func newSweptTenant(t *testing.T) (*appinstaller.AppInstaller, string) {
 
 	// The module has to be registered for a module-type app to install at all;
 	// in the running server this is apps.Bootstrap.
-	organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
+	//
+	// A stub rather than the real organisation module. What is under test is the
+	// installer — that a default app reaches a new tenant, with its permissions
+	// — and nothing here reads a field of the module beyond the permissions it
+	// declares. Importing the app for it pointed the platform at an app package,
+	// which is the coupling internal/apps/boundaries_test.go exists to refuse:
+	// the platform is what every deployment runs, and an app is what one product
+	// ships.
+	nexus.Register(defaultAppModule{})
 
 	var tenantID string
 	if err := pool.QueryRow(ctx,
@@ -69,7 +106,7 @@ func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
 	var installed string
 	if err := pool.QueryRow(ctx,
 		`SELECT installed_version FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-		tenantID, organisation.ID).Scan(&installed); err != nil {
+		tenantID, defaultAppID).Scan(&installed); err != nil {
 		t.Fatalf("the default app was not installed for a tenant that lacked it: %v", err)
 	}
 	if installed != "1.0.0" {
@@ -84,7 +121,7 @@ func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
 	var count int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-		tenantID, organisation.ID).Scan(&count); err != nil {
+		tenantID, defaultAppID).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
@@ -121,7 +158,7 @@ func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T)
 	var status string
 	if err := pool.QueryRow(ctx,
 		`SELECT enabled, status FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-		tenantID, organisation.ID).Scan(&enabled, &status); err != nil {
+		tenantID, defaultAppID).Scan(&enabled, &status); err != nil {
 		t.Fatalf("the installation row was deleted rather than disabled: %v", err)
 	}
 	if enabled || status != "disabled" {
@@ -135,7 +172,7 @@ func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T)
 	}
 	if err := pool.QueryRow(ctx,
 		`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
-		tenantID, organisation.ID).Scan(&enabled); err != nil {
+		tenantID, defaultAppID).Scan(&enabled); err != nil {
 		t.Fatal(err)
 	}
 	if enabled {

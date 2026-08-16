@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — The core's shape is a test now, not a paragraph
+
+Four apps have left this repository, and every one of those decisions was made
+in prose. The paragraphs are right and they were also the only thing holding the
+line: nothing failed when an app reached into another app's package, or when the
+platform reached into an app's. The split just got quietly more expensive, and
+the price was paid by whoever tried it next.
+
+`internal/apps/boundaries_test.go` asserts the two properties that make a split
+possible — no app imports another app, and no platform package imports an app —
+and it found a real violation of each on the first run:
+
+- **`internal/platform/server.go` imported the e-Government app** to name
+  `egov.Rail`, the shape it fills in with what this deployment is wired to. The
+  comment said "egov names the shape, the platform answers it", which reads well
+  and points the wrong way. The type moved to `internal/platform/staterail`,
+  beside the clients that fill it in; the app imports it the way it already
+  imports them.
+- **The default-app installer test built the real organisation module.** It is a
+  test about the installer, so it registers a stub answering for that id
+  instead.
+
+One deliberate exception is recorded in the test with its reason: `documents`
+imports `esign`, because the PDF rails moved inside that app when the two store
+cards became one. Adding another entry is a decision, and it should feel like
+making one.
+
 ### Changed — The commerce distribution is Gerege Business
 
 `commerce-gerege-nexus` is

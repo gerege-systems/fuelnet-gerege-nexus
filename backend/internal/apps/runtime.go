@@ -19,6 +19,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 )
 
@@ -36,7 +37,7 @@ type Runtime struct {
 type InstalledApps = reports.InstalledApps
 
 func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmongolia.Service,
-	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails egov.Rails,
+	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails staterail.Rails,
 	link *urtuu.Service, installedApps InstalledApps) Runtime {
 	// First, and not merely in order: organisation is what the others assume. It
 	// is the organisation, the people in it and how it is arranged — the module

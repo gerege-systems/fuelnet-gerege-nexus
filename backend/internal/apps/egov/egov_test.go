@@ -14,6 +14,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -85,8 +86,8 @@ func newFixture(t *testing.T) *fixture {
 	// Mock mode, which is the state a deployment without ХУР credentials is in
 	// and the only one a test can be in.
 	t.Setenv("XYP_MOCK_MODE", "true")
-	rails := func() []egov.Rail {
-		return []egov.Rail{{ID: "xyp", Name: "ХУР", Mode: "mock", Endpoint: "https://xyp.example.invalid"}}
+	rails := func() []staterail.Rail {
+		return []staterail.Rail{{ID: "xyp", Name: "ХУР", Mode: "mock", Endpoint: "https://xyp.example.invalid"}}
 	}
 	module := egov.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)),
 		gerege.NewGeregeService(), rails)
@@ -217,8 +218,8 @@ func TestConnectionsReportTheRailModeAndPointAtTheProfileForIdentities(t *testin
 		t.Fatalf("connections answered %d: %s", res.Code, res.Body.String())
 	}
 	var body struct {
-		Rails          []egov.Rail `json:"rails"`
-		IdentitiesPath string      `json:"identities_path"`
+		Rails          []staterail.Rail `json:"rails"`
+		IdentitiesPath string           `json:"identities_path"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
