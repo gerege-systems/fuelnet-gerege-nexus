@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -160,8 +161,17 @@ func (s *CopilotService) Query(ctx context.Context, req CopilotRequest) (*Copilo
 	return s.localFallback(ctx, req), nil
 }
 
+// systemPrompt builds what the model is told about itself.
+//
+// `{brand}` in a stored prompt becomes this deployment's name. The name used to
+// be written into the row, which made a rebrand a data migration: 00012 rewrote
+// it for the Gerege Nexus rename, and the Gerege Salus fork carried a migration
+// of its own to do the same thing one distribution later. A deployment that
+// differs by a name should not have to write SQL to say so, and a placeholder
+// is the difference between a stored default and a stored decision — the first
+// follows the deployment, the second is an operator's and must not be touched.
 func (s *CopilotService) systemPrompt(ctx context.Context, tenantID, lang string) string {
-	scope := "You are Gerege Nexus AI Copilot. Use approved tools for live data. Never expose data from another tenant."
+	scope := "You are {brand} AI Copilot. Use approved tools for live data. Never expose data from another tenant."
 	instructions := "Be concise, do not invent values, and reply in language code " + lang + "."
 	if s.db != nil {
 		rows, err := s.db.Query(ctx, `SELECT prompt_key, content FROM ai_prompts WHERE active AND (tenant_id IS NULL OR tenant_id=$1) ORDER BY tenant_id NULLS FIRST`, tenantID)
@@ -180,7 +190,10 @@ func (s *CopilotService) systemPrompt(ctx context.Context, tenantID, lang string
 			}
 		}
 	}
-	return scope + "\n" + instructions
+	// Applied to whatever won above — the shipped default, the global row, or a
+	// tenant's own — so a tenant that wants the product named in its prompt
+	// writes `{brand}` and stays right through a rename.
+	return strings.ReplaceAll(scope+"\n"+instructions, "{brand}", config.BrandName())
 }
 
 func toolDeclarations() []gemini.FunctionDeclaration {
