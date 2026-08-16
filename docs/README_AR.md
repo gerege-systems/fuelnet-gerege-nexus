@@ -405,8 +405,7 @@ cd frontend && npm run build
 
 ## الترخيص
 
-حقوق النشر (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**. يُوزَّع بموجب رخصة Apache 2.0 — راجع [`LICENSE`](../LICENSE).
+حقوق النشر (c) 2026 **Gerege Systems Development Team**. يُوزَّع بموجب رخصة Apache 2.0 — راجع [`LICENSE`](../LICENSE).
 
 أيقونات الأعلام من [Flaticon](https://www.flaticon.com/)
 ([بيان الإسناد](assets/icons/ATTRIBUTION.md)).

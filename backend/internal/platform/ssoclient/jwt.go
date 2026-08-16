@@ -1,6 +1,6 @@
 /*
  * Gerege Nexus
- * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
  * Distributed under the Apache 2.0 License.
  *
  * id_token verification (OpenID Connect Core 1.0 §3.1.3.7).

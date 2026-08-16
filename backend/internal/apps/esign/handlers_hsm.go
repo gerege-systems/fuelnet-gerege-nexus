@@ -1,6 +1,6 @@
 /*
  * Gerege Nexus
- * Copyright (c) 2026 Gerege Systems Development Team & Claude AI
+ * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
  * Distributed under the Apache 2.0 License.
  *
  * The Gerege eSign HSM rail: certificate proof plus a drawn signature stamped

@@ -291,8 +291,7 @@ govulncheck 与 gosec。
 
 ## 许可证
 
-Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**。基于 Apache 2.0 许可证发布，详见 [`LICENSE`](../LICENSE)。
+Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**。基于 Apache 2.0 许可证发布，详见 [`LICENSE`](../LICENSE)。
 
 国旗图标来自 [Flaticon](https://www.flaticon.com/)
 （[署名](assets/icons/ATTRIBUTION.md)）。

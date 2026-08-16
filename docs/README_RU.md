@@ -310,8 +310,7 @@ gosec при каждом push и pull request.
 
 ## Лицензия
 
-Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**. Распространяется по лицензии Apache 2.0 — см.
+Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**. Распространяется по лицензии Apache 2.0 — см.
 [`LICENSE`](../LICENSE).
 
 Иконки флагов — [Flaticon](https://www.flaticon.com/)

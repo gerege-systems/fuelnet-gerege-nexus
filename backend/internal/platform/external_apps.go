@@ -1,6 +1,6 @@
 /*
  * Gerege Nexus
- * Copyright (c) 2026 Gerege Systems Development Team, @craftzbay, Gemini AI & Claude AI
+ * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
  *
  * The app gate, continued into applications that run somewhere else.
  */

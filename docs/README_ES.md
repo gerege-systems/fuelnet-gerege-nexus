@@ -349,8 +349,7 @@ Informe de vulnerabilidades según lo descrito en [`SECURITY.md`](../SECURITY.md
 
 ## Licencia
 
-Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**. Distribuido bajo la Licencia Apache 2.0 — véase
+Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**. Distribuido bajo la Licencia Apache 2.0 — véase
 [`LICENSE`](../LICENSE).
 
 Iconos de banderas por [Flaticon](https://www.flaticon.com/)

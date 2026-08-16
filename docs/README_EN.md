@@ -347,8 +347,7 @@ Report vulnerabilities as described in [`SECURITY.md`](../SECURITY.md).
 
 ## License
 
-Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**. Distributed under the Apache 2.0 License — see
+Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**. Distributed under the Apache 2.0 License — see
 [`LICENSE`](../LICENSE).
 
 Flag icons by [Flaticon](https://www.flaticon.com/)

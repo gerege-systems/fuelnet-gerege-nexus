@@ -450,8 +450,7 @@ CI нь push ба pull request бүр дээр lint, тест, frontend build, D
 
 ## Лиценз
 
-Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**. Apache 2.0 лицензээр тараагдана — [`LICENSE`](LICENSE)-ийг үзнэ үү.
+Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**. Apache 2.0 лицензээр тараагдана — [`LICENSE`](LICENSE)-ийг үзнэ үү.
 
 Тугны дүрсийг [Flaticon](https://www.flaticon.com/)-оос авсан
 ([оруулсан хувь нэмэр](docs/assets/icons/ATTRIBUTION.md)).

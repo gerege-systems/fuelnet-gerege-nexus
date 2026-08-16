@@ -352,8 +352,7 @@ Signalez les vulnérabilités comme décrit dans [`SECURITY.md`](../SECURITY.md)
 
 ## Licence
 
-Copyright (c) 2026 **Gerege Systems Development Team, Gemini AI &
-Claude AI**. Distribué sous licence Apache 2.0 — voir
+Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**. Distribué sous licence Apache 2.0 — voir
 [`LICENSE`](../LICENSE).
 
 Icônes de drapeaux par [Flaticon](https://www.flaticon.com/)
