@@ -182,6 +182,7 @@ export const urtuu = {
     mn: "Дээд байгууллагаас доод байгууллагад өгсөн ажил. Хүсэгч гэж байхгүй — эхлүүлсэн байгууллага өөрөө үр дүнг нь хүлээж авна.",
     en: "Work a superior organisation gave a subordinate. There is no applicant: the organisation that raised it is the one waiting for the outcome.",
   },
+  "urtuu.field.number": { mn: "Бүртгэлийн дугаар", en: "Register number" },
   "urtuu.field.line": { mn: "Шугам", en: "Line" },
   "urtuu.field.applicant": { mn: "Хүсэгч", en: "Applicant" },
   "urtuu.field.applicant_kind": { mn: "Хэн", en: "Who" },

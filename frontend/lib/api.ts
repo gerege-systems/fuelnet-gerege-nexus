@@ -440,6 +440,10 @@ export interface UrtuuApplicant {
 
 export interface UrtuuTask {
   id: string;
+  /** This installation's own register number — "Д2026-00412". Quoted, never routed. */
+  number?: string;
+  /** The number the sending installation registered it under, cited beside that link's name. */
+  origin_number?: string;
   code: string;
   /**
    * Which of Өртөө's two promises this is under.
@@ -1373,7 +1377,7 @@ export const api = {
     document?: { document_id?: string; title?: string; type?: string };
     /** Required on the service line, refused on the assignment line. */
     applicant?: UrtuuApplicant;
-  }) => fetcher<{ id: string; status: string }>("/urtuu/tasks", {
+  }) => fetcher<{ id: string; number: string; status: string }>("/urtuu/tasks", {
     method: "POST",
     body: JSON.stringify(input),
   }).then(urtuuChanged),

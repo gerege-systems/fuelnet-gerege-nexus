@@ -241,14 +241,19 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	actor := actorOf(r)
+	root.Number, err = nextNumber(ctx, tx, tenantID, line, now)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not allocate a register number")
+		return
+	}
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, line, title, payload, applicant, origin_chain, status,
+		    (tenant_id, number, code, line, title, payload, applicant, origin_chain, status,
 		     deadline, note, evidence, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12, '')::uuid)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULLIF($13, '')::uuid)
 		RETURNING id`,
-		tenantID, root.Code, line, root.Title, root.Payload, applicant, root.OriginChain,
-		string(status), deadline, strings.TrimSpace(request.Note),
+		tenantID, root.Number, root.Code, line, root.Title, root.Payload, applicant,
+		root.OriginChain, string(status), deadline, strings.TrimSpace(request.Note),
 		encodedEvidence, actor).Scan(&root.ID); err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not raise the task")
 		return
@@ -275,8 +280,11 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nexus.Audit(r.Context(), tenantID, actor, "urtuu.task_raised", "urtuu_task",
-		map[string]any{"task_id": root.ID, "code": root.Code, "links": len(request.PeerIDs)})
-	nexus.JSON(w, http.StatusCreated, map[string]any{"id": root.ID, "status": status})
+		map[string]any{"task_id": root.ID, "number": root.Number, "code": root.Code,
+			"links": len(request.PeerIDs)})
+	nexus.JSON(w, http.StatusCreated, map[string]any{
+		"id": root.ID, "number": root.Number, "status": status,
+	})
 }
 
 // handleDelegate splits a task this organisation was given, downward.

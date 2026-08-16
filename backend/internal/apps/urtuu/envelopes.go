@@ -35,6 +35,10 @@ type assignment struct {
 	// comes back on every update, which is how the two sides stay matched
 	// without either of them having to know the other's database.
 	TaskID string `json:"task_id"`
+	// Number is the sender's own register number for this dispatch. Display
+	// only — the receiving installation cites it the way an incoming letter
+	// cites the sender's reference, and matches on TaskID as before.
+	Number string `json:"number,omitempty"`
 	Code   string `json:"code"`
 	// Line is which promise this work is under. It travels because the
 	// receiving installation has to know: a service request it accepts is one
@@ -93,14 +97,21 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 		return fmt.Errorf("the code %s is not open on that link", parent.Code)
 	}
 
+	// Each dispatch is registered here as well, the way outgoing mail is: this
+	// is the number the subordinate will cite back.
+	mirrorNumber, err := nextNumber(ctx, tx, tenantID, parent.Line, time.Now())
+	if err != nil {
+		return err
+	}
+
 	var mirrorID string
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, line, title, payload, applicant, target_peer_id,
+		    (tenant_id, number, code, line, title, payload, applicant, target_peer_id,
 		     parent_task_id, origin_chain, status, deadline, evidence, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'RECEIVED', $10, $11, NULLIF($12, '')::uuid)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'RECEIVED', $11, $12, NULLIF($13, '')::uuid)
 		RETURNING id`,
-		tenantID, parent.Code, parent.Line, parent.Title, parent.Payload,
+		tenantID, mirrorNumber, parent.Code, parent.Line, parent.Title, parent.Payload,
 		applicantOrEmpty(parent.Applicant), peerID, parent.ID,
 		parent.OriginChain, deadline, parent.Evidence, actorUserID).Scan(&mirrorID); err != nil {
 		return err
@@ -111,6 +122,7 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 
 	_, err = m.link.EnqueueTx(ctx, tx, tenantID, contract.KindTaskAssigned, assignment{
 		TaskID:      mirrorID,
+		Number:      mirrorNumber,
 		Code:        parent.Code,
 		Line:        parent.Line,
 		Title:       parent.Title,
@@ -214,19 +226,27 @@ func (m *Module) receiveAssignment(ctx context.Context, message transport.Receiv
 		return err
 	}
 
+	// Registered on arrival, under this installation's own year and sequence.
+	// The sender's number is kept beside it rather than reused: two registers,
+	// two numbers, and the second cites the first.
+	number, err := nextNumber(ctx, tx, message.TenantID, lineOf(work.Line), time.Now())
+	if err != nil {
+		return err
+	}
+
 	var taskID string
 	err = tx.QueryRow(ctx, `
 		INSERT INTO urtuu_tasks
-		    (tenant_id, code, line, title, payload, applicant, origin_peer_id,
-		     origin_task_id, origin_chain, status, deadline, evidence)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'RECEIVED', $10, $11)
+		    (tenant_id, number, origin_number, code, line, title, payload, applicant,
+		     origin_peer_id, origin_task_id, origin_chain, status, deadline, evidence)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'RECEIVED', $12, $13)
 		-- The unique index on (origin_peer_id, origin_task_id). A reader has to
 		-- be safe to repeat: the envelope is идемпотент by message id, but the
 		-- write that marks it read can fail after this one succeeded.
 		ON CONFLICT (origin_peer_id, origin_task_id) WHERE origin_peer_id IS NOT NULL DO NOTHING
 		RETURNING id`,
-		message.TenantID, work.Code, lineOf(work.Line), work.Title, payloadOrEmpty(work.Payload),
-		applicantOrEmpty(work.Applicant),
+		message.TenantID, number, work.Number, work.Code, lineOf(work.Line), work.Title,
+		payloadOrEmpty(work.Payload), applicantOrEmpty(work.Applicant),
 		message.PeerID, work.TaskID, append(work.OriginChain, m.link.InstallationID()),
 		deadline, incomingEvidence).Scan(&taskID)
 	if errors.Is(err, pgx.ErrNoRows) {

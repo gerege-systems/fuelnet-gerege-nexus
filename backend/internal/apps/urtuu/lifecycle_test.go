@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -927,5 +928,70 @@ func TestTheDatabaseItselfRefusesAnUnansweredService(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "urtuu_tasks_service_has_answer") {
 		t.Errorf("refused, but not by the constraint that exists for this: %v", err)
+	}
+}
+
+// ------------------------------------------------------- register numbers
+
+// The number is what a person quotes down a telephone, so it has to be
+// allocated per installation, per line and per year — and each side has to
+// register incoming work under its own number while citing the sender's.
+func TestEverySideRegistersItsOwnNumberAndCitesTheSenders(t *testing.T) {
+	pool := openPool(t)
+	parent, child, parentPeerID := serviceLine(t, pool, 34)
+
+	created := parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code": "local.count", "peer_ids": []string{parentPeerID},
+	}, http.StatusCreated)
+	rootNumber, _ := created["number"].(string)
+
+	year := time.Now().Year()
+	// Д for an assignment, the year, and a sequence. The first task this
+	// organisation raised this year is number one.
+	if want := fmt.Sprintf("Д%d-00001", year); rootNumber != want {
+		t.Fatalf("the raised task is %q, want %q", rootNumber, want)
+	}
+	// The dispatch is registered too, the way outgoing mail is.
+	dispatch := parent.tasks("outgoing")[0]
+	if dispatch.Number != fmt.Sprintf("Д%d-00002", year) {
+		t.Errorf("the dispatch is %q; each one is registered in turn", dispatch.Number)
+	}
+
+	carry(t, parent, child)
+
+	work := child.tasks("incoming")[0]
+	// The child's own register starts at one: two registers, two numbers.
+	if want := fmt.Sprintf("Д%d-00001", year); work.Number != want {
+		t.Errorf("the child registered it as %q, want %q", work.Number, want)
+	}
+	// And it cites what arrived, the way an incoming letter cites the sender's
+	// reference. The "whose number is this" half is the link's own name.
+	if work.OriginNumber != dispatch.Number {
+		t.Errorf("origin number = %q, want the sender's %q", work.OriginNumber, dispatch.Number)
+	}
+	if work.OriginPeerName == "" {
+		t.Error("the cited number names no installation, so it cannot be read")
+	}
+}
+
+// The two lines are numbered apart: the first letter is the promise, and a
+// service request and an assignment raised on the same day are both number one.
+func TestTheTwoLinesAreNumberedApart(t *testing.T) {
+	pool := openPool(t)
+	parent, _, _ := serviceLine(t, pool, 35)
+	year := time.Now().Year()
+
+	assignment := parent.call(http.MethodPost, "/api/v1/urtuu/tasks",
+		map[string]any{"code": "local.count"}, http.StatusCreated)
+	service := parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
+		"code":      "local.certificate",
+		"applicant": map[string]string{"kind": "citizen", "name": "Дорж"},
+	}, http.StatusCreated)
+
+	if got := assignment["number"]; got != fmt.Sprintf("Д%d-00001", year) {
+		t.Errorf("assignment number = %v", got)
+	}
+	if got := service["number"]; got != fmt.Sprintf("Ү%d-00001", year) {
+		t.Errorf("service number = %v", got)
 	}
 }

@@ -1256,6 +1256,7 @@ export const zh: Record<string, string> = {
   "urtuu.message.answer_required": "服务申请不能在没有给申请人回复的情况下标记完成。",
   "urtuu.message.no_answer_yet": "尚无回复",
   "urtuu.field.line": "线路",
+  "urtuu.field.number": "登记号",
   "web.action.close_menu": "关闭菜单",
   "web.action.close_more": "关闭更多应用",
   "web.action.collapse_all": "全部收起",

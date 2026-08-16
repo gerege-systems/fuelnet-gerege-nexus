@@ -1256,6 +1256,7 @@ export const ru: Record<string, string> = {
   "urtuu.message.answer_required": "Запрос на услугу нельзя завершить без ответа заявителю.",
   "urtuu.message.no_answer_yet": "Ответа пока нет",
   "urtuu.field.line": "Линия",
+  "urtuu.field.number": "Регистрационный номер",
   "web.action.close_menu": "Закрыть меню",
   "web.action.close_more": "Закрыть другие приложения",
   "web.action.collapse_all": "Свернуть все",

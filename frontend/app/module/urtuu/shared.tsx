@@ -153,6 +153,7 @@ export function TaskQueue({ tasks, empty }: { tasks: UrtuuTask[]; empty: React.R
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[11px]">
           <tr>
+            <th className="px-3 py-2 text-left">{t("urtuu.field.number")}</th>
             <th className="px-3 py-2 text-left">{t("urtuu.field.code")}</th>
             <th className="px-3 py-2 text-left">{t("urtuu.field.applicant")}</th>
             <th className="px-3 py-2 text-left">{t("urtuu.field.title")}</th>
@@ -164,6 +165,18 @@ export function TaskQueue({ tasks, empty }: { tasks: UrtuuTask[]; empty: React.R
         <tbody className="divide-y divide-slate-100">
           {tasks.map((task) => (
             <tr key={task.id} className="hover:bg-slate-50">
+              {/* The number first: it is what somebody was told on the
+                  telephone, and what they are looking for on this screen. */}
+              <td className="px-3 py-2 align-top">
+                <span className="font-mono text-xs font-semibold text-slate-800">
+                  {task.number || "—"}
+                </span>
+                {task.origin_number && (
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    ← {task.origin_number}
+                  </p>
+                )}
+              </td>
               <td className="px-3 py-2 font-mono text-xs text-slate-600 align-top">{task.code}</td>
               {/* Who asked, on the service line. An empty cell on the
                   assignment line is the truth there: nobody outside the

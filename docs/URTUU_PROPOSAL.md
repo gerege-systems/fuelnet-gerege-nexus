@@ -22,6 +22,7 @@ report_grants, signed catalog transport — бүгдийг уншсаны үнд
 | Ө5 гурван тайлан | ✅ | `internal/apps/urtuu/reports.go` |
 | Ө6 eID хавсралт | ✅ | `internal/apps/urtuu/evidence.go`, `pkg/urtuu`-ийн `Evidence` |
 | Хоёр шугам | ✅ | Миграци `00065`, `pkg/urtuu`-ийн `LineService`/`LineAssignment` |
+| Бүртгэлийн дугаар | ✅ | Миграци `00066`, `internal/apps/urtuu/numbers.go` |
 | Ө7 gov_services гүүр | ⏸ сонголтот | Хийгдээгүй |
 
 **Саналаас нэмэгдсэн зүйл: хоёр шугам.** Энэ санал нь дээрээс доошоо ирэх

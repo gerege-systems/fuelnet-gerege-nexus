@@ -85,7 +85,7 @@ export default function UrtuuTaskPage() {
     <Screen
       icon={<Route className="w-5 h-5" />}
       title={task.title || task.code}
-      subtitle={task.code}
+      subtitle={[task.number, task.code].filter(Boolean).join(" · ")}
       action={
         <div className="flex flex-col items-end gap-1">
           <StatusChip status={task.status} />
@@ -103,6 +103,12 @@ export default function UrtuuTaskPage() {
         </Fact>
         <Fact label={task.origin_peer_name ? t("urtuu.field.from") : t("urtuu.field.to")}>
           {task.origin_peer_name || task.target_peer_name || "—"}
+          {/* The sender's number is read together with the sender's name.
+              Neither half means anything alone — which is why the number
+              itself carries no platform prefix. */}
+          {task.origin_number && (
+            <span className="font-mono text-xs text-slate-500"> · {task.origin_number}</span>
+          )}
         </Fact>
         {/* Who asked. Only the service line has one, and there it is the
             first thing anybody working the task needs. */}
@@ -230,6 +236,9 @@ export default function UrtuuTaskPage() {
                   className="text-indigo-700 hover:underline"
                 >
                   {branch.target_peer_name || branch.title || branch.id.slice(0, 8)}
+                  {branch.number && (
+                    <span className="font-mono text-xs text-slate-400"> · {branch.number}</span>
+                  )}
                 </Link>
                 <span className="flex items-center gap-2">
                   {branch.overdue && <OverdueMark />}

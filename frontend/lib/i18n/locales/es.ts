@@ -1256,6 +1256,7 @@ export const es: Record<string, string> = {
   "urtuu.message.answer_required": "Una solicitud de servicio no puede completarse sin una respuesta para quien la presentó.",
   "urtuu.message.no_answer_yet": "Todavía sin respuesta",
   "urtuu.field.line": "Línea",
+  "urtuu.field.number": "Número de registro",
   "web.action.close_menu": "Cerrar menú",
   "web.action.close_more": "Cerrar más apps",
   "web.action.collapse_all": "Contraer todo",

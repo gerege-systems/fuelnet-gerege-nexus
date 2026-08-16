@@ -1256,6 +1256,7 @@ export const ar: Record<string, string> = {
   "urtuu.message.answer_required": "لا يمكن إنجاز طلب خدمة دون جواب لمقدّمه.",
   "urtuu.message.no_answer_yet": "لا جواب بعد",
   "urtuu.field.line": "الخط",
+  "urtuu.field.number": "رقم القيد",
   "web.action.close_menu": "إغلاق القائمة",
   "web.action.close_more": "إغلاق المزيد من التطبيقات",
   "web.action.collapse_all": "طي الكل",

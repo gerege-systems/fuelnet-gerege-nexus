@@ -31,8 +31,16 @@ import (
 
 // Task is one row as the API returns it.
 type Task struct {
-	ID   string `json:"id"`
-	Code string `json:"code"`
+	ID string `json:"id"`
+	// Number is this installation's own register number — "Д2026-00412". What
+	// a person quotes; never what an API takes.
+	Number string `json:"number,omitempty"`
+	// OriginNumber is the number the sending installation registered it under,
+	// cited the way an incoming letter cites the sender's reference. Rendered
+	// beside the link's name, which is where the "whose number is this" half
+	// of the answer already lives.
+	OriginNumber string `json:"origin_number,omitempty"`
+	Code         string `json:"code"`
 	// Line is which of Өртөө's two promises this task is under — a state
 	// service somebody applied for, or an assignment a superior organisation
 	// gave. Copied from the code when the task is raised, so that a code being
@@ -90,7 +98,8 @@ type TaskEvent struct {
 // — the list, the detail and the tree — and a column added to one of them and
 // not the others is how a screen quietly stops showing something.
 const taskColumns = `
-	t.id::text, t.code, t.line, t.title, t.payload, t.applicant, t.answer,
+	t.id::text, t.number, t.origin_number, t.code, t.line, t.title, t.payload,
+	t.applicant, t.answer,
 	coalesce(t.origin_peer_id::text, ''), coalesce(op.name, ''), t.origin_task_id,
 	coalesce(t.target_peer_id::text, ''), coalesce(tp.name, ''),
 	coalesce(t.parent_task_id::text, ''), t.origin_chain, t.status, t.deadline,
@@ -105,7 +114,8 @@ const taskFrom = `
 
 func scanTask(rows pgx.Rows, now time.Time) (Task, error) {
 	var task Task
-	if err := rows.Scan(&task.ID, &task.Code, &task.Line, &task.Title, &task.Payload,
+	if err := rows.Scan(&task.ID, &task.Number, &task.OriginNumber,
+		&task.Code, &task.Line, &task.Title, &task.Payload,
 		&task.Applicant, &task.Answer,
 		&task.OriginPeerID, &task.OriginPeerName, &task.originTaskID,
 		&task.TargetPeerID, &task.TargetPeerName,
