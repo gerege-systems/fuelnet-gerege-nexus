@@ -9,6 +9,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { ThemeProvider } from "@/lib/theme";
 import { BrandProvider } from "@/lib/brandContext";
 import type { Brand } from "@/lib/brand";
+import type { BrandCopy } from "@/lib/brandCopy";
 
 /**
  * Everything under the document that has to run in the browser.
@@ -22,8 +23,17 @@ import type { Brand } from "@/lib/brand";
  *
  * The brand is passed down rather than fetched: it is in the first byte of HTML
  * the server sends, so no screen shows one product's name and then swaps it.
+ * The deployment's wording travels the same way and for the same reason.
  */
-export default function Providers({ brand, children }: { brand: Brand; children: React.ReactNode }) {
+export default function Providers({
+  brand,
+  copy,
+  children,
+}: {
+  brand: Brand;
+  copy: BrandCopy;
+  children: React.ReactNode;
+}) {
   // Created per mount rather than at module scope so the cache is not shared
   // across requests when the bundle is reused.
   const [queryClient] = useState(() => new QueryClient());
@@ -32,7 +42,7 @@ export default function Providers({ brand, children }: { brand: Brand; children:
     <BrandProvider brand={brand}>
       <ThemeProvider>
         {/* The brand name reaches every translation as {brand}; see lib/i18n. */}
-        <I18nProvider brand={brand.name}>
+        <I18nProvider brand={brand.name} copy={copy}>
           <QueryClientProvider client={queryClient}>
             <Layout>{children}</Layout>
             <InstallApp />

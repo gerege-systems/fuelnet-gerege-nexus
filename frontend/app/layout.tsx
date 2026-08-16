@@ -4,6 +4,7 @@ import React from "react";
 
 import Providers from "./providers";
 import { brandFromEnv } from "@/lib/brandEnv";
+import { brandCopyFromEnv } from "@/lib/brandCopy";
 
 /**
  * Rendered per request, because the deployment's name is not the build's to
@@ -63,7 +64,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // I18nProvider keeps <html lang> in step with the selected locale.
     <html lang="mn">
       <body>
-        <Providers brand={brandFromEnv()}>{children}</Providers>
+        <Providers brand={brandFromEnv()} copy={brandCopyFromEnv()}>
+          {children}
+        </Providers>
       </body>
     </html>
   );

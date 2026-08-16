@@ -111,6 +111,11 @@ services:
       BRAND_DESCRIPTION: ${BRAND_DESCRIPTION:-}
       BRAND_LOGO_URL: ${BRAND_LOGO_URL:-}
       BRAND_THEME_COLOR: ${BRAND_THEME_COLOR:-}
+      # Wording a deployment says differently; see brand/README.md.
+      BRAND_COPY_FILE: ${BRAND_COPY_FILE:-}
+      BRAND_COPY: ${BRAND_COPY:-}
+    volumes:
+      - ./brand:/brand:ro
     ports:
       - "3000:3000"
     depends_on:

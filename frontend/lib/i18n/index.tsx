@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { DEFAULT_BRAND } from "../brand";
+import type { BrandCopy } from "../brandCopy";
 import { base } from "./base";
 import { web } from "./web";
 import { access } from "./addons/access";
@@ -144,12 +145,21 @@ function isLocale(value: unknown): value is Locale {
  *
  * It has a default so that a provider mounted without one — a test, a harness —
  * still reads as this product rather than as plumbing.
+ *
+ * `copy` is the deployment's own wording, from `BRAND_COPY_FILE`. A name is not
+ * always the whole difference between two deployments: one that positions
+ * itself differently says so in prose, and prose is not a variable. Overrides
+ * are matched per key *and* per locale, so supplying English does not put
+ * English in front of a Mongolian reader — it leaves that language reading as
+ * it did, which is the honest state for a translation nobody has written yet.
  */
 export function I18nProvider({
   brand = DEFAULT_BRAND.name,
+  copy = {},
   children,
 }: {
   brand?: string;
+  copy?: BrandCopy;
   children: React.ReactNode;
 }) {
   // Server and first client render must agree, so the stored preference is
@@ -213,11 +223,16 @@ export function I18nProvider({
       // Entries are authored with mn and en; the other five locales are filled
       // in progressively, so a lookup is widened to "this locale, maybe".
       const entry = dictionary[key] as (Partial<Record<Locale, string>> & { en: string }) | undefined;
-      // Overlay first: that is where the generated and reviewed translations
+      // The deployment's own wording first, when it wrote this key in this
+      // language: it is the most specific statement anybody has made about what
+      // this string should say, and the only one made about this deployment.
+      //
+      // Then the overlay: that is where the generated and reviewed translations
       // for the optional languages live. Then the entry's own locale, then the
       // English source term rather than the key, as gettext does — an
       // untranslated screen reads as English, not as plumbing.
-      let text: string = overlays[locale]?.[key] || (entry ? entry[locale] || entry.en : key);
+      let text: string =
+        copy[key]?.[locale] || overlays[locale]?.[key] || (entry ? entry[locale] || entry.en : key);
       // The brand is offered to every key, so a string that names the product
       // needs nothing at the call site. A caller that passes its own `brand`
       // still wins — the spread order says so — which is what a screen naming
@@ -236,7 +251,7 @@ export function I18nProvider({
     };
 
     return { locale, setLocale, availableLocales, setLocaleEnabled, t };
-  }, [locale, extraLocales, brand]);
+  }, [locale, extraLocales, brand, copy]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

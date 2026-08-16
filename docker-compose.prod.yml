@@ -346,6 +346,18 @@ services:
       # was built with — see .env.example for why the maskable one is separate.
       BRAND_ICON_URL: ${BRAND_ICON_URL:-}
       BRAND_MASKABLE_ICON_URL: ${BRAND_MASKABLE_ICON_URL:-}
+      # Wording this deployment says differently — see .env.example. The path is
+      # inside the container: put the file in ./brand beside this compose file
+      # and name it BRAND_COPY_FILE=/brand/copy.json. The inline form needs no
+      # file and suits an override of a line or two.
+      BRAND_COPY_FILE: ${BRAND_COPY_FILE:-}
+      BRAND_COPY: ${BRAND_COPY:-}
+    volumes:
+      # Mounted always and usually empty. Copy is configuration a person edits,
+      # so it must not need an image rebuild — and it is not something the app
+      # has any reason to write, hence read-only. A deployment with nothing to
+      # override sets no BRAND_COPY_FILE and nothing here is ever opened.
+      - ./brand:/brand:ro
     ports:
       - "127.0.0.1:3008:3000"
     depends_on:
