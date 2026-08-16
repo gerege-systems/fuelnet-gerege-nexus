@@ -480,3 +480,68 @@ func TestAnInstallationWithoutAKeyIsSimplyOff(t *testing.T) {
 		t.Errorf("pull = %d, want 404", rec.Code)
 	}
 }
+
+// A signature covers bytes, so the bytes have to come back.
+//
+// The stamp is written with nanoseconds in it deliberately. It used to be kept
+// in a timestamptz column, which holds microseconds, so the string that came
+// back out was not the string that had been signed — and every envelope this
+// platform sent failed verification at the far end. It went unnoticed on a
+// developer's Mac, where the clock usually stops at microseconds, and turned
+// every Өртөө test red on Linux, where it does not.
+//
+// The instant here is fixed rather than taken from the clock, so this fails on
+// the old schema whatever machine it runs on.
+func TestASignedEnvelopeSurvivesTheOutboxToTheNanosecond(t *testing.T) {
+	pool := openPool(t)
+	t.Setenv(insecurePeersEnv, "1")
+	parent := newInstallation(t, pool, "parent", 40)
+	child := newInstallation(t, pool, "child", 140)
+
+	parentPeerID, _ := handshake(t, parent, child)
+	if rec := parent.adminCall(t, parent.svc.handleConfirm, nil, parentPeerID); rec.Code != http.StatusOK {
+		t.Fatalf("confirm = %d %s", rec.Code, rec.Body)
+	}
+
+	created := time.Date(2026, 8, 16, 9, 0, 0, 123456789, time.UTC)
+	envelope, err := contract.New(uuid.NewString(), contract.KindTaskAssigned, created,
+		map[string]string{"code": "D-101"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if !strings.HasSuffix(envelope.CreatedAt, "123456789Z") {
+		t.Fatalf("the test did not build a nanosecond stamp: %q", envelope.CreatedAt)
+	}
+	envelope, err = contract.Sign(parent.svc.signing, envelope)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	ctx := nexus.WithTenantID(context.Background(), parent.tenantID)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if err := parent.svc.queue(ctx, tx, parent.tenantID, envelope, []string{parentPeerID}); err != nil {
+		t.Fatalf("queue: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	sent, err := parent.svc.dueEnvelopes(context.Background(),
+		peerRow{ID: parentPeerID, TenantID: parent.tenantID}, 10)
+	if err != nil {
+		t.Fatalf("read the queue: %v", err)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("the queue holds %d envelopes, want 1", len(sent))
+	}
+	if sent[0].CreatedAt != envelope.CreatedAt {
+		t.Errorf("created_at came back as %q, was signed as %q", sent[0].CreatedAt, envelope.CreatedAt)
+	}
+	// The assertion the far end makes, made here.
+	if err := contract.Verify(parent.svc.public, sent[0]); err != nil {
+		t.Errorf("the envelope this platform is about to send does not verify: %v", err)
+	}
+}

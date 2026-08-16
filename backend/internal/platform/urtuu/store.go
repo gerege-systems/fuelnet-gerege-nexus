@@ -274,16 +274,15 @@ func (s *Service) dueEnvelopes(ctx context.Context, peer peerRow, limit int) ([]
 	for rows.Next() {
 		var envelope urtuu.Envelope
 		var payload string
-		var createdAt time.Time
-		if err := rows.Scan(&envelope.MessageID, &envelope.Kind, &createdAt, &payload, &envelope.Signature); err != nil {
+		if err := rows.Scan(&envelope.MessageID, &envelope.Kind, &envelope.CreatedAt,
+			&payload, &envelope.Signature); err != nil {
 			return nil, err
 		}
-		// Rendered from the stored instant in the one format the signature was
-		// taken over. The column is timestamptz because a text column would
-		// have made "what is overdue" unanswerable in SQL; the format is
-		// restored here, and the golden test in pkg/urtuu is what keeps the
-		// two in step.
-		envelope.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+		// Read back, never re-rendered — the same rule the payload follows and
+		// for the same reason. It was a timestamptz once, and the round trip
+		// through it silently dropped the nanoseconds Go had signed: on Linux,
+		// where the clock has them, every envelope this platform sent failed
+		// verification at the far end. See migration 00067.
 		envelope.Payload = []byte(payload)
 		envelopes = append(envelopes, envelope)
 	}
