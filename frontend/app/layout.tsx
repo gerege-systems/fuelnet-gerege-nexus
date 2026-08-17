@@ -2,9 +2,13 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import React from "react";
 
+import { cookies } from "next/headers";
+
 import Providers from "./providers";
 import { brandFromEnv } from "@/lib/brandEnv";
 import { brandCopyFromEnv } from "@/lib/brandCopy";
+import { localizedBrand } from "@/lib/brand";
+import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY } from "@/lib/i18n";
 
 /**
  * Rendered per request, because the deployment's name is not the build's to
@@ -23,7 +27,13 @@ import { brandCopyFromEnv } from "@/lib/brandCopy";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const brand = brandFromEnv();
+  // The name in the reader's language, when the deployment wrote one. The
+  // language comes from the cookie the switcher sets (lib/i18n): metadata is
+  // produced on the server, where localStorage does not exist, and a page read
+  // in English inside a Mongolian-titled tab is the same mismatch the header
+  // had.
+  const locale = (await cookies()).get(LOCALE_STORAGE_KEY)?.value || DEFAULT_LOCALE;
+  const brand = localizedBrand(brandFromEnv(), brandCopyFromEnv(), locale);
   return {
     title: brand.name,
     description: brand.description,

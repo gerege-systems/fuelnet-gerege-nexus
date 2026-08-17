@@ -68,9 +68,10 @@ const OPTIONAL_LOCALES: Locale[] = LOCALES.map((l) => l.code).filter(
   (code) => !DEFAULT_LOCALES.includes(code),
 );
 
-const STORAGE_KEY = "locale";
+export const LOCALE_STORAGE_KEY = "locale";
+const STORAGE_KEY = LOCALE_STORAGE_KEY;
 const ENABLED_STORAGE_KEY = "locales.enabled";
-const DEFAULT_LOCALE: Locale = "mn";
+export const DEFAULT_LOCALE: Locale = "mn";
 
 /**
  * The dictionary, assembled from one file per module the way Odoo gives each
@@ -204,6 +205,11 @@ export function I18nProvider({
 
     const setLocale = (next: Locale) => {
       window.localStorage.setItem(STORAGE_KEY, next);
+      // Also a cookie, because the server has to know: the tab title, the
+      // description and the launcher name are metadata, produced before any of
+      // this runs, and localStorage is not readable there. Without it a reader
+      // in English had an English page inside a Mongolian-titled tab.
+      document.cookie = `${STORAGE_KEY}=${next}; path=/; max-age=31536000; samesite=lax`;
       setLocaleState(next);
     };
 
