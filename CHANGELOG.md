@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-17
+
 ### Added — The installation ring and the platform's clock are SDK capabilities
 
 Two things a module could only reach by living in this repository are published
