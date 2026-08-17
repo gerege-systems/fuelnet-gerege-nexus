@@ -38,17 +38,19 @@ export default function Providers({
   // across requests when the bundle is reused.
   const [queryClient] = useState(() => new QueryClient());
 
+  // The brand name reaches every translation as {brand}; see lib/i18n. I18n is
+  // the outer provider because the name itself is translatable — BrandProvider
+  // resolves it against the language being read.
   return (
-    <BrandProvider brand={brand}>
-      <ThemeProvider>
-        {/* The brand name reaches every translation as {brand}; see lib/i18n. */}
-        <I18nProvider brand={brand.name} copy={copy}>
+    <I18nProvider brand={brand.name} copy={copy}>
+      <BrandProvider brand={brand} copy={copy}>
+        <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <Layout>{children}</Layout>
             <InstallApp />
           </QueryClientProvider>
-        </I18nProvider>
-      </ThemeProvider>
-    </BrandProvider>
+        </ThemeProvider>
+      </BrandProvider>
+    </I18nProvider>
   );
 }

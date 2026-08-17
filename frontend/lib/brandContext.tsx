@@ -1,8 +1,10 @@
 "use client";
 
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useMemo } from "react";
 
-import { DEFAULT_BRAND, type Brand } from "./brand";
+import { DEFAULT_BRAND, localizedBrand, type Brand } from "./brand";
+import type { BrandCopy } from "./brandCopy";
+import { useI18n } from "./i18n";
 
 /**
  * The brand, as the browser half of the app sees it.
@@ -19,8 +21,28 @@ import { DEFAULT_BRAND, type Brand } from "./brand";
  */
 const BrandContext = createContext<Brand>(DEFAULT_BRAND);
 
-export function BrandProvider({ brand, children }: { brand: Brand; children: React.ReactNode }) {
-  return <BrandContext.Provider value={brand}>{children}</BrandContext.Provider>;
+/**
+ * The name follows the reader's language; nothing else does.
+ *
+ * That is why this sits *inside* the i18n provider rather than outside it,
+ * which is where it used to be: a deployment writes its name per locale in
+ * `BRAND_COPY_FILE`, so resolving it needs to know which language is being
+ * read. Every `useBrand()` caller gets the right one without asking — there
+ * are a dozen of them, and the one that forgot would be a header in the wrong
+ * language beside a sentence in the right one.
+ */
+export function BrandProvider({
+  brand,
+  copy = {},
+  children,
+}: {
+  brand: Brand;
+  copy?: BrandCopy;
+  children: React.ReactNode;
+}) {
+  const { locale } = useI18n();
+  const value = useMemo(() => localizedBrand(brand, copy, locale), [brand, copy, locale]);
+  return <BrandContext.Provider value={value}>{children}</BrandContext.Provider>;
 }
 
 /**

@@ -219,6 +219,11 @@ export function I18nProvider({
       if (!enabled && locale === target) setLocale(DEFAULT_LOCALE);
     };
 
+    // The deployment's name in the language being read, when it wrote one:
+    // `{brand}` inside a translated sentence has to agree with the header
+    // beside it, and the header follows the same override (lib/brand.ts).
+    const brandName = copy["brand.name"]?.[locale]?.trim() || brand;
+
     const t = (key: TranslationKey, vars?: Record<string, string | number>) => {
       // Entries are authored with mn and en; the other five locales are filled
       // in progressively, so a lookup is widened to "this locale, maybe".
@@ -243,7 +248,7 @@ export function I18nProvider({
       // and this used to build no regular expression at all when the caller
       // passed no variables.
       if (text.includes("{")) {
-        for (const [name, replacement] of Object.entries({ brand, ...(vars ?? {}) })) {
+        for (const [name, replacement] of Object.entries({ brand: brandName, ...(vars ?? {}) })) {
           text = text.replace(new RegExp(`\\{${name}\\}`, "g"), String(replacement));
         }
       }

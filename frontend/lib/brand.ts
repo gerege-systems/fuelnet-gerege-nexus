@@ -92,3 +92,39 @@ export const DEFAULT_BRAND: Brand = {
   maskableIconUrl: "",
   docsUrl: "https://gerege-systems.github.io/open-gerege-nexus/",
 };
+
+/**
+ * The copy keys a deployment writes its own name under, per language.
+ *
+ * `BRAND_NAME` is one string, and a deployment whose name is Mongolian showed
+ * that Mongolian name to an English reader — the header said one thing and
+ * every sentence around it said another. The name is prose like the rest of a
+ * deployment's wording, so it is written where the rest of it is written:
+ * `BRAND_COPY_FILE`, matched per locale. Unwritten languages keep the
+ * environment's value, which is the honest state for a name nobody translated.
+ */
+export const BRAND_COPY_KEYS = {
+  name: "brand.name",
+  shortName: "brand.short_name",
+  description: "brand.description",
+} as const;
+
+/**
+ * The brand as one language sees it.
+ *
+ * Everything except the three words is the same in every language: a logo, a
+ * colour and an address do not translate.
+ */
+export function localizedBrand(
+  brand: Brand,
+  copy: Record<string, Partial<Record<string, string>>>,
+  locale: string,
+): Brand {
+  const pick = (key: string, fallback: string) => copy[key]?.[locale]?.trim() || fallback;
+  return {
+    ...brand,
+    name: pick(BRAND_COPY_KEYS.name, brand.name),
+    shortName: pick(BRAND_COPY_KEYS.shortName, brand.shortName),
+    description: pick(BRAND_COPY_KEYS.description, brand.description),
+  };
+}
