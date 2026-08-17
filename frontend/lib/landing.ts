@@ -34,19 +34,20 @@ export type LandingSection = (typeof LANDING_SECTIONS)[number];
  * the page: a deployment that drops `applications` drops its menu item with
  * it, instead of leaving a link that scrolls nowhere. `hero` is absent because
  * it is the top of the page — the brand mark already goes there.
+ *
+ * A section may also render without a menu item, which is why this is partial:
+ * `applications`, `technology` and `capabilities` are read on the way down the
+ * page rather than jumped to, and a seven-item menu was crowding out the two
+ * controls a visitor actually came for. Their labels stay in the translations
+ * (`website.menu.applications`, `.technology`, `.identity`) for a deployment
+ * that wants them linked again.
  */
 export const SECTION_LINKS: Partial<
   Record<LandingSection, { anchor: string; label: TranslationKey }>
 > = {
   architecture: { anchor: "architecture", label: "website.menu.architecture" },
-  applications: { anchor: "applications", label: "website.menu.applications" },
   platform: { anchor: "platform", label: "website.menu.platform" },
   trust: { anchor: "trust", label: "website.menu.trust" },
-  technology: { anchor: "technology", label: "website.menu.technology" },
-  // The section's own id is `features`; its subject is identity. The id is
-  // what existing links point at, so the anchor keeps it and the label says
-  // what a reader is actually being offered.
-  capabilities: { anchor: "features", label: "website.menu.identity" },
 };
 
 /**
