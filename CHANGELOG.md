@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-08-17
+
+### Fixed — The first consent a client is ever asked for
+
+`/api/v1/oauth2/consent` sent `already_granted: null` when the user had granted
+that client nothing, because a Go nil slice is `null` and the handler set the
+field straight from a lookup that finds no row. The consent screen asks that
+list whether it includes each requested scope, so the page threw before it
+rendered: a relying party's very first authorization — the only kind a new
+client ever sees — ended at "This page couldn't load", with the grant itself
+never offered.
+
+The handler sends `[]` now, through the same `list` helper the client writes
+already use, and the screen tolerates a null besides: a shell talks to
+deployments of several ages, and it should not be the half that breaks when one
+of them answers with an older shape.
+
 ## [1.8.0] - 2026-08-17
 
 ### Added — The installation ring and the platform's clock are SDK capabilities

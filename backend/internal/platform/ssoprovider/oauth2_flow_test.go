@@ -451,6 +451,41 @@ func TestConsentIsRequiredBeforeACodeIsIssued(t *testing.T) {
 	}
 }
 
+// A user who has granted nothing gets an empty list, not null.
+//
+// The consent screen maps over the scopes and asks `already_granted` whether it
+// includes each one, so a null is not a cosmetic difference: the very first
+// consent for a client — the only kind a new relying party ever sees — threw
+// before the page rendered, and the browser showed "This page couldn't load".
+func TestConsentPromptAlreadyGrantedIsAListWhenNothingIsGranted(t *testing.T) {
+	f := newFixture(t)
+
+	q := url.Values{
+		"response_type": {"code"}, "client_id": {f.client.ClientID},
+		"redirect_uri": {f.client.RedirectURIs[0]}, "scope": {"openid profile"},
+		"code_challenge": {f.challenge}, "code_challenge_method": {"S256"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/oauth2/consent?"+q.Encode(), nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "test-session"})
+	rec := httptest.NewRecorder()
+	f.provider.HandleConsentPrompt(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("consent prompt returned %d: %s", rec.Code, rec.Body.String())
+	}
+	// Decoded into Go, null and [] are the same nil slice, so the assertion is
+	// on the JSON the browser is handed.
+	var raw struct {
+		AlreadyGranted json.RawMessage `json:"already_granted"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(raw.AlreadyGranted) != "[]" {
+		t.Errorf("already_granted was %s, want []", raw.AlreadyGranted)
+	}
+}
+
 func TestClientCredentialsGrantHasNoUserAndNoIdentityScopes(t *testing.T) {
 	f := newFixture(t)
 

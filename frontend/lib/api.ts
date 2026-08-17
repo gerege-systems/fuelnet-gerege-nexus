@@ -1816,5 +1816,7 @@ export type ConsentPrompt = {
   logo_uri?: string;
   redirect_uri: string;
   scopes: OAuth2Scope[];
-  already_granted: string[];
+  // Nullable because a server that has recorded no grant sends `null`, and the
+  // screens this type feeds are rendered against deployments of several ages.
+  already_granted: string[] | null;
 };

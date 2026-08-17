@@ -121,7 +121,7 @@ export default function ConsentPage() {
                 </p>
                 <ul className="space-y-2">
                   {prompt.scopes.map((scope) => {
-                    const known = prompt.already_granted.includes(scope.name);
+                    const known = (prompt.already_granted ?? []).includes(scope.name);
                     return (
                       <li key={scope.name} className="flex items-start gap-3 text-sm">
                         <Check

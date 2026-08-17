@@ -281,12 +281,15 @@ func (s *SSOProvider) HandleConsentPrompt(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// A user who has granted nothing leaves this nil, and a nil slice is sent
+	// as `null` rather than `[]` — which the consent screen then asks whether
+	// it includes each scope. Every first consent for a client is that case.
 	granted, _ := s.store.GetConsent(r.Context(), claims.UserID, req.Client.ClientID)
 
 	prompt := ConsentPrompt{
 		ClientID: req.Client.ClientID, ClientName: req.Client.ClientName,
 		ClientURI: req.Client.ClientURI, LogoURI: req.Client.LogoURI,
-		RedirectURI: req.RedirectURI, AlreadyGranted: granted,
+		RedirectURI: req.RedirectURI, AlreadyGranted: list(granted),
 		Scopes: make([]Scope, 0, len(req.Scopes)),
 	}
 	for _, name := range req.Scopes {
