@@ -723,6 +723,20 @@ export const api = {
   openShift: (openingFloat:number,notes="") => fetcher<{id:string;opened_at:string}>("/devices/shifts/open",{method:"POST",body:JSON.stringify({opening_float:openingFloat,notes})}),
   closeShift: (closingTotal:number,notes="") => fetcher<{id:string;status:string}>("/devices/shifts/close",{method:"POST",body:JSON.stringify({closing_total:closingTotal,notes})}),
 
+  // Касс — io.gerege.nexus.pos (pos-gerege-nexus). Тэр модульгүй суулгац
+  // эдгээрт 403 хариулна, тэр нь "энэ бүтээгдэхүүн касс биш" гэсэн жинхэнэ
+  // хариу; app/pos/page.tsx түүнийг уншаад төхөөрөмжийн ээлж рүү шилждэг.
+  //
+  // Ээлж нь кассын цэгт хамаарна, төхөөрөмжид биш: дээрх /devices/shifts/*
+  // нь device токен шаарддаг тул лангуун дээрх хөтөч түүнийг нээж чадахгүй.
+  getPosRegisters: () => fetcher<Array<{id:string;code:string;name:string;warehouse_id?:string;active:boolean}>>("/pos/registers"),
+  createPosRegister: (data:{code:string;name:string;warehouse_id?:string}) => fetcher<{id:string;code:string;name:string;warehouse_id?:string;active:boolean}>("/pos/registers",{method:"POST",body:JSON.stringify(data)}),
+  getPosShift: (registerId:string) => fetcher<{shift:null|{id:string;register_id:string;register_code:string;opened_at:string;opening_float:number;closed_at?:string;counted_cash?:number;notes:string;report:{sales:number;gross:number;vat:number;cash_taken:number;card_taken:number;expected_cash:number;variance:number}}}>(`/pos/shift?register_id=${encodeURIComponent(registerId)}`),
+  openPosShift: (registerId:string,openingFloat:number,notes="") => fetcher<{id:string}>("/pos/shifts",{method:"POST",body:JSON.stringify({register_id:registerId,opening_float:openingFloat,notes})}),
+  closePosShift: (id:string,countedCash:number,notes="") => fetcher(`/pos/shifts/${id}/close`,{method:"POST",body:JSON.stringify({counted_cash:countedCash,notes})}),
+  createPosSale: (registerId:string,lines:Array<{product_id:string;quantity:number}>,cash:number,card:number) => fetcher<{id:string;receipt_no:string;total:number;vat_amount:number;cash:number;card:number;change_given:number}>("/pos/sales",{method:"POST",body:JSON.stringify({register_id:registerId,lines,cash,card})}),
+  getPosSales: (shiftId:string) => fetcher<Array<{id:string;receipt_no:string;seq:number;total:number;vat_amount:number;cash:number;card:number;change_given:number;created_at:string}>>(`/pos/sales?shift_id=${encodeURIComponent(shiftId)}`),
+
   // Store
   //
   // A manifest carries release notes since the chronicle: one sentence saying
