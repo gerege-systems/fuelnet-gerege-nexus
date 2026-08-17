@@ -8,7 +8,7 @@ import Providers from "./providers";
 import { brandFromEnv } from "@/lib/brandEnv";
 import { brandCopyFromEnv } from "@/lib/brandCopy";
 import { localizedBrand } from "@/lib/brand";
-import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY } from "@/lib/i18n";
+import { DEFAULT_LOCALE, LOCALE_KEY } from "@/lib/locale";
 
 /**
  * Rendered per request, because the deployment's name is not the build's to
@@ -32,7 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // produced on the server, where localStorage does not exist, and a page read
   // in English inside a Mongolian-titled tab is the same mismatch the header
   // had.
-  const locale = (await cookies()).get(LOCALE_STORAGE_KEY)?.value || DEFAULT_LOCALE;
+  const locale = (await cookies()).get(LOCALE_KEY)?.value || DEFAULT_LOCALE;
   const brand = localizedBrand(brandFromEnv(), brandCopyFromEnv(), locale);
   return {
     title: brand.name,

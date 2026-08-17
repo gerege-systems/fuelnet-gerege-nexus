@@ -33,7 +33,11 @@ import { urtuu } from "./addons/urtuu";
 import { website } from "./addons/website";
 import { overlays } from "./locales";
 
-export type Locale = "mn" | "ar" | "zh" | "en" | "fr" | "ru" | "es";
+// The type and the two constants live in lib/locale.ts, which carries no
+// "use client": the server reads them too, and a value imported from a client
+// module reaches a server component as a stub rather than as itself.
+export type { Locale } from "../locale";
+import { DEFAULT_LOCALE as DEFAULT_LOCALE_VALUE, LOCALE_KEY, type Locale } from "../locale";
 
 /**
  * Mongolian plus the six official languages of the United Nations, in the UN's
@@ -68,10 +72,9 @@ const OPTIONAL_LOCALES: Locale[] = LOCALES.map((l) => l.code).filter(
   (code) => !DEFAULT_LOCALES.includes(code),
 );
 
-export const LOCALE_STORAGE_KEY = "locale";
-const STORAGE_KEY = LOCALE_STORAGE_KEY;
+const STORAGE_KEY = LOCALE_KEY;
 const ENABLED_STORAGE_KEY = "locales.enabled";
-export const DEFAULT_LOCALE: Locale = "mn";
+const DEFAULT_LOCALE = DEFAULT_LOCALE_VALUE;
 
 /**
  * The dictionary, assembled from one file per module the way Odoo gives each
