@@ -24,10 +24,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"slices"
-	"strings"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/ssoclients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -35,6 +33,7 @@ import (
 
 type SSOClientsModule struct {
 	sso *ssoprovider.SSOProvider
+	svc *domain.Service
 }
 
 // ID is the catalogue identifier.
@@ -48,11 +47,32 @@ const ID = "io.gerege.nexus.sso_clients"
 const LegacyID = "io.gerege.nexus.developer_portal"
 
 // New builds the module and registers it in the compile-time app registry.
+//
+// The provider stays whole: issuing codes, exchanging tokens and holding the
+// clients are one authorization server this deployment shares, and none of it
+// is this app's decision. What the app decides — what a registration has to
+// look like before the provider is allowed to hold it — is the service.
 func New(sso *ssoprovider.SSOProvider) *SSOClientsModule {
-	m := &SSOClientsModule{sso: sso}
+	m := &SSOClientsModule{sso: sso, svc: domain.NewService(vocabulary{}, identifiers{})}
 	nexus.Register(m)
 	return m
 }
+
+// vocabulary is domain/ssoclients.Vocabulary over the authorization server:
+// what it implements, what it renders, and what its operator allows.
+type vocabulary struct{}
+
+func (vocabulary) SupportedGrantTypes() []string { return ssoprovider.SupportedGrantTypes }
+
+func (vocabulary) IsSupportedScope(scope string) bool { return ssoprovider.IsSupportedScope(scope) }
+
+func (vocabulary) AllowedRedirect(raw string) error { return ssoprovider.ValidateRedirectURI(raw) }
+
+// identifiers is the platform's randomness, which is the only source this
+// deployment has and the only one an audit has looked at.
+type identifiers struct{}
+
+func (identifiers) New(length int) string { return ssoprovider.NewIdentifier(length) }
 
 func (m *SSOClientsModule) ID() string { return ID }
 
@@ -161,21 +181,10 @@ func (m *SSOClientsModule) handleGetApp(w http.ResponseWriter, r *http.Request) 
 	nexus.JSON(w, http.StatusOK, client)
 }
 
-// appRequest is the create/update payload.
-type appRequest struct {
-	ClientName   string   `json:"client_name"`
-	ClientURI    string   `json:"client_uri"`
-	LogoURI      string   `json:"logo_uri"`
-	ClientType   string   `json:"client_type"`
-	RedirectURIs []string `json:"redirect_uris"`
-	// Where the platform may return somebody after this application signs them
-	// out of it. Optional: an application that never ends a session here needs
-	// none, and one that does gets its return address matched exactly.
-	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
-	GrantTypes             []string `json:"grant_types"`
-	Scopes                 []string `json:"scopes"`
-	Disabled               bool     `json:"disabled"`
-}
+// appRequest is the create/update payload, which is the domain's registration:
+// one struct rather than two, so the request shape and the thing the rules
+// check cannot drift apart.
+type appRequest = domain.Registration
 
 func (m *SSOClientsModule) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
@@ -190,15 +199,16 @@ func (m *SSOClientsModule) handleCreateApp(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	normalised, verr := normalise(&req)
+	normalised, verr := m.svc.Normalise(req)
 	if verr != nil {
 		nexus.Error(w, http.StatusBadRequest, verr.Error())
 		return
 	}
 
+	clientID, secret := m.svc.Credentials(normalised)
 	client := &ssoprovider.Client{
 		TenantID:               tenantID,
-		ClientID:               "app_" + strings.ToLower(slugify(req.ClientName)) + "_" + ssoprovider.NewIdentifier(8),
+		ClientID:               clientID,
 		ClientName:             normalised.ClientName,
 		ClientURI:              normalised.ClientURI,
 		LogoURI:                normalised.LogoURI,
@@ -209,12 +219,10 @@ func (m *SSOClientsModule) handleCreateApp(w http.ResponseWriter, r *http.Reques
 		Scopes:                 normalised.Scopes,
 	}
 
-	// A public client is issued no secret at all: PKCE stands in for it,
-	// because a secret embedded in a mobile app or an SPA is readable by
-	// anyone who downloads it.
-	var secret, secretHash string
-	if client.ClientType != "public" {
-		secret = "sec_" + ssoprovider.NewIdentifier(48)
+	// Only the digest is stored, and only when there is a secret at all: a
+	// public client is issued none.
+	secretHash := ""
+	if secret != "" {
 		secretHash = ssoprovider.HashSecret(secret)
 	}
 
@@ -252,12 +260,10 @@ func (m *SSOClientsModule) handleUpdateApp(w http.ResponseWriter, r *http.Reques
 		nexus.Error(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
-	// The client type is fixed at registration: flipping a public client to
-	// confidential would leave it with no secret, and the other direction
-	// would leave a secret in a binary that cannot keep one.
-	req.ClientType = existing.ClientType
+	// The client type is fixed at registration.
+	req = domain.FixedType(req, existing.ClientType)
 
-	normalised, verr := normalise(&req)
+	normalised, verr := m.svc.Normalise(req)
 	if verr != nil {
 		nexus.Error(w, http.StatusBadRequest, verr.Error())
 		return
@@ -318,12 +324,12 @@ func (m *SSOClientsModule) handleRotateSecret(w http.ResponseWriter, r *http.Req
 		nexus.Error(w, http.StatusInternalServerError, "could not load the application")
 		return
 	}
-	if client.IsPublic() {
-		nexus.Error(w, http.StatusBadRequest, "a public client has no secret to rotate")
+	secret, verr := m.svc.RotateSecret(client.ClientType)
+	if verr != nil {
+		nexus.Error(w, http.StatusBadRequest, verr.Error())
 		return
 	}
 
-	secret := "sec_" + ssoprovider.NewIdentifier(48)
 	if err := m.sso.Store().RotateClientSecret(r.Context(), tenantID, clientID, ssoprovider.HashSecret(secret)); err != nil {
 		slog.Error("failed to rotate a client secret", "error", err)
 		nexus.Error(w, http.StatusInternalServerError, "could not rotate the secret")
@@ -450,152 +456,4 @@ func (m *SSOClientsModule) handleEndpoints(w http.ResponseWriter, r *http.Reques
 		"introspection_endpoint": issuer + "/oauth2/introspect",
 		"revocation_endpoint":    issuer + "/oauth2/revoke",
 	})
-}
-
-// normalise validates and cleans a create/update payload.
-func normalise(req *appRequest) (*appRequest, error) {
-	out := &appRequest{
-		ClientName: strings.TrimSpace(req.ClientName),
-		ClientURI:  strings.TrimSpace(req.ClientURI),
-		LogoURI:    strings.TrimSpace(req.LogoURI),
-		ClientType: strings.TrimSpace(req.ClientType),
-	}
-
-	if out.ClientName == "" {
-		return nil, errors.New("client_name is required")
-	}
-	if len(out.ClientName) > 200 {
-		return nil, errors.New("client_name is too long")
-	}
-
-	if out.ClientType == "" {
-		out.ClientType = "confidential"
-	}
-	if out.ClientType != "confidential" && out.ClientType != "public" {
-		return nil, errors.New("client_type must be confidential or public")
-	}
-
-	if out.GrantTypes = dedupe(req.GrantTypes); len(out.GrantTypes) == 0 {
-		out.GrantTypes = []string{"authorization_code", "refresh_token"}
-	}
-	for _, grant := range out.GrantTypes {
-		if !slices.Contains(ssoprovider.SupportedGrantTypes, grant) {
-			return nil, errors.New("unsupported grant type: " + grant)
-		}
-		if grant == "client_credentials" && out.ClientType == "public" {
-			return nil, errors.New("a public client cannot use client_credentials: it has no secret to prove with")
-		}
-	}
-
-	if out.Scopes = dedupe(req.Scopes); len(out.Scopes) == 0 {
-		out.Scopes = []string{"openid", "profile", "erp.read"}
-	}
-	for _, scope := range out.Scopes {
-		if !ssoprovider.IsSupportedScope(scope) {
-			return nil, errors.New("unknown scope: " + scope)
-		}
-	}
-	out.RedirectURIs = dedupe(req.RedirectURIs)
-	if slices.Contains(out.GrantTypes, "authorization_code") && len(out.RedirectURIs) == 0 {
-		return nil, errors.New("authorization_code requires at least one redirect_uri")
-	}
-	for _, raw := range out.RedirectURIs {
-		if err := validateRedirectURI(raw, out.ClientType); err != nil {
-			return nil, err
-		}
-	}
-	// The same rules: a post-logout address is matched exactly by the logout
-	// endpoint, so a wildcard or a fragment registered here would be a target
-	// that can never match, and a plain-HTTP one off the loopback would be a
-	// person handed back over an unprotected hop.
-	out.PostLogoutRedirectURIs = dedupe(req.PostLogoutRedirectURIs)
-	for _, raw := range out.PostLogoutRedirectURIs {
-		if err := validateRedirectURI(raw, out.ClientType); err != nil {
-			return nil, err
-		}
-	}
-	for _, raw := range []string{out.ClientURI, out.LogoURI} {
-		if raw == "" {
-			continue
-		}
-		if parsed, err := url.Parse(raw); err != nil || !parsed.IsAbs() {
-			return nil, errors.New("client_uri and logo_uri must be absolute URLs")
-		}
-	}
-
-	return out, nil
-}
-
-// validateRedirectURI enforces what the authorization endpoint will later match
-// against. Nothing was checked before, so a client could be registered with a
-// redirect target the flow would refuse — or worse, accept.
-func validateRedirectURI(raw, clientType string) error {
-	parsed, err := url.Parse(raw)
-	if err != nil || !parsed.IsAbs() {
-		return errors.New("redirect_uri must be an absolute URL: " + raw)
-	}
-	// A fragment is never sent to the server and cannot be matched, so a
-	// registration carrying one is a mistake worth naming now.
-	if parsed.Fragment != "" || strings.Contains(raw, "#") {
-		return errors.New("redirect_uri must not contain a fragment: " + raw)
-	}
-	if strings.Contains(raw, "*") {
-		return errors.New("wildcards are not allowed in a redirect_uri: " + raw)
-	}
-	// Credentials in the URI are never part of a callback anyone means to
-	// register, and they would be handed to whoever reads the browser's history.
-	if parsed.User != nil {
-		return errors.New("redirect_uri must not carry userinfo: " + raw)
-	}
-
-	switch parsed.Scheme {
-	case "https":
-		// The operator's host allowlist, when they have set one.
-		return ssoprovider.ValidateRedirectURI(raw)
-	case "http":
-		// Plain HTTP is only ever safe on the loopback interface, which is how
-		// native apps and local development receive the redirect.
-		host := parsed.Hostname()
-		if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-			return nil
-		}
-		return errors.New("redirect_uri must use https outside localhost: " + raw)
-	default:
-		// Custom schemes (com.example.app:/callback) are how a mobile app
-		// receives a redirect, and are meaningful only for public clients.
-		if clientType == "public" {
-			return nil
-		}
-		return errors.New("a confidential client's redirect_uri must be http(s): " + raw)
-	}
-}
-
-func dedupe(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, v := range values {
-		v = strings.TrimSpace(v)
-		if v != "" && !slices.Contains(out, v) {
-			out = append(out, v)
-		}
-	}
-	return out
-}
-
-// slugify turns an application name into the readable half of its client_id.
-func slugify(name string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(name) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == ' ' || r == '-' || r == '_':
-			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
-				b.WriteRune('-')
-			}
-		}
-		if b.Len() >= 24 {
-			break
-		}
-	}
-	return strings.Trim(b.String(), "-")
 }
