@@ -20,26 +20,13 @@ package urtuu
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/jackc/pgx/v5"
 )
-
-// lineMark is the first character of a number: the promise, in one letter.
-//
-// Cyrillic, because the number is printed on Mongolian paperwork and read by
-// people who call the two lines Үйлчилгээ and Даалгавар. It is never an API
-// identifier — routes take a UUID — so it does not have to survive a URL.
-func lineMark(line string) string {
-	if line == contract.LineService {
-		return "Ү"
-	}
-	return "Д"
-}
 
 // nextNumber allocates one register number inside the caller's transaction.
 //
@@ -53,9 +40,7 @@ func lineMark(line string) string {
 // the 1st of January belongs to the new year's register, which is the year its
 // number has to name.
 func nextNumber(ctx context.Context, tx pgx.Tx, tenantID, line string, when time.Time) (string, error) {
-	if !contract.KnownLine(line) {
-		line = contract.LineAssignment
-	}
+	line = domain.LineOf(line)
 	// The platform's clock. A request registered at half past midnight in
 	// Ulaanbaatar on the first of January belongs to the new year's register,
 	// and on a UTC container `when.Year()` would have filed it under the old
@@ -72,8 +57,5 @@ func nextNumber(ctx context.Context, tx pgx.Tx, tenantID, line string, when time
 		return "", err
 	}
 
-	// Five digits, and it grows rather than wrapping: an organisation that
-	// passes a hundred thousand requests in a year gets a longer number, not a
-	// number somebody else already has.
-	return fmt.Sprintf("%s%d-%05d", lineMark(line), year, sequence), nil
+	return domain.FormatNumber(line, year, sequence), nil
 }

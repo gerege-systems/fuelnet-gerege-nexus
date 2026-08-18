@@ -18,11 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/jackc/pgx/v5"
@@ -93,7 +93,7 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 		return err
 	}
 	if !open {
-		return fmt.Errorf("the code %s is not open on that link", parent.Code)
+		return domain.CodeNotOpenOn(parent.Code)
 	}
 
 	// Each dispatch is registered here as well, the way outgoing mail is: this
@@ -111,7 +111,7 @@ func (m *Module) sendDown(ctx context.Context, tx pgx.Tx, tenantID, actorUserID 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'RECEIVED', $11, $12, NULLIF($13, '')::uuid)
 		RETURNING id`,
 		tenantID, mirrorNumber, parent.Code, parent.Line, parent.Title, parent.Payload,
-		applicantOrEmpty(parent.Applicant), peerID, parent.ID,
+		domain.ApplicantOrEmpty(parent.Applicant), peerID, parent.ID,
 		parent.OriginChain, deadline, parent.Evidence, actorUserID).Scan(&mirrorID); err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (m *Module) receiveAssignment(ctx context.Context, message nexus.LinkMessag
 	// The deadline the sender set, or this code's own norm measured from the
 	// envelope's stamp — the sender's clock, because that is the moment the
 	// work was promised against.
-	deadline := deadlineFor(code, work.Deadline, message.CreatedAt)
+	deadline := domain.DeadlineFor(code, work.Deadline, message.CreatedAt)
 	// Stored exactly as it arrived. These references are to documents at the
 	// sending installation and cannot be read from here; a count re-derived
 	// locally would be a lie with a number in it.
@@ -228,7 +228,7 @@ func (m *Module) receiveAssignment(ctx context.Context, message nexus.LinkMessag
 	// Registered on arrival, under this installation's own year and sequence.
 	// The sender's number is kept beside it rather than reused: two registers,
 	// two numbers, and the second cites the first.
-	number, err := nextNumber(ctx, tx, message.TenantID, lineOf(work.Line), time.Now())
+	number, err := nextNumber(ctx, tx, message.TenantID, domain.LineOf(work.Line), time.Now())
 	if err != nil {
 		return err
 	}
@@ -244,8 +244,8 @@ func (m *Module) receiveAssignment(ctx context.Context, message nexus.LinkMessag
 		-- write that marks it read can fail after this one succeeded.
 		ON CONFLICT (origin_peer_id, origin_task_id) WHERE origin_peer_id IS NOT NULL DO NOTHING
 		RETURNING id`,
-		message.TenantID, number, work.Number, work.Code, lineOf(work.Line), work.Title,
-		payloadOrEmpty(work.Payload), applicantOrEmpty(work.Applicant),
+		message.TenantID, number, work.Number, work.Code, domain.LineOf(work.Line), work.Title,
+		domain.PayloadOrEmpty(work.Payload), domain.ApplicantOrEmpty(work.Applicant),
 		message.PeerID, work.TaskID, append(work.OriginChain, m.link.InstallationID()),
 		deadline, incomingEvidence).Scan(&taskID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -263,33 +263,21 @@ func (m *Module) receiveAssignment(ctx context.Context, message nexus.LinkMessag
 }
 
 // refuseAssignment returns the reason this task cannot be taken, or empty.
+//
+// The lookup is here and the judgement is the domain's. A database failure is
+// not a refusal in the ordinary sense — returning empty would have the caller
+// create the task, and refusing outright would turn a transient fault into a
+// permanent no — so it travels as its own sentence, which the parent can tell
+// apart when it retries.
 func (m *Module) refuseAssignment(ctx context.Context, message nexus.LinkMessage, work assignment) string {
-	// The cycle guard. A→Б→А is a legitimate shape for a peer graph — two
-	// ministries can each be above the other for different kinds of work — so
-	// it is the *task* that must not go round, not the link that must not
-	// exist.
-	for _, installation := range work.OriginChain {
-		if installation == m.link.InstallationID() {
-			return "this task has already passed through this installation (origin chain)"
-		}
-	}
-
 	code, err := m.lookupCode(ctx, message.TenantID, work.Code)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "this installation has no request code " + work.Code
-	}
-	if err != nil {
-		// A database failure is not a refusal. Returning empty here would have
-		// the caller create the task; returning a reason would refuse work for
-		// a transient fault, and neither is right — so it is reported as a
-		// refusal only after the lookup has actually answered.
+	found := err == nil
+	failed := err != nil && !errors.Is(err, pgx.ErrNoRows)
+	if failed {
 		slog.Warn("urtuu: could not check an incoming task's code", "code", work.Code, "error", err)
-		return "this installation could not check the request code " + work.Code
 	}
-	if !code.Active {
-		return "the request code " + work.Code + " is not in use at this installation"
-	}
-	return ""
+	return domain.AssignmentRefusal(work.OriginChain, m.link.InstallationID(),
+		work.Code, code, found, failed)
 }
 
 // ------------------------------------------------------------- receiving back
@@ -335,10 +323,7 @@ func (m *Module) receiveUpdate(ctx context.Context, message nexus.LinkMessage) e
 	// state copied here — so the transition table is not applied to it. What is
 	// applied is monotonicity: deliveries retry and can arrive out of order,
 	// and an older update must not walk a finished task backwards.
-	if rank(news.Status) < rank(from) {
-		return nil
-	}
-	if news.Status == from {
+	if !domain.SupersededBy(from, news.Status) {
 		return nil
 	}
 
@@ -449,50 +434,25 @@ func (m *Module) gatherAnswers(ctx context.Context, tenantID, parentID string) {
 	}
 	defer rows.Close()
 
-	var parts []string
+	branches := make([]domain.BranchAnswer, 0, 8)
 	for rows.Next() {
-		var peer, answer string
-		if err := rows.Scan(&peer, &answer); err != nil {
+		var branch domain.BranchAnswer
+		if err := rows.Scan(&branch.Peer, &branch.Answer); err != nil {
 			return
 		}
-		parts = append(parts, peer+": "+answer)
+		branches = append(branches, branch)
 	}
-	if err := rows.Err(); err != nil || len(parts) == 0 {
+	if err := rows.Err(); err != nil {
 		return
 	}
-	// One branch answers as itself; the office's name only helps when there is
-	// more than one of them.
-	answer := parts[0]
-	if len(parts) > 1 {
-		answer = strings.Join(parts, "\n")
-	} else if peer, rest, found := strings.Cut(parts[0], ": "); found {
-		_ = peer
-		answer = rest
+	answer := domain.JoinAnswers(branches)
+	if answer == "" {
+		return
 	}
 	if _, err := m.db.Exec(ctx,
 		`UPDATE urtuu_tasks SET answer = $2, updated_at = NOW() WHERE id = $1`,
 		parentID, answer); err != nil {
 		slog.Warn("urtuu: could not record a request's answer", "task_id", parentID, "error", err)
-	}
-}
-
-// rank orders the statuses for the monotonicity check above. It is not part of
-// the contract's state machine and must not be mistaken for one: it exists only
-// so that two updates arriving out of order settle the same way round.
-func rank(status string) int {
-	switch contract.TaskStatus(status) {
-	case contract.StatusReceived:
-		return 0
-	case contract.StatusAccepted:
-		return 1
-	case contract.StatusInProgress, contract.StatusDelegated:
-		return 2
-	case contract.StatusCompleted, contract.StatusReturned:
-		return 3
-	case contract.StatusClosed:
-		return 4
-	default:
-		return -1
 	}
 }
 
@@ -502,32 +462,6 @@ func rank(status string) int {
 // nothing here, it is only ever quoted back. Keeping it off the JSON keeps
 // another installation's internal identifier out of this one's API.
 func (t Task) OriginTaskRef() string { return t.originTaskID }
-
-// lineOf keeps an envelope from an older build readable. A peer that does not
-// know about the two lines can only be sending assignments, because that is the
-// only thing its build could raise.
-func lineOf(line string) string {
-	if contract.KnownLine(line) {
-		return line
-	}
-	return contract.LineAssignment
-}
-
-// applicantOrEmpty renders an applicant for a NOT NULL column. Absent is `{}`,
-// which is the honest empty value on the assignment line.
-func applicantOrEmpty(raw json.RawMessage) []byte {
-	if len(raw) == 0 {
-		return []byte(`{}`)
-	}
-	return raw
-}
-
-func payloadOrEmpty(raw json.RawMessage) []byte {
-	if len(raw) == 0 {
-		return []byte(`{}`)
-	}
-	return raw
-}
 
 func evidenceOrNil(raw json.RawMessage) any {
 	if len(raw) == 0 {

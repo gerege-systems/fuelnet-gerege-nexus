@@ -19,11 +19,11 @@ package urtuu
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/jackc/pgx/v5"
@@ -124,20 +124,9 @@ func scanTask(rows pgx.Rows, now time.Time) (Task, error) {
 		&task.CreatedAt, &task.UpdatedAt); err != nil {
 		return Task{}, err
 	}
-	task.Direction = directionOf(task)
+	task.Direction = domain.DirectionOf(task.OriginPeerID, task.TargetPeerID)
 	task.Overdue = contract.Overdue(contract.TaskStatus(task.Status), task.Deadline, now)
 	return task, nil
-}
-
-func directionOf(task Task) string {
-	switch {
-	case task.OriginPeerID != "":
-		return "incoming"
-	case task.TargetPeerID != "":
-		return "outgoing"
-	default:
-		return "local"
-	}
 }
 
 // taskFilter is what the two queue screens ask for.
@@ -250,14 +239,10 @@ func (m *Module) taskEvents(ctx context.Context, tenantID, id string) ([]TaskEve
 
 // ---------------------------------------------------------------- moving one
 
-// ErrTransition is refusing a move the state machine does not allow.
-var ErrTransition = errors.New("that is not a move this task can make")
-
 // move applies one transition and records it, inside one transaction.
 //
-// The guard is contract's table rather than a switch here, because the same
-// table is what the transport, the app and the migration's CHECK are all held
-// against. Two expressions of a state machine drift; one does not.
+// The guard is the domain's, which asks the contract's table: the same table is
+// what the transport, the app and the migration's CHECK are all held against.
 //
 // It returns the row as it now stands, so the caller can decide what to report
 // upward without a second read.
@@ -282,8 +267,8 @@ func (m *Module) move(ctx context.Context, tenantID, id string, to contract.Task
 		id, tenantID).Scan(&from); err != nil {
 		return Task{}, err
 	}
-	if !contract.TaskStatus(from).CanMoveTo(to) {
-		return Task{}, fmt.Errorf("%w: %s → %s", ErrTransition, from, to)
+	if err := domain.CheckTransition(contract.TaskStatus(from), to); err != nil {
+		return Task{}, err
 	}
 
 	if _, err := tx.Exec(ctx, `
@@ -322,29 +307,20 @@ func (m *Module) record(ctx context.Context, tx pgx.Tx, tenantID, taskID, status
 
 // ------------------------------------------------------------- the vocabulary
 
-// requestCode is what the app needs to know about a code before raising work
-// under it.
+// lookupCode reads a code out of the transport's table rather than through an
+// accessor. The two packages are one product split by layer, sharing one schema
+// and one tenant binding; an interface between them would be a second
+// description of the same three columns.
 //
-// Read straight out of the transport's table rather than through an accessor.
-// The two packages are one product split by layer, sharing one schema and one
-// tenant binding; an interface between them would be a second description of
-// the same three columns.
-type requestCode struct {
-	Code     string
-	Names    map[string]string
-	SLA      *int64
-	Line     string
-	Active   bool
-	SourceOf string
-}
-
-func (m *Module) lookupCode(ctx context.Context, tenantID, code string) (requestCode, error) {
-	var found requestCode
+// What comes back is the domain's RequestCode: what the rules ask of a code —
+// its name in every language, its norm, its promise and whether it is in use.
+func (m *Module) lookupCode(ctx context.Context, tenantID, code string) (domain.RequestCode, error) {
+	var found domain.RequestCode
 	err := m.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
 		SELECT code, names, EXTRACT(EPOCH FROM default_sla)::bigint, line, active, source
 		  FROM urtuu_request_codes WHERE tenant_id = $1 AND code = $2`,
 		tenantID, code).Scan(&found.Code, &found.Names, &found.SLA, &found.Line,
-		&found.Active, &found.SourceOf)
+		&found.Active, &found.Source)
 	return found, err
 }
 
@@ -360,38 +336,4 @@ func (m *Module) codeOpenOn(ctx context.Context, tenantID, peerID, code string) 
 		                WHERE tenant_id = $1 AND peer_id = $2 AND code = $3)`,
 		tenantID, peerID, code).Scan(&open)
 	return open, err
-}
-
-// titleFor is what a task is called, decided once when it is raised.
-//
-// Copied rather than looked up on every read: a code can be withdrawn or
-// retranslated, and what was asked for in March has to still read as what was
-// asked for in March.
-func titleFor(code requestCode, given, locale string) string {
-	if title := strings.TrimSpace(given); title != "" {
-		return title
-	}
-	if name := strings.TrimSpace(code.Names[locale]); name != "" {
-		return name
-	}
-	if name := strings.TrimSpace(code.Names["mn"]); name != "" {
-		return name
-	}
-	return code.Code
-}
-
-// deadlineFor resolves when the work is due.
-//
-// From the code's norm when nobody said otherwise, and measured from the moment
-// the task is raised — which for received work is the sender's stamp, not this
-// installation's clock (§9).
-func deadlineFor(code requestCode, given *time.Time, from time.Time) *time.Time {
-	if given != nil {
-		return given
-	}
-	if code.SLA == nil || *code.SLA <= 0 {
-		return nil
-	}
-	due := from.Add(time.Duration(*code.SLA) * time.Second)
-	return &due
 }
