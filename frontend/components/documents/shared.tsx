@@ -25,9 +25,16 @@ export interface DocumentRecord {
   doc_type: string;
   status: string;
   signed_by?: string;
+  /**
+   * The newest approval's ceremony reference — NOT a hash of the document.
+   * This app holds no document content to hash; `proof` says what the record
+   * is worth. See docs/adr/0002-one-signing-rail.md.
+   */
   signature_hash?: string;
   signer_reg_number?: string;
   signer_method?: string;
+  /** "approval" — an authenticated approval; "signature" — over content. */
+  proof?: string;
   signed_at?: string;
   /** How many signatures the document carries, and how many it asked for. */
   signature_count: number;
@@ -199,9 +206,13 @@ export function SignatureCell({ doc }: { doc: DocumentRecord }) {
           <span>{doc.signed_by}</span>
         </span>
         {doc.signature_hash && (
-          <div className="font-mono text-[10px] text-slate-400 truncate max-w-[220px]" title={doc.signature_hash}>
+          <div
+            className="text-[10px] text-slate-400 truncate max-w-[220px]"
+            title={`${t("documents.field.approval_reference")}: ${doc.signature_hash}`}
+          >
             {doc.signer_reg_number ? `${doc.signer_reg_number} · ` : ""}
-            {doc.signature_hash}
+            {t("documents.field.approval_reference")}{" "}
+            <span className="font-mono">{doc.signature_hash}</span>
           </div>
         )}
       </div>
@@ -639,7 +650,10 @@ export interface AppliedSignature {
   signer_name: string;
   signer_reg_number: string;
   signer_method: string;
+  /** The ceremony this approval came from, not a hash of anything. */
   signature_hash: string;
+  /** "approval" — an authenticated approval; "signature" — over content. */
+  proof?: string;
   signed_at: string;
   /** Which step of the document's chain this signature filled. */
   step_order: number;
@@ -787,25 +801,34 @@ export function SignatureHistoryDialog({ doc, onClose }: { doc: DocumentRecord; 
                       <dt className="text-slate-500 shrink-0">{t("documents.field.signed_at")}:</dt>
                       <dd className="text-slate-700">{new Date(signature.signed_at).toLocaleString()}</dd>
                     </div>
-                    {signature.certificate_serial ? (
-                      <>
-                        <div className="flex gap-2">
-                          <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_serial")}:</dt>
-                          <dd className="font-mono text-slate-700 break-all">{signature.certificate_serial}</dd>
-                        </div>
-                        {signature.certificate_issuer && (
-                          <div className="flex gap-2">
-                            <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_issuer")}:</dt>
-                            <dd className="text-slate-700 break-all">{signature.certificate_issuer}</dd>
-                          </div>
-                        )}
-                      </>
-                    ) : (
+                    {signature.certificate_serial && (
                       <div className="flex gap-2">
-                        <dt className="text-slate-500 shrink-0">{t("documents.field.approval_reference")}:</dt>
-                        <dd className="font-mono text-slate-500 break-all">{signature.signature_hash}</dd>
+                        <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_serial")}:</dt>
+                        <dd className="font-mono text-slate-700 break-all">{signature.certificate_serial}</dd>
                       </div>
                     )}
+                    {signature.certificate_issuer && (
+                      <div className="flex gap-2">
+                        <dt className="text-slate-500 shrink-0">{t("documents.field.certificate_issuer")}:</dt>
+                        <dd className="text-slate-700 break-all">{signature.certificate_issuer}</dd>
+                      </div>
+                    )}
+                    {/* Always, and never instead of the certificate: this is
+                        what the record is, and a screen that hid it behind a
+                        certificate let the certificate read as a signature
+                        over the document. */}
+                    <div className="flex gap-2">
+                      <dt className="text-slate-500 shrink-0">{t("documents.field.approval_reference")}:</dt>
+                      <dd className="font-mono text-slate-500 break-all">{signature.signature_hash}</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="text-slate-500 shrink-0">{t("documents.field.proof")}:</dt>
+                      <dd className="text-slate-700">
+                        {t(signature.proof === "signature"
+                          ? "documents.proof.signature"
+                          : "documents.proof.approval")}
+                      </dd>
+                    </div>
                   </dl>
                 )}
               </li>

@@ -176,6 +176,15 @@ func TestSigningApprovesWhenNoChainIsConfigured(t *testing.T) {
 	if ledger[0].SignerMethod != SignerEID || ledger[0].SignatureHash == "" {
 		t.Errorf("ledger row = %+v, want an E-ID row referencing the approval", ledger[0])
 	}
+	// And it says what it is worth. Nothing here signs a document's content —
+	// this app holds none — so the record must publish an approval and not let
+	// a reader take it for a signature over the bytes. See ADR 0002.
+	if ledger[0].Proof != domain.ProofApproval {
+		t.Errorf("ledger proof = %q, want %q", ledger[0].Proof, domain.ProofApproval)
+	}
+	if signed.Proof != domain.ProofApproval {
+		t.Errorf("document proof = %q, want %q", signed.Proof, domain.ProofApproval)
+	}
 
 	// A decided document is not signable again — the refusal comes before anybody
 	// is asked to approve anything.

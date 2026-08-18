@@ -109,11 +109,15 @@ type Document struct {
 	Status   string `json:"status"`   // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED
 	// The newest signature, mirrored onto the record so the list stays one query.
 	// The full history is in document_signatures.
-	SignedBy        string     `json:"signed_by,omitempty"`
-	SignatureHash   string     `json:"signature_hash,omitempty"`
-	SignerRegNumber string     `json:"signer_reg_number,omitempty"`
-	SignerMethod    string     `json:"signer_method,omitempty"`
-	SignedAt        *time.Time `json:"signed_at,omitempty"`
+	SignedBy string `json:"signed_by,omitempty"`
+	// SignatureHash is the newest approval's ceremony reference. It is not a
+	// hash of the document: this app holds no content to hash, which is why
+	// Proof says what the record is worth. See ADR 0002.
+	SignatureHash   string       `json:"signature_hash,omitempty"`
+	SignerRegNumber string       `json:"signer_reg_number,omitempty"`
+	SignerMethod    string       `json:"signer_method,omitempty"`
+	Proof           domain.Proof `json:"proof,omitempty"`
+	SignedAt        *time.Time   `json:"signed_at,omitempty"`
 	// Progress through the approval chain: how many signatures the document carries
 	// and how many it asked for.
 	SignatureCount     int `json:"signature_count"`
@@ -1352,6 +1356,10 @@ func (m *DocumentsModule) scanDocument(row rowScanner) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Derived rather than stored: what a method proves is a decision about a
+	// national channel, and a column would be a second place for it to be
+	// answered — including for the rows written before the question was asked.
+	doc.Proof = domain.ProofOf(doc.SignerMethod)
 	return &doc, nil
 }
 
