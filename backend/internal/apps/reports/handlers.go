@@ -4,17 +4,24 @@
  * Distributed under the Apache 2.0 License.
  *
  * The reporting API: list, describe, run, export.
+ *
+ * What is left in this file is the engine's half. Running a report and writing
+ * a spreadsheet are things the platform does; the app's own decisions — which
+ * reports this organisation may see at all — moved to backend/domain/reports
+ * and arrive here as a value or a refusal.
  */
 
 package reports
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"sort"
-	"strings"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
@@ -26,57 +33,18 @@ import (
 // dozen short values; anything larger is not a report request.
 const maxRunBody = 16 << 10
 
-// reportSummary is one entry of the list.
-type reportSummary struct {
-	Key    string            `json:"key"`
-	App    string            `json:"app"`
-	Title  string            `json:"title"`
-	Titles map[string]string `json:"titles"`
-}
-
 // handleList returns the reports this tenant may run, grouped by app.
-//
-// Grouped rather than flat because that is how the screen reads and because the
-// grouping is the app gate made visible: a tenant sees the sections for the
-// apps it has, and a section it does not have simply is not there — rather than
-// being there and refusing when clicked.
 func (m *Module) handleList(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	installed, err := m.installedApps(r, tenantID)
+	groups, err := m.svc.Available(r.Context(), tenantID, localeOf(r))
 	if err != nil {
+		fail(w, r, err)
 		return
 	}
-
-	locale := localeOf(r)
-	groups := map[string][]reportSummary{}
-	for _, report := range reporting.ForApps(installed) {
-		groups[report.App()] = append(groups[report.App()], reportSummary{
-			Key:    report.Key(),
-			App:    report.App(),
-			Title:  reporting.LocalizedTitle(report.Titles(), locale, report.Key()),
-			Titles: report.Titles(),
-		})
-	}
-
-	apps := make([]string, 0, len(groups))
-	for app := range groups {
-		apps = append(apps, app)
-	}
-	sort.Strings(apps)
-
-	type group struct {
-		App     string          `json:"app"`
-		Reports []reportSummary `json:"reports"`
-	}
-	response := make([]group, 0, len(apps))
-	for _, app := range apps {
-		response = append(response, group{App: app, Reports: groups[app]})
-	}
-
-	nexus.JSON(w, http.StatusOK, map[string]any{"groups": response})
+	nexus.JSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
 // paramView is a parameter as the form needs it: the spec, plus the options for
@@ -213,47 +181,31 @@ func (m *Module) handleExport(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(payload)
 }
 
-// resolve is the guard every report endpoint shares: a tenant, a report that
-// exists, and an app that tenant has installed.
+// resolve is the guard every report endpoint shares, asked of the domain: a
+// report that exists, and an app this organisation has installed.
 //
-// The third check is the one that matters and the easiest to leave out. Without
-// it, a caller who knows a key can run a report belonging to an app their
-// organisation never installed — the list would not show it and the API would
-// serve it anyway.
+// It answers with the engine's report rather than the domain's description,
+// because what happens next is running it. The gate has already been decided by
+// then, which is the half that was easy to leave out.
 func (m *Module) resolve(w http.ResponseWriter, r *http.Request) (string, reporting.Report, bool) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return "", nil, false
 	}
-
-	key := strings.TrimSpace(chi.URLParam(r, "key"))
-	report, found := reporting.Get(key)
-	if !found {
-		nexus.Error(w, http.StatusNotFound, "no such report")
-		return "", nil, false
-	}
-
-	installed, err := m.installedApps(r, tenantID)
+	described, err := m.svc.Resolve(r.Context(), tenantID, chi.URLParam(r, "key"))
 	if err != nil {
+		fail(w, r, err)
 		return "", nil, false
 	}
-	if !installed[report.App()] {
-		// 404 rather than 403: whether another organisation's app exists is not
-		// this caller's business, and the two answers together enumerate the
-		// catalogue.
+	report, found := reporting.Get(described.Key)
+	if !found {
+		// Unreachable: the domain answered from this same registry a moment
+		// ago. Written out rather than asserted because a nil Report here would
+		// be a panic in a handler.
 		nexus.Error(w, http.StatusNotFound, "no such report")
 		return "", nil, false
 	}
 	return tenantID, report, true
-}
-
-// installedApps asks the platform, and refuses on error rather than admitting.
-func (m *Module) installedApps(r *http.Request, tenantID string) (map[string]bool, error) {
-	installed, err := m.installed(r.Context(), tenantID)
-	if err != nil {
-		return nil, err
-	}
-	return installed, nil
 }
 
 // loadOptions fills a UUID parameter's dropdown from the tenant's own rows.
@@ -319,9 +271,54 @@ func localeOf(r *http.Request) string { return config.LocaleFromRequest(r) }
 // worth having on ordinary runs too: "who read the payroll figures" is a
 // question an organisation is entitled to an answer to.
 func (m *Module) record(r *http.Request, tenantID, action, key string, details map[string]any) {
-	userID := ""
+	nexus.Audit(r.Context(), tenantID, actorOf(r), action, key, details)
+}
+
+// acting names the person making the request, for the one row that records it.
+func acting(r *http.Request) context.Context {
+	return domain.WithActor(r.Context(), actorOf(r))
+}
+
+func actorOf(r *http.Request) string {
 	if claims, err := nexus.UserFromContext(r.Context()); err == nil {
-		userID = claims.UserID
+		return claims.UserID
 	}
-	nexus.Audit(r.Context(), tenantID, userID, action, key, details)
+	return ""
+}
+
+// fail answers with the domain's own words and the status that refusal has
+// always had. Anything that is not a refusal is a platform that could not
+// answer, which is a 500 and a log line.
+func fail(w http.ResponseWriter, r *http.Request, err error) {
+	code := status(err)
+	if code >= http.StatusInternalServerError {
+		slog.Error("reports: "+err.Error(), "error", errors.Unwrap(err), "path", r.URL.Path)
+	}
+	nexus.Error(w, code, err.Error())
+}
+
+// status is the whole of what this app says in HTTP that it does not say in Go.
+//
+// Not found is 404 rather than 403 throughout: whether a report, a schedule, an
+// agreement or an organisation exists on the other side of a boundary is not
+// this caller's business, and the two answers together would enumerate the
+// deployment.
+func status(err error) int {
+	switch {
+	case errors.Is(err, domain.ErrReportUnavailable),
+		errors.Is(err, domain.ErrNoSuchSchedule),
+		errors.Is(err, domain.ErrNoSuchGrant),
+		errors.Is(err, domain.ErrNoPendingRequest),
+		errors.Is(err, domain.ErrNoSuchTenant):
+		return http.StatusNotFound
+	case errors.Is(err, domain.ErrGrantExists):
+		return http.StatusConflict
+	case domain.IsRefusal(err):
+		// Every other refusal is a field the caller got wrong: an unknown
+		// report key in a body, a scope that is not one, an address list
+		// nobody can be reached at.
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
 }

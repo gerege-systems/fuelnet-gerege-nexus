@@ -20,6 +20,8 @@ import (
 	"context"
 	"net/http"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
+	"github.com/gerege-systems/open-gerege-nexus/backend/domain/reports/postgres"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -48,13 +50,20 @@ const (
 // must not become a second, differently-stale source of it.
 type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, error)
 
-// Module is the reports app.
+// Module is the reports app: the catalogue entry, the routes, the engine it
+// serves and the rules it applies before it does.
+//
+// The database handle is still a field, and deliberately. Two screens here read
+// through the platform's own listers — the schedules the scheduler owns, the
+// grants the consolidated run owns — and one reads the audit trail; those are
+// the engine's rows rather than this app's, and a reader of its own for each
+// would be a second shape for the same row.
 type Module struct {
 	db        nexus.DB
 	engine    *reporting.Engine
 	scheduler *reporting.Scheduler
 	perms     nexus.PermissionStore
-	installed InstalledApps
+	svc       *domain.Service
 }
 
 // New builds the module and registers it.
@@ -70,7 +79,17 @@ func New(p nexus.Platform, installedApps InstalledApps) *Module {
 		engine:    engine,
 		scheduler: reporting.NewScheduler(engine, reporting.NewSMTPDeliverer()),
 		perms:     p.Permissions(),
-		installed: installedApps,
+		svc: domain.NewService(
+			catalogue{},
+			// The tenant binding is handed to the store rather than imported by
+			// it: which organisation a query runs as is the platform's
+			// mechanism, and domain/ may not name the SDK that carries it.
+			postgres.New(db, postgres.Tenancy{
+				Bind:    nexus.WithTenantID,
+				Unbound: nexus.WithoutTenant,
+			}),
+			domain.Installations(installedApps),
+		),
 	}
 	nexus.Register(m)
 	return m
