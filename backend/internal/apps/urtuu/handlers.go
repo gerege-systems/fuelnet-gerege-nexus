@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/go-chi/chi/v5"
@@ -50,11 +51,11 @@ func (m *Module) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// A status the machine does not know would match nothing and read as "there
 	// is no work", which is the wrong answer to a typo.
 	if filter.Status != "" && !contract.KnownStatus(contract.TaskStatus(filter.Status)) {
-		nexus.Error(w, http.StatusBadRequest, "no such status: "+filter.Status)
+		nexus.Error(w, http.StatusBadRequest, domain.UnknownStatus(filter.Status).Error())
 		return
 	}
 	if filter.Line != "" && !contract.KnownLine(filter.Line) {
-		nexus.Error(w, http.StatusBadRequest, "no such line: "+filter.Line)
+		nexus.Error(w, http.StatusBadRequest, domain.UnknownLine(filter.Line).Error())
 		return
 	}
 	if filter.ParentID != "" {
@@ -181,11 +182,8 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	// its own orders is an assignment. If the raiser could choose, one code
 	// would be usable under two different promises — and the promise is the
 	// whole distinction between the two lines.
-	line := code.Line
-	if !contract.KnownLine(line) {
-		line = contract.LineAssignment
-	}
-	applicant, err := applicantFor(line, request.Applicant)
+	line := domain.LineOf(code.Line)
+	applicant, err := domain.ApplicantFor(line, request.Applicant)
 	if err != nil {
 		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -214,23 +212,17 @@ func (m *Module) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	root := Task{
 		Code:    code.Code,
 		Line:    line,
-		Title:   titleFor(code, request.Title, localeOf(r)),
-		Payload: payloadOrEmpty(request.Payload),
+		Title:   domain.TitleFor(code, request.Title, localeOf(r)),
+		Payload: domain.PayloadOrEmpty(request.Payload),
 		// The chain starts here. Every installation this work reaches adds
 		// itself, and any that finds itself already on it refuses.
 		OriginChain: []string{m.link.InstallationID()},
 	}
 	root.Evidence = encodedEvidence
 	root.Applicant = applicant
-	deadline := deadlineFor(code, request.Deadline, now)
+	deadline := domain.DeadlineFor(code, request.Deadline, now)
 
-	// A task with branches is delegated from birth; one kept here starts where
-	// every task starts. Neither is a transition — this is the initial state,
-	// which is why it is written rather than moved to.
-	status := contract.StatusReceived
-	if len(request.PeerIDs) > 0 {
-		status = contract.StatusDelegated
-	}
+	status := domain.InitialStatus(len(request.PeerIDs))
 
 	ctx := nexus.WithTenantID(r.Context(), tenantID)
 	tx, err := m.db.Begin(ctx)
@@ -310,7 +302,7 @@ func (m *Module) handleDelegate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(request.PeerIDs) == 0 {
-		nexus.Error(w, http.StatusBadRequest, "delegating to nobody is not delegating")
+		nexus.Error(w, http.StatusBadRequest, domain.ErrNoBranches.Error())
 		return
 	}
 
@@ -472,7 +464,7 @@ func (m *Module) transition(w http.ResponseWriter, r *http.Request,
 	// not an error worth answering with.
 	_ = json.NewDecoder(r.Body).Decode(&request)
 	if requireNote && strings.TrimSpace(request.Note) == "" {
-		nexus.Error(w, http.StatusBadRequest, "a reason is required")
+		nexus.Error(w, http.StatusBadRequest, domain.ErrReasonRequired.Error())
 		return
 	}
 
@@ -491,11 +483,11 @@ func (m *Module) transition(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	answer := strings.TrimSpace(request.Answer)
-	if to == contract.StatusCompleted && current.Line == contract.LineService &&
-		current.TargetPeerID == "" && answer == "" && strings.TrimSpace(current.Answer) == "" {
-		nexus.Error(w, http.StatusBadRequest,
-			"a service request cannot be completed without an answer for the applicant")
-		return
+	if to == contract.StatusCompleted {
+		if err := domain.CanComplete(current.Line, current.TargetPeerID, answer, current.Answer); err != nil {
+			nexus.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	if answer != "" {
 		if _, err := m.db.Exec(nexus.WithTenantID(r.Context(), tenantID),
@@ -732,7 +724,7 @@ func (m *Module) taskParty(w http.ResponseWriter, r *http.Request) (string, stri
 // somebody else, or a subordinate's envelope, moved it first.
 func (m *Module) refuse(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrTransition):
+	case errors.Is(err, domain.ErrTransition):
 		nexus.Error(w, http.StatusConflict, err.Error())
 	case errors.Is(err, pgx.ErrNoRows):
 		nexus.Error(w, http.StatusNotFound, "no such task")
@@ -755,28 +747,4 @@ func localeOf(r *http.Request) string {
 		return strings.ToLower(locale[:2])
 	}
 	return "mn"
-}
-
-// applicantFor validates who is said to have asked.
-//
-// Required on the service line and refused on the assignment line. Both halves
-// matter: a request with no applicant is one nobody can answer, and an
-// applicant attached to a ministry's internal order invents a citizen behind an
-// instruction that had none.
-func applicantFor(line string, given *contract.Applicant) ([]byte, error) {
-	if line != contract.LineService {
-		if given != nil && given.Named() {
-			return nil, errors.New("an assignment has no applicant; it is raised by this organisation")
-		}
-		// The column is NOT NULL DEFAULT '{}', and empty is the honest value
-		// for a line where nobody outside the platform is waiting.
-		return []byte(`{}`), nil
-	}
-	if given == nil || !given.Named() {
-		return nil, errors.New("a service request has to say who asked for it")
-	}
-	if given.Kind != "citizen" && given.Kind != "organisation" {
-		return nil, errors.New("an applicant is a citizen or an organisation")
-	}
-	return json.Marshal(given)
 }
