@@ -96,6 +96,17 @@
   Rows.Err() error
   Rows.Next() bool
   Rows.Scan(dest ...any) error
+  SignatureRequest.DigestHex string
+  SignatureRequest.DisplayText string
+  SignatureRequest.DocumentName string
+  SignatureRequest.FullName string
+  SignatureRequest.RegNumber string
+  SignatureSession.SessionID string
+  SignatureSession.VerificationCode string
+  Signer.Enabled() bool
+  Signer.PollSignature(ctx context.Context, ownerRegNumber, sessionID string) (SignatureState, error)
+  Signer.SignDigest(ctx context.Context, request SignatureRequest) (SignatureSession, error)
+  Signer.VerifiedDigest(ctx context.Context, ownerRegNumber, sessionID string) (string, error)
   UserClaims.AllowedTenantIDs []string
   UserClaims.Email string
   UserClaims.Impersonated bool
@@ -120,6 +131,11 @@ const ParamText
 const ParamUUID
 const ReportCounterpartyKey
 const ReportScopeFull
+const SignatureCompleted
+const SignatureExpired
+const SignatureFailed
+const SignatureRejected
+const SignatureRunning
 func (FiledDocument) Signed() bool
 func (MenuDefinition) LocalizedLabel(locale string) string
 func (Params) Bool(key string) bool
@@ -129,6 +145,7 @@ func (Params) Raw() map[string]any
 func (Params) String(key string) string
 func (Params) Time(key string) time.Time
 func (Params) UUID(key string) string
+func (SignatureState) Settled() bool
 func AllowedTenants(ctx context.Context) []string
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error)
@@ -193,9 +210,14 @@ type Querier interface
 type Report interface
 type Result struct
 type Rows interface
+type SignatureRequest struct
+type SignatureSession struct
+type SignatureState string
+type Signer interface
 type UserClaims struct
 var ErrForbidden
 var ErrNoDocumentFiler
 var ErrNoLink
+var ErrSigningUnavailable
 var ErrTenantMissing
 var ErrUnauthenticated
