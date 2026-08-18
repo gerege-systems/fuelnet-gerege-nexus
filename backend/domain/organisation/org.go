@@ -80,8 +80,8 @@ type Membership struct {
 // renaming a user would rename them in every other tenant that person belongs
 // to.
 type PersonEdit struct {
-	JobTitle     *string
-	DepartmentID *string
+	JobTitle     *string `json:"job_title"`
+	DepartmentID *string `json:"department_id"`
 }
 
 // Department reports what to write and whether to write it at all.
@@ -98,10 +98,10 @@ func (e PersonEdit) Department() (value *string, set bool) {
 
 // DepartmentEdit is a unit as somebody has just described it.
 type DepartmentEdit struct {
-	Code      string
-	Name      string
-	ParentID  *string
-	ManagerID *string
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	ParentID  *string `json:"parent_id"`
+	ManagerID *string `json:"manager_membership_id"`
 }
 
 // Parent is the unit this one reports to, or nil for a root.
