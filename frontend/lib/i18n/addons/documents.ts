@@ -36,6 +36,15 @@ export const documents = {
   "documents.field.certificate_serial": { mn: "Гэрчилгээний дугаар", en: "Certificate serial" },
   "documents.field.certificate_issuer": { mn: "Гэрчилгээ олгогч", en: "Certificate issuer" },
   "documents.field.approval_reference": { mn: "Батламжийн сурвалж", en: "Approval reference" },
+  "documents.field.proof": { mn: "Юуг нотолж байна", en: "What this proves" },
+  "documents.proof.approval": {
+    mn: "Иргэн хэн болохоо баталж, энэ баримтыг зөвшөөрсөн (агуулгад холбогдоогүй)",
+    en: "The citizen proved who they were and approved this document (not bound to its content)",
+  },
+  "documents.proof.signature": {
+    mn: "Баримтын агуулгын дээрх гарын үсэг",
+    en: "A signature over the document's content",
+  },
   "documents.field.waiting_days": { mn: "Хүлээсэн хоног", en: "Days waiting" },
 
   "documents.stat.awaiting": { mn: "Гарын үсэг хүлээж буй", en: "Awaiting signature" },

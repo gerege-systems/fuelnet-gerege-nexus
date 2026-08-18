@@ -193,11 +193,20 @@ func (m *DocumentsModule) stepsForDocumentTx(ctx context.Context, q querier, ten
 
 // AppliedSignature is one row of a document's signature ledger.
 type AppliedSignature struct {
-	SignerName      string    `json:"signer_name"`
-	SignerRegNumber string    `json:"signer_reg_number"`
-	SignerMethod    string    `json:"signer_method"`
-	SignatureHash   string    `json:"signature_hash"`
-	SignedAt        time.Time `json:"signed_at"`
+	SignerName      string `json:"signer_name"`
+	SignerRegNumber string `json:"signer_reg_number"`
+	SignerMethod    string `json:"signer_method"`
+	// Proof is what this record establishes: an authenticated approval, or a
+	// signature over the document's content. Every record this app writes is
+	// the first — see domain/documents.Proof and ADR 0002 — and a reader that
+	// treats the two alike is reading a legal record wrong.
+	Proof domain.Proof `json:"proof"`
+	// SignatureHash is the ceremony this approval came from, not a hash of
+	// anything. The name is what migration 00013 called the column and is kept
+	// so that clients reading it keep working; `proof` is what says how much it
+	// is worth.
+	SignatureHash string    `json:"signature_hash"`
+	SignedAt      time.Time `json:"signed_at"`
 	// StepOrder is which approval of the document's chain this signature filled.
 	StepOrder int `json:"step_order"`
 	// The eID certificate the citizen approved with, when the provider returned
@@ -427,6 +436,7 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 			&sig.CertificateSerial, &sig.CertificateIssuer); err != nil {
 			return nil, fmt.Errorf("scan signature: %w", err)
 		}
+		sig.Proof = domain.ProofOf(sig.SignerMethod)
 		list = append(list, sig)
 	}
 	return list, rows.Err()

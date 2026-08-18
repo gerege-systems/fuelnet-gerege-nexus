@@ -201,3 +201,24 @@ func TestFillableChainOpensOnlyWhatNobodyCouldFill(t *testing.T) {
 		}
 	}
 }
+
+// What a signature record establishes is the difference between two legal
+// artifacts this app had been recording under one word.
+func TestWhatTheNationalChannelsActuallyProve(t *testing.T) {
+	// Both of them authenticate a citizen and record their approval. Neither
+	// binds to the document's content, because a document here has none.
+	for _, method := range []string{documents.SignerEID, documents.SignerDAN} {
+		if got := documents.ProofOf(method); got != documents.ProofApproval {
+			t.Fatalf("%s yields %q, want %q", method, got, documents.ProofApproval)
+		}
+	}
+	// A rail added without answering the question shows up rather than being
+	// quietly filed as one of the two.
+	if got := documents.ProofOf("SMARTCARD"); got != documents.ProofUnknown {
+		t.Fatalf("an undeclared rail yields %q, want unknown", got)
+	}
+	// And the app must not claim the one it cannot produce.
+	if documents.ProofOf(documents.SignerEID) == documents.ProofSignature {
+		t.Fatal("nothing in this app signs a document's content")
+	}
+}
