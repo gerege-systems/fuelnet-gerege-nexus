@@ -46,7 +46,10 @@ package organisation
 import (
 	"net/http"
 
+	org "github.com/gerege-systems/open-gerege-nexus/backend/domain/organisation"
+	"github.com/gerege-systems/open-gerege-nexus/backend/domain/organisation/postgres"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -62,13 +65,21 @@ const ID = "io.gerege.nexus.organisation"
 // DEPRECATED: remove in vNEXT.
 const LegacyID = "io.gerege.nexus.core"
 
+// Module is the platform's half of this app: the seven methods a catalogue
+// entry has to answer, the routes, and one service that holds everything those
+// routes are for.
+//
+// The database handle is not a field any more. It goes into the store at
+// construction and nothing above that layer has one, which is what makes the
+// grep in CI — no SQL under internal/apps/organisation — a property rather
+// than a habit.
 type Module struct {
-	db    nexus.DB
+	svc   *org.Service
 	perms nexus.PermissionStore
 }
 
 func New(p nexus.Platform) *Module {
-	m := &Module{db: p.DB(), perms: p.Permissions()}
+	m := &Module{svc: org.NewService(postgres.New(p.DB())), perms: p.Permissions()}
 	nexus.Register(m)
 	registerReports()
 	return m

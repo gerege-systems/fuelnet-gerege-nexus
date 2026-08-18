@@ -79,18 +79,17 @@ var policylessModules = map[string]nexus.Module{
 
 // Directories under internal/apps that hold no module at all.
 //
-// esign is one since the merge: it is the PDF rails of the documents app, built
-// by documents.New and mounted by its RegisterRoutes, and it registers nothing
-// with nexus. It appears here rather than being deleted from the classification
-// because the directory is still there, and the count below reads directories —
-// a package that stops being a module must say so somewhere, or the next person
-// reads its absence as an oversight.
+// There is one entry's worth of history and no entries. esign was here: the PDF
+// rails of the documents app, registering nothing with nexus, listed rather than
+// deleted because the directory was still under internal/apps and the count
+// below reads directories. It is internal/platform/esign now — a package that
+// answers none of nexus.Module's methods does not belong in the tree of things
+// that do — so the classification has nothing to say about it.
 //
-// Its routes are gated: every handler asserts one of the documents permissions
-// through Module.require, which is the same way documents gates its own.
-var nonModulePackages = map[string]string{
-	"esign": "the documents app's PDF rails; documents.New builds it and mounts its routes",
-}
+// The map stays for the next package that ends up in the same position, because
+// absent-because-considered and absent-because-forgotten look identical in a
+// table.
+var nonModulePackages = map[string]string{}
 
 func TestTheModulesWithNoPolicyAreTheOnesWeMeant(t *testing.T) {
 	for name, mod := range policylessModules {

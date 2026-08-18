@@ -21,7 +21,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 )
 
-func (m *Module) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -34,7 +34,7 @@ func (m *Module) getSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, settings)
 }
 
-func (m *Module) settings(r *http.Request, tenantID string) (*Settings, error) {
+func (m *Rails) settings(r *http.Request, tenantID string) (*Settings, error) {
 	placement, policy, updatedAt, err := m.store.loadSettings(r.Context(), tenantID)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (m *Module) settings(r *http.Request, tenantID string) (*Settings, error) {
 // stored value the process is not using would make this screen a liar.
 //
 // The token is never returned; only whether one is present.
-func (m *Module) hsmSettings(probe *Probe) HSMSettings {
+func (m *Rails) hsmSettings(probe *Probe) HSMSettings {
 	loginURL := os.Getenv("ESIGN_LOGIN_URL")
 	if loginURL == "" {
 		loginURL = "https://hsm.gerege.mn/esign/login"
@@ -79,7 +79,7 @@ func (m *Module) hsmSettings(probe *Probe) HSMSettings {
 	}
 }
 
-func (m *Module) updatePlacementHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) updatePlacementHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return
@@ -104,7 +104,7 @@ func (m *Module) updatePlacementHandler(w http.ResponseWriter, r *http.Request) 
 	nexus.JSON(w, http.StatusOK, req)
 }
 
-func (m *Module) updatePolicyHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) updatePolicyHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return
@@ -136,7 +136,7 @@ func (m *Module) updatePolicyHandler(w http.ResponseWriter, r *http.Request) {
 // testHSMHandler probes the eSign service so an operator can tell a
 // misconfigured endpoint from a broken document, which are otherwise
 // indistinguishable at the moment somebody tries to sign.
-func (m *Module) testHSMHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) testHSMHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return

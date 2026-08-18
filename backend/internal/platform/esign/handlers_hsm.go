@@ -26,7 +26,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (m *Module) checkCertHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) checkCertHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -86,7 +86,7 @@ func (m *Module) checkCertHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (m *Module) signDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) signDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -228,7 +228,7 @@ func (m *Module) signDocumentHandler(w http.ResponseWriter, r *http.Request) {
 // assertHSMAllowed refuses the older rail when the tenant has moved to
 // qualified signatures. Without this the policy toggle would be decorative:
 // the endpoint would still sign for anyone who called it directly.
-func (m *Module) assertHSMAllowed(r *http.Request, tenantID string) error {
+func (m *Rails) assertHSMAllowed(r *http.Request, tenantID string) error {
 	_, policy, _, err := m.store.loadSettings(r.Context(), tenantID)
 	if err != nil {
 		return err

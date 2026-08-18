@@ -3,8 +3,7 @@
  * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
  * Distributed under the Apache 2.0 License.
  *
- * PDF e-signature app (io.gerege.nexus.esign). Two signing rails share one document
- * store:
+ * The PDF signing rails. Two of them share one document store:
  *
  *   HSM — Gerege eSign hardware module. The citizen proves a certificate with
  *         phone + civil ID, draws a signature, and the HSM stamps it. Fully
@@ -17,6 +16,16 @@
  * The rails are not interchangeable in law. Only the eID rail produces a
  * qualified electronic signature, which is why it is the default and why a
  * tenant can switch the HSM off entirely from the signing policy.
+ *
+ * This is not an app and has not been one since migration 00058 folded it into
+ * `documents`: it registers no module, answers no ID(), Menus() or
+ * Permissions(), and appears in no catalogue or manifest. What kept it looking
+ * like one was a directory under internal/apps, a type called `Module` and a
+ * method called `RegisterRoutes` — three imitations of a contract it does not
+ * implement, and the reason the boundaries test needed an exception to allow
+ * `documents` to import it. The precedent is internal/platform/staterail, where
+ * egov.Rail moved for the same reason: the platform builds the value, so the
+ * type is the platform's.
  */
 
 package esign
@@ -49,7 +58,7 @@ type FileExporter interface {
 	ExportFile(ctx context.Context, tenantID, integrationID, filename string, content []byte, reference string) (*integration.ExportResult, error)
 }
 
-type Module struct {
+type Rails struct {
 	db      nexus.DB
 	store   *store
 	hsm     *gerege.EsignService
@@ -68,14 +77,14 @@ type Module struct {
 // on its own; they adopt it because something has to be signed.
 //
 // So the rails moved inside the documents module, which owns the app's
-// identity, permissions and menu, and calls RegisterRoutes below. Everything
+// identity, permissions and menu, and calls Mount below. Everything
 // here is unchanged apart from the permission codes: the paths under
 // /api/v1/esign, the tables, the HSM and eID ceremonies and the signature log
 // are all what they were, because none of them was ever the reason there were
 // two apps.
-func New(p nexus.Platform, hsm *gerege.EsignService, eid *eidmongolia.Service, exports FileExporter) *Module {
+func New(p nexus.Platform, hsm *gerege.EsignService, eid *eidmongolia.Service, exports FileExporter) *Rails {
 	db := p.DB()
-	m := &Module{
+	m := &Rails{
 		db:      db,
 		store:   &store{db: db},
 		hsm:     hsm,
@@ -87,7 +96,7 @@ func New(p nexus.Platform, hsm *gerege.EsignService, eid *eidmongolia.Service, e
 	return m
 }
 
-func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
+func (m *Rails) Mount(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/v1/esign", func(er chi.Router) {
 		er.Use(tenantAuthMiddleware)
 
@@ -136,7 +145,7 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 // actorFrom resolves the caller into permissions and, when their account is
 // linked, their eID signing identity. It is the single place authorisation
 // context is built, so no handler can forget to apply it.
-func (m *Module) actorFrom(r *http.Request) (string, Actor, error) {
+func (m *Rails) actorFrom(r *http.Request) (string, Actor, error) {
 	tenantID, err := nexus.TenantID(r.Context())
 	if err != nil {
 		return "", Actor{}, &Error{Code: "UNAUTHORIZED", Message: "unauthorized", Status: http.StatusUnauthorized}
@@ -171,7 +180,7 @@ func (m *Module) actorFrom(r *http.Request) (string, Actor, error) {
 // require is the guard every handler starts with. The platform's app gate only
 // checks that the module is installed for the tenant; the three permissions
 // this module declares mean nothing unless asserted here.
-func (m *Module) require(w http.ResponseWriter, r *http.Request, permission string) (string, Actor, bool) {
+func (m *Rails) require(w http.ResponseWriter, r *http.Request, permission string) (string, Actor, bool) {
 	tenantID, actor, err := m.actorFrom(r)
 	if err != nil {
 		writeDomainError(w, err)
@@ -187,7 +196,7 @@ func (m *Module) require(w http.ResponseWriter, r *http.Request, permission stri
 // log records an auditable event. Failures are logged and swallowed: losing an
 // audit row must never fail a signature that has already been made, because
 // the signed document is the record of consequence.
-func (m *Module) log(r *http.Request, entry logEntry) {
+func (m *Rails) log(r *http.Request, entry logEntry) {
 	if err := m.store.recordLog(r.Context(), entry); err != nil {
 		slog.Error("esign: could not write the signature log",
 			"action", entry.Action, "outcome", entry.Outcome, "error", err)

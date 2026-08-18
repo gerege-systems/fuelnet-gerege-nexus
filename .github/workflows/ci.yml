@@ -57,6 +57,31 @@ jobs:
           # per run.
           skip-cache: true
 
+      - name: Fail if the domain imports the platform
+        working-directory: backend
+        # backend/domain holds the apps' rules with nothing of this deployment
+        # in them: no internal/, no pkg/nexus. backend/domain/boundaries_test.go
+        # asserts the same thing and is the better error message — it names the
+        # package and says why the rule exists.
+        #
+        # This is here anyway because the two measure different things. The test
+        # reads direct imports, which is what a person writes; these lines read
+        # the whole transitive graph, which is what the module actually carries.
+        # A domain package that imports a harmless-looking helper which itself
+        # reaches into internal/ passes the test and fails here, and that is the
+        # version of the mistake nobody would have found by reading.
+        run: |
+          if go list -deps ./domain/... | grep -q 'open-gerege-nexus/backend/internal'; then
+            echo "::error::the domain reaches the platform — go list -deps ./domain/... contains backend/internal"
+            go list -deps ./domain/... | grep 'open-gerege-nexus/backend/internal'
+            exit 1
+          fi
+          if go list -deps ./domain/... | grep -q 'open-gerege-nexus/backend/pkg/nexus'; then
+            echo "::error::the domain reaches the SDK — go list -deps ./domain/... contains pkg/nexus"
+            go list -deps ./domain/... | grep 'open-gerege-nexus/backend/pkg/nexus'
+            exit 1
+          fi
+
   test:
     name: Test
     runs-on: ubuntu-latest

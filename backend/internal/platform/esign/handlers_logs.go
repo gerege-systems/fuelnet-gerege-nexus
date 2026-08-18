@@ -18,7 +18,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-func (m *Module) listLogsHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) listLogsHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -43,7 +43,7 @@ func (m *Module) listLogsHandler(w http.ResponseWriter, r *http.Request) {
 // exportLogsHandler streams the filtered log as CSV. An auditor needs the
 // evidence outside the browser, and asking them to paginate through a table is
 // not an answer.
-func (m *Module) exportLogsHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) exportLogsHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return

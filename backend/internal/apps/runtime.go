@@ -10,12 +10,12 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
