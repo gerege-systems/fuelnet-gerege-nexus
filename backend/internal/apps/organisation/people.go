@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
@@ -312,7 +312,7 @@ func (m *Module) handleCreateDepartment(w http.ResponseWriter, r *http.Request) 
 	}
 	body.Code = strings.TrimSpace(body.Code)
 	body.Name = strings.TrimSpace(body.Name)
-	if body.Name == "" || !security.IsValidSlug(body.Code) {
+	if body.Name == "" || !catalog.IsValidSlug(body.Code) {
 		nexus.Error(w, http.StatusBadRequest,
 			"a department needs a name and a code of lowercase letters, digits, - and _")
 		return
