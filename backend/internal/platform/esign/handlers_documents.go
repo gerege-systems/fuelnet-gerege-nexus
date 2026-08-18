@@ -28,7 +28,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (m *Module) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -57,7 +57,7 @@ func (m *Module) listDocumentsHandler(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, list)
 }
 
-func (m *Module) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -73,7 +73,7 @@ func (m *Module) getDocumentHandler(w http.ResponseWriter, r *http.Request) {
 // uploadDocumentHandler takes a base64 payload. It is the original intake and
 // stays for API clients; browsers use the multipart route, which does not pay
 // base64's 33% transfer cost.
-func (m *Module) uploadDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) uploadDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return
@@ -103,7 +103,7 @@ func (m *Module) uploadDocumentHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // uploadMultipartHandler takes the file directly.
-func (m *Module) uploadMultipartHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) uploadMultipartHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return
@@ -147,7 +147,7 @@ func (m *Module) uploadMultipartHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 // storeUpload is the shared tail of both intake routes: validate, hash, store.
-func (m *Module) storeUpload(w http.ResponseWriter, r *http.Request, tenantID string, actor Actor, title, fileName string, pdf []byte) {
+func (m *Rails) storeUpload(w http.ResponseWriter, r *http.Request, tenantID string, actor Actor, title, fileName string, pdf []byte) {
 	_, policy, _, err := m.store.loadSettings(r.Context(), tenantID)
 	if err != nil {
 		writeDomainError(w, err)
@@ -186,7 +186,7 @@ func (m *Module) storeUpload(w http.ResponseWriter, r *http.Request, tenantID st
 	nexus.JSON(w, http.StatusCreated, doc)
 }
 
-func (m *Module) downloadDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) downloadDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -217,7 +217,7 @@ func (m *Module) downloadDocumentHandler(w http.ResponseWriter, r *http.Request)
 	writePDF(w, fileName, pdf)
 }
 
-func (m *Module) deleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) deleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return

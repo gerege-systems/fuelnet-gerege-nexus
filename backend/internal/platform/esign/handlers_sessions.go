@@ -61,7 +61,7 @@ func stateFromLibrary(state string) string {
 
 // signInitHandler starts a ceremony, from either a multipart upload or a JSON
 // body naming a document already in the store.
-func (m *Module) signInitHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) signInitHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -163,7 +163,7 @@ func (m *Module) signInitHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // readSignInput accepts either shape of request and returns the bytes to sign.
-func (m *Module) readSignInput(r *http.Request, tenantID string, policy Policy) (pdf []byte, fileName, documentID, onBehalfOf, signerID string, err error) {
+func (m *Rails) readSignInput(r *http.Request, tenantID string, policy Policy) (pdf []byte, fileName, documentID, onBehalfOf, signerID string, err error) {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(nil, r.Body, maxUploadBody)
 		if parseErr := r.ParseMultipartForm(8 << 20); parseErr != nil {
@@ -247,7 +247,7 @@ func tooLarge(policy Policy) error {
 
 // signStatusHandler is what the browser polls. The library is authoritative;
 // the stored row is a cache of it kept for the log and the batch view.
-func (m *Module) signStatusHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) signStatusHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -281,7 +281,7 @@ func (m *Module) signStatusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // settle asks the library for the ceremony's state and records the outcome.
-func (m *Module) settle(r *http.Request, tenantID string, actor Actor, session *SignSession) (*SignSession, error) {
+func (m *Rails) settle(r *http.Request, tenantID string, actor Actor, session *SignSession) (*SignSession, error) {
 	state, err := m.eid.PollSign(r.Context(), civilIDFromEtsi(session.SignerEtsi), session.ID)
 	if err != nil {
 		return nil, err
@@ -357,7 +357,7 @@ func (m *Module) settle(r *http.Request, tenantID string, actor Actor, session *
 	return m.store.getSession(r.Context(), tenantID, session.ID)
 }
 
-func (m *Module) signDownloadHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) signDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -383,7 +383,7 @@ func (m *Module) signDownloadHandler(w http.ResponseWriter, r *http.Request) {
 // signCancelHandler abandons a ceremony from this side. eID's own session is
 // left to expire — the relying-party API has no cancel, and the citizen's phone
 // stops mattering once the result is refused.
-func (m *Module) signCancelHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) signCancelHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -410,7 +410,7 @@ func (m *Module) signCancelHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // organizationsHandler lists the organisations the signer may act for.
-func (m *Module) organizationsHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) organizationsHandler(w http.ResponseWriter, r *http.Request) {
 	_, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return

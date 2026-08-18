@@ -65,7 +65,7 @@ func exportFilename(title, fallbackID string) string {
 //
 // The context is detached for the same reason webhook delivery is: this runs
 // after the handler returns, and the request context is cancelled by then.
-func (m *Module) exportSignedDocument(ctx context.Context, tenantID, documentID, title string, pdf []byte) {
+func (m *Rails) exportSignedDocument(ctx context.Context, tenantID, documentID, title string, pdf []byte) {
 	if m.exports == nil || len(pdf) == 0 {
 		return
 	}
@@ -88,7 +88,7 @@ func (m *Module) exportSignedDocument(ctx context.Context, tenantID, documentID,
 // This covers the ones signed before it, and the retry after a destination was
 // unreachable — without it the only way to get an existing document into a
 // newly connected Drive would be to sign it again.
-func (m *Module) exportDocumentHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) exportDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return

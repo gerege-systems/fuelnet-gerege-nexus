@@ -23,9 +23,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -154,7 +154,7 @@ type DocumentsModule struct {
 	// means this deployment builds the module without them: the register, the
 	// approval chains and the record signing all work, and the PDF routes are
 	// simply not mounted.
-	pdf *esign.Module
+	pdf *esign.Rails
 }
 
 // New builds the module and registers it in the compile-time app registry so
@@ -184,7 +184,7 @@ const (
 )
 
 // pdf is the PDF signing rails, or nil on a deployment built without them.
-func New(p nexus.Platform, pdf *esign.Module) *DocumentsModule {
+func New(p nexus.Platform, pdf *esign.Rails) *DocumentsModule {
 	db := p.DB()
 	m := &DocumentsModule{
 		db:          db,
@@ -340,7 +340,7 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 	// costs other people's afternoons and buys nothing. What merged was the
 	// product; the wires are where they were.
 	if m.pdf != nil {
-		m.pdf.RegisterRoutes(r, tenantAuthMiddleware)
+		m.pdf.Mount(r, tenantAuthMiddleware)
 	}
 }
 

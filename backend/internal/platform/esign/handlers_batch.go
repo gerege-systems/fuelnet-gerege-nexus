@@ -27,7 +27,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (m *Module) listBatchesHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) listBatchesHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -41,7 +41,7 @@ func (m *Module) listBatchesHandler(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, Page[Batch]{Items: list, Total: total, Limit: limit, Offset: offset})
 }
 
-func (m *Module) getBatchHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) getBatchHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, _, ok := m.require(w, r, PermRead)
 	if !ok {
 		return
@@ -54,7 +54,7 @@ func (m *Module) getBatchHandler(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, batch)
 }
 
-func (m *Module) createBatchHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) createBatchHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return
@@ -123,7 +123,7 @@ func (m *Module) createBatchHandler(w http.ResponseWriter, r *http.Request) {
 // would have to block for as long as the citizen takes to approve every
 // document — well past any HTTP deadline — and would leave the browser with no
 // way to show which document it is currently asking about.
-func (m *Module) runBatchHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) runBatchHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermSign)
 	if !ok {
 		return
@@ -210,7 +210,7 @@ func (m *Module) runBatchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // startBatchItem opens one ceremony for one document in the batch.
-func (m *Module) startBatchItem(r *http.Request, tenantID string, actor Actor, item *BatchItem) (*SignSession, error) {
+func (m *Rails) startBatchItem(r *http.Request, tenantID string, actor Actor, item *BatchItem) (*SignSession, error) {
 	pdf, _, _, err := m.store.documentForSigning(r.Context(), tenantID, item.DocumentID)
 	if err != nil {
 		return nil, err
@@ -254,7 +254,7 @@ func (m *Module) startBatchItem(r *http.Request, tenantID string, actor Actor, i
 
 // settleRunningItems reconciles in-flight ceremonies against eID so a batch
 // makes progress even when the browser was closed mid-run.
-func (m *Module) settleRunningItems(r *http.Request, tenantID string, actor Actor, batch *Batch) {
+func (m *Rails) settleRunningItems(r *http.Request, tenantID string, actor Actor, batch *Batch) {
 	for i := range batch.Items {
 		item := &batch.Items[i]
 		if item.Status != ItemRunning || item.SessionID == "" {
@@ -280,7 +280,7 @@ func (m *Module) settleRunningItems(r *http.Request, tenantID string, actor Acto
 	}
 }
 
-func (m *Module) cancelBatchHandler(w http.ResponseWriter, r *http.Request) {
+func (m *Rails) cancelBatchHandler(w http.ResponseWriter, r *http.Request) {
 	tenantID, actor, ok := m.require(w, r, PermManage)
 	if !ok {
 		return

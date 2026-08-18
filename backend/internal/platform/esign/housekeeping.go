@@ -29,7 +29,7 @@ const sweepInterval = 5 * time.Minute
 //
 // It returns when ctx is cancelled, so shutdown does not have to wait a full
 // interval.
-func (m *Module) StartHousekeeping(ctx context.Context) {
+func (m *Rails) StartHousekeeping(ctx context.Context) {
 	async.Go("esign-housekeeping", func() {
 		ticker := time.NewTicker(sweepInterval)
 		defer ticker.Stop()
