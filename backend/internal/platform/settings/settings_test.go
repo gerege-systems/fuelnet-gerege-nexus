@@ -72,6 +72,20 @@ func TestTheAccessModeIsPrivateByDefault(t *testing.T) {
 	}
 }
 
+// A distribution that is public by design says so in its compose file, rather
+// than needing somebody to open the console after every fresh deployment.
+func TestADeploymentCanDeclareItselfPublic(t *testing.T) {
+	t.Setenv("PLATFORM_ACCESS_MODE", "public")
+	if got := Get(AccessMode); got != AccessPublic {
+		t.Fatalf("the access mode is %q, want %q", got, AccessPublic)
+	}
+	// A typo must not open the platform.
+	t.Setenv("PLATFORM_ACCESS_MODE", "publik")
+	if got := Get(AccessMode); got != AccessPrivate {
+		t.Fatalf("an invalid mode gave %q, want %q", got, AccessPrivate)
+	}
+}
+
 // The environment stays the fallback, so a deployment that has never opened the
 // console behaves exactly as it did before this package existed.
 func TestTheEnvironmentIsStillRead(t *testing.T) {

@@ -61,6 +61,12 @@ func init() {
 		// this setting exists to prevent. The console says which mode it is
 		// in, and switching to public is one field and a reason.
 		Default: AccessPrivate,
+		// The env fallback every other setting here has, and the one this
+		// setting needed most: a distribution that is public by design —
+		// sso.gerege.mn — otherwise has to be switched by hand in the console
+		// after every fresh deployment, and until somebody does, eID sign-in
+		// answers 403 to everybody. The console still wins over it.
+		Env: "PLATFORM_ACCESS_MODE",
 		Description: "Хаалттай (private) горимд зөвхөн урьдчилан бүртгэгдсэн хүн нэвтэрнэ: " +
 			"eID, ДАН, SSO-гоор баталгаажсан ч бүртгэлгүй хүнд шинэ данс үүсэхгүй. " +
 			"Нээлттэй (public) горимд анх удаа нэвтэрсэн хүнд данс автоматаар үүснэ.",
