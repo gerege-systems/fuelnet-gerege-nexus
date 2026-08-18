@@ -123,14 +123,14 @@ func (s *Store) CreateGrant(ctx context.Context, grant reports.Grant) (string, e
 		RETURNING id`,
 		grant.GrantorTenantID, grant.GranteeTenantID, grant.ReportKey, grant.Scope,
 		grant.CounterpartyRef, grant.ValidUntil, grant.CreatedBy, grant.Note).Scan(&id)
-	if err != nil {
-		// Every failure is reported as the partial unique index — one live
-		// agreement per pair per report — because that is what the handler
-		// this was lifted from did. It is not right and it is not this
-		// commit's to change: see the fix that follows.
+	// One live agreement per pair per report, held by a partial unique index.
+	// Only that violation is the conflict: the handler this was lifted from
+	// answered 409 to every failure, so a database that was down told the
+	// operator their colleague had already asked.
+	if sqlState(err) == "23505" {
 		return "", reports.ErrGrantExists
 	}
-	return id, nil
+	return id, err
 }
 
 func (s *Store) AcceptGrant(ctx context.Context, grantorTenantID, id, actorUserID string) (string, error) {
@@ -164,6 +164,19 @@ func (s *Store) RevokeGrant(ctx context.Context, tenantID, id string) (string, s
 		return "", "", reports.ErrNoSuchGrant
 	}
 	return reportKey, side, err
+}
+
+// sqlState is how PostgreSQL says which rule was broken. Anything else — a
+// closed connection, a timeout — has no state and is nobody's mistake.
+func sqlState(err error) string {
+	if err == nil {
+		return ""
+	}
+	var pgErr interface{ SQLState() string }
+	if errors.As(err, &pgErr) {
+		return pgErr.SQLState()
+	}
+	return ""
 }
 
 var _ reports.Store = (*Store)(nil)

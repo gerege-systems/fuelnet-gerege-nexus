@@ -284,7 +284,7 @@ func (s *Service) RequestGrant(ctx context.Context, granteeTenantID string, requ
 	}
 	id, err := s.store.CreateGrant(ctx, grant)
 	if err != nil {
-		return Grant{}, err
+		return Grant{}, Failed("could not record the request", err)
 	}
 	grant.ID = id
 	return grant, nil

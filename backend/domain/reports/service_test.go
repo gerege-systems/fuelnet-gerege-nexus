@@ -287,3 +287,36 @@ func TestAPlatformThatCannotAnswerIsNotARefusal(t *testing.T) {
 		t.Fatalf("the operator's sentence: %q", err)
 	}
 }
+
+// brokenStore answers every lookup and fails the one write, which is the shape
+// of a database that has gone away mid-request.
+type brokenStore struct{ *memory.Store }
+
+func (brokenStore) CreateGrant(context.Context, reports.Grant) (string, error) {
+	return "", errors.New("the connection is closed")
+}
+
+// A database that is down is not a colleague who has already asked.
+//
+// The handler this rule came from answered 409 — "a request or agreement for
+// this report already exists between these organisations" — to every failure of
+// the insert, so an operator whose database had gone away was told a story
+// about their own organisation instead.
+func TestAStoreThatFailsIsNotAConflict(t *testing.T) {
+	store := memory.New()
+	store.Register(us, ourReg)
+	store.Register(them, theirRe)
+	installed := func(context.Context, string) (map[string]bool, error) {
+		return map[string]bool{ourApp: true}, nil
+	}
+	service := reports.NewService(catalogue(), brokenStore{store}, installed)
+
+	_, err := service.RequestGrant(context.Background(), us, reports.GrantRequest{
+		GrantorRegistrationNumber: theirRe, ReportKey: shareable, Scope: reports.ScopeFull})
+	if err == nil || reports.IsRefusal(err) || errors.Is(err, reports.ErrGrantExists) {
+		t.Fatalf("a store that failed should not read as a conflict: %v", err)
+	}
+	if err.Error() != "could not record the request" {
+		t.Fatalf("the operator's sentence: %q", err)
+	}
+}
