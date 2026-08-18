@@ -24,7 +24,7 @@
  */
 
 // Bumping this name is what retires everything cached by the previous worker.
-const CACHE = "gerege-nexus-shell-v1";
+const CACHE = "gerege-nexus-shell-v2";
 
 // The offline page is plain HTML with no bundle behind it. It has to render
 // when nothing else can, which rules out anything that needs the app to boot.
@@ -111,11 +111,19 @@ self.addEventListener("fetch", (event) => {
   // Navigations: always ask the network, because the page that comes back
   // depends on who is signed in. The cache is only ever the answer to "there
   // was no network at all".
+  //
+  // One retry before that answer, because "the first fetch failed" and "there
+  // is no network" are not the same sentence. A phone waking its radio, a
+  // handover between cells, a browser resuming a backgrounded tab — each
+  // rejects one request and then works. Without the retry the reader gets a
+  // full-page "you are offline" over a link that was fine a second later, and
+  // has to press a button to find that out; a real outage costs one extra
+  // request and reads the same.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() =>
-        caches.match(OFFLINE_PAGE).then((page) => page || Response.error()),
-      ),
+      fetch(request)
+        .catch(() => new Promise((resolve) => setTimeout(resolve, 400)).then(() => fetch(request)))
+        .catch(() => caches.match(OFFLINE_PAGE).then((page) => page || Response.error())),
     );
   }
 });
