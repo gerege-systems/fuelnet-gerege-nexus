@@ -4,28 +4,33 @@
  * Distributed under the Apache 2.0 License.
  *
  * Sharing a report with another organisation: request, accept, revoke, read.
+ *
+ * The rules are in backend/domain/reports — who may ask, who may agree, what a
+ * scope means. What is here is the request, the audit entry and the status.
  */
 
 package reports
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
-	"strings"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 const maxGrantBody = 8 << 10
 
 // handleListGrants returns every grant this organisation is a party to.
+//
+// Read through the engine's own lister: the grants table is also what the
+// consolidated run reads, and a second reader here would be a second shape for
+// the same row.
 func (m *Module) handleListGrants(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
@@ -40,24 +45,7 @@ func (m *Module) handleListGrants(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, map[string]any{"grants": grants})
 }
 
-type grantRequest struct {
-	// Whose data is being asked for, by registration number rather than by
-	// tenant id. A tenant id is an internal identifier a requester has no
-	// legitimate way to know, and letting one be typed in would turn this form
-	// into a way to enumerate the organisations on the deployment.
-	GrantorRegistrationNumber string `json:"grantor_registration_number"`
-	ReportKey                 string `json:"report_key"`
-	Scope                     string `json:"scope"`
-	ValidUntil                string `json:"valid_until"`
-	Note                      string `json:"note"`
-}
-
 // handleRequestGrant is the grantee asking to be shown a report.
-//
-// It creates a request, not a permission: accepted_at is null until the owning
-// organisation's administrator answers, and ActiveGrants ignores anything
-// unaccepted. §3.5's second principle — the data owner decides — is enforced
-// here and again in the query that reads grants.
 func (m *Module) handleRequestGrant(w http.ResponseWriter, r *http.Request) {
 	granteeTenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
@@ -65,90 +53,22 @@ func (m *Module) handleRequestGrant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxGrantBody)
-	var request grantRequest
+	var request domain.GrantRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		nexus.Error(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
-	report, found := reporting.Get(strings.TrimSpace(request.ReportKey))
-	if !found {
-		nexus.Error(w, http.StatusBadRequest, "no such report")
-		return
-	}
-
-	scope := strings.TrimSpace(request.Scope)
-	if scope == "" {
-		scope = reporting.ScopeCounterparty
-	}
-	if scope != reporting.ScopeCounterparty && scope != reporting.ScopeFull {
-		nexus.Error(w, http.StatusBadRequest, "scope must be counterparty or full")
-		return
-	}
-	// Default deny in the type system: a report that has not been written to be
-	// shared cannot be shared, and one that cannot filter by counterparty
-	// cannot be granted that scope — rather than the scope quietly widening to
-	// everything.
-	if !reporting.SupportsScope(report, scope) {
-		nexus.Error(w, http.StatusBadRequest,
-			"this report cannot be shared with that scope")
-		return
-	}
-
-	grantorTenantID, err := m.tenantByRegistration(r, request.GrantorRegistrationNumber)
+	grant, err := m.svc.RequestGrant(acting(r), granteeTenantID, request)
 	if err != nil {
-		nexus.Error(w, http.StatusNotFound, "no organisation with that registration number")
-		return
-	}
-	if grantorTenantID == granteeTenantID {
-		nexus.Error(w, http.StatusBadRequest, "an organisation cannot ask itself for a report")
+		fail(w, r, err)
 		return
 	}
 
-	// The counterparty reference is decided once, here, and stored. Matching it
-	// again on every run would mean a grant silently pointing at different data
-	// after the requesting organisation edited its own profile.
-	counterpartyRef := ""
-	if scope == reporting.ScopeCounterparty {
-		counterpartyRef, err = m.registrationOf(r, granteeTenantID)
-		if err != nil || counterpartyRef == "" {
-			nexus.Error(w, http.StatusBadRequest,
-				"your organisation has no registration number; set it in Organisation before asking for a counterparty report")
-			return
-		}
-	}
-
-	var validUntil *time.Time
-	if raw := strings.TrimSpace(request.ValidUntil); raw != "" {
-		parsed, err := time.Parse("2006-01-02", raw)
-		if err != nil {
-			nexus.Error(w, http.StatusBadRequest, "valid_until must be YYYY-MM-DD")
-			return
-		}
-		validUntil = &parsed
-	}
-
-	userID := actorOf(r)
-	var id string
-	err = m.db.QueryRow(nexus.WithTenantID(r.Context(), granteeTenantID), `
-		INSERT INTO report_grants
-		    (grantor_tenant_id, grantee_tenant_id, report_key, scope,
-		     counterparty_ref, valid_until, created_by, note)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::uuid, $8)
-		RETURNING id`,
-		grantorTenantID, granteeTenantID, report.Key(), scope,
-		counterpartyRef, validUntil, userID, strings.TrimSpace(request.Note)).Scan(&id)
-	if err != nil {
-		// The partial unique index: one live agreement per pair per report.
-		nexus.Error(w, http.StatusConflict,
-			"a request or agreement for this report already exists between these organisations")
-		return
-	}
-
-	m.record(r, granteeTenantID, "reports.grant_requested", report.Key(), map[string]any{
-		"grant_id": id, "grantor_tenant_id": grantorTenantID, "scope": scope,
+	m.record(r, granteeTenantID, "reports.grant_requested", grant.ReportKey, map[string]any{
+		"grant_id": grant.ID, "grantor_tenant_id": grant.GrantorTenantID, "scope": grant.Scope,
 	})
-	nexus.JSON(w, http.StatusCreated, map[string]any{"id": id})
+	nexus.JSON(w, http.StatusCreated, map[string]any{"id": grant.ID})
 }
 
 // handleAcceptGrant is the grantor agreeing. Only they can.
@@ -158,21 +78,9 @@ func (m *Module) handleAcceptGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// `grantor_tenant_id = $2` is the whole authorization for this endpoint:
-	// the row-level policy lets both parties see the row, so without this
-	// clause a grantee could accept their own request.
-	var reportKey string
-	err := m.db.QueryRow(nexus.WithTenantID(r.Context(), grantorTenantID), `
-		UPDATE report_grants
-		   SET accepted_by = NULLIF($3, '')::uuid, accepted_at = NOW(), updated_at = NOW()
-		 WHERE id = $1 AND grantor_tenant_id = $2 AND revoked_at IS NULL AND accepted_at IS NULL
-		 RETURNING report_key`, id, grantorTenantID, actorOf(r)).Scan(&reportKey)
-	if errors.Is(err, pgx.ErrNoRows) {
-		nexus.Error(w, http.StatusNotFound, "no such pending request")
-		return
-	}
+	reportKey, err := m.svc.AcceptGrant(acting(r), grantorTenantID, id)
 	if err != nil {
-		nexus.Error(w, http.StatusInternalServerError, "could not accept the request")
+		fail(w, r, err)
 		return
 	}
 
@@ -180,47 +88,21 @@ func (m *Module) handleAcceptGrant(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, map[string]any{"id": id})
 }
 
-// handleRevokeGrant ends an agreement.
-//
-// Either side may. The owner revoking is the point — §3.5's second principle
-// is that the permission is revocable and takes effect immediately — and the
-// reader withdrawing is a request they no longer want, which nobody benefits
-// from leaving open.
-//
-// The row is not deleted. "Who could see our data, and when" is a question the
-// owner is entitled to an answer to after the fact.
+// handleRevokeGrant ends an agreement. Either side may.
 func (m *Module) handleRevokeGrant(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := nexus.RequireTenant(w, r)
+	tenantID, id, ok := m.grantParty(w, r)
 	if !ok {
 		return
 	}
-	id := chi.URLParam(r, "id")
-	if _, err := uuid.Parse(id); err != nil {
-		nexus.Error(w, http.StatusBadRequest, "invalid grant id")
-		return
-	}
 
-	var reportKey, direction string
-	err := m.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
-		UPDATE report_grants
-		   SET revoked_at = NOW(), updated_at = NOW()
-		 WHERE id = $1
-		   AND (grantor_tenant_id = $2 OR grantee_tenant_id = $2)
-		   AND revoked_at IS NULL
-		 RETURNING report_key,
-		           CASE WHEN grantor_tenant_id = $2 THEN 'given' ELSE 'received' END`,
-		id, tenantID).Scan(&reportKey, &direction)
-	if errors.Is(err, pgx.ErrNoRows) {
-		nexus.Error(w, http.StatusNotFound, "no such agreement")
-		return
-	}
+	reportKey, side, err := m.svc.RevokeGrant(r.Context(), tenantID, id)
 	if err != nil {
-		nexus.Error(w, http.StatusInternalServerError, "could not revoke the agreement")
+		fail(w, r, err)
 		return
 	}
 
 	m.record(r, tenantID, "reports.grant_revoked", reportKey, map[string]any{
-		"grant_id": id, "side": direction,
+		"grant_id": id, "side": side,
 	})
 	nexus.JSON(w, http.StatusOK, map[string]any{"id": id})
 }
@@ -312,6 +194,10 @@ func (m *Module) handleAccessHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // grantParty resolves the caller's tenant and the grant id together.
+//
+// The id is checked for shape here rather than in the domain: an unparseable
+// identifier is a malformed request, in the same class as a body that is not
+// JSON, and the answer is the same 400 either way.
 func (m *Module) grantParty(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
@@ -323,42 +209,4 @@ func (m *Module) grantParty(w http.ResponseWriter, r *http.Request) (string, str
 		return "", "", false
 	}
 	return tenantID, id, true
-}
-
-// tenantByRegistration resolves an organisation from its registration number.
-//
-// On the platform path, because it deliberately looks outside the caller's own
-// organisation — and narrowly: it answers with an id or a not-found, takes an
-// exact registration number rather than a name, and is behind the same
-// authenticated, app-gated, permission-checked route as everything else here.
-func (m *Module) tenantByRegistration(r *http.Request, registration string) (string, error) {
-	registration = strings.TrimSpace(registration)
-	if registration == "" {
-		return "", errors.New("a registration number is required")
-	}
-
-	var tenantID string
-	err := m.db.QueryRow(nexus.WithoutTenant(r.Context()),
-		`SELECT tenant_id FROM tenant_profiles WHERE registration_number = $1`,
-		registration).Scan(&tenantID)
-	return tenantID, err
-}
-
-// registrationOf reads one organisation's own registration number.
-func (m *Module) registrationOf(r *http.Request, tenantID string) (string, error) {
-	var registration string
-	err := m.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID),
-		`SELECT registration_number FROM tenant_profiles WHERE tenant_id = $1`,
-		tenantID).Scan(&registration)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
-	}
-	return strings.TrimSpace(registration), err
-}
-
-func actorOf(r *http.Request) string {
-	if claims, err := nexus.UserFromContext(r.Context()); err == nil {
-		return claims.UserID
-	}
-	return ""
 }
