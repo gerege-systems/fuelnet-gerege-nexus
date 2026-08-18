@@ -201,6 +201,19 @@ jobs:
             echo "::error::OAuth2 flow tests skipped — OAUTH_TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
+      - name: Fail if the reports app tests were skipped
+        # These are the net under the reports app: which reports an app gate
+        # lets through, what a schedule body must satisfy, and the rule that
+        # only the owning organisation may agree to share. The app had no tests
+        # at all until the domain split, and a skip puts it back there.
+        run: |
+          go test -run 'TestOnlyTheOwnerAgreesToShareAndEitherSideMayEnd' -v \
+            ./internal/apps/reports/... | tee /tmp/reports.log
+          if grep -q -- '--- SKIP' /tmp/reports.log; then
+            echo "::error::reports app tests skipped — REPORTING_TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
+
       - name: Fail if the route policy test was skipped
         # This is the one that decides whether a route is reachable by a
         # stranger. Modules are handed the root router, so mounting a path
