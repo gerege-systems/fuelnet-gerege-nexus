@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/go-chi/chi/v5"
@@ -547,7 +548,7 @@ func TestThePolicyAndTheChainCannotLockATypeOutTogether(t *testing.T) {
 		}
 	}
 	if policy.RequireNamedSigner {
-		if err := stepsCanRequireNamedSigners("REQUEST", steps); err != nil {
+		if err := domain.StepsCanRequireNamedSigners("REQUEST", steps); err != nil {
 			t.Errorf("stored state cannot be satisfied by anyone: %v (chain %+v)", err, steps)
 		}
 	}

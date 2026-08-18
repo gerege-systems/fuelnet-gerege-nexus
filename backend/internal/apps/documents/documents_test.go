@@ -88,28 +88,6 @@ func TestSignatureDisplayText(t *testing.T) {
 	}
 }
 
-func TestSignaturePolicyDefaultsToBothChannels(t *testing.T) {
-	policy := defaultSignaturePolicy("CONTRACT")
-
-	if !policy.allows(SignerEID) || !policy.allows(SignerDAN) {
-		t.Error("an unconfigured type must accept both national channels, as it did before policies existed")
-	}
-	if policy.RequireNamedSigner {
-		t.Error("an unconfigured type must not require a named signer")
-	}
-	if policy.Configured {
-		t.Error("a default policy is not a stored one")
-	}
-	if policy.allows("SMARTCARD") {
-		t.Error("a channel the module does not speak must never be allowed")
-	}
-
-	only := SignaturePolicy{DocType: "CONTRACT", AllowEID: true}
-	if only.allows(SignerDAN) {
-		t.Error("DAN must be refused when the policy allows E-ID only")
-	}
-}
-
 // A signature is held to whoever the document's next step names, and held back
 // from anyone the chain still needs further along.
 func TestCheckSigner(t *testing.T) {
@@ -193,32 +171,6 @@ func TestCheckSignerUnderARequiredNamedSigner(t *testing.T) {
 
 // A chain that could never be completed under a named-signer policy must be
 // refused when it is saved, not discovered when a document sticks.
-func TestStepsCanRequireNamedSigners(t *testing.T) {
-	ok := []WorkflowStep{
-		{Order: 1, Name: "Дарга", SignerRegNumber: "AA90010111"},
-		{Order: 2, Name: "Захирал", SignerRegNumber: "BB90010111"},
-	}
-	if err := stepsCanRequireNamedSigners("CONTRACT", ok); err != nil {
-		t.Errorf("a chain naming a distinct signer per step is fine: %v", err)
-	}
-
-	for name, steps := range map[string][]WorkflowStep{
-		"no steps at all": {},
-		"an open step nobody could fill": {
-			{Order: 1, Name: "Дарга", SignerRegNumber: "AA90010111"},
-			{Order: 2, Name: "Хэн ч"},
-		},
-		"one citizen named twice, who signs once": {
-			{Order: 1, Name: "Дарга", SignerRegNumber: "AA90010111"},
-			{Order: 2, Name: "Дарга дахин", SignerRegNumber: "AA90010111"},
-		},
-	} {
-		if err := stepsCanRequireNamedSigners("CONTRACT", steps); !errors.Is(err, ErrInvalidConfiguration) {
-			t.Errorf("%s: got %v, want ErrInvalidConfiguration", name, err)
-		}
-	}
-}
-
 // A registration number this module can see is wrong is refused here, so that
 // anything the provider then refuses can be treated as the provider's trouble —
 // which a polling client must retry rather than give up on.
@@ -236,68 +188,6 @@ func TestAShortRegistrationNumberIsRefusedLocally(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "AA1") {
 		t.Errorf("got %q, want it to quote what was sent", err)
-	}
-}
-
-// A Mongolian registration number is Cyrillic — "УБ99010111" is ten characters in
-// twenty bytes — and every bound on it is a bound on CHARACTERS: the column counts
-// characters, the SQL that repairs stored chains counts characters, and a citizen
-// reading their own number counts characters. Measuring bytes in Go made the three
-// places that enforce "a named step must be fillable" disagree: "УБ9901" is eight
-// bytes but six characters, so the save accepted it as a named step and the snapshot
-// then opened it, leaving the workflows screen naming a citizen the document's own
-// chain did not.
-func TestARegistrationNumberIsBoundedInCharactersNotBytes(t *testing.T) {
-	for _, tc := range []struct {
-		reg       string
-		plausible bool
-		why       string
-	}{
-		{"AA90010111", true, "the transliterated form the mock uses"},
-		{"УБ99010111", true, "the real Cyrillic form, 10 characters in 20 bytes"},
-		{"уб99010111", true, "the same, normalised on the way in"},
-		{"УБ9901", false, "6 characters — 8 bytes, which once passed"},
-		{"AA1", false, "3 characters"},
-		{"", false, "an open step names nobody"},
-		{strings.Repeat("У", RegNumberMax), true, "64 characters is what the column holds"},
-		{strings.Repeat("У", RegNumberMax+1), false, "65 would not survive being stored"},
-	} {
-		if got := plausibleRegNumber(normaliseRegNumber(tc.reg)); got != tc.plausible {
-			t.Errorf("plausibleRegNumber(%q) = %v, want %v — %s", tc.reg, got, tc.plausible, tc.why)
-		}
-	}
-
-	// And the shortest Cyrillic number that passes must be exactly the limit in
-	// characters, not in bytes.
-	if !plausibleRegNumber(strings.Repeat("Ү", RegNumberLimit)) {
-		t.Error("a number of exactly the limit in characters must be accepted")
-	}
-	if plausibleRegNumber(strings.Repeat("Ү", RegNumberLimit-1)) {
-		t.Error("a number one character short must be refused")
-	}
-}
-
-// The same rule, applied where a document's chain is decided: what cannot be saved
-// must not be copied, and what can be saved must be copied intact.
-func TestFillableChainOpensOnlyWhatNobodyCouldFill(t *testing.T) {
-	got := fillableChain([]WorkflowStep{
-		{Order: 1, Name: "Ня-бо", SignerRegNumber: "  уб99010111 "}, // normalised, kept
-		{Order: 2, Name: "Дахилт", SignerRegNumber: "УБ99010111"},   // the same citizen
-		{Order: 3, Name: "Алдаа", SignerRegNumber: "УБ9901"},        // 6 characters
-		{Order: 4, Name: "Хэн ч", SignerRegNumber: ""},              // open already
-		{Order: 5, Name: "Захирал", SignerRegNumber: "cc90010111"},  // fine, normalised
-	})
-	want := []string{"УБ99010111", "", "", "", "CC90010111"}
-	if len(got) != len(want) {
-		t.Fatalf("got %d steps, want %d — the tenant asked for that many approvals", len(got), len(want))
-	}
-	for i, step := range got {
-		if step.SignerRegNumber != want[i] {
-			t.Errorf("step %d = %q, want %q", i+1, step.SignerRegNumber, want[i])
-		}
-		if step.Order != i+1 {
-			t.Errorf("step %d carries order %d", i+1, step.Order)
-		}
 	}
 }
 

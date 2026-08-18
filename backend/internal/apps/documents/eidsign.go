@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
@@ -168,8 +169,8 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 		return nil, fmt.Errorf("%w: that registration number cannot be stored — %s",
 			ErrSignatureRejected, fault)
 	}
-	regNumber = normaliseRegNumber(regNumber)
-	if !plausibleRegNumber(regNumber) {
+	regNumber = domain.NormaliseRegNumber(regNumber)
+	if !domain.PlausibleRegNumber(regNumber) {
 		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
 	}
 
@@ -383,7 +384,7 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 	}
 
 	// The approval has to come from the citizen the request was addressed to.
-	approved := normaliseRegNumber(result.Identity.RegNumber)
+	approved := domain.NormaliseRegNumber(result.Identity.RegNumber)
 	if approved != regNumber {
 		return nil, fmt.Errorf("%w: the request was sent to %s but %s approved it",
 			ErrSignatureRejected, regNumber, approved)

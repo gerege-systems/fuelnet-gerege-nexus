@@ -38,13 +38,16 @@ package egov
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/egov"
+	"github.com/gerege-systems/open-gerege-nexus/backend/domain/egov/postgres"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -59,37 +62,102 @@ const ID = "io.gerege.nexus.egov"
 // than an error it reports. Contacts is the first caller-in-waiting — its
 // address book fills itself in from the citizen registry — and it must keep
 // working on a deployment that has no state integration at all.
-type Registry interface {
-	Citizen(ctx context.Context, regNumber string) (*gerege.CitizenInfo, error)
-	Company(ctx context.Context, companyReg string) (*gerege.CompanyInfo, error)
-}
+//
+// It is the domain's now, so that a consumer names this app's types rather than
+// a platform client's to say what it got back.
+type Registry = domain.Registry
 
 // Rail and Rails moved to internal/platform/staterail: the platform builds the
 // value and the platform is not allowed to import an app to name its type. See
 // that package, and internal/apps/boundaries_test.go for the rule.
 
 type Module struct {
-	db    nexus.DB
-	xyp   *gerege.GeregeService
-	rails staterail.Rails
+	svc   *domain.Service
 	perms nexus.PermissionStore
 }
 
+// New wires the two platform clients to the domain's ports.
+//
+// The clients stay the platform's — ХУР signs people in before any app is
+// installed, and the rails are read from this process's configuration — so what
+// crosses into the domain is not the client but the answer: a value with this
+// app's own type on it, which is what lets the rules be run against a map.
 func New(p nexus.Platform, xyp *gerege.GeregeService, rails staterail.Rails) *Module {
-	m := &Module{db: p.DB(), xyp: xyp, rails: rails, perms: p.Permissions()}
+	m := &Module{
+		svc:   domain.NewService(registry{xyp: xyp}, asRails(rails), postgres.New(p.DB())),
+		perms: p.Permissions(),
+	}
 	nexus.Register(m)
 	return m
+}
+
+// asRails is staterail.Rails as domain/egov.Rails. The two structs are the same
+// four fields with the same JSON, which is the point: neither side has to know
+// the other, and the screen sees no difference.
+func asRails(rails staterail.Rails) domain.Rails {
+	if rails == nil {
+		return nil
+	}
+	return func() []domain.Rail {
+		wired := rails()
+		described := make([]domain.Rail, 0, len(wired))
+		for _, rail := range wired {
+			described = append(described, domain.Rail{
+				ID: rail.ID, Name: rail.Name, Mode: rail.Mode, Endpoint: rail.Endpoint,
+			})
+		}
+		return described
+	}
 }
 
 // Compile-time proof that the module satisfies what it publishes.
 var _ Registry = (*Module)(nil)
 
-func (m *Module) Citizen(ctx context.Context, regNumber string) (*gerege.CitizenInfo, error) {
-	return m.xyp.GetCitizenInfo(ctx, regNumber)
+func (m *Module) Citizen(ctx context.Context, regNumber string) (domain.Citizen, error) {
+	return m.svc.Citizen(ctx, regNumber)
 }
 
-func (m *Module) Company(ctx context.Context, companyReg string) (*gerege.CompanyInfo, error) {
-	return m.xyp.GetCompanyInfo(ctx, companyReg)
+func (m *Module) Company(ctx context.Context, companyReg string) (domain.Company, error) {
+	return m.svc.Company(ctx, companyReg)
+}
+
+// registry is domain/egov.Registry over the platform's XYP client: a pointer
+// and a nil check become a value and an error.
+//
+// The field copy is the translation, and it is written out rather than done by
+// embedding so that a field added on the platform side does not silently become
+// part of this app's published answer.
+type registry struct{ xyp *gerege.GeregeService }
+
+func (r registry) Citizen(ctx context.Context, regNumber string) (domain.Citizen, error) {
+	info, err := r.xyp.GetCitizenInfo(ctx, regNumber)
+	if err != nil {
+		return domain.Citizen{}, err
+	}
+	if info == nil {
+		return domain.Citizen{}, errors.New("the registry answered with nothing")
+	}
+	return domain.Citizen{
+		RegNumber: info.RegNumber, CivilID: info.CivilID,
+		LastName: info.LastName, FirstName: info.FirstName,
+		Gender: info.Gender, Address: info.Address,
+		PassportStatus: info.PassportStatus, Verified: info.Verified,
+	}, nil
+}
+
+func (r registry) Company(ctx context.Context, companyReg string) (domain.Company, error) {
+	info, err := r.xyp.GetCompanyInfo(ctx, companyReg)
+	if err != nil {
+		return domain.Company{}, err
+	}
+	if info == nil {
+		return domain.Company{}, errors.New("the registry answered with nothing")
+	}
+	return domain.Company{
+		CompanyReg: info.CompanyReg, Name: info.Name, Executive: info.Executive,
+		Address: info.Address, VatPayer: info.VatPayer, Status: info.Status,
+		FoundingDate: info.FoundingDate,
+	}, nil
 }
 
 func (m *Module) ID() string { return ID }
@@ -182,21 +250,18 @@ func (m *Module) handleCitizen(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RegNumber string `json:"reg_number"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<13)).Decode(&req); err != nil || req.RegNumber == "" {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<13)).Decode(&req); err != nil {
 		nexus.Error(w, http.StatusBadRequest, "invalid registration number")
 		return
 	}
 
-	info, err := m.Citizen(r.Context(), req.RegNumber)
+	info, err := m.svc.Citizen(r.Context(), req.RegNumber)
 	if err != nil {
-		nexus.Error(w, http.StatusBadRequest, "XYP citizen query failed: "+err.Error())
+		fail(w, r, err)
 		return
 	}
 
-	claims, _ := nexus.UserFromContext(r.Context())
-	nexus.Audit(r.Context(), tenantID, claims.UserID, "egov.citizen_queried", "egov",
-		map[string]any{"reg_number": req.RegNumber})
-
+	m.record(r, tenantID, domain.ActionCitizenQueried, map[string]any{"reg_number": req.RegNumber})
 	nexus.JSON(w, http.StatusOK, info)
 }
 
@@ -209,22 +274,37 @@ func (m *Module) handleCompany(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CompanyReg string `json:"company_reg"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<13)).Decode(&req); err != nil || req.CompanyReg == "" {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<13)).Decode(&req); err != nil {
 		nexus.Error(w, http.StatusBadRequest, "invalid company registration number")
 		return
 	}
 
-	info, err := m.Company(r.Context(), req.CompanyReg)
+	info, err := m.svc.Company(r.Context(), req.CompanyReg)
 	if err != nil {
-		nexus.Error(w, http.StatusBadRequest, "XYP company query failed: "+err.Error())
+		fail(w, r, err)
 		return
 	}
 
-	claims, _ := nexus.UserFromContext(r.Context())
-	nexus.Audit(r.Context(), tenantID, claims.UserID, "egov.company_queried", "egov",
-		map[string]any{"company_reg": req.CompanyReg})
-
+	m.record(r, tenantID, domain.ActionCompanyQueried, map[string]any{"company_reg": req.CompanyReg})
 	nexus.JSON(w, http.StatusOK, info)
+}
+
+// record keeps what was asked. The lookups are the whole reason the history
+// screen has anything to read.
+func (m *Module) record(r *http.Request, tenantID, action string, details map[string]any) {
+	claims, _ := nexus.UserFromContext(r.Context())
+	nexus.Audit(r.Context(), tenantID, claims.UserID, action, "egov", details)
+}
+
+// fail answers with the domain's own words. Everything this app refuses is the
+// caller's request; everything else is a platform that could not answer.
+func fail(w http.ResponseWriter, r *http.Request, err error) {
+	if domain.IsRefusal(err) {
+		nexus.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	slog.Error("egov: "+err.Error(), "error", errors.Unwrap(err), "path", r.URL.Path)
+	nexus.Error(w, http.StatusInternalServerError, err.Error())
 }
 
 // handleConnections answers with the three rails and where a person manages
@@ -238,24 +318,7 @@ func (m *Module) handleConnections(w http.ResponseWriter, r *http.Request) {
 	if _, ok := nexus.RequireTenant(w, r); !ok {
 		return
 	}
-	rails := []staterail.Rail{}
-	if m.rails != nil {
-		rails = m.rails()
-	}
-	nexus.JSON(w, http.StatusOK, map[string]any{
-		"rails": rails,
-		// Where the person's own linked identities live. See the package
-		// comment for why they are not here.
-		"identities_path": "/profile",
-	})
-}
-
-// historyEntry is one thing this organisation asked the state.
-type historyEntry struct {
-	Action    string         `json:"action"`
-	UserID    string         `json:"user_id"`
-	Details   map[string]any `json:"details"`
-	CreatedAt time.Time      `json:"created_at"`
+	nexus.JSON(w, http.StatusOK, m.svc.Connections())
 }
 
 // handleHistory reads the audit trail rather than a table of its own.
@@ -270,33 +333,10 @@ func (m *Module) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := m.db.Query(r.Context(),
-		`SELECT action, COALESCE(user_id, ''), details, created_at
-		   FROM audit_events
-		  WHERE tenant_id = $1
-		    AND (action LIKE 'egov.%' OR action LIKE 'xyp.%')
-		  ORDER BY created_at DESC
-		  LIMIT 200`, tenantID)
+	lookups, err := m.svc.History(r.Context(), tenantID)
 	if err != nil {
-		slog.Error("egov: could not read the lookup history", "error", err, "tenant_id", tenantID)
-		nexus.Error(w, http.StatusInternalServerError, "could not load the history")
+		fail(w, r, err)
 		return
 	}
-	defer rows.Close()
-
-	entries := make([]historyEntry, 0, 32)
-	for rows.Next() {
-		var e historyEntry
-		var raw []byte
-		if err := rows.Scan(&e.Action, &e.UserID, &raw, &e.CreatedAt); err != nil {
-			continue
-		}
-		_ = json.Unmarshal(raw, &e.Details)
-		entries = append(entries, e)
-	}
-	// `xyp.%` is in the query on purpose: events written before the rename are
-	// the same acts under their old name, and a history that started empty on
-	// the day this module shipped would look like a history that had been
-	// cleared.
-	nexus.JSON(w, http.StatusOK, entries)
+	nexus.JSON(w, http.StatusOK, lookups)
 }
