@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
-	"strings"
 	"time"
-	"unicode/utf8"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/go-chi/chi/v5"
@@ -27,102 +25,20 @@ var ErrNotRoutable = errors.New("document not found or is not a draft")
 // signed. One approval per person is not progress through the workflow.
 var ErrAlreadySigned = errors.New("this signer has already signed the document")
 
-// WorkflowStep is one approval a document type needs, in order. An empty
-// SignerRegNumber means the step counts but names nobody for it.
-type WorkflowStep struct {
-	Order           int    `json:"order"`
-	Name            string `json:"name"`
-	SignerRegNumber string `json:"signer_reg_number"`
-}
-
-// DocumentWorkflow is the ordered approval chain for one document type. No steps
-// means a single signature approves, which is how the app behaved before.
-type DocumentWorkflow struct {
-	DocType string         `json:"doc_type"`
-	Steps   []WorkflowStep `json:"steps"`
-}
-
-// ApprovalStep is one step of a document's OWN chain — the copy taken when it
-// started waiting for approval, which no later configuration change touches.
-type ApprovalStep struct {
-	Order int    `json:"order"`
-	Name  string `json:"name"`
-	// Empty means the step is open: anyone allowed to sign may take it.
-	SignerRegNumber string `json:"signer_reg_number"`
-}
+// The approval chain's shapes and its rules are backend/domain/documents. They
+// are aliased rather than re-declared: the JSON here is the published one, and
+// two structs would be two places for it to drift.
+type (
+	WorkflowStep     = domain.WorkflowStep
+	DocumentWorkflow = domain.DocumentWorkflow
+	ApprovalStep     = domain.ApprovalStep
+)
 
 // querier is satisfied by both the pool and a transaction, so a read that has to
 // happen inside somebody else's transaction does not need its own copy.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
-// normaliseRegNumber is the one shape a registration number is compared in. Every
-// decision that pairs a number with another number — whether a named step is this
-// citizen's, whether they have signed already, the ledger's one-per-signer
-// constraint — rests on both sides having been through here.
-//
-// It is deliberately Go rather than SQL. Postgres upper() is governed by the
-// database's ctype: on a cluster initialised with LC_CTYPE=C, upper('уб99010111')
-// is 'уб99010111' unchanged, while Go upper-cases Cyrillic wherever it runs. Since
-// Mongolian registration numbers are Cyrillic, letting SQL decide would make the
-// feature's central comparison depend on how somebody ran initdb.
-func normaliseRegNumber(reg string) string {
-	return strings.ToUpper(strings.TrimSpace(reg))
-}
-
-// plausibleRegNumber reports whether a normalised number could be presented by a
-// citizen at all. Anything shorter than the limit is refused by both providers, and
-// anything longer than the column would not survive being stored.
-//
-// Counted in RUNES, not bytes. A Mongolian registration number is Cyrillic —
-// 'УБ99010111' is 10 characters in 20 bytes — and the column is VARCHAR(64), which
-// Postgres also counts in characters. Measuring bytes here made this check disagree
-// with both the column and the SQL that repairs stored chains: 'УБ9901' is 8 bytes
-// but 6 characters, so it was stored as a named step and then copied onto every
-// document as an open one, leaving the screen naming a citizen the document's own
-// chain did not.
-func plausibleRegNumber(reg string) bool {
-	n := utf8.RuneCountInString(reg)
-	return n >= RegNumberLimit && n <= RegNumberMax
-}
-
-// RegNumberMax is what document_workflow_steps.signer_reg_number holds, in the
-// characters Postgres counts.
-const RegNumberMax = 64
-
-// fillableChain is the chain a document may actually be approved by: numbers
-// normalised, and every step nobody could fill left open.
-//
-// A step is unfillable in two ways. It may name something that is not a
-// registration number, which no provider would vouch for. Or it may name a citizen
-// an earlier step already names — one citizen signs a document once, so the later
-// step would be owed to somebody who has already signed, and the document could
-// never be approved by anybody.
-//
-// The steps must arrive in step_order: it decides which occurrence of a repeated
-// citizen keeps the name. Both callers read them ordered, and the migration that
-// repairs stored chains breaks the same tie the same way.
-//
-// Opening such a step is the only reading that leaves the chain completable: the
-// tenant asked for that many approvals and still gets them, the step is simply
-// fillable by whoever can actually sign. ReplaceWorkflow refuses to SAVE either
-// shape; this is what the path that decides who may sign does with the chains
-// stored before it did.
-func fillableChain(steps []WorkflowStep) []WorkflowStep {
-	out := make([]WorkflowStep, 0, len(steps))
-	namedAt := map[string]bool{}
-	for _, step := range steps {
-		reg := normaliseRegNumber(step.SignerRegNumber)
-		if !plausibleRegNumber(reg) || namedAt[reg] {
-			reg = ""
-		} else {
-			namedAt[reg] = true
-		}
-		out = append(out, WorkflowStep{Order: step.Order, Name: step.Name, SignerRegNumber: reg})
-	}
-	return out
 }
 
 // snapshotApprovalChain copies the type's chain onto the document and records how
@@ -141,7 +57,7 @@ func (m *DocumentsModule) snapshotApprovalChain(ctx context.Context, tx pgx.Tx, 
 	if err != nil {
 		return fmt.Errorf("read approval chain to copy: %w", err)
 	}
-	for _, step := range fillableChain(stored) {
+	for _, step := range domain.FillableChain(stored) {
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO document_approval_steps (tenant_id, document_id, step_order, name, signer_reg_number)
 			      VALUES ($1, $2, $3, $4, $5)
@@ -336,50 +252,9 @@ const maxChainSteps = 10
 // step by step would let a half-applied edit decide who may approve, so the
 // delete and the inserts share one transaction.
 func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType string, steps []WorkflowStep) (*DocumentWorkflow, error) {
-	docType = strings.ToUpper(strings.TrimSpace(docType))
-	if !slices.Contains(DocTypes, docType) {
-		return nil, fmt.Errorf("%w: invalid doc_type %q", ErrInvalidConfiguration, docType)
-	}
-	if len(steps) > maxChainSteps {
-		return nil, fmt.Errorf("%w: an approval chain is limited to %d steps",
-			ErrInvalidConfiguration, maxChainSteps)
-	}
-
-	cleaned := make([]WorkflowStep, 0, len(steps))
-	namedAt := map[string]int{}
-	for i, step := range steps {
-		name := strings.TrimSpace(step.Name)
-		if name == "" {
-			return nil, fmt.Errorf("%w: step %d needs a name", ErrInvalidConfiguration, i+1)
-		}
-		for field, value := range map[string]string{"name": name, "signer": step.SignerRegNumber} {
-			if fault := textFault(value); fault != "" {
-				return nil, fmt.Errorf("%w: step %d's %s cannot be stored — %s",
-					ErrInvalidConfiguration, i+1, field, fault)
-			}
-		}
-		reg := normaliseRegNumber(step.SignerRegNumber)
-		// A step naming something no citizen could present is a step nobody can
-		// fill: signing checks the identity a provider vouched for, and both
-		// providers refuse a registration number under eight characters. Refused
-		// here, so a chain is never stored in a shape the snapshot would have to
-		// open — the screen would name a citizen the document's chain did not.
-		if reg != "" && !plausibleRegNumber(reg) {
-			return nil, fmt.Errorf("%w: step %d names %q, which is %d characters — a registration number is %d to %d",
-				ErrInvalidConfiguration, i+1, reg, utf8.RuneCountInString(reg), RegNumberLimit, RegNumberMax)
-		}
-		// One citizen signs a document once, so naming the same person at two
-		// steps builds a chain that can never be completed — whatever the
-		// signature policy says. This has to be refused when it is saved, not
-		// discovered when a document sticks halfway.
-		if reg != "" {
-			if first, repeated := namedAt[reg]; repeated {
-				return nil, fmt.Errorf("%w: steps %d and %d both name %s, and one citizen signs a document once",
-					ErrInvalidConfiguration, first, i+1, reg)
-			}
-			namedAt[reg] = i + 1
-		}
-		cleaned = append(cleaned, WorkflowStep{Order: i + 1, Name: name, SignerRegNumber: reg})
+	docType, cleaned, err := domain.ValidateChain(docType, DocTypes, steps)
+	if err != nil {
+		return nil, err
 	}
 
 	tx, err := m.db.Begin(ctx)
@@ -413,7 +288,7 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 		requireNamed = false // an unconfigured type allows open steps
 	}
 	if requireNamed {
-		if err := stepsCanRequireNamedSigners(docType, cleaned); err != nil {
+		if err := domain.StepsCanRequireNamedSigners(docType, cleaned); err != nil {
 			return nil, err
 		}
 	}
@@ -446,30 +321,6 @@ func (m *DocumentsModule) ReplaceWorkflow(ctx context.Context, tenantID, docType
 	})
 
 	return &DocumentWorkflow{DocType: docType, Steps: cleaned}, nil
-}
-
-// stepsCanRequireNamedSigners reports whether a chain could ever be completed
-// under a policy that only accepts named signers: every step has to name one, and
-// no two steps may name the same citizen, because one citizen signs a document
-// once. A chain that fails this would leave the type unapprovable by anybody.
-func stepsCanRequireNamedSigners(docType string, steps []WorkflowStep) error {
-	if len(steps) == 0 {
-		return fmt.Errorf("%w: the %s chain has no steps, so requiring a named signer would leave nobody able to sign", ErrInvalidConfiguration, docType)
-	}
-
-	seen := map[string]int{}
-	for _, step := range steps {
-		if step.SignerRegNumber == "" {
-			return fmt.Errorf("%w: step %d of the %s chain (%s) names no signer, so requiring a named signer would leave it unfillable",
-				ErrInvalidConfiguration, step.Order, docType, step.Name)
-		}
-		if first, repeated := seen[step.SignerRegNumber]; repeated {
-			return fmt.Errorf("%w: steps %d and %d of the %s chain both name %s, and one citizen signs a document once",
-				ErrInvalidConfiguration, first, step.Order, docType, step.SignerRegNumber)
-		}
-		seen[step.SignerRegNumber] = step.Order
-	}
-	return nil
 }
 
 // workflowStepsTx reads one type's chain inside somebody else's transaction, so a

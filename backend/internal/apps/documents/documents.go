@@ -21,8 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
@@ -90,7 +90,9 @@ var ErrInvalidDocument = errors.New("invalid document")
 // ErrInvalidConfiguration is returned when a template, approval chain, signature
 // policy or retention rule the caller sent cannot be stored as asked. Like
 // ErrInvalidDocument its message is meant to be read by whoever sent it.
-var ErrInvalidConfiguration = errors.New("invalid configuration")
+// ErrInvalidConfiguration is the domain's: a chain, a policy and a template are
+// all refused with it, and a caller matching on one must match on all three.
+var ErrInvalidConfiguration = domain.ErrInvalidConfiguration
 
 // ErrProviderUnavailable is returned when the identity provider could not be
 // reached or answered in a way we could not use. It is nobody's mistake and it may
@@ -538,24 +540,16 @@ func (m *DocumentsModule) rejectDocumentHandler(w http.ResponseWriter, r *http.R
 // answered that with 500 "we could not save it", which is untrue twice over: nothing
 // broke, and it is the caller's input. A 400 that names the fault is the honest answer,
 // and it keeps a log line for something nobody can fix out of the error log.
-func textFault(value string) string {
-	if strings.ContainsRune(value, 0) {
-		return "it contains a NUL character"
-	}
-	if !utf8.ValidString(value) {
-		return "it is not valid UTF-8"
-	}
-	return ""
-}
+func textFault(value string) string { return domain.TextFault(value) }
 
 // TitleLimit is what document_records.title holds. Checking it here turns a
 // storage error the caller cannot read into one they can act on.
 const TitleLimit = 255
 
-// RegNumberLimit is the shortest thing that can be a registration number. Both
-// national channels refuse anything shorter, so naming one in an approval chain
-// would create a step no citizen could fill.
-const RegNumberLimit = 8
+// RegNumberLimit is the shortest thing that can be a registration number. It is
+// the domain's, because what a registration number is decides what an approval
+// chain may name.
+const RegNumberLimit = domain.RegNumberLimit
 
 func (m *DocumentsModule) CreateDocument(ctx context.Context, tenantID, title, docType string) (*Document, error) {
 	title = strings.TrimSpace(title)
@@ -761,7 +755,7 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 		return nil, fmt.Errorf("%w: that registration number cannot be stored — %s",
 			ErrSignatureRejected, fault)
 	}
-	if !plausibleRegNumber(normaliseRegNumber(regNumber)) {
+	if !domain.PlausibleRegNumber(domain.NormaliseRegNumber(regNumber)) {
 		return nil, fmt.Errorf("%w: %q is not a registration number", ErrSignatureRejected, regNumber)
 	}
 
@@ -791,7 +785,7 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 	// and let them sign a second time in the other case.
 	signature := &verifiedSignature{
 		SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
-		RegNumber:  normaliseRegNumber(profile.RegNumber),
+		RegNumber:  domain.NormaliseRegNumber(profile.RegNumber),
 		Hash:       "dan_sig_" + profile.DANSessionID,
 	}
 

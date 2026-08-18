@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/documents"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,9 @@ import (
 // SignaturePolicy says how a document type may be signed. Every type has an
 // effective policy: a type nobody has configured allows both national channels
 // and names no signer, which is how the app behaved before the table existed.
+//
+// UpdatedAt is the only field the domain's policy does not carry: it is a fact
+// about the row rather than about the rule.
 type SignaturePolicy struct {
 	DocType            string     `json:"doc_type"`
 	AllowEID           bool       `json:"allow_eid"`
@@ -28,18 +32,17 @@ type SignaturePolicy struct {
 
 // defaultSignaturePolicy is the policy a type falls back to while no row exists.
 func defaultSignaturePolicy(docType string) SignaturePolicy {
-	return SignaturePolicy{DocType: docType, AllowEID: true, AllowDAN: true}
+	rule := domain.DefaultSignaturePolicy(docType)
+	return SignaturePolicy{
+		DocType: rule.DocType, AllowEID: rule.AllowEID, AllowDAN: rule.AllowDAN,
+		RequireNamedSigner: rule.RequireNamedSigner,
+	}
 }
 
+// allows asks the domain, so that which channels a policy admits — and that an
+// unknown one is refused rather than allowed — is decided in one place.
 func (p SignaturePolicy) allows(method string) bool {
-	switch method {
-	case SignerEID:
-		return p.AllowEID
-	case SignerDAN:
-		return p.AllowDAN
-	default:
-		return false
-	}
+	return domain.SignaturePolicy{AllowEID: p.AllowEID, AllowDAN: p.AllowDAN}.Allows(method)
 }
 
 // SignaturePolicyFor reads the stored policy for a type, or the default when the
@@ -162,7 +165,7 @@ func (m *DocumentsModule) SaveSignaturePolicy(ctx context.Context, tenantID stri
 		if err != nil {
 			return nil, err
 		}
-		if err := stepsCanRequireNamedSigners(docType, steps); err != nil {
+		if err := domain.StepsCanRequireNamedSigners(docType, steps); err != nil {
 			return nil, err
 		}
 		if !wasRequired {
