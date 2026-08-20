@@ -43,21 +43,44 @@ func (m *DocumentsModule) startContentSignature(ctx context.Context, tenantID, d
 		return nil, fmt.Errorf("%w: this installation has no signing rail", ErrProviderUnavailable)
 	}
 
-	// The format the document's own content dictates. pdfRail is false because
-	// the PAdES rail is esign's and is reached through its own routes and its
-	// own store; a PDF filed here is signed detached, which covers the same
-	// bytes and is what this app can produce today. See ADR 0003.
-	format := domain.FormatFor(artifact, false)
+	// The format the document's own content dictates.
+	format := domain.FormatFor(artifact, true)
 
-	started, err := m.signer.SignDigest(ctx, nexus.SignatureRequest{
-		RegNumber:    regNumber,
-		DigestHex:    artifact.SHA256,
-		DisplayText:  displayText,
-		DocumentName: artifact.FileName,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: the signing rail could not reach the signer: %w",
-			ErrProviderUnavailable, err)
+	var started nexus.SignatureSession
+	var err error
+	if format == domain.FormatPAdES {
+		// The PDF travels, not a digest of it: the rail puts the signature
+		// inside the document, which it can only do with the document. What
+		// goes is the signed copy when there is one — PAdES adds signatures
+		// rather than replacing them, so a chain of signers signs a growing
+		// file — and the digest recorded is of what was actually sent.
+		pdf, err := m.pdfToSign(ctx, tenantID, docID)
+		if err != nil {
+			return nil, err
+		}
+		started, err = m.signer.SignDocument(ctx, nexus.DocumentSignatureRequest{
+			RegNumber:   regNumber,
+			FileName:    artifact.FileName,
+			PDF:         pdf,
+			DisplayText: displayText,
+		})
+		if errors.Is(err, nexus.ErrPDFSigningUnavailable) {
+			// A rail that cannot sign PDFs can still sign the digest of one,
+			// and refusing the citizen over a format would be refusing them a
+			// signature this installation can actually give.
+			format = domain.FormatDetached
+			started, err = m.signer.SignDigest(ctx, digestRequest(regNumber, artifact, displayText))
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: the signing rail could not reach the signer: %w",
+				ErrProviderUnavailable, err)
+		}
+	} else {
+		started, err = m.signer.SignDigest(ctx, digestRequest(regNumber, artifact, displayText))
+		if err != nil {
+			return nil, fmt.Errorf("%w: the signing rail could not reach the signer: %w",
+				ErrProviderUnavailable, err)
+		}
 	}
 
 	nexus.Audit(ctx, tenantID, actorFor(ctx), "documents.signature_requested", docID, map[string]any{
@@ -111,18 +134,37 @@ func (m *DocumentsModule) pollContentSignature(ctx context.Context, tenantID, do
 		return &EIDSignProgress{State: approvalStateOf(state)}, nil
 	}
 
-	// The half that makes this a signature rather than a session id. A rail
-	// that answers with a different digest signed something else — a stale
-	// session, a mixed-up id — and recording it would put a signature for one
-	// document on another.
-	signed, err := m.signer.VerifiedDigest(ctx, session.RegNumber, sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: the signing rail would not say what was signed: %w",
-			ErrProviderUnavailable, err)
-	}
-	if !sameDigest(signed, session.RequestedDigest) {
-		return nil, fmt.Errorf("%w: the rail signed %s, this document asked for %s",
-			ErrSignatureRejected, signed, session.RequestedDigest)
+	// PAdES answers with the document itself, which is the check as well as the
+	// artifact: what comes back is what a verifier will read, and it is stored
+	// beside the original rather than over it — the original is what says which
+	// bytes were signed.
+	if domain.Format(session.Format) == domain.FormatPAdES {
+		signed, err := m.signer.SignedDocument(ctx, session.RegNumber, sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: the signing rail would not hand over the signed document: %w",
+				ErrProviderUnavailable, err)
+		}
+		if len(signed.PDF) == 0 {
+			return nil, fmt.Errorf("%w: the rail reported a signature and returned no document",
+				ErrProviderUnavailable)
+		}
+		if err := m.keepSignedPDF(ctx, tenantID, docID, signed.PDF); err != nil {
+			return nil, err
+		}
+	} else {
+		// The half that makes a digest ceremony a signature rather than a
+		// session id. A rail that answers with a different digest signed
+		// something else — a stale session, a mixed-up id — and recording it
+		// would put a signature for one document on another.
+		signed, err := m.signer.VerifiedDigest(ctx, session.RegNumber, sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: the signing rail would not say what was signed: %w",
+				ErrProviderUnavailable, err)
+		}
+		if !sameDigest(signed, session.RequestedDigest) {
+			return nil, fmt.Errorf("%w: the rail signed %s, this document asked for %s",
+				ErrSignatureRejected, signed, session.RequestedDigest)
+		}
 	}
 
 	// The policy and the chain are read again here rather than trusted from
@@ -225,4 +267,51 @@ func sameDigest(railAnswer, requestedHex string) bool {
 		return string(got) == string(wanted)
 	}
 	return false
+}
+
+// digestRequest is one ceremony over the artifact's digest.
+func digestRequest(regNumber string, artifact domain.Artifact, displayText string) nexus.SignatureRequest {
+	return nexus.SignatureRequest{
+		RegNumber:    regNumber,
+		DigestHex:    artifact.SHA256,
+		DisplayText:  displayText,
+		DocumentName: artifact.FileName,
+	}
+}
+
+// pdfToSign is what the next signer signs: the signed copy when the document
+// already carries one, the original otherwise.
+//
+// PAdES adds a signature to a document rather than replacing what is there, so
+// a second signer handed the original would produce a document carrying their
+// signature and not the first one's — the chain would lose a signature every
+// time it gained one.
+func (m *DocumentsModule) pdfToSign(ctx context.Context, tenantID, docID string) ([]byte, error) {
+	var original, signed []byte
+	if err := m.db.QueryRow(ctx,
+		`SELECT content, signed_content FROM document_files
+		  WHERE document_id = $1 AND tenant_id = $2`, docID, tenantID).Scan(&original, &signed); err != nil {
+		if isNoRows(err) {
+			return nil, ErrNoAttachment
+		}
+		return nil, fmt.Errorf("read document file: %w", err)
+	}
+	if len(signed) > 0 {
+		return signed, nil
+	}
+	return original, nil
+}
+
+// keepSignedPDF stores the signed copy beside the original.
+//
+// Beside, never over: the original is what the ledger's covered digest names,
+// and a store that replaced it would leave every recorded signature pointing at
+// bytes that are no longer there.
+func (m *DocumentsModule) keepSignedPDF(ctx context.Context, tenantID, docID string, pdf []byte) error {
+	if _, err := m.db.Exec(ctx,
+		`UPDATE document_files SET signed_content = $3, signed_at = NOW()
+		  WHERE document_id = $1 AND tenant_id = $2`, docID, tenantID, pdf); err != nil {
+		return fmt.Errorf("store the signed document: %w", err)
+	}
+	return nil
 }

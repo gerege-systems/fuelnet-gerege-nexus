@@ -49,6 +49,39 @@ func (r signingRail) SignDigest(ctx context.Context, request nexus.SignatureRequ
 	}, nil
 }
 
+func (r signingRail) SignDocument(ctx context.Context, request nexus.DocumentSignatureRequest) (nexus.SignatureSession, error) {
+	if !r.Enabled() {
+		return nexus.SignatureSession{}, nexus.ErrSigningUnavailable
+	}
+	if len(request.PDF) == 0 {
+		return nexus.SignatureSession{}, nexus.ErrPDFSigningUnavailable
+	}
+	started, err := r.eid.SignPDF(ctx, eidmongolia.SignRequest{
+		RegNo:    request.RegNumber,
+		FullName: request.FullName,
+		FileName: request.FileName,
+		PDF:      request.PDF,
+	})
+	if err != nil {
+		return nexus.SignatureSession{}, err
+	}
+	return nexus.SignatureSession{
+		SessionID:        started.SessionID,
+		VerificationCode: started.VerificationCode,
+	}, nil
+}
+
+func (r signingRail) SignedDocument(ctx context.Context, ownerRegNumber, sessionID string) (nexus.SignedDocument, error) {
+	if !r.Enabled() {
+		return nexus.SignedDocument{}, nexus.ErrSigningUnavailable
+	}
+	signed, err := r.eid.DownloadSigned(ctx, ownerRegNumber, sessionID)
+	if err != nil {
+		return nexus.SignedDocument{}, err
+	}
+	return nexus.SignedDocument{PDF: signed.PDF, FileName: signed.Filename}, nil
+}
+
 func (r signingRail) PollSignature(ctx context.Context, ownerRegNumber, sessionID string) (nexus.SignatureState, error) {
 	if !r.Enabled() {
 		return "", nexus.ErrSigningUnavailable

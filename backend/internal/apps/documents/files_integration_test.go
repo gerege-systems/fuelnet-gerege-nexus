@@ -102,8 +102,10 @@ func TestASignedDocumentsFileCannotBeReplaced(t *testing.T) {
 		t.Fatalf("a signed document took a new file: %v", err)
 	}
 
-	// And the original is still what it was.
-	back, stored, err := f.m.FileOf(ctx, f.tenantID, doc.ID)
+	// And the original is still what it was. Read as the original on purpose:
+	// a PAdES signature adds bytes to a copy of the document, and the digest
+	// the ledger names is the one the original still has.
+	back, stored, err := f.m.OriginalFileOf(ctx, f.tenantID, doc.ID)
 	if err != nil {
 		t.Fatalf("download: %v", err)
 	}
@@ -149,8 +151,10 @@ func TestAFiledDocumentIsSignedOverItsContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	content := []byte("%PDF-1.7\nталуудын гэрээ")
-	artifact, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "contract.pdf", "application/pdf", content, "")
+	// A spreadsheet rather than a PDF: the PAdES rail signs documents it can
+	// put a signature inside, and everything else is covered by its digest.
+	content := []byte("огноо;дүн\n2026-08-20;100")
+	artifact, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "amounts.csv", "text/csv", content, "")
 	if err != nil {
 		t.Fatalf("attach: %v", err)
 	}
@@ -202,8 +206,8 @@ func TestARailThatSignedSomethingElseIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "contract.pdf", "application/pdf",
-		[]byte("%PDF-1.7\nэх бичвэр"), ""); err != nil {
+	if _, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "amounts.csv", "text/csv",
+		[]byte("огноо;дүн\n2026-08-20;100"), ""); err != nil {
 		t.Fatalf("attach: %v", err)
 	}
 
@@ -255,5 +259,100 @@ func TestADocumentWithNoFileIsStillApproved(t *testing.T) {
 	}
 	if ledger[0].CoveredDigest != "" {
 		t.Fatalf("an approval covers nothing, got %q", ledger[0].CoveredDigest)
+	}
+}
+
+// A filed PDF is signed the strongest way this platform can: the signature goes
+// inside the document, and what comes back verifies away from here.
+func TestAFiledPDFIsSignedIntoTheDocumentItself(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	original := []byte("%PDF-1.7\nталуудын гэрээ")
+	artifact, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "contract.pdf", "application/pdf", original, "")
+	if err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil || len(ledger) != 1 {
+		t.Fatalf("ledger: %+v %v", ledger, err)
+	}
+	if ledger[0].Format != domain.FormatPAdES {
+		t.Fatalf("format = %q, want %q", ledger[0].Format, domain.FormatPAdES)
+	}
+	if ledger[0].Proof != domain.ProofSignature {
+		t.Fatalf("proof = %q, want a signature over content", ledger[0].Proof)
+	}
+	// What was covered is the original's digest: that is the file the record
+	// names, and the signed copy is what came back from covering it.
+	if ledger[0].CoveredDigest != artifact.SHA256 {
+		t.Fatalf("covered = %q, want the original's digest %q", ledger[0].CoveredDigest, artifact.SHA256)
+	}
+
+	// Downloading gives the signed copy — that is the artifact a person wants.
+	_, handed, err := f.m.FileOf(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if !bytes.Contains(handed, []byte("%%SIGNED")) {
+		t.Fatal("the signed copy was not handed over")
+	}
+	// And the original is untouched, because it is what the ledger names.
+	back, stored, err := f.m.OriginalFileOf(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("original: %v", err)
+	}
+	if !bytes.Equal(stored, original) || back.SHA256 != domain.Digest(original) {
+		t.Fatal("the original changed under the signature")
+	}
+}
+
+// A rail that signs digests but not documents still signs. Refusing the citizen
+// over a format would refuse them a signature this installation can give.
+func TestARailWithoutPDFSigningFallsBackToTheDigest(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.signer.noPDF = true
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	content := []byte("%PDF-1.7\nталуудын гэрээ")
+	artifact, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "contract.pdf", "application/pdf", content, "")
+	if err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil || len(ledger) != 1 {
+		t.Fatalf("ledger: %+v %v", ledger, err)
+	}
+	if ledger[0].Format != domain.FormatDetached {
+		t.Fatalf("format = %q, want the fallback %q", ledger[0].Format, domain.FormatDetached)
+	}
+	if ledger[0].CoveredDigest != artifact.SHA256 {
+		t.Fatalf("covered = %q, want %q", ledger[0].CoveredDigest, artifact.SHA256)
+	}
+	// No signed copy was produced, because none was possible.
+	_, handed, err := f.m.FileOf(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if !bytes.Equal(handed, content) {
+		t.Fatal("a digest ceremony must not leave a signed copy behind")
 	}
 }
