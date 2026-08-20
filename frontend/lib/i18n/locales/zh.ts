@@ -1348,6 +1348,7 @@ export const zh: Record<string, string> = {
   "website.menu.applications": "应用",
   "website.menu.architecture": "架构",
   "website.menu.docs": "文档",
+  "website.menu.toggle": "菜单",
   "website.menu.identity": "身份",
   "website.menu.platform": "平台底座",
   "website.menu.technology": "技术",

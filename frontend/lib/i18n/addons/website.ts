@@ -16,6 +16,7 @@ export const website = {
   // Leaves the product for the published documentation. The other menu items
   // scroll within this page, so this one is marked as leaving.
   "website.menu.docs": { mn: "Баримт бичиг", en: "Documentation" },
+  "website.menu.toggle": { mn: "Цэс", en: "Menu" },
 
   "website.action.sign_in": { mn: "Нэвтрэх", en: "Sign in" },
   "website.action.eid_sign_in": { mn: "eID-ээр нэвтрэх", en: "Sign in with eID" },
