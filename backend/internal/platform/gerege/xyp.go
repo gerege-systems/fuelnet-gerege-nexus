@@ -99,7 +99,9 @@ func (s *GeregeService) lookup(ctx context.Context, path string, request, out an
 	if err != nil {
 		return fmt.Errorf("XYP %s: %w", path, err)
 	}
-	defer response.Body.Close()
+	// The repo's idiom for a close nobody can act on: an ignored error stated
+	// rather than an unchecked one, which is what errcheck is for.
+	defer func() { _ = response.Body.Close() }()
 
 	// The status is named in the error because the three that happen mean
 	// different things to whoever has to fix it: 401 is the credential, 403 is
