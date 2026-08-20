@@ -232,3 +232,16 @@ func nameOf(header *multipart.FileHeader) string {
 	}
 	return strings.TrimSpace(name)
 }
+
+// formatOrApproval is what a signature says it is when nobody set a format.
+//
+// The empty format belongs to the paths that predate ADR 0003 — the DAN
+// ceremony and an eID approval on a document carrying nothing — and approval is
+// what those are. Defaulting here rather than at every call site means a new
+// path that forgets to say gets the weakest claim rather than the strongest.
+func formatOrApproval(format domain.Format) domain.Format {
+	if format == "" {
+		return domain.FormatApproval
+	}
+	return format
+}

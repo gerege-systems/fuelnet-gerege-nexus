@@ -137,3 +137,123 @@ func TestAFileBelongsToTheOrganisationThatFiledIt(t *testing.T) {
 		t.Fatalf("another organisation downloads nothing: %v", err)
 	}
 }
+
+// A document that carries a file is signed over that file, and the record says
+// so. This is the whole point of ADR 0003: before it, the same ceremony
+// recorded an approval of a title.
+func TestAFiledDocumentIsSignedOverItsContent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	content := []byte("%PDF-1.7\nталуудын гэрээ")
+	artifact, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "contract.pdf", "application/pdf", content, "")
+	if err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	signed, err := signWithEID(t, f, doc.ID, "AA90010111")
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if signed.Status != StatusApproved {
+		t.Fatalf("status = %q, want %q", signed.Status, StatusApproved)
+	}
+
+	// The rail was asked to sign the file's digest and nothing else.
+	f.signer.mu.Lock()
+	asked := len(f.signer.asked)
+	var sentDigest string
+	for _, digest := range f.signer.asked {
+		sentDigest = digest
+	}
+	f.signer.mu.Unlock()
+	if asked != 1 || sentDigest != artifact.SHA256 {
+		t.Fatalf("the rail was asked for %q, the file is %q (%d ceremonies)", sentDigest, artifact.SHA256, asked)
+	}
+
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil || len(ledger) != 1 {
+		t.Fatalf("ledger: %+v %v", ledger, err)
+	}
+	// A signature over content, and the record says which content.
+	if ledger[0].Format != domain.FormatDetached {
+		t.Fatalf("format = %q, want %q", ledger[0].Format, domain.FormatDetached)
+	}
+	if ledger[0].Proof != domain.ProofSignature {
+		t.Fatalf("proof = %q, want %q", ledger[0].Proof, domain.ProofSignature)
+	}
+	if ledger[0].CoveredDigest != artifact.SHA256 {
+		t.Fatalf("covered = %q, want the file's digest %q", ledger[0].CoveredDigest, artifact.SHA256)
+	}
+}
+
+// A rail that answers with a digest it was never given signed something else —
+// a stale session, a mixed-up id — and recording it would put one document's
+// signature on another.
+func TestARailThatSignedSomethingElseIsRefused(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := f.m.AttachFile(ctx, f.tenantID, doc.ID, "contract.pdf", "application/pdf",
+		[]byte("%PDF-1.7\nэх бичвэр"), ""); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	// The rail will confirm a different document's digest.
+	f.signer.badDigest = domain.Digest([]byte("өөр баримт"))
+
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); !errors.Is(err, ErrSignatureRejected) {
+		t.Fatalf("a mismatched digest must be refused, got %v", err)
+	}
+
+	// And nothing was written: a refused ceremony leaves no signature behind.
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ledger) != 0 {
+		t.Fatalf("a refused ceremony left %d signatures", len(ledger))
+	}
+}
+
+// A document carrying nothing keeps the ceremony it always had, and the record
+// keeps saying what that is worth.
+func TestADocumentWithNoFileIsStillApproved(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Тэмдэглэл", "APPROVAL")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := signWithEID(t, f, doc.ID, "AA90010111"); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	// The signing rail was never troubled: there was nothing to sign.
+	f.signer.mu.Lock()
+	asked := len(f.signer.asked)
+	f.signer.mu.Unlock()
+	if asked != 0 {
+		t.Fatalf("the signing rail was asked %d times for a document with no file", asked)
+	}
+
+	ledger, err := f.m.ListSignatures(ctx, f.tenantID, doc.ID)
+	if err != nil || len(ledger) != 1 {
+		t.Fatalf("ledger: %+v %v", ledger, err)
+	}
+	if ledger[0].Format != domain.FormatApproval || ledger[0].Proof != domain.ProofApproval {
+		t.Fatalf("a document with nothing to sign records an approval: %+v", ledger[0])
+	}
+	if ledger[0].CoveredDigest != "" {
+		t.Fatalf("an approval covers nothing, got %q", ledger[0].CoveredDigest)
+	}
+}

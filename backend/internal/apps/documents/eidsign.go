@@ -220,6 +220,19 @@ func (m *DocumentsModule) StartEIDSignature(ctx context.Context, tenantID, docID
 	}
 
 	displayText := signatureDisplayText(title)
+
+	// What the document carries decides which ceremony it gets. A file is
+	// signed over its own digest through the platform's signing rail; a
+	// document carrying nothing is approved on the sign-in rail below, which
+	// proves identity and intent and not content. See ADR 0003.
+	artifact, err := m.ArtifactOf(ctx, tenantID, docID)
+	if err != nil {
+		return nil, err
+	}
+	if artifact.Present() {
+		return m.startContentSignature(ctx, tenantID, docID, regNumber, artifact, pre, displayText)
+	}
+
 	started, err := m.eidSvc.StartSignature(ctx, regNumber, displayText, "")
 	if err != nil {
 		return nil, fmt.Errorf("%w: E-ID could not reach the signer: %w", ErrProviderUnavailable, err)
@@ -321,6 +334,14 @@ func (m *DocumentsModule) PollEIDSignature(ctx context.Context, tenantID, docID,
 			return nil, err
 		}
 		return &EIDSignProgress{State: ApprovalComplete, Document: doc}, nil
+	}
+
+	// A ceremony that named a digest was a signature over the document's file,
+	// and it is finished on the rail that started it. The two cannot be mixed:
+	// polling a signing session on the sign-in rail would find nothing and
+	// report an expiry over a signature the citizen had given.
+	if session, err := m.loadSignSession(ctx, tenantID, docID, sessionID); err == nil && session.RequestedDigest != "" {
+		return m.pollContentSignature(ctx, tenantID, docID, sessionID, session)
 	}
 
 	// An approval the citizen gave days ago is not one to turn into a signature

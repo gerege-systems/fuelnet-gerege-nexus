@@ -197,10 +197,14 @@ type AppliedSignature struct {
 	SignerRegNumber string `json:"signer_reg_number"`
 	SignerMethod    string `json:"signer_method"`
 	// Proof is what this record establishes: an authenticated approval, or a
-	// signature over the document's content. Every record this app writes is
-	// the first — see domain/documents.Proof and ADR 0002 — and a reader that
-	// treats the two alike is reading a legal record wrong.
+	// signature over the document's content. A reader that treats the two alike
+	// is reading a legal record wrong. See ADR 0002 and ADR 0003.
 	Proof domain.Proof `json:"proof"`
+	// Format is how it covers the document — pades, detached or approval — and
+	// CoveredDigest is what it covered. Empty on an approval: there was nothing
+	// to cover.
+	Format        domain.Format `json:"format"`
+	CoveredDigest string        `json:"covered_digest,omitempty"`
 	// SignatureHash is the ceremony this approval came from, not a hash of
 	// anything. The name is what migration 00013 called the column and is kept
 	// so that clients reading it keep working; `proof` is what says how much it
@@ -419,7 +423,8 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 	rows, err := m.db.Query(ctx,
 		`SELECT signer_name, signer_reg_number, signer_method, signature_hash, signed_at,
 		        COALESCE(step_order, 0),
-		        COALESCE(certificate_serial, ''), COALESCE(certificate_issuer, '')
+		        COALESCE(certificate_serial, ''), COALESCE(certificate_issuer, ''),
+		        COALESCE(format, ''), COALESCE(covered_digest, '')
 		   FROM document_signatures
 		  WHERE tenant_id = $1 AND document_id = $2
 		  ORDER BY COALESCE(step_order, 0), signed_at`, tenantID, docID)
@@ -433,10 +438,16 @@ func (m *DocumentsModule) ListSignatures(ctx context.Context, tenantID, docID st
 		var sig AppliedSignature
 		if err := rows.Scan(&sig.SignerName, &sig.SignerRegNumber, &sig.SignerMethod,
 			&sig.SignatureHash, &sig.SignedAt, &sig.StepOrder,
-			&sig.CertificateSerial, &sig.CertificateIssuer); err != nil {
+			&sig.CertificateSerial, &sig.CertificateIssuer,
+			&sig.Format, &sig.CoveredDigest); err != nil {
 			return nil, fmt.Errorf("scan signature: %w", err)
 		}
-		sig.Proof = domain.ProofOf(sig.SignerMethod)
+		// A row written before ADR 0003 asked the question carries no format,
+		// and approval is what it was — see the column's comment in migration
+		// 00071. What it proves follows from the format rather than from the
+		// rail, because the same rail now produces two different things.
+		sig.Format = formatOrApproval(sig.Format)
+		sig.Proof = sig.Format.Proof()
 		list = append(list, sig)
 	}
 	return list, rows.Err()

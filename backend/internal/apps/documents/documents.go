@@ -161,6 +161,11 @@ type DocumentsModule struct {
 	// approval chains and the record signing all work, and the PDF routes are
 	// simply not mounted.
 	pdf *esign.Rails
+	// signer is the installation's qualified signing rail (nexus.Signer). A
+	// document that carries a file is signed over that file's digest through
+	// it; one that carries nothing is approved on the sign-in rail, which is a
+	// different ceremony proving a different thing. See ADR 0003.
+	signer nexus.Signer
 }
 
 // New builds the module and registers it in the compile-time app registry so
@@ -190,7 +195,7 @@ const (
 )
 
 // pdf is the PDF signing rails, or nil on a deployment built without them.
-func New(p nexus.Platform, pdf *esign.Rails) *DocumentsModule {
+func New(p nexus.Platform, pdf *esign.Rails, signer nexus.Signer) *DocumentsModule {
 	db := p.DB()
 	m := &DocumentsModule{
 		db:          db,
@@ -199,6 +204,7 @@ func New(p nexus.Platform, pdf *esign.Rails) *DocumentsModule {
 		perms:       p.Permissions(),
 		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
 		pdf:         pdf,
+		signer:      signer,
 	}
 	nexus.Register(m)
 	// The capability, published for every other module — see filer.go. Done
@@ -647,6 +653,11 @@ type verifiedSignature struct {
 	// is what a dispute turns on; a session id alone only says one happened.
 	CertificateSerial string
 	CertificateIssuer string
+	// Format is how this signature covers the document, and CoveredDigest is
+	// what it covered. An approval carries the approval format and no digest:
+	// there was nothing to cover. See ADR 0003.
+	Format        domain.Format
+	CoveredDigest string
 }
 
 // signaturePreflight is what the document's own configuration decides before a
@@ -1000,11 +1011,14 @@ func (m *DocumentsModule) writeSignature(ctx context.Context, tenantID, docID, m
 		`INSERT INTO document_signatures
 		        (tenant_id, document_id, signer_name, signer_reg_number,
 		         signer_method, signature_hash, signed_at,
-		         certificate_serial, certificate_issuer, step_order)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10)`,
+		         certificate_serial, certificate_issuer, step_order,
+		         format, covered_digest)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10,
+		         $11, NULLIF($12, ''))`,
 		tenantID, docID, signature.SignerName, signature.RegNumber,
 		method, signature.Hash, signedAt,
-		signature.CertificateSerial, signature.CertificateIssuer, step)
+		signature.CertificateSerial, signature.CertificateIssuer, step,
+		string(formatOrApproval(signature.Format)), signature.CoveredDigest)
 	// Only the one-per-signer constraint means "you have already signed". The
 	// one-per-approval constraint means this module chose a step number another
 	// signature already holds, which is a bug in here, not something the caller did
