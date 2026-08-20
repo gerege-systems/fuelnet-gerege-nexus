@@ -311,6 +311,12 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// Which channels may sign this one, here. A read: it says what the
 		// screen may offer, not what anybody may do.
 		dr.With(read).Get("/{id}/signing-rails", m.signingRailsHandler)
+
+		// What the document is about. Attaching is documents.manage — it is
+		// preparing a document rather than signing one — and it is refused
+		// once anything has been signed (ADR 0003).
+		dr.With(manage).Post("/{id}/file", m.attachFileHandler)
+		dr.With(read).Get("/{id}/file", m.downloadFileHandler)
 		dr.With(read).Get("/{id}/steps", m.listDocumentStepsHandler)
 		// Correcting a title is authoring, not approving, so it is checked against
 		// documents.manage like the rest of this group — the path carries no /sign.
