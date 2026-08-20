@@ -57,6 +57,9 @@ Spanish) — seven in total.
 | [`ARCHITECTURE_SPECIFICATION.md`](ARCHITECTURE_SPECIFICATION.md) | MN | Платформын давхаргууд, өгөгдлийн загвар, архитектурын шийдвэрүүд |
 | [`ARCHITECTURE_SPECIFICATION_EN.md`](ARCHITECTURE_SPECIFICATION_EN.md) | EN | Architecture specification |
 | [`SSO_FEDERATION.md`](SSO_FEDERATION.md) | MN | Нэг суулгацыг нөгөөгийн SSO клиент болгох: env, урсгал, гарах зам |
+| [`ECOSYSTEM_GIT_STRATEGY.md`](ECOSYSTEM_GIT_STRATEGY.md) | MN | Зуун платформ нэг цөм дээр: юу цөмд үлдэж, юу distribution болох, хилийг хэрхэн тестээр барих |
+| [`adr/0001-domain-first.md`](adr/0001-domain-first.md) | MN | Домэйн эхэнд: аппын дүрэм платформоо мэдэхгүй — хэрэгжилт, хоёр хойшлуулалт, дөрвөн дүрэм |
+| [`adr/0002-one-signing-rail.md`](adr/0002-one-signing-rail.md) | MN | Гарын үсгийн зам нэг (`eidmongolia`), ба «гарын үсэг» гэдэг үг хоёр зүйлийг нэрлэж байсан нь |
 | [`SHELL_CONTRACT.md`](SHELL_CONTRACT.md) | MN | Native бүрхүүл ба web ажлын мужийн `window.GeregeShell` гэрээ |
 | [`NATIVE_LOGIN_SPEC.md`](NATIVE_LOGIN_SPEC.md) | MN | Swift, C#, Kotlin клиентүүдийн нэвтрэлтийн зан төлөв |
 | [`NATIVE_SETTINGS_SPEC.md`](NATIVE_SETTINGS_SPEC.md) | MN | Бүрхүүл, төхөөрөмж, peripheral, fleet тохиргоо |
@@ -75,7 +78,23 @@ Spanish) — seven in total.
 | [`MONITORING_AND_REPORTING_PROPOSAL.md`](MONITORING_AND_REPORTING_PROPOSAL.md) | MN | Ажиглалт ба тайлангийн давхаргын дизайны санал |
 | [`URTUU_PROPOSAL.md`](URTUU_PROPOSAL.md) | MN | «Өртөө» сувгийн дизайны санал ба үе шатууд |
 | [`CONTROL_PLANE_PLAN.md`](CONTROL_PLANE_PLAN.md) | MN | Операторын консолын дизайн ба үе шатуудын төлөвлөгөө |
+| [`PEER_PROPOSAL.md`](PEER_PROPOSAL.md) | MN | «Хөрш» — Nexus биш системийг Өртөөний бүрэн эрхт талд оруулах санал |
+| [`APPSTORE_SEPARATION_PLAN.md`](APPSTORE_SEPARATION_PLAN.md) | MN | App Store-ыг appstore.gerege.mn дээр салгаж байршуулах төлөвлөгөө |
+| [`APPSTORE_PHASE2_PLAN.md`](APPSTORE_PHASE2_PLAN.md) | MN | «Шастир» ба платформ нэгдлийн 2-р үе шатын төлөвлөгөө |
+| [`DOCUMENTS_WORKLOG.md`](DOCUMENTS_WORKLOG.md) | MN | Баримт ба цахим гарын үсгийн ажлын төлөв — юу хийгдсэн, юу үлдсэн |
 | [`TRANSLATION_GUIDE.md`](TRANSLATION_GUIDE.md) | MN | Долоон хэлний толь бичиг, орчуулга нэмэх урсгал |
+
+## Хэрэгжүүлэлтийн prompt-ууд — Implementation prompts
+
+Хийгдсэн ажлыг хэрхэн даалгасныг үлдээсэн бичвэрүүд. Тэдгээр нь түүх:
+prompt-ын төлөвлөгөө ба эцэст нь хэрэгжсэн зүйл заримдаа зөрдөг, тэр
+зөрүү нь ADR-д тэмдэглэгддэг.
+
+| Баримт | Хэл | Тайлбар |
+| --- | --- | --- |
+| [`MODULE_RENAME_PROMPT.md`](MODULE_RENAME_PROMPT.md) | MN | Цөмийн модулиудын нэршлийн засвар (салгалтын 0-р алхам) |
+| [`MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md`](MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md) | MN | Мониторинг ба тайлангийн системийг хэрэгжүүлэх prompt |
+| [`DOMAIN_FIRST_PROMPT.md`](DOMAIN_FIRST_PROMPT.md) | MN | Домэйн давхаргыг салгах prompt — үр дүн нь [`adr/0001-domain-first.md`](adr/0001-domain-first.md) |
 
 ## Төслийн журам — Project governance
 

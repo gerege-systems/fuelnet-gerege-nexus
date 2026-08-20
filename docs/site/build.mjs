@@ -62,6 +62,14 @@ const PAGES = [
 
   {src: "docs/SSO_FEDERATION.md", slug: "sso-federation", title: "SSO холбоос", group: "Архитектур"},
 
+  // The strategy and the decision record. They are published because the ADRs
+  // are what a reader is sent to when they ask why the code is shaped this way,
+  // and because both link to the strategy — a published page linking to an
+  // unpublished one leaves the site.
+  {src: "docs/ECOSYSTEM_GIT_STRATEGY.md", slug: "ecosystem-git-strategy", title: "Экосистемийн git стратеги", group: "Архитектур"},
+  {src: "docs/adr/0001-domain-first.md", slug: "adr-0001-domain-first", title: "ADR 0001 — Домэйн эхэнд", group: "Архитектур"},
+  {src: "docs/adr/0002-one-signing-rail.md", slug: "adr-0002-one-signing-rail", title: "ADR 0002 — Гарын үсгийн зам нэг", group: "Архитектур"},
+
   {src: "docs/MODULE_AUTHORING_GUIDE.md", slug: "module-authoring", title: "Модуль хөгжүүлэх заавар", group: "Хөгжүүлэлт"},
   {src: "docs/TRANSLATION_GUIDE.md", slug: "translation", title: "Орчуулгын гарын авлага", group: "Хөгжүүлэлт"},
   {src: "docs/APPSTORE_OPERATIONS.md", slug: "appstore-operations", title: "Апп сторын ажиллагаа", group: "Хөгжүүлэлт"},
