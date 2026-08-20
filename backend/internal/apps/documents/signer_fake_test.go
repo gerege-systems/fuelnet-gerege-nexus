@@ -29,9 +29,19 @@ type fakeSigner struct {
 	// declining does.
 	refuse bool
 	off    bool
+	// noPDF makes this a rail that signs digests and not documents, which is
+	// the state of an installation whose eID registration carries no PDF
+	// signing permission.
+	noPDF bool
+	// signedPDFs is what SignDocument was handed, by session, so a test can
+	// see that a second signer signed the first signer's copy rather than the
+	// original.
+	signedPDFs map[string][]byte
 }
 
-func newFakeSigner() *fakeSigner { return &fakeSigner{asked: map[string]string{}} }
+func newFakeSigner() *fakeSigner {
+	return &fakeSigner{asked: map[string]string{}, signedPDFs: map[string][]byte{}}
+}
 
 func (f *fakeSigner) Enabled() bool { return !f.off }
 
@@ -80,6 +90,41 @@ func (f *fakeSigner) VerifiedDigest(_ context.Context, _, sessionID string) (str
 	}
 	// Base64, the way the real rail answers.
 	return base64.StdEncoding.EncodeToString(raw), nil
+}
+
+// SignDocument stands in for the PAdES rail: it remembers what it was given
+// and appends a marker, which is enough to tell "the signed copy" from "the
+// original" and to see a second signature land on the first one's output.
+func (f *fakeSigner) SignDocument(_ context.Context, request nexus.DocumentSignatureRequest) (nexus.SignatureSession, error) {
+	if f.off {
+		return nexus.SignatureSession{}, nexus.ErrSigningUnavailable
+	}
+	if f.noPDF {
+		return nexus.SignatureSession{}, nexus.ErrPDFSigningUnavailable
+	}
+	if len(request.PDF) == 0 {
+		return nexus.SignatureSession{}, nexus.ErrPDFSigningUnavailable
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	session := "fake-pades-" + hex.EncodeToString([]byte(request.RegNumber))[:8]
+	f.signedPDFs[session] = append(append([]byte{}, request.PDF...), []byte("\n%%SIGNED")...)
+	// A PAdES session is a signing session like any other, so Poll knows it.
+	f.asked[session] = ""
+	return nexus.SignatureSession{SessionID: session, VerificationCode: "2026"}, nil
+}
+
+func (f *fakeSigner) SignedDocument(_ context.Context, _, sessionID string) (nexus.SignedDocument, error) {
+	if f.off {
+		return nexus.SignedDocument{}, nexus.ErrSigningUnavailable
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	pdf, known := f.signedPDFs[sessionID]
+	if !known {
+		return nexus.SignedDocument{}, errors.New("no such PDF ceremony")
+	}
+	return nexus.SignedDocument{PDF: pdf, FileName: "signed.pdf"}, nil
 }
 
 var _ nexus.Signer = (*fakeSigner)(nil)

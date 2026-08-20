@@ -116,14 +116,30 @@ func (m *DocumentsModule) ArtifactOf(ctx context.Context, tenantID, docID string
 }
 
 // FileOf returns the bytes with what describes them.
+//
+// The signed copy when the document has one: that is the artifact a person
+// asked for, the one a verifier reads and the one worth keeping. The original
+// is still there — SignedOnly reaches it — because it is what the ledger's
+// covered digest names.
 func (m *DocumentsModule) FileOf(ctx context.Context, tenantID, docID string) (domain.Artifact, []byte, error) {
+	return m.fileOf(ctx, tenantID, docID, false)
+}
+
+// OriginalFileOf is the file as it was filed, whatever has been signed since.
+// It is what the ledger's covered digest names, so it is what a check of a
+// recorded signature has to be run against.
+func (m *DocumentsModule) OriginalFileOf(ctx context.Context, tenantID, docID string) (domain.Artifact, []byte, error) {
+	return m.fileOf(ctx, tenantID, docID, true)
+}
+
+func (m *DocumentsModule) fileOf(ctx context.Context, tenantID, docID string, originalOnly bool) (domain.Artifact, []byte, error) {
 	var artifact domain.Artifact
-	var content []byte
+	var content, signed []byte
 	err := m.db.QueryRow(ctx, `
-		SELECT file_name, content_type, size_bytes, sha256, content
+		SELECT file_name, content_type, size_bytes, sha256, content, signed_content
 		  FROM document_files WHERE document_id = $1 AND tenant_id = $2`,
 		docID, tenantID).Scan(&artifact.FileName, &artifact.ContentType,
-		&artifact.SizeBytes, &artifact.SHA256, &content)
+		&artifact.SizeBytes, &artifact.SHA256, &content, &signed)
 	if isNoRows(err) {
 		return domain.Artifact{}, nil, ErrNoAttachment
 	}
@@ -131,10 +147,15 @@ func (m *DocumentsModule) FileOf(ctx context.Context, tenantID, docID string) (d
 		return domain.Artifact{}, nil, fmt.Errorf("read document file: %w", err)
 	}
 	// What is stored is what was signed, and a store that has drifted from its
-	// own digest must not be handed out as though it had not.
+	// own digest must not be handed out as though it had not. The check is on
+	// the ORIGINAL: the signed copy has bytes added to it by design, and its
+	// digest is not the one recorded.
 	if got := domain.Digest(content); got != artifact.SHA256 {
 		return domain.Artifact{}, nil, fmt.Errorf("%w: stored %s, holds %s",
 			ErrArtifactCorrupt, artifact.SHA256, got)
+	}
+	if !originalOnly && len(signed) > 0 {
+		return artifact, signed, nil
 	}
 	return artifact, content, nil
 }

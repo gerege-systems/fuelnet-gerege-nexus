@@ -21,6 +21,15 @@ import (
 // signature was rejected.
 var ErrSigningUnavailable = errors.New("nexus: this installation has no signing rail")
 
+// ErrPDFSigningUnavailable is what SignDocument answers on a rail that signs
+// digests but not documents.
+//
+// Separate from ErrSigningUnavailable because the caller should do something
+// different: a rail that cannot sign PDFs can still sign the digest of one, and
+// a caller that treated the two errors alike would refuse a citizen over a
+// format rather than sign what it could.
+var ErrPDFSigningUnavailable = errors.New("nexus: this signing rail cannot sign PDFs")
+
 // Signer is the installation's qualified signing rail, as a module sees it.
 //
 // It is a platform capability for the same reason the Өртөө ring is: an
@@ -76,6 +85,23 @@ type Signer interface {
 	// citizen cannot reach another's session by guessing an id.
 	PollSignature(ctx context.Context, ownerRegNumber, sessionID string) (SignatureState, error)
 
+	// SignDocument asks a citizen to sign a PDF, and returns as soon as their
+	// device has been asked.
+	//
+	// It is a separate call from SignDigest because the artifact is different,
+	// not because the ceremony is: what comes back at the end is a PDF that
+	// carries the signature inside it and verifies away from this platform,
+	// which a digest signature cannot do. A rail that cannot sign PDFs answers
+	// ErrPDFSigningUnavailable, and a caller that gets it should sign the
+	// digest instead rather than refuse the citizen.
+	SignDocument(ctx context.Context, request DocumentSignatureRequest) (SignatureSession, error)
+
+	// SignedDocument is the finished PDF, once PollSignature reports completed.
+	//
+	// The bytes are the whole point: they are the artifact a person keeps, a
+	// court reads and a verifier checks without asking this platform anything.
+	SignedDocument(ctx context.Context, ownerRegNumber, sessionID string) (SignedDocument, error)
+
 	// VerifiedDigest is the digest a completed ceremony actually signed, in
 	// base64.
 	//
@@ -102,6 +128,33 @@ type SignatureRequest struct {
 	DisplayText string
 	// DocumentName names the artifact in the rail's own records.
 	DocumentName string
+}
+
+// DocumentSignatureRequest is one PDF ceremony.
+//
+// The PDF travels rather than a digest of it: the rail embeds the signature in
+// the document, which it can only do with the document.
+type DocumentSignatureRequest struct {
+	// RegNumber is the citizen being asked, and the owner of the session.
+	RegNumber string
+	// FullName is who the certificate is expected to belong to, as the rail
+	// shows it. Optional.
+	FullName string
+	// FileName names the artifact in the rail's records and in what comes back.
+	FileName string
+	// PDF is the document to sign. On a second signature it is the already
+	// signed copy: PAdES adds signatures to a document rather than replacing
+	// them, so a chain of signers signs a growing file.
+	PDF []byte
+	// DisplayText is the only thing the citizen sees about what they are
+	// approving.
+	DisplayText string
+}
+
+// SignedDocument is a finished PDF.
+type SignedDocument struct {
+	PDF      []byte
+	FileName string
 }
 
 // SignatureSession is a started ceremony.
