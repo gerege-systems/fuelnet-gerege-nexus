@@ -1348,6 +1348,7 @@ export const es: Record<string, string> = {
   "website.menu.applications": "Aplicaciones",
   "website.menu.architecture": "Arquitectura",
   "website.menu.docs": "Documentación",
+  "website.menu.toggle": "Menú",
   "website.menu.identity": "Identidad",
   "website.menu.platform": "Plataforma",
   "website.menu.technology": "Tecnología",

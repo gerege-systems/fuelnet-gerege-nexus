@@ -1348,6 +1348,7 @@ export const ar: Record<string, string> = {
   "website.menu.applications": "التطبيقات",
   "website.menu.architecture": "البنية",
   "website.menu.docs": "التوثيق",
+  "website.menu.toggle": "القائمة",
   "website.menu.identity": "الهوية",
   "website.menu.platform": "الأساس",
   "website.menu.technology": "التقنية",

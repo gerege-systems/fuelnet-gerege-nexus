@@ -1348,6 +1348,7 @@ export const fr: Record<string, string> = {
   "website.menu.applications": "Applications",
   "website.menu.architecture": "Architecture",
   "website.menu.docs": "Documentation",
+  "website.menu.toggle": "Menu",
   "website.menu.identity": "Identité",
   "website.menu.platform": "Socle",
   "website.menu.technology": "Technologie",

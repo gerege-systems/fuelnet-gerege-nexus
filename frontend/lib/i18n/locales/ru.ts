@@ -1348,6 +1348,7 @@ export const ru: Record<string, string> = {
   "website.menu.applications": "Приложения",
   "website.menu.architecture": "Архитектура",
   "website.menu.docs": "Документация",
+  "website.menu.toggle": "Меню",
   "website.menu.identity": "Вход",
   "website.menu.platform": "Платформа",
   "website.menu.technology": "Технологии",
