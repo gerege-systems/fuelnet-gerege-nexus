@@ -348,6 +348,8 @@ export const es: Record<string, string> = {
   "documents.menu.signature_policies": "Políticas de firma",
   "documents.menu.templates": "Plantillas de documentos",
   "documents.menu.workflows": "Flujos de trabajo de documentos",
+  "documents.message.rail_not_configured": "Esta instalación no tiene credenciales para ello: consulte a un operador",
+  "documents.message.rail_not_allowed": "Su organización no lo permite para este tipo de documento",
   "documents.message.approval_display_text": "Lo que ve el ciudadano",
   "documents.message.approval_expired": "La solicitud de aprobación caducó — no se firmó nada. Envíela de nuevo.",
   "documents.message.approval_refused": "El ciudadano rechazó la solicitud — no se firmó nada.",

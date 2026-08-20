@@ -58,3 +58,56 @@ func ProofOf(method string) Proof {
 		return ProofUnknown
 	}
 }
+
+// Rail is one signing channel as a screen needs to know about it: whether it
+// may be used for this document, and if not, which of the two reasons applies.
+type Rail struct {
+	Method string `json:"method"`
+	// Available is the only field a button should look at.
+	Available bool `json:"available"`
+	// Reason is empty when it is available, and otherwise says whose decision
+	// this was. The two are different problems for different people: one is an
+	// administrator's setting, the other is an operator's deployment.
+	Reason RailReason `json:"reason,omitempty"`
+}
+
+// RailReason is why a channel cannot be used.
+type RailReason string
+
+const (
+	// RailNotAllowed — this organisation's signature policy for this document
+	// type does not permit the channel. An administrator can change it.
+	RailNotAllowed RailReason = "not_allowed"
+	// RailNotConfigured — the installation has no credentials for the channel,
+	// so it would answer nothing whatever the policy said. Only an operator can
+	// change it, and until they do a button for it is a button that fails.
+	RailNotConfigured RailReason = "not_configured"
+)
+
+// RailsFor answers which channels may sign this document type here.
+//
+// Two facts, and both have to be true: the organisation allows the channel, and
+// the installation has it. They were previously combined nowhere — the screen
+// offered both channels always, the policy was enforced when the request
+// arrived, and whether the deployment had the channel at all was discovered by
+// the citizen not receiving anything. On ДАН that is every deployment: there is
+// no live client for it, so the button could only ever fail.
+//
+// The policy is asked first because it is the answer that can be acted on: an
+// administrator told "your organisation has switched this off" knows what to do,
+// and one told "this deployment has no ДАН" does not.
+func RailsFor(policy SignaturePolicy, eidConfigured, danConfigured bool) []Rail {
+	configured := map[string]bool{SignerEID: eidConfigured, SignerDAN: danConfigured}
+	rails := make([]Rail, 0, 2)
+	for _, method := range []string{SignerEID, SignerDAN} {
+		switch {
+		case !policy.Allows(method):
+			rails = append(rails, Rail{Method: method, Reason: RailNotAllowed})
+		case !configured[method]:
+			rails = append(rails, Rail{Method: method, Reason: RailNotConfigured})
+		default:
+			rails = append(rails, Rail{Method: method, Available: true})
+		}
+	}
+	return rails
+}

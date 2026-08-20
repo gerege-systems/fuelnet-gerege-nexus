@@ -37,6 +37,14 @@ export const documents = {
   "documents.field.certificate_issuer": { mn: "Гэрчилгээ олгогч", en: "Certificate issuer" },
   "documents.field.approval_reference": { mn: "Батламжийн сурвалж", en: "Approval reference" },
   "documents.field.proof": { mn: "Юуг нотолж байна", en: "What this proves" },
+  "documents.message.rail_not_configured": {
+    mn: "Энэ суурилуулалтад тохируулаагүй байна — операторт хандана уу",
+    en: "This installation has no credentials for it — ask an operator",
+  },
+  "documents.message.rail_not_allowed": {
+    mn: "Энэ төрлийн баримтад байгууллага чинь зөвшөөрөөгүй байна",
+    en: "Your organisation does not allow it for this document type",
+  },
   "documents.proof.approval": {
     mn: "Иргэн хэн болохоо баталж, энэ баримтыг зөвшөөрсөн (агуулгад холбогдоогүй)",
     en: "The citizen proved who they were and approved this document (not bound to its content)",

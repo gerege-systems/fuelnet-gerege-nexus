@@ -2681,3 +2681,47 @@ func TestTurningOnANamedSignerRequirementCannotStrandTheQueue(t *testing.T) {
 		t.Errorf("status = %q, want %q", signed.Status, StatusApproved)
 	}
 }
+
+// A button whose only outcome is an error is worse than no button.
+//
+// The dialog offered E-ID and ДАН always: neither this organisation's policy
+// for the type nor whether the installation has the channel at all reached the
+// screen. On ДАН that is every deployment — there is no live client for it — so
+// picking it could only ever answer 503.
+func TestTheScreenIsToldWhichChannelsCanActuallySign(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	doc, err := f.m.CreateDocument(ctx, f.tenantID, "Гэрээ", "CONTRACT")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	policy, err := f.m.SignaturePolicyFor(ctx, f.tenantID, doc.DocType)
+	if err != nil {
+		t.Fatalf("policy: %v", err)
+	}
+	// An unconfigured type allows both channels, which is what makes the
+	// installation's own answer the one that decides here.
+	if !policy.AllowEID || !policy.AllowDAN {
+		t.Fatalf("the default policy changed: %+v", policy)
+	}
+
+	rails := domain.RailsFor(domain.SignaturePolicy{
+		DocType:  policy.DocType,
+		AllowEID: policy.AllowEID, AllowDAN: policy.AllowDAN,
+		RequireNamedSigner: policy.RequireNamedSigner, Configured: policy.Configured,
+	}, f.m.eidSvc.Mode() != "unconfigured", f.m.danSvc.Mode() != "unconfigured")
+
+	if len(rails) != 2 {
+		t.Fatalf("both channels have to be described, offered or not: %+v", rails)
+	}
+	for _, rail := range rails {
+		if rail.Available && rail.Reason != "" {
+			t.Errorf("%+v is available and carries a reason", rail)
+		}
+		if !rail.Available && rail.Reason == "" {
+			t.Errorf("%+v is refused without saying whose decision it was", rail)
+		}
+	}
+}

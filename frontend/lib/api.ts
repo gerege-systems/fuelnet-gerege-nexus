@@ -1518,6 +1518,14 @@ export const api = {
   // Send a draft for approval.
   routeDocument: (id: string) => fetcher(`/documents/${id}/route`, { method: "POST" }),
 
+  // Which channels may sign this document here: this organisation's policy for
+  // the type AND whether the installation has the channel at all. The screen
+  // offered both always, which on ДАН meant a button that could only fail.
+  getDocumentSigningRails: (id: string) =>
+    fetcher<{
+      rails: Array<{ method: string; available: boolean; reason?: string }>;
+    }>(`/documents/${id}/signing-rails`),
+
   // A document's signature ledger, oldest first.
   getDocumentSignatures: (id: string) =>
     fetcher<
@@ -1526,6 +1534,7 @@ export const api = {
         signer_reg_number: string;
         signer_method: string;
         signature_hash: string;
+        proof?: string;
         signed_at: string;
         step_order: number;
         certificate_serial?: string;

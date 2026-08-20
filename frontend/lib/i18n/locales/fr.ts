@@ -348,6 +348,8 @@ export const fr: Record<string, string> = {
   "documents.menu.signature_policies": "Politiques de signature",
   "documents.menu.templates": "Modèles de document",
   "documents.menu.workflows": "Flux de travail des documents",
+  "documents.message.rail_not_configured": "Cette installation n'a pas d'identifiants pour cela — voyez un opérateur",
+  "documents.message.rail_not_allowed": "Votre organisation ne l'autorise pas pour ce type de document",
   "documents.message.approval_display_text": "Ce que le citoyen voit",
   "documents.message.approval_expired": "La demande d'approbation a expiré — rien n'a été signé. Veuillez la renvoyer.",
   "documents.message.approval_refused": "Le citoyen a refusé la demande — rien n'a été signé.",

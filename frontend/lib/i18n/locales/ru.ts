@@ -348,6 +348,8 @@ export const ru: Record<string, string> = {
   "documents.menu.signature_policies": "Политики подписи",
   "documents.menu.templates": "Шаблоны документов",
   "documents.menu.workflows": "Рабочие процессы документов",
+  "documents.message.rail_not_configured": "В этой установке нет учётных данных для него — обратитесь к оператору",
+  "documents.message.rail_not_allowed": "Ваша организация не разрешает его для этого типа документа",
   "documents.message.approval_display_text": "Текст, видимый гражданину",
   "documents.message.approval_expired": "Срок действия запроса на утверждение истек — ничего не было подписано. Отправьте его снова.",
   "documents.message.approval_refused": "Гражданин отклонил запрос — ничего не было подписано.",

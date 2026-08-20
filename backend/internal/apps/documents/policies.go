@@ -290,3 +290,42 @@ func (m *DocumentsModule) saveSignaturePolicyHandler(w http.ResponseWriter, r *h
 	}
 	nexus.JSON(w, http.StatusOK, saved)
 }
+
+// signingRailsHandler answers which channels may sign this document here.
+//
+// Two facts the screen had to guess at and could not: this organisation's
+// policy for the type, and whether the installation has the channel at all. It
+// offered both channels always, which on ДАН meant a button whose only outcome
+// was a 503 — there is no live client for it on any deployment today.
+func (m *DocumentsModule) signingRailsHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := nexus.RequireTenant(w, r)
+	if !ok {
+		return
+	}
+
+	doc, err := m.getDocument(r.Context(), tenantID, chi.URLParam(r, "id"))
+	if err != nil {
+		if isNoRows(err) {
+			nexus.Error(w, http.StatusNotFound, "document not found")
+			return
+		}
+		nexus.Error(w, http.StatusInternalServerError, "could not read the document")
+		return
+	}
+
+	policy, err := m.SignaturePolicyFor(r.Context(), tenantID, doc.DocType)
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not read the signature policy")
+		return
+	}
+
+	nexus.JSON(w, http.StatusOK, map[string]any{
+		"rails": domain.RailsFor(domain.SignaturePolicy{
+			DocType:            policy.DocType,
+			AllowEID:           policy.AllowEID,
+			AllowDAN:           policy.AllowDAN,
+			RequireNamedSigner: policy.RequireNamedSigner,
+			Configured:         policy.Configured,
+		}, m.eidSvc.Mode() != "unconfigured", m.danSvc.Mode() != "unconfigured"),
+	})
+}
