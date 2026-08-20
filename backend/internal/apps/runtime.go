@@ -37,7 +37,7 @@ type InstalledApps = reports.InstalledApps
 
 func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmongolia.Service,
 	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails staterail.Rails,
-	link nexus.Link, installedApps InstalledApps) Runtime {
+	link nexus.Link, signer nexus.Signer, installedApps InstalledApps) Runtime {
 	// First, and not merely in order: organisation is what the others assume. It
 	// is the organisation, the people in it and how it is arranged — the module
 	// Odoo calls base.
@@ -54,7 +54,10 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	// built first and handed in rather than registering themselves: there is one
 	// app here now, and only one thing may answer for io.gerege.nexus.documents.
 	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
-	documents.New(p, esignModule)
+	// The signing rail, as the SDK publishes it. A document that carries a file
+	// is signed over that file's digest through this; one that carries nothing
+	// is approved on the sign-in rail as before. See ADR 0003.
+	documents.New(p, esignModule, signer)
 	sso_clients.New(sso)
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module

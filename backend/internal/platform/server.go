@@ -245,6 +245,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 			}
 		},
 		urtuuLink,
+		// The signing rail, as the SDK publishes it: a document that carries a
+		// file is signed over that file's digest through this. Handed over even
+		// when the installation has no eID registration — it answers Enabled()
+		// false, which is the state a module is meant to ask about rather than
+		// a nil it has to guard.
+		Signing(eidMN),
 		func(ctx context.Context, tenantID string) (map[string]bool, error) {
 			return server.installedAppSet(ctx, tenantID)
 		})

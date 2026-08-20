@@ -51,6 +51,10 @@ func testPool(t *testing.T) *pgxpool.Pool {
 type fixture struct {
 	m        *DocumentsModule
 	tenantID string
+	// signer is the rail a document carrying a file is signed through. It is
+	// reachable from the tests so that one can make it answer badly — see
+	// fakeSigner.
+	signer *fakeSigner
 }
 
 // newFixture builds a module wired to its own tenant, so one test's documents
@@ -62,7 +66,8 @@ func newFixture(t *testing.T) *fixture {
 	t.Setenv("DAN_MOCK_MODE", "true")
 
 	pool := testPool(t)
-	m := &DocumentsModule{db: pool, eidSvc: eid.NewEIDService(), danSvc: dan.NewDANService()}
+	signer := newFakeSigner()
+	m := &DocumentsModule{db: pool, eidSvc: eid.NewEIDService(), danSvc: dan.NewDANService(), signer: signer}
 
 	var tenantID string
 	slug := fmt.Sprintf("docs-test-%s", randomSuffix(t))
@@ -77,7 +82,7 @@ func newFixture(t *testing.T) *fixture {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID)
 	})
 
-	return &fixture{m: m, tenantID: tenantID}
+	return &fixture{m: m, tenantID: tenantID, signer: signer}
 }
 
 // signWithEID runs the whole approval ceremony: push the request to the citizen,
