@@ -69,6 +69,7 @@ const PAGES = [
   {src: "docs/ECOSYSTEM_GIT_STRATEGY.md", slug: "ecosystem-git-strategy", title: "Экосистемийн git стратеги", group: "Архитектур"},
   {src: "docs/adr/0001-domain-first.md", slug: "adr-0001-domain-first", title: "ADR 0001 — Домэйн эхэнд", group: "Архитектур"},
   {src: "docs/adr/0002-one-signing-rail.md", slug: "adr-0002-one-signing-rail", title: "ADR 0002 — Гарын үсгийн зам нэг", group: "Архитектур"},
+  {src: "docs/adr/0003-a-document-carries-what-is-signed.md", slug: "adr-0003-document-carries", title: "ADR 0003 — Баримт файлаа авч явна", group: "Архитектур"},
 
   {src: "docs/MODULE_AUTHORING_GUIDE.md", slug: "module-authoring", title: "Модуль хөгжүүлэх заавар", group: "Хөгжүүлэлт"},
   {src: "docs/TRANSLATION_GUIDE.md", slug: "translation", title: "Орчуулгын гарын авлага", group: "Хөгжүүлэлт"},
