@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import Link from "next/link";
 
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -34,16 +34,37 @@ export default function SiteHeader({sections}: {sections: LandingSection[]}) {
   const {t} = useI18n();
   const brand = useBrand();
   const [open, setOpen] = useState(false);
+  const header = useRef<HTMLElement>(null);
 
-  // Escape closes it, because a panel that covers the page and can only be
-  // dismissed by finding the same small button again is a trap on a phone.
+  // Three ways out, because a panel that covers the page and can only be
+  // dismissed by finding the same small button again is a trap on a phone: the
+  // button, Escape, and a tap anywhere else.
+  //
+  // "Anywhere else" is measured against the whole header rather than the panel,
+  // so a tap on the button itself is inside and is left to the button — closing
+  // here and reopening there would make it look like the button does nothing.
+  //
+  // pointerdown rather than click: it fires for touch and mouse alike, and it
+  // fires before the tap has a chance to activate whatever is underneath, so
+  // the first tap outside dismisses instead of also pressing something.
   useEffect(() => {
     if (!open) return;
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && header.current?.contains(target)) return;
+      setOpen(false);
+    };
+
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
   }, [open]);
 
   const items = (
@@ -69,7 +90,7 @@ export default function SiteHeader({sections}: {sections: LandingSection[]}) {
   );
 
   return (
-    <header className="gp-nav">
+    <header className="gp-nav" ref={header}>
       <a href="#top" className="gp-brand">
         <img src={brand.logoUrl} alt="" />
         <span>{brand.name}</span>
