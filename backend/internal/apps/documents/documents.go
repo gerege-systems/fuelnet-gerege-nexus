@@ -308,6 +308,9 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// A single document. Static segments above win over {id} in chi's trie,
 		// so "templates" and "policies" are never read as document ids.
 		dr.With(read).Get("/{id}/signatures", m.listSignaturesHandler)
+		// Which channels may sign this one, here. A read: it says what the
+		// screen may offer, not what anybody may do.
+		dr.With(read).Get("/{id}/signing-rails", m.signingRailsHandler)
 		dr.With(read).Get("/{id}/steps", m.listDocumentStepsHandler)
 		// Correcting a title is authoring, not approving, so it is checked against
 		// documents.manage like the rest of this group — the path carries no /sign.

@@ -222,3 +222,44 @@ func TestWhatTheNationalChannelsActuallyProve(t *testing.T) {
 		t.Fatal("nothing in this app signs a document's content")
 	}
 }
+
+// A button whose only outcome is an error is worse than no button, and on ДАН
+// that was every deployment: there is no live client for it.
+func TestAChannelIsOfferedOnlyWhenBothTheTenantAndTheInstallationHaveIt(t *testing.T) {
+	both := documents.DefaultSignaturePolicy("CONTRACT")
+
+	// The ordinary case: allowed and configured.
+	rails := documents.RailsFor(both, true, true)
+	if len(rails) != 2 {
+		t.Fatalf("both channels should be described: %+v", rails)
+	}
+	for _, rail := range rails {
+		if !rail.Available || rail.Reason != "" {
+			t.Fatalf("%+v should be available with no reason", rail)
+		}
+	}
+
+	// The deployment has no ДАН — which is every deployment today.
+	rails = documents.RailsFor(both, true, false)
+	if !rails[0].Available || rails[1].Available {
+		t.Fatalf("only E-ID is usable here: %+v", rails)
+	}
+	if rails[1].Reason != documents.RailNotConfigured {
+		t.Fatalf("the reason is the operator's, got %q", rails[1].Reason)
+	}
+
+	// The organisation switched E-ID off. That is an administrator's decision
+	// and is reported as such, so somebody knows where to go and change it.
+	eidOff := documents.SignaturePolicy{DocType: "CONTRACT", AllowDAN: true, Configured: true}
+	rails = documents.RailsFor(eidOff, true, true)
+	if rails[0].Available || rails[0].Reason != documents.RailNotAllowed {
+		t.Fatalf("a policy refusal is the tenant's: %+v", rails[0])
+	}
+
+	// Both reasons at once: the policy answer wins, because it is the one
+	// somebody in this organisation can act on.
+	rails = documents.RailsFor(eidOff, false, true)
+	if rails[0].Reason != documents.RailNotAllowed {
+		t.Fatalf("the actionable reason comes first: %+v", rails[0])
+	}
+}

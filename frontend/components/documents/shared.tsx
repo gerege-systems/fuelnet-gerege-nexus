@@ -392,10 +392,41 @@ export function SignatureDialog({
   // failure the operator cannot read while the dialog is still open. It is shown
   // here as well, and the caller is told too so it survives the dialog closing.
   const [failure, setFailure] = useState<string | null>(null);
+  // Which channels can actually sign this document: the organisation's policy
+  // for its type, and whether this installation has the channel at all. Null
+  // while it is being asked — the buttons stay enabled until the answer
+  // arrives, because a dialog that starts disabled reads as broken.
+  const [rails, setRails] = useState<Record<string, { available: boolean; reason?: string }> | null>(null);
   const report = (text: string) => {
     setFailure(text);
     onError(text);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getDocumentSigningRails(doc.id)
+      .then((answer) => {
+        if (cancelled) return;
+        const byMethod: Record<string, { available: boolean; reason?: string }> = {};
+        for (const rail of answer.rails) {
+          byMethod[rail.method] = { available: rail.available, reason: rail.reason };
+        }
+        setRails(byMethod);
+        // Land on one that works rather than on a button that cannot.
+        if (byMethod.EID && !byMethod.EID.available && byMethod.DAN?.available) {
+          setMethod("DAN");
+        }
+      })
+      .catch(() => {
+        // A channel list that could not be read is not a reason to refuse
+        // signing: the request itself still says no, with its own words.
+        if (!cancelled) setRails(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc.id]);
 
   // One check at a time, with a breather between them, a tolerance for the
   // dropped long-polls a mobile network produces, and a deadline — a request that
@@ -556,26 +587,61 @@ export function SignatureDialog({
               {t("documents.field.signature_method")}
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {(["EID", "DAN"] as SignMethod[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMethod(m)}
-                  className={`py-2 rounded-lg text-xs font-semibold border transition ${
-                    method === m
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  {m === "EID" ? "E-ID (eidmongolia.mn)" : "DAN (dan.gerege.mn)"}
-                </button>
-              ))}
+              {(["EID", "DAN"] as SignMethod[]).map((m) => {
+                const rail = rails?.[m];
+                // Unknown means the answer has not arrived; only a definite no
+                // disables the button.
+                const usable = rail === undefined || rail.available;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={!usable}
+                    title={
+                      usable
+                        ? undefined
+                        : t(
+                            rail?.reason === "not_configured"
+                              ? "documents.message.rail_not_configured"
+                              : "documents.message.rail_not_allowed",
+                          )
+                    }
+                    onClick={() => setMethod(m)}
+                    className={`py-2 rounded-lg text-xs font-semibold border transition ${
+                      !usable
+                        ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed"
+                        : method === m
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {m === "EID" ? "E-ID (eidmongolia.mn)" : "DAN (dan.gerege.mn)"}
+                  </button>
+                );
+              })}
             </div>
             <p className="text-[11px] text-slate-500 mt-1.5">
               {method === "EID"
                 ? t("documents.message.eid_method_hint")
                 : t("documents.message.dan_method_hint")}
             </p>
+            {/* Why a channel is greyed out, in words rather than only in a
+                tooltip: the two reasons are different problems for different
+                people — one is an administrator's setting, the other is the
+                operator's deployment. */}
+            {rails &&
+              (["EID", "DAN"] as SignMethod[])
+                .filter((m) => rails[m] && !rails[m].available)
+                .map((m) => (
+                  <p key={m} className="text-[11px] text-amber-700 mt-1">
+                    {m === "EID" ? "E-ID" : "DAN"}:{" "}
+                    {t(
+                      rails[m].reason === "not_configured"
+                        ? "documents.message.rail_not_configured"
+                        : "documents.message.rail_not_allowed",
+                    )}
+                  </p>
+                ))}
           </div>
 
           <div>

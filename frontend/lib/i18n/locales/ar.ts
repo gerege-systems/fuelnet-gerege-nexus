@@ -348,6 +348,8 @@ export const ar: Record<string, string> = {
   "documents.menu.signature_policies": "سياسات التوقيع",
   "documents.menu.templates": "قوالب المستندات",
   "documents.menu.workflows": "سير عمل المستندات",
+  "documents.message.rail_not_configured": "لا تملك هذه المنشأة بيانات اعتماد لذلك — راجع المشغّل",
+  "documents.message.rail_not_allowed": "لا تسمح مؤسستك بذلك لهذا النوع من الوثائق",
   "documents.message.approval_display_text": "ما يراه المواطن",
   "documents.message.approval_expired": "انتهت صلاحية طلب الموافقة — لم يتم توقيع أي شيء. أرسله مرة أخرى.",
   "documents.message.approval_refused": "رفض المواطن الطلب — لم يتم توقيع أي شيء.",

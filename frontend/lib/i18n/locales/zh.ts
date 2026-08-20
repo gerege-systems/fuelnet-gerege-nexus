@@ -348,6 +348,8 @@ export const zh: Record<string, string> = {
   "documents.menu.signature_policies": "签名策略",
   "documents.menu.templates": "文档模板",
   "documents.menu.workflows": "文档工作流",
+  "documents.message.rail_not_configured": "本部署未配置该渠道的凭据——请联系运维人员",
+  "documents.message.rail_not_allowed": "贵组织不允许对此类文件使用该渠道",
   "documents.message.approval_display_text": "公民可见文本",
   "documents.message.approval_expired": "审批请求已过期 — 未签署任何内容。请重新发送。",
   "documents.message.approval_refused": "公民拒绝了请求 — 未签署任何内容。",
