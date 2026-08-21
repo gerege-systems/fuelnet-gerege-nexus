@@ -192,6 +192,14 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 		}
 	}
 
+	// A module's own schema, before anything claims the app is installed. See
+	// runModuleMigrations for why this is outside the transaction below.
+	for _, appID := range installOrderIDs {
+		if err := ai.runModuleMigrations(ctx, appID); err != nil {
+			return err
+		}
+	}
+
 	tx, err := ai.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

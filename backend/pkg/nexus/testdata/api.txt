@@ -170,6 +170,8 @@ func LocalizedTitle(titles map[string]string, locale, fallback string) string
 func Location() *time.Location
 func Meetings() (MeetingBooker, error)
 func MenuPermissionOf(m Module) string
+func Migrations(moduleID string, fsys fs.FS)
+func MigrationsOf(moduleID string) (fs.FS, bool)
 func NewParams(values map[string]any, locale string) Params
 func NewPlatform(db DB, permissions PermissionStore) Platform
 func Now() time.Time
