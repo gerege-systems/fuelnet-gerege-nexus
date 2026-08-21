@@ -1,8 +1,25 @@
 # Who has to look at a change before it lands.
 #
-# One entry, and deliberately one: a CODEOWNERS file that names an owner for
-# every directory turns review into a formality nobody reads. This names the
-# one place where a mistake is expensive in a way no test result shows.
+# This file used to name one path, on the argument that a CODEOWNERS naming an
+# owner for every directory turns review into a formality nobody reads. That
+# argument still holds and this list is still short: what has been added is not
+# "the core", it is the twelve paths docs/CORE_BOUNDARY_PLAN.md §2.1 measured as
+# the ones app work drags along with it. Of the last 300 commits, 133 touched
+# backend/internal/apps; the files below are the ones they touched at the same
+# time, most often. Every one of them is a place where an app's change lands in
+# the platform because the platform gave it nowhere else to go.
+#
+# Being here does not mean "do not change this". It means the change is worth a
+# second pair of eyes asking whether it belongs in the core at all.
+#
+# Owner: @gerege-systems/core-team. The team exists but currently holds only
+# read access to this repository, so GitHub resolves it as an unknown owner and
+# enforces none of these rules — check with
+#
+#	gh api repos/gerege-systems/open-gerege-nexus/codeowners/errors
+#
+# Granting the team write access is what turns this file from a comment into a
+# required review; until then it documents the boundary without guarding it.
 
 # The ecosystem's contract. Every distribution repository compiles against this
 # package and pins it by tag, so a change here is a change to code that is not
@@ -11,3 +28,37 @@
 # The golden file beside it is part of the same review: its diff is the plain
 # statement of what the contract gained or lost.
 /backend/pkg/nexus/ @gerege-systems/core-team
+
+# The rest of the published surface: the app manifest schema every catalogue
+# entry is validated against, the Өртөө wire contract two installations speak
+# across a network, and the entry point a distribution's main.go calls.
+/backend/pkg/catalog/ @gerege-systems/core-team
+/backend/pkg/urtuu/ @gerege-systems/core-team
+/backend/pkg/platform/ @gerege-systems/core-team
+
+# The route table (37 commits) and the bootstrap that builds every module
+# (its signature went from 4 parameters to 9 in eleven days). Both are where an
+# app's need for one more line becomes the platform's permanent surface.
+/backend/internal/platform/server.go @gerege-systems/core-team
+/backend/internal/apps/runtime.go @gerege-systems/core-team
+
+# What a tenant gets when it installs an app: which permissions exist and which
+# system roles they reach by default (12 commits). A line here changes who can
+# do what, in every deployment, and no test failure looks like it.
+/backend/internal/platform/appinstaller/ @gerege-systems/core-team
+
+# The platform's schema. 104 tables, and the row-level policies that are the
+# whole of tenant isolation. An app's table added here is an app's table the
+# core now carries forever.
+/backend/db/migrations/ @gerege-systems/core-team
+
+# The frontend's three shared files, and the three at the top of §2.1's table:
+# the API client (40 commits), the translation dictionary that every app is
+# spliced into by hand (its locale files, 21 commits each), and the shell that
+# names each app's icon and position in a list in its own source.
+/frontend/lib/api.ts @gerege-systems/core-team
+/frontend/lib/i18n/index.tsx @gerege-systems/core-team
+/frontend/components/Layout.tsx @gerege-systems/core-team
+
+# The bundled catalogue (20 commits). What this binary claims it can install.
+/catalog/ @gerege-systems/core-team
