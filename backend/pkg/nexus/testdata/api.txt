@@ -1,5 +1,10 @@
   AccessPolicy.MenuPermission() string
   AccessPolicy.RoutePermissionPrefix() string
+  AssistantSource.AssistantTools() []AssistantTool
+  AssistantTool.Call func(ctx context.Context, tenantID string, args map[string]any) (map[string]any, error)
+  AssistantTool.Description string
+  AssistantTool.Name string
+  AssistantTool.Parameters map[string]any
   ColumnSpec.Chart ChartRole
   ColumnSpec.Key string
   ColumnSpec.Kind ColumnKind
@@ -158,6 +163,7 @@ func (Params) Time(key string) time.Time
 func (Params) UUID(key string) string
 func (SignatureState) Settled() bool
 func AllowedTenants(ctx context.Context) []string
+func AssistantToolset() []AssistantTool
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 func Capability[T any]() (T, error)
 func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error)
@@ -175,6 +181,7 @@ func MigrationsOf(moduleID string) (fs.FS, bool)
 func NewParams(values map[string]any, locale string) Params
 func NewPlatform(db DB, permissions PermissionStore) Platform
 func Now() time.Time
+func ProvideAssistant(moduleID string, source AssistantSource)
 func Provide[T any](impl T)
 func Register(m Module)
 func RegisterReport(report Report)
@@ -197,6 +204,8 @@ func WithTenantID(ctx context.Context, tenantID string) context.Context
 func WithUser(ctx context.Context, claims UserClaims) context.Context
 func WithoutTenant(ctx context.Context) context.Context
 type AccessPolicy interface
+type AssistantSource interface
+type AssistantTool struct
 type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 type ChartRole string
 type ColumnKind string

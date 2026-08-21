@@ -202,15 +202,6 @@ func TestPlatformSQLNamesNoAppTable(t *testing.T) {
 	// not an exemption: the change that moves the table is the change that
 	// deletes the line. A prefix matches a package or a single file.
 	allowed := map[string]string{
-		// Two LLM tools — erp_summary and search_products — over products,
-		// contacts, warehouses and stock_levels. Commerce left; the tables are
-		// still created here, so nothing errors. The assistant answers
-		// "0 products, 0 customers" instead, confidently, on every deployment
-		// that never had commerce. See docs/CORE_BOUNDARY_PLAN.md §3.4(A).
-		//
-		// TODO: removed by Үе 4a, which is the change that deletes this entry.
-		"internal/platform/ai": "Үе 4a",
-
 		// The shift endpoints under /devices/shifts. Point of sale went to
 		// pos-gerege-nexus and these did not follow — the same arrangement the
 		// frontend is in, where lib/api/_departed/shifts.ts still serves the
@@ -233,7 +224,10 @@ func TestPlatformSQLNamesNoAppTable(t *testing.T) {
 		"internal/platform/reporting/engine_integration_test.go": "commerce schema move",
 	}
 
-	// A table name where SQL would put one.
+	// A table name where SQL would put one. Comments are stripped first, the
+	// same as in the migration scan above: these files explain themselves, and
+	// a sentence saying which tables a query *used* to read is not a query.
+	comments := regexp.MustCompile(`(?s)/\*.*?\*/|(?m)//.*$`)
 	pattern := regexp.MustCompile(`(?i)\b(?:FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?(` +
 		strings.Join(departed, "|") + `)\b`)
 
@@ -254,7 +248,8 @@ func TestPlatformSQLNamesNoAppTable(t *testing.T) {
 			}
 		}
 		seen := map[string]bool{}
-		for _, match := range pattern.FindAllStringSubmatch(string(source), -1) {
+		code := comments.ReplaceAllString(string(source), "")
+		for _, match := range pattern.FindAllStringSubmatch(code, -1) {
 			table := strings.ToLower(match[1])
 			if seen[table] {
 				continue

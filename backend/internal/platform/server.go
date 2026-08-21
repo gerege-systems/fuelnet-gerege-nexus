@@ -91,7 +91,6 @@ type Server struct {
 	// called read as a dependency the modules already had.
 	emailVerify *emailverify.Service
 	copilotSvc  *ai.CopilotService
-	forecaster  *ai.Forecaster
 	eidSvc      *eid.EIDService
 	danSvc      *dan.DANService
 	ssoProvider *ssoprovider.SSOProvider
@@ -352,7 +351,6 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
 		emailVerify:    emailverify.NewService(db),
 		copilotSvc:     ai.NewCopilotService(db),
-		forecaster:     ai.NewForecaster(db),
 		eidSvc:         eidSvc,
 		danSvc:         danSvc,
 		ssoProvider:    ssoProvider,

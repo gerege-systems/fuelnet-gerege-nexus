@@ -22,6 +22,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -253,6 +254,17 @@ func decodeLimitedJSON(r *http.Request, dst any, max int64) error {
 }
 func aiStatus(error) int { return http.StatusBadGateway }
 
+// handleAIForecast asks whichever app lends a stock forecast for one.
+//
+// The platform used to compute it: a query over products and stock_levels, both
+// of which are commerce's tables and are in business-gerege-nexus. On a
+// deployment without commerce it returned an empty list, which reads as "you
+// have nothing to reorder" rather than as "this deployment cannot tell you".
+//
+// The route stays mounted either way. A route table that changes shape with the
+// environment is a route table nobody can reason about — the same principle the
+// health and readiness endpoints follow — so the endpoint answers 404 when
+// nothing provides the tool rather than disappearing from the router.
 func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("forecast")
 	s.recordAIUse(r, "forecast")
@@ -261,15 +273,27 @@ func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	forecast, err := s.forecaster.AnalyzeTenantStock(r.Context(), tenantID)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "failed to generate forecast")
+	for _, tool := range nexus.AssistantToolset() {
+		if tool.Name != stockForecastTool || tool.Call == nil {
+			continue
+		}
+		forecast, err := tool.Call(r.Context(), tenantID, nil)
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "failed to generate forecast")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, forecast)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(forecast)
+	httpx.Error(w, http.StatusNotFound, "no app on this deployment produces a stock forecast")
 }
+
+// stockForecastTool is the name an app declares to answer /ai/stock-forecast.
+// A convention rather than a contract type: the endpoint predates the assistant
+// registry and keeps its URL, and one name is a smaller thing to agree on than
+// a second capability that would carry one function.
+const stockForecastTool = "stock_forecast"
 
 // recordAIUse writes the act into the organisation's audit trail.
 //
