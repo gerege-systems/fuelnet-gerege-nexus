@@ -43,8 +43,6 @@ import (
 	"net/http"
 
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/egov"
-	"github.com/gerege-systems/open-gerege-nexus/backend/domain/egov/postgres"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/go-chi/chi/v5"
@@ -81,13 +79,37 @@ type Module struct {
 // installed, and the rails are read from this process's configuration — so what
 // crosses into the domain is not the client but the answer: a value with this
 // app's own type on it, which is what lets the rules be run against a map.
-func New(p nexus.Platform, xyp *gerege.GeregeService, rails nexus.StateRails) *Module {
+func New(p nexus.Platform) *Module {
+	// Asked of the platform rather than handed in. Both were parameters until
+	// the contracts existed, and the ХУР one carried *gerege.GeregeService —
+	// a type under internal/, which is what kept this module in this
+	// repository. See pkg/nexus/stateregistry.go.
+	state, err := nexus.StateRegistryOf()
+	if err != nil {
+		slog.Warn("egov: this deployment provides no state registry; lookups will refuse", "error", err)
+	}
+	rails, err := nexus.Capability[nexus.StateRails]()
+	if err != nil {
+		slog.Warn("egov: this deployment names no state rails", "error", err)
+	}
 	m := &Module{
-		svc:   domain.NewService(registry{xyp: xyp}, asRails(rails), postgres.New(p.DB())),
+		svc:   domain.NewService(registry{state: state}, asRails(rails), history{audit: auditReader()}),
 		perms: p.Permissions(),
 	}
 	nexus.Register(m)
 	return m
+}
+
+// auditReader is the trail this app reads its own history back from. A
+// deployment that provides none leaves the history screen empty, which is what
+// it should show when the trail cannot be read.
+func auditReader() nexus.AuditReader {
+	reader, err := nexus.AuditHistory()
+	if err != nil {
+		slog.Warn("egov: this deployment provides no audit reader; the lookup history will be empty", "error", err)
+		return nil
+	}
+	return reader
 }
 
 // asRails is nexus.StateRails as domain/egov.Rails. The two structs are the same
@@ -126,10 +148,13 @@ func (m *Module) Company(ctx context.Context, companyReg string) (domain.Company
 // The field copy is the translation, and it is written out rather than done by
 // embedding so that a field added on the platform side does not silently become
 // part of this app's published answer.
-type registry struct{ xyp *gerege.GeregeService }
+type registry struct{ state nexus.StateRegistry }
 
 func (r registry) Citizen(ctx context.Context, regNumber string) (domain.Citizen, error) {
-	info, err := r.xyp.GetCitizenInfo(ctx, regNumber)
+	if r.state == nil {
+		return domain.Citizen{}, errors.New("this deployment is not connected to the state's registers")
+	}
+	info, err := r.state.Citizen(ctx, regNumber)
 	if err != nil {
 		return domain.Citizen{}, err
 	}
@@ -145,7 +170,10 @@ func (r registry) Citizen(ctx context.Context, regNumber string) (domain.Citizen
 }
 
 func (r registry) Company(ctx context.Context, companyReg string) (domain.Company, error) {
-	info, err := r.xyp.GetCompanyInfo(ctx, companyReg)
+	if r.state == nil {
+		return domain.Company{}, errors.New("this deployment is not connected to the state's registers")
+	}
+	info, err := r.state.Company(ctx, companyReg)
 	if err != nil {
 		return domain.Company{}, err
 	}
