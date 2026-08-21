@@ -50,8 +50,6 @@ export const LINES: Record<ShellPlatform, LineContent> = {
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
       { label: "Баримт", hint: "Боловсруулах, батлах, архивлах", href: "/documents", icon: "file" },
       { label: "Гарын үсэг", hint: "eID болон HSM-ээр зурах", href: "/module/documents/pdf", icon: "pen" },
-      { label: "Төрийн үйлчилгээ", hint: "Хүсэлт, цаг захиалга", href: "/gov-services", icon: "landmark" },
-      { label: "Харилцагч", hint: "Байгууллага, хүмүүс", href: "/contacts", icon: "users" },
       { label: "Төхөөрөмжийн парк", hint: "Бүртгэсэн төхөөрөмжүүд", href: "/settings/devices", icon: "monitor" },
     ],
   },
@@ -65,8 +63,6 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     actions: [
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
       { label: "Баримт", hint: "Боловсруулах, батлах, архивлах", href: "/documents", icon: "file" },
-      { label: "Нэхэмжлэл", hint: "Төлбөр, тооцоо", href: "/billing", icon: "wallet" },
-      { label: "Нөөц", hint: "Агуулах, хөдөлгөөн", href: "/inventory", icon: "boxes" },
       { label: "Хандах эрх", hint: "Хэрэглэгч, үүрэг", href: "/settings/access", icon: "shield" },
       { label: "Төхөөрөмжийн парк", hint: "Бүртгэсэн төхөөрөмжүүд", href: "/settings/devices", icon: "monitor" },
     ],
@@ -82,9 +78,13 @@ export const LINES: Record<ShellPlatform, LineContent> = {
       { label: "Батлах хүлээж буй", hint: "Таны шийдвэр хүлээсэн баримт", href: "/documents", icon: "file" },
       { label: "Гарын үсэг", hint: "Face ID-аар баталгаажуулж зурна", href: "/module/documents/pdf", icon: "pen" },
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
-      { label: "Харилцагч", hint: "Хайх, залгах, бичих", href: "/contacts", icon: "users" },
     ],
   },
+  // Агуулахын гар утас ба касс хоёрын үйлдлүүд нь тэдний апп болох бараа,
+  // нөөц, кассынх байсан. Гурвуулаа өөр репод нүүсэн (business-gerege-nexus,
+  // pos-gerege-nexus) бөгөөд 2026-08-21-нд дэлгэцүүд нь хамт явсан. Үлдсэн нь
+  // энэ бинарийн үнэхээр мөнтөддөг платформын дэлгэцүүд: тэдгээр аппыг
+  // авчирсан distribution нь өөрийн шугамын агуулгыг өөрөө өгнө.
   android: {
     eyebrow: "ГЭРЭГЭ · ANDROID ШУГАМ",
     title: "Талбарт",
@@ -93,10 +93,9 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     alloy: "#2E9E5B",
     alloyRGB: "46 158 91",
     actions: [
-      { label: "Бараа уншуулах", hint: "Камер эсвэл сканнераар", href: "/inventory", icon: "scan" },
-      { label: "Нөөц", hint: "Агуулах, хөдөлгөөн", href: "/inventory", icon: "boxes" },
-      { label: "Бараа", hint: "Каталог, үнэ", href: "/products", icon: "package" },
-      { label: "Харилцагч", hint: "Хайх, залгах, бичих", href: "/contacts", icon: "users" },
+      { label: "Баримт", hint: "Гарын үсэг, батламж", href: "/documents", icon: "file-text" },
+      { label: "Аппууд", hint: "Суулгасан, суулгаж болох", href: "/apps", icon: "grid" },
+      { label: "Профайл", hint: "Хэл, төхөөрөмж, нэвтрэлт", href: "/profile", icon: "settings" },
     ],
   },
   kiosk: {
@@ -108,7 +107,6 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     alloyRGB: "200 121 26",
     actions: [
       { label: "Үйлчилгээ эхлүүлэх", hint: "eID-аар таниулж эхэлнэ", href: "/kiosk", icon: "scan" },
-      { label: "Төрийн үйлчилгээ", hint: "Хүсэлт, цаг захиалга", href: "/gov-services", icon: "landmark" },
     ],
   },
   pos: {
@@ -119,9 +117,8 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     alloy: "#C2410C",
     alloyRGB: "194 65 12",
     actions: [
-      { label: "Худалдаа эхлүүлэх", hint: "Ээлж нээж, борлуулалт бүртгэнэ", href: "/pos", icon: "receipt" },
-      { label: "Бараа", hint: "Каталог, үнэ", href: "/products", icon: "package" },
-      { label: "Нэхэмжлэл", hint: "Төлбөр, тооцоо", href: "/billing", icon: "wallet" },
+      { label: "Дэлгэц түгжих", hint: "Киоск горим", href: "/kiosk", icon: "shield-check" },
+      { label: "Төхөөрөмж", hint: "Бүртгэл, ээлж, тохиргоо", href: "/settings/devices", icon: "monitor-cog" },
     ],
   },
 };

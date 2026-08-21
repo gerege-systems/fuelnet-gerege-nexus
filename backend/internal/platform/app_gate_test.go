@@ -147,7 +147,7 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 // the move safe to ship — contacts offers registry auto-fill and must not
 // become unusable on a deployment that has no state integration, so it is
 // deliberately not a dependent, and its own endpoints answer regardless.
-func TestTheStateRegistryIsBehindItsAppAndContactsIsNot(t *testing.T) {
+func TestTheStateRegistryIsBehindItsAppAndTheOrganisationIsNot(t *testing.T) {
 	f := newGateFixture(t)
 
 	// Nothing installed yet.
@@ -162,23 +162,30 @@ func TestTheStateRegistryIsBehindItsAppAndContactsIsNot(t *testing.T) {
 		t.Fatalf("connections answered %d without the app installed; expected 403", res.Code)
 	}
 
-	// Contacts, on the other hand, is unaffected by the state integration being
-	// absent. What matters here is that the answer does not depend on egov.
+	// The organisation's own routes, on the other hand, are unaffected by the
+	// state integration being absent. What matters here is that the answer does
+	// not depend on egov.
 	//
-	// The app installed to open that gate is the directory, not a contacts app:
-	// the contact register was absorbed into io.gerege.nexus.organisation, so
-	// that is the installation its routes are now gated on. The claim under
-	// test did not move with it.
+	// This used to ask for /api/v1/contacts, which was the right question when
+	// the contact register was part of the organisation app. Commerce took the
+	// register and migration 00075 took its table, so the route stopped
+	// existing — and the assertion, which only refuses a 403, went on passing
+	// against a 404. A test that cannot fail is worse than no test, so it now
+	// asks for a route the organisation app actually serves.
 	f.install(t, "io.gerege.nexus.organisation")
-	if res := f.do(t, http.MethodGet, "/api/v1/contacts", ""); res.Code == http.StatusForbidden {
-		t.Fatalf("contacts was refused while the e-Government app was absent: %s", res.Body.String())
+	res := f.do(t, http.MethodGet, "/api/v1/organisation/departments", "")
+	if res.Code == http.StatusForbidden {
+		t.Fatalf("departments was refused while the e-Government app was absent: %s", res.Body.String())
+	}
+	if res.Code == http.StatusNotFound {
+		t.Fatalf("departments answered 404; this test asserts nothing unless the route is served")
 	}
 
 	// And with the app installed the gate opens. A 403 here would mean the
 	// permission was refused rather than the app; the caller is a tenant
 	// administrator, who bypasses permission checks.
 	f.install(t, "io.gerege.nexus.egov")
-	res := f.do(t, http.MethodGet, "/api/v1/egov/connections", "")
+	res = f.do(t, http.MethodGet, "/api/v1/egov/connections", "")
 	if res.Code != http.StatusOK {
 		t.Fatalf("connections answered %d with the app installed: %s", res.Code, res.Body.String())
 	}

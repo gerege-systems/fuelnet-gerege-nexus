@@ -14,7 +14,8 @@
     "i18n:export-native": "node scripts/export-native-auth-i18n.mjs",
     "i18n:snapshot": "node scripts/i18n-snapshot.mjs",
     "icons:export": "node scripts/export-lucide-icons.mjs",
-    "icons:generate": "node scripts/generate-icon-map.mjs"
+    "icons:generate": "node scripts/generate-icon-map.mjs",
+    "links:check": "node scripts/check-shell-links.mjs"
   },
   "overrides": {
     "nanoid": "^3.3.18"

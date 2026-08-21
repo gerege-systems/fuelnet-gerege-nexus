@@ -379,6 +379,12 @@ jobs:
       # keeps the core client from filling up again.
       - name: Check the core API client owns only core paths
         run: npm run api:check
+      # The native shells' home screens and the installed app's launcher
+      # shortcuts are plain data, so nothing else checks them. Fourteen of
+      # twenty-six tiles were left pointing at deleted pages once and the build
+      # stayed green: a string is a string.
+      - name: Check every shell link leads somewhere
+        run: npm run links:check
       # Warning mode, deliberately. 257 keys per language are untranslated
       # today and this step is not the commit that fixes them — an untranslated
       # key falls back to English, which is right at runtime and invisible in
