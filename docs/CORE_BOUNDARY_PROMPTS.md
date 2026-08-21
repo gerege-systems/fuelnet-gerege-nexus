@@ -7,18 +7,34 @@
 
 Prompt бүрийг `## PROMPT` мөрнөөс доош бүтнээр нь хуулж Claude Code-д өгнө.
 
-| Үе | Branch | Юу гарах | Хамаарал |
+**Арваулаа 2026-08-21-нд хэрэгжсэн.** Prompt-ууд нь түүх болж үлдэв: доорх
+бичвэр нь юуг даалгасныг, дараах хүснэгт нь юу гарсныг хэлнэ. Хоёр нь
+хоорондоо зөрсөн газар бүр PR-ийн тайлбарт хэмжилттэйгээ бичигдсэн.
+
+| Үе | PR | Юу гарсан | Төлөв |
 | --- | --- | --- | --- |
-| 0 | `core/phase-0-freeze` | Маршрутын golden, CODEOWNERS, CI-ийн хоосон ногоон засах | — |
-| 1 | `core/phase-1-capabilities` | `Provide[T]` / `Capability[T]`, `Bootstrap(p)` | 0 |
-| 2a | `frontend/phase-2a-api-split` | `lib/api.ts` задлах | — |
-| 2b | `frontend/phase-2b-i18n-runtime` | i18n runtime бүртгэл | — |
-| 2c | `frontend/phase-2c-layout` | `Layout.tsx`-ыг өгөгдлөөс жолоодох | 2b |
-| 3 | `core/phase-3-app-migrations` | Апп өөрийн миграцтай | 1 |
-| 4a | `core/phase-4a-ai-capability` | AI-г commerce схемээс салгах | 1 |
-| 4b | `core/phase-4b-default-roles` | `DefaultRoles`, `gov.*` устгах | — |
-| 4c | `core/phase-4c-pilot-extract` | `urtuu` эсвэл `organisation` pilot | 1, 3 |
-| 5 | `ci/phase-5-downstream` | Downstream distribution build | 1 |
+| 0 | [#170](https://github.com/gerege-systems/open-gerege-nexus/pull/170) | Маршрутын golden (341 мөр), CODEOWNERS, хоосон ногоон CI алхам | ✅ merged |
+| 1 | [#171](https://github.com/gerege-systems/open-gerege-nexus/pull/171) | `Provide[T]`/`Capability[T]`, `Bootstrap` 9→1, `Meetings()` | ✅ merged |
+| 2a | [#172](https://github.com/gerege-systems/open-gerege-nexus/pull/172) | `lib/api.ts` 1831→80 мөр, 21 файл, 185 метод хэвээр | ✅ merged |
+| 2b | [#173](https://github.com/gerege-systems/open-gerege-nexus/pull/173) | i18n runtime бүртгэл, 11,368 мөр байт-ижил | ✅ merged |
+| 2c | [#174](https://github.com/gerege-systems/open-gerege-nexus/pull/174) | `Layout.tsx`-ийн гурван хатуу жагсаалт | ✅ merged |
+| 3 | [#175](https://github.com/gerege-systems/open-gerege-nexus/pull/175) | `nexus.Migrations`, гурван хамгаалалт, миграц 00073 | ✅ merged |
+| 4a | [#177](https://github.com/gerege-systems/open-gerege-nexus/pull/177) | AI "0" гэж хэлэхээ болив | ✅ merged |
+| 4b | [#176](https://github.com/gerege-systems/open-gerege-nexus/pull/176) | `DefaultRoles`, `gov.*` устав, миграц 00074 | ✅ merged |
+| 4c | [#178](https://github.com/gerege-systems/open-gerege-nexus/pull/178) | Өртөө **гараагүй** — [ADR 0004](adr/0004-a-pilot-that-did-not-ship.md) | ⚠️ шийдвэр |
+| 5 | [#179](https://github.com/gerege-systems/open-gerege-nexus/pull/179) | Downstream ажил, хоёр canary, RELEASING | ✅ merged |
+
+Хэрэгжүүлэлтийн үеэр prompt-оос зөрсөн хоёр зүйл, тус бүр хэмжилттэй:
+
+* **Үе 2c** — lucide-ийн `DynamicIcon`-ыг хэрэгжүүлж, `.next/static` 3.5 MB /
+  95 chunk-аас **11 MB / 1828 chunk** болохыг хэмжиж хассан. Оронд нь
+  build-time generated map.
+* **Үе 4c** — Өртөө гараагүй. Рельс нь 2,900 мөр `internal/` код бөгөөд
+  `lifecycle_test.go` түүнийг шаарддаг; апп рельсний дөрвөн хүснэгтийг шууд
+  SQL-ээр уншдаг; миграц салдаггүй. Гурван саадын дараалал ADR 0004-т.
+
+Мөн §9-ийн хэмжүүр буруу цонх дээр ажилладаг байсныг залруулав —
+[`CORE_BOUNDARY_PLAN.md` §9](CORE_BOUNDARY_PLAN.md#9-амжилтын-хэмжүүр).
 
 **Бүх prompt-д хамаарах дүрэм** (Claude Code-д давтагдаж орсон байгаа):
 

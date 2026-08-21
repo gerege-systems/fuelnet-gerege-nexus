@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import ts from "typescript";
+
+import { loadModule } from "./i18n-layout.mjs";
 
 const root = process.cwd();
 const locales = ["mn", "en", "ar", "zh", "fr", "ru", "es"];
@@ -13,19 +14,21 @@ const xml = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt
 const resourceKey = key => key.replaceAll(".", "_").replace(/[^a-zA-Z0-9_]/g, "_");
 const catalog = { sourceLanguage: "mn", strings: {}, version: "1.0" };
 
-async function loadTs(file) {
-  const source = await (await import("node:fs/promises")).readFile(file, "utf8");
-  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
-}
-
-const { auth } = await loadTs(path.resolve(root, "lib/i18n/addons/auth.ts"));
+// Read as data rather than transpiled, the same as every other script here.
+//
+// It used to go through ts.transpileModule, which stopped existing: TypeScript 7
+// rewrote the compiler and the root namespace no longer carries ModuleKind or
+// transpileModule, so this script had been failing with
+// `Cannot read properties of undefined (reading 'ESNext')`. Nothing noticed,
+// because it is not in CI — it is run by hand when the native shells need new
+// strings. The dictionaries are `export const x = {...}` where every value is a
+// literal, so the compiler was never needed.
+const auth = await loadModule(path.resolve(root, "lib/i18n/addons/auth.ts"));
 const overlays = {};
 for (const locale of locales.slice(2)) {
   // core.ts, not the directory: auth is one of the platform's own dictionaries,
   // and the files beside it belong to apps this export does not carry.
-  const localeModule = await loadTs(path.resolve(root, `lib/i18n/locales/${locale}/core.ts`));
-  overlays[locale] = localeModule[locale] ?? {};
+  overlays[locale] = await loadModule(path.resolve(root, `lib/i18n/locales/${locale}/core.ts`));
 }
 
 /**
