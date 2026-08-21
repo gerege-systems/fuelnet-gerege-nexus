@@ -12,23 +12,37 @@
 # Being here does not mean "do not change this". It means the change is worth a
 # second pair of eyes asking whether it belongs in the core at all.
 #
-# Owner: @erdenebatt. A person rather than a team, because
-# @gerege-systems/core-team holds no write access to this repository and GitHub
-# resolves an owner it cannot write as no owner at all — check with
+# Owner: @erdenebatt. A person rather than a team, and the reason is worth
+# writing down because the obvious fix does not work.
+#
+# A team was tried. @gerege-systems/core-team held no write access, and GitHub
+# resolves an owner it cannot write to as no owner at all — every line was an
+# `Unknown owner` error. Check with
 #
 #	gh api repos/gerege-systems/open-gerege-nexus/codeowners/errors
 #
-# What this buys and what it does not. GitHub never asks a pull request's own
-# author to review it, so on a branch pushed from here this file requests
-# nothing: almost every commit in this repository is the owner's. Where it does
-# work is the case this repository is open for — somebody else's pull request,
-# which now reaches the owner by name instead of by whoever happens to look.
+# Granting the team access made those errors go away and revealed the second
+# problem: the team's other member was an account with no commits here and no
+# activity anywhere since 2020. It was removed and the team with it.
 #
-# It is a request, not a gate. main requires its status checks and does not
-# require a review, so nothing here blocks a merge. The gates are the golden
-# files — testdata/api.txt and testdata/routes.txt — which fail the Test check
-# that branch protection does require. This file says where to look; those say
-# what changed.
+# So a person, and this file is a request rather than a gate. GitHub never asks
+# a pull request's own author to review it, and 615 of this repository's commits
+# are the owner's, so on a branch pushed from here it requests nothing. Where it
+# works is the case this repository is open for: somebody else's pull request
+# now reaches the owner by name instead of by whoever happens to look.
+#
+# Making it a gate needs a second reviewer, not a settings change. A sole owner
+# who is also the author is a requirement that can never be satisfied — the only
+# way through would be an admin bypass on every pull request, which teaches
+# everybody to bypass. When there are two people who read this code, put them in
+# a team, give the team write access, and turn on required code-owner reviews.
+#
+# What does gate merges is the thirteen required status checks on main, and as
+# of 2026-08-21 they bind on administrators too — which matters here, because
+# this organisation has ten owners and an organisation owner is an administrator
+# of every repository in it. Among those checks are the golden files
+# (testdata/api.txt, testdata/routes.txt) and the two downstream distribution
+# builds. This file says who to ask; those say what changed.
 
 # The ecosystem's contract. Every distribution repository compiles against this
 # package and pins it by tag, so a change here is a change to code that is not
