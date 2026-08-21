@@ -98,7 +98,7 @@ prompt-ын төлөвлөгөө ба эцэст нь хэрэгжсэн зүй�
 | [`MODULE_RENAME_PROMPT.md`](MODULE_RENAME_PROMPT.md) | MN | Цөмийн модулиудын нэршлийн засвар (салгалтын 0-р алхам) |
 | [`MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md`](MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md) | MN | Мониторинг ба тайлангийн системийг хэрэгжүүлэх prompt |
 | [`DOMAIN_FIRST_PROMPT.md`](DOMAIN_FIRST_PROMPT.md) | MN | Домэйн давхаргыг салгах prompt — үр дүн нь [`adr/0001-domain-first.md`](adr/0001-domain-first.md) |
-| [`CORE_BOUNDARY_PROMPTS.md`](CORE_BOUNDARY_PROMPTS.md) | MN | [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md)-ыг хэрэгжүүлэх үе шат бүрийн prompt |
+| [`CORE_BOUNDARY_PROMPTS.md`](CORE_BOUNDARY_PROMPTS.md) | MN | [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md)-ыг хэрэгжүүлэх үе шат бүрийн prompt — арваулаа хэрэгжсэн, үр дүнгийн хүснэгттэй |
 
 ## Төслийн журам — Project governance
 

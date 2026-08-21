@@ -16,6 +16,9 @@
     "icons:export": "node scripts/export-lucide-icons.mjs",
     "icons:generate": "node scripts/generate-icon-map.mjs"
   },
+  "overrides": {
+    "nanoid": "^3.3.18"
+  },
   "dependencies": {
     "@sentry/nextjs": "^10.70.0",
     "@tanstack/react-query": "^5.66.0",
