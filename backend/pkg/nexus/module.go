@@ -36,6 +36,7 @@
 package nexus
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -62,6 +63,52 @@ type PermissionDefinition struct {
 	// rows and a bad one for reading somebody's national registry record, which
 	// is a `.read` by grammar and an administrative act by consequence.
 	AdminOnly bool `json:"admin_only,omitempty"`
+
+	// DefaultRoles names the system roles this permission is granted to when
+	// the app is installed. Valid values are "manager" and "user"; the tenant
+	// administrator receives every permission regardless.
+	//
+	// It exists because until now a module could not say. The installer decided
+	// by reading the end of the code — `.read` to everybody, `.manage` to
+	// managers — and anything that did not fit the grammar was named in the
+	// installer itself. Five `gov.*` codes were, and stayed there after
+	// gov-services moved to gerege-gov: a permission this binary does not have,
+	// granted by a switch this binary still runs. A module outside this
+	// repository had no way in at all, so its only option was to name its
+	// permissions to suit somebody else's suffix rule.
+	//
+	// AdminOnly wins, and a definition that sets both is refused rather than
+	// reconciled: the two say opposite things, and quietly merging opposite
+	// statements about who may do what is how a permission goes missing.
+	DefaultRoles []string `json:"default_roles,omitempty"`
+}
+
+// The system roles a permission may be granted to by default. Not an exhaustive
+// list of roles — a tenant creates as many as it likes in Access control — but
+// of the ones that exist before anybody has configured anything.
+const (
+	DefaultRoleManager = "manager"
+	DefaultRoleUser    = "user"
+)
+
+// Validate reports whether a permission definition contradicts itself.
+//
+// Called by the installer before anything is written, and by
+// catalog.ValidateManifest so that an external app's declaration is held to the
+// same rule as a compiled module's. A manifest arrives from a registry; a
+// module is compiled here. Neither is a reason to check one and not the other.
+func (p PermissionDefinition) Validate() error {
+	if p.AdminOnly && len(p.DefaultRoles) > 0 {
+		return fmt.Errorf("permission %s is AdminOnly and also asks for default roles %v; "+
+			"the two say opposite things about who may do this", p.Code, p.DefaultRoles)
+	}
+	for _, role := range p.DefaultRoles {
+		if role != DefaultRoleManager && role != DefaultRoleUser {
+			return fmt.Errorf("permission %s asks for the default role %q; only %q and %q exist "+
+				"before a tenant has configured anything", p.Code, role, DefaultRoleManager, DefaultRoleUser)
+		}
+	}
+	return nil
 }
 
 // MenuDefinition defines a navigation menu item for an app module.

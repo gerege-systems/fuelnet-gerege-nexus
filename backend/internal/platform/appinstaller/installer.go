@@ -305,6 +305,15 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 	}
 
 	for _, perm := range permissions {
+		// Refused before anything is written. A definition that is both
+		// AdminOnly and asks for default roles, or that names a role that does
+		// not exist, is a statement its author believes and the platform cannot
+		// keep — and the failure it would otherwise produce is a permission
+		// quietly reaching more people or fewer than intended.
+		if err := perm.Validate(); err != nil {
+			return fmt.Errorf("app %s: %w", app.ID, err)
+		}
+
 		permID := uuid.New().String()
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO permissions (id, code, name, description)
@@ -331,41 +340,42 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 			continue
 		}
 
-		// Odoo-style additive default groups: managers receive operational
-		// read/manage permissions; users receive read/self-service rights.
-		// Tenant administrators still bypass checks and their system role is
-		// kept complete above.
-		for _, grant := range []struct {
-			roleCode string
-			allowed  bool
-		}{
-			{roleCode: "manager", allowed: strings.HasSuffix(perm.Code, ".read") || strings.HasSuffix(perm.Code, ".manage") || perm.Code == "gov.process" || perm.Code == "gov.delegate" || perm.Code == "gov.verify" || perm.Code == "gov.report" || perm.Code == "documents.sign"},
-			// documents.sign reaches ordinary users deliberately. The
-			// authority to sign is the citizen's own — an eID signature is
-			// made with their PIN2 on their own phone, the HSM rail makes
-			// them prove a certificate, and an approval chain only counts a
-			// signature from somebody it names — so withholding it would
-			// only stop people signing their own documents. Uploading,
-			// routing and configuring remain behind documents.manage.
-			//
-			// It was esign.sign until the two apps became one. The rule
-			// widened with the rename: record signing, which had been
-			// admin-only by omission rather than by argument, is the same
-			// act on the same authority as signing a PDF was.
-			{roleCode: "user", allowed: strings.HasSuffix(perm.Code, ".read") || perm.Code == "gov.apply" || perm.Code == "documents.sign"},
-		} {
-			if !grant.allowed {
-				continue
-			}
+		for _, roleCode := range defaultRolesFor(perm) {
 			if _, err := tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id)
 				SELECT r.id,p.id FROM roles r JOIN permissions p ON p.code=$3
 				WHERE r.tenant_id=$1 AND r.code=$2 AND r.active ON CONFLICT DO NOTHING`,
-				tenantID, grant.roleCode, perm.Code); err != nil {
-				return fmt.Errorf("grant %s to the %s role: %w", perm.Code, grant.roleCode, err)
+				tenantID, roleCode, perm.Code); err != nil {
+				return fmt.Errorf("grant %s to the %s role: %w", perm.Code, roleCode, err)
 			}
 		}
 	}
 	return nil
+}
+
+// defaultRolesFor is who gets this permission when the app is installed.
+//
+// The app's own answer, when it gave one. When it did not, the suffix rule the
+// platform has always used stands in: `.read` to everybody, `.manage` to
+// managers.
+//
+// Deprecated: the suffix fallback. A naming convention should not be a
+// contract — it cannot express "apply for a service", it cannot be checked, and
+// it silently decides who may do something for every module that has not heard
+// of it. A permission with no DefaultRoles will reach no default role in v2;
+// see docs/RELEASING.md. Until then a module that says nothing keeps exactly
+// the grants it had.
+func defaultRolesFor(perm nexus.PermissionDefinition) []string {
+	if len(perm.DefaultRoles) > 0 {
+		return perm.DefaultRoles
+	}
+	switch {
+	case strings.HasSuffix(perm.Code, ".read"):
+		return []string{nexus.DefaultRoleManager, nexus.DefaultRoleUser}
+	case strings.HasSuffix(perm.Code, ".manage"):
+		return []string{nexus.DefaultRoleManager}
+	default:
+		return nil
+	}
 }
 
 // recordInstallationEvent appends one line to an installation's history.

@@ -252,6 +252,15 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 		return fmt.Errorf("app %s declares a negative rail order %d", m.ID, m.Order)
 	}
 
+	// Held to the same rule as a compiled module's. A manifest arrives from a
+	// registry and a module is compiled here; neither is a reason to check one
+	// and not the other, and this is a statement about who may do what.
+	for _, perm := range m.Permissions {
+		if err := perm.Validate(); err != nil {
+			return fmt.Errorf("app %s: %w", m.ID, err)
+		}
+	}
+
 	switch m.Type {
 	case "", TypeModule:
 		if m.External != nil {
