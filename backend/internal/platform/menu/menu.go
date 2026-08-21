@@ -33,11 +33,21 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 	for _, id := range enabledIDs {
 		enabled[id] = true
 	}
+	// The manifests, by app id. What the shell needs from them is where an app
+	// sits in the rail and whether it is drawn as part of the shell at all —
+	// both properties of the app, both of which used to be lists in
+	// frontend/components/Layout.tsx.
+	manifests := map[string]catalog.Manifest{}
+	for _, app := range store.GetCatalog() {
+		manifests[app.ID] = app.Manifest
+	}
+
 	menus := make([]nexus.MenuDefinition, 0)
 	for _, mod := range nexus.List() {
 		if !enabled[mod.ID()] {
 			continue
 		}
+		manifest := manifests[mod.ID()]
 		// A module with no blueprint still has screens: the ones it registers
 		// itself. Skipping it outright is how an app ships with three working
 		// pages and nothing in the sidebar pointing at them, which is exactly
@@ -49,6 +59,7 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 			bp = blueprint{Slug: routeSlug(mod.ID())}
 		}
 		modulesID, settingsID := bp.Slug+"_modules", bp.Slug+"_settings"
+		before := len(menus)
 		menus = append(menus,
 			localized(nexus.MenuDefinition{ID: modulesID, AppID: mod.ID(), AppName: mod.Name(), Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale),
 			localized(nexus.MenuDefinition{ID: settingsID, AppID: mod.ID(), AppName: mod.Name(), Label: "Settings", Icon: "settings", Order: 20, Labels: groupSettings}, locale),
@@ -71,6 +82,11 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		for i, item := range bp.Settings {
 			menus = append(menus, futureDefinition(mod.ID(), mod.Name(), settingsID, bp.Slug, item, 10+i*10, locale))
 		}
+		// Stamped afterwards rather than threaded through four construction
+		// sites: it is the same answer for every row this module contributed.
+		for i := before; i < len(menus); i++ {
+			menus[i].AppOrder, menus[i].AppChrome = manifest.Order, manifest.Chrome
+		}
 	}
 	// External apps: a third-party service the tenant has installed. There is no
 	// Go module behind them and no blueprint of screens still to be built, so
@@ -81,10 +97,13 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 			continue
 		}
 		modulesID := app.Slug + "_modules"
+		// No Chrome: ValidateManifest refuses it on an external app, which runs
+		// somewhere else and cannot be part of this shell.
 		menus = append(menus,
-			localized(nexus.MenuDefinition{ID: modulesID, AppID: app.ID, AppName: app.Name, Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale))
+			localized(nexus.MenuDefinition{ID: modulesID, AppID: app.ID, AppName: app.Name, Label: "Modules", Icon: "boxes", Order: 10, AppOrder: app.Manifest.Order, Labels: groupModules}, locale))
 		for _, item := range app.Manifest.Menus {
 			item.AppID, item.AppName, item.ParentID = app.ID, app.Name, modulesID
+			item.AppOrder = app.Manifest.Order
 			if item.Order == 0 {
 				item.Order = defaultMenuOrder
 			}

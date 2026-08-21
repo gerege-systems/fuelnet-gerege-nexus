@@ -12,7 +12,9 @@
     "i18n:check": "node scripts/i18n-check.mjs",
     "pwa:check": "node scripts/pwa-check.mjs",
     "i18n:export-native": "node scripts/export-native-auth-i18n.mjs",
-    "i18n:snapshot": "node scripts/i18n-snapshot.mjs"
+    "i18n:snapshot": "node scripts/i18n-snapshot.mjs",
+    "icons:export": "node scripts/export-lucide-icons.mjs",
+    "icons:generate": "node scripts/generate-icon-map.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.70.0",

@@ -95,7 +95,7 @@ func (m *SSOClientsModule) Permissions() []nexus.PermissionDefinition {
 
 func (m *SSOClientsModule) Menus() []nexus.MenuDefinition {
 	return []nexus.MenuDefinition{
-		{ID: "sso_clients_apps", Label: "SSO clients", Path: "/sso-clients", Icon: "code", Order: 10, Labels: map[string]string{"mn": "SSO клиентүүд", "ar": "عملاء SSO", "zh": "SSO 客户端", "fr": "Clients SSO", "ru": "SSO-клиенты", "es": "Clientes SSO"}},
+		{ID: "sso_clients_apps", Label: "SSO clients", Path: "/sso-clients", Icon: "code-2", Order: 10, Labels: map[string]string{"mn": "SSO клиентүүд", "ar": "عملاء SSO", "zh": "SSO 客户端", "fr": "Clients SSO", "ru": "SSO-клиенты", "es": "Clientes SSO"}},
 	}
 }
 

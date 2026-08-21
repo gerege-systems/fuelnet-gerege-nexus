@@ -350,6 +350,12 @@ jobs:
       # review. What it does catch as a failure is an orphaned translation and
       # one filed under the wrong app, both of which are mistakes rather than
       # backlog. The count is printed so it can be watched going the right way.
+      # The sidebar's icon map is generated from the icons Go and the manifests
+      # name. Out of date, a menu entry renders the fallback glyph — which is
+      # the silent failure the hand-written map used to produce, arriving by a
+      # different road.
+      - name: Check the icon map is current
+        run: npm run icons:generate -- --check
       - name: Report the translation backlog
         run: npm run i18n:check -- --warn
       - name: Build

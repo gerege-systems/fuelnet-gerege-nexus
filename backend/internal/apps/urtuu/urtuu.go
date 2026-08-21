@@ -131,7 +131,7 @@ func (m *Module) Menus() []nexus.MenuDefinition {
 		},
 		{
 			ID: "urtuu_links", Label: "Links",
-			Path: "/module/urtuu/links", Icon: "link", Order: 4,
+			Path: "/module/urtuu/links", Icon: "link-2", Order: 4,
 			Labels: map[string]string{
 				"mn": "Холбоосууд", "ar": "الروابط", "zh": "连接",
 				"fr": "Liens", "ru": "Связи", "es": "Enlaces",

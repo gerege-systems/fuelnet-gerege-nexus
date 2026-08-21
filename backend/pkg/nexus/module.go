@@ -81,6 +81,20 @@ type MenuDefinition struct {
 	Icon        string `json:"icon"`
 	Order       int    `json:"order"`
 
+	// AppOrder and AppChrome describe the *app* this entry belongs to rather
+	// than the entry itself, and the platform fills them in from the app's
+	// manifest — a module does not set them, the same as AppID and AppName.
+	//
+	// They are here because the shell had them hard-coded. Layout.tsx carried a
+	// list of nine app ids in source order and a constant naming the one app it
+	// draws as part of itself; six of the nine had already left this repository
+	// and the list still named them. Where an app sits in the chrome is a
+	// property of the app, so it travels with the app.
+	AppOrder int `json:"app_order,omitempty"`
+	// AppChrome marks an app the shell presents as part of itself rather than
+	// as a tile in the app rail — see catalog.Manifest.Chrome.
+	AppChrome bool `json:"app_chrome,omitempty"`
+
 	// Labels holds per-locale overrides keyed by ISO 639-1 code. The menu API
 	// resolves Label from the caller's locale before responding, so the client
 	// never has to translate server-owned content.

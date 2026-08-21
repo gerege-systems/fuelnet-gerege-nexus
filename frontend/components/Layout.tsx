@@ -13,57 +13,18 @@ import { TenantChoices, forgetTenants, useTenants } from "@/components/TenantCho
 import AICopilot from "@/components/AICopilot";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
-import { BarChart3, Landmark, LayoutGrid, Settings, Users, Package, Boxes, Share2, CreditCard, FileText, Code2, Menu as MenuIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, PenTool, ScrollText, Layers, Move, ServerCog, Activity, Copy, Upload, Tags, BadgeDollarSign, Ruler, Sliders, Percent, ArrowRightLeft, RefreshCw, Warehouse, Route, Calculator, Wallet, ChartColumn, ListOrdered, Receipt, ListChecks, Files, Workflow, Archive, KeyRound, KeySquare, Webhook, MonitorCog, Inbox, CalendarClock, Timer, MailCheck, Network, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Link2, Send } from "lucide-react";
+import { MenuIcon } from "@/lib/icons";
+import { LayoutGrid, Settings, Share2, Menu as HamburgerIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
 
-interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number }
+// app_order and app_chrome describe the app rather than the entry: where its
+// tile sits in the rail, and whether it has a tile at all. Both come from the
+// app's manifest — see backend/pkg/catalog.Manifest.
+interface MenuItem { id:string; app_id?:string; app_name?:string; parent_id?:string; label:string; path?:string; external_url?:string; icon:string; order:number; app_order?:number; app_chrome?:boolean }
 // path is a route in this application; external_url is somewhere else. An app
 // installed from the store may be either, so an AppNav carries whichever its
 // first menu entry has and the rail renders a Link or an anchor accordingly.
-interface AppNav { id:string; name:string; icon:string; path:string; externalUrl?:string; menus:MenuItem[] }
+interface AppNav { id:string; name:string; icon:string; path:string; externalUrl?:string; order:number; chrome:boolean; menus:MenuItem[] }
 
-// Every icon the server can name in a menu definition. A name missing here
-// falls back to a generic box, which is why the sub-menus under an app used to
-// render as a column of identical squares — the blueprint icons in
-// platform/menu were never mapped.
-const iconMap: Record<string, React.ReactNode> = {
-  users:<Users className="w-5 h-5"/>, package:<Package className="w-5 h-5"/>, boxes:<Boxes className="w-5 h-5"/>,
-  "credit-card":<CreditCard className="w-5 h-5"/>, "file-text":<FileText className="w-5 h-5"/>, code:<Code2 className="w-5 h-5"/>, landmark:<Landmark className="w-5 h-5"/>,
-  "pen-tool":<PenTool className="w-5 h-5"/>, settings:<Settings className="w-5 h-5"/>,
-  "mail-check":<MailCheck className="w-5 h-5"/>,
-  // Named by the external-app example manifest, and by any third party
-  // that copies it. Without this such an app's menu entry fell back to a
-  // box, which is the icon for "we did not recognise yours".
-  "share-2":<Share2 className="w-5 h-5"/>,
-  // organisation
-  "building-2":<Building2 className="w-5 h-5"/>, network:<Network className="w-5 h-5"/>,
-  // esign
-  "scroll-text":<ScrollText className="w-5 h-5"/>, layers:<Layers className="w-5 h-5"/>,
-  move:<Move className="w-5 h-5"/>, "server-cog":<ServerCog className="w-5 h-5"/>,
-  "shield-check":<ShieldCheck className="w-5 h-5"/>,
-  // contacts
-  activity:<Activity className="w-5 h-5"/>, copy:<Copy className="w-5 h-5"/>, upload:<Upload className="w-5 h-5"/>,
-  // products
-  tags:<Tags className="w-5 h-5"/>, "badge-dollar-sign":<BadgeDollarSign className="w-5 h-5"/>,
-  ruler:<Ruler className="w-5 h-5"/>, sliders:<Sliders className="w-5 h-5"/>, percent:<Percent className="w-5 h-5"/>,
-  // reports
-  "bar-chart-3":<BarChart3 className="w-5 h-5"/>,
-  // inventory
-  "arrow-right-left":<ArrowRightLeft className="w-5 h-5"/>, "refresh-cw":<RefreshCw className="w-5 h-5"/>,
-  warehouse:<Warehouse className="w-5 h-5"/>, route:<Route className="w-5 h-5"/>, calculator:<Calculator className="w-5 h-5"/>,
-  // billing
-  wallet:<Wallet className="w-5 h-5"/>, "chart-column":<ChartColumn className="w-5 h-5"/>,
-  "list-ordered":<ListOrdered className="w-5 h-5"/>, receipt:<Receipt className="w-5 h-5"/>,
-  // documents
-  "list-checks":<ListChecks className="w-5 h-5"/>, files:<Files className="w-5 h-5"/>,
-  workflow:<Workflow className="w-5 h-5"/>, archive:<Archive className="w-5 h-5"/>,
-  // sso clients
-  "key-round":<KeyRound className="w-5 h-5"/>, "key-square":<KeySquare className="w-5 h-5"/>, webhook:<Webhook className="w-5 h-5"/>,
-  // gov services
-  // urtuu — Өртөө. route and inbox were already here for other apps; a link
-  // and a dispatch going out are what the channel adds.
-  link:<Link2 className="w-5 h-5"/>, send:<Send className="w-5 h-5"/>,
-  inbox:<Inbox className="w-5 h-5"/>, "calendar-clock":<CalendarClock className="w-5 h-5"/>, timer:<Timer className="w-5 h-5"/>,
-};
 // Routes that render without the ERP chrome. /oauth/consent is signed-in but
 // belongs here too: it is an identity handoff to another product, and framing
 // it in this one's navigation invites the user to wander off mid-flow.
@@ -106,13 +67,11 @@ function currentPath(pathname:string,paths:string[]){
   return best;
 }
 
-// The organisation app, named because the shell treats it differently: its
-// screens are rendered in the platform's own menu group instead of behind a
-// tile in the app rail. It is the organisation you are signed in to, not one of
-// the things installed into it.
-const ORGANISATION_APP="io.gerege.nexus.organisation";
-
-const APP_ORDER=["io.gerege.nexus.organisation","io.gerege.nexus.contacts","io.gerege.nexus.products","io.gerege.nexus.inventory","io.gerege.nexus.billing","io.gerege.nexus.documents","io.gerege.nexus.esign","io.gerege.nexus.sso_clients","io.gerege.nexus.gov_services"];
+// Where an unordered app sits: after every app that asked for a place, and then
+// in id order among its equals. Kept from the list this replaced, which used
+// the same 999 for anything it did not name — most apps have no opinion about
+// their position and should not have to invent one.
+const UNORDERED=999;
 
 export default function Layout({children}:{children:React.ReactNode}){
   const [menus,setMenus]=useState<MenuItem[]>([]),[user,setUser]=useState<any>(null),[loading,setLoading]=useState(true);
@@ -207,11 +166,13 @@ export default function Layout({children}:{children:React.ReactNode}){
     return [...groups.entries()].flatMap(([id,items])=>{
       const sorted=items.sort((a,b)=>a.order-b.order),first=sorted.find(item=>item.path||item.external_url);
       if(!first)return[];
-      return[{id,name:first.label||first.app_name||id,icon:first.icon,path:first.path||first.external_url!,externalUrl:first.path?undefined:first.external_url,menus:sorted}];
-    }).sort((a,b)=>{const ai=APP_ORDER.indexOf(a.id),bi=APP_ORDER.indexOf(b.id);return (ai<0?999:ai)-(bi<0?999:bi)||a.id.localeCompare(b.id)});
+      return[{id,name:first.label||first.app_name||id,icon:first.icon,path:first.path||first.external_url!,externalUrl:first.path?undefined:first.external_url,order:first.app_order||UNORDERED,chrome:!!first.app_chrome,menus:sorted}];
+    }).sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id));
   },[menus]);
-  // The organisation is presented by the platform rather than as an app in the
+  // An app the shell presents as part of itself rather than as a tile in the
   // rail, and this is the line that makes that true rather than merely drawn.
+  // One app claims it today — the organisation — and it claims it in its own
+  // manifest rather than being named here.
   //
   // Its screens are still the module's — the server sends them only when the
   // app is installed and enabled, which is what keeps the links honest on a
@@ -220,8 +181,8 @@ export default function Layout({children}:{children:React.ReactNode}){
   // and selecting an app replaces the whole sidebar: the menu you clicked in
   // disappeared and you were somewhere else. The screens are the same; where
   // you are should not change under you for opening one.
-  const organisation=apps.find(app=>app.id===ORGANISATION_APP)||null;
-  const railApps=useMemo(()=>apps.filter(app=>app.id!==ORGANISATION_APP),[apps]);
+  const organisation=apps.find(app=>app.chrome)||null;
+  const railApps=useMemo(()=>apps.filter(app=>!app.chrome),[apps]);
   const selected=railApps.find(app=>app.menus.some(m=>m.path&&isUnder(pathname,m.path)))||null;
   const platformActive=!selected;
   const searchIndex=useMemo(()=>[
@@ -266,7 +227,7 @@ export default function Layout({children}:{children:React.ReactNode}){
   const brandTitle=selected?.name||(t("web.label.platform"));
   const mobileAppTabs=[
     {id:"platform",href:"/apps",external:false,active:platformActive,label:t("web.label.platform"),icon:<LayoutGrid className="w-5 h-5"/>},
-    ...railApps.map(app=>({id:app.id,href:app.path,external:!!app.externalUrl,active:selected?.id===app.id,label:app.name,icon:iconMap[app.icon]||<Package className="w-5 h-5"/>})),
+    ...railApps.map(app=>({id:app.id,href:app.path,external:!!app.externalUrl,active:selected?.id===app.id,label:app.name,icon:<MenuIcon name={app.icon} className="w-5 h-5"/>})),
   ];
   const hasMobileMore=mobileAppTabs.length>5;
   const primaryMobileTabs=hasMobileMore?mobileAppTabs.slice(0,4):mobileAppTabs;
@@ -295,7 +256,7 @@ export default function Layout({children}:{children:React.ReactNode}){
         and so the labels stay in the seven languages the module declares. */}
     {organisation?.menus.filter(item=>item.path).map(item=>
       <NavLink key={item.id} href={item.path!} active={item.path===pathname}
-        icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}
+        icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>)}
   </MenuGroup><MenuGroup id={PLATFORM_GROUPS.settings} title={t("web.group.settings")} closed={closedGroups.includes(PLATFORM_GROUPS.settings)} onToggle={toggleGroup}>
     {/* Under Settings, where its screen already lives: /settings/apps is what
         the address bar says, and a sidebar that files it under Modules asks
@@ -328,12 +289,12 @@ export default function Layout({children}:{children:React.ReactNode}){
   // web тал аль хэдийн мэддэг.
   if(workAreaOnly)return <div className="gerege-shell gerege-workarea h-screen flex flex-col overflow-hidden">
     <ImpersonationBanner active={!!user?.impersonated}/>
-    <RibbonBar selected={selected} brandTitle={brandTitle} user={user} setShellSearchOpen={setShellSearchOpen} iconMap={iconMap} t={t} onLogout={logout} />
+    <RibbonBar selected={selected} brandTitle={brandTitle} user={user} setShellSearchOpen={setShellSearchOpen} t={t} onLogout={logout} />
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <div className="gerege-sidebar bottom-0 left-0 z-40 flex overflow-hidden is-desktop-open">
         <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
-          {railApps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+          {railApps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={<MenuIcon name={app.icon} className="w-5 h-5"/>}/>) }
         </nav>
         <aside className="gerege-menu-panel overflow-hidden">
           <div className="w-56 py-4"><nav className="space-y-1 px-2">
@@ -353,7 +314,7 @@ export default function Layout({children}:{children:React.ReactNode}){
             if(e.key==="Enter"&&results[0]){router.push(results[0].path);setShellSearchOpen(false);setQuery("")}
           }} placeholder={t("web.view.search_placeholder")} className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)]"/>
         </div>
-        {results.length>0&&<div className="mt-2 space-y-0.5">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setShellSearchOpen(false);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
+        {results.length>0&&<div className="mt-2 space-y-0.5">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setShellSearchOpen(false);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{<MenuIcon name={item.icon} className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
       </div>
     </div>}
     <AICopilot/>
@@ -371,11 +332,11 @@ export default function Layout({children}:{children:React.ReactNode}){
         {theme.design==="gerege"?<img src={brand.logoUrl} width={36} height={36} alt={brand.name} className="w-9 h-9 rounded-lg shadow-sm"/>:<span className="original-brand-mark w-9 h-9 rounded-lg grid place-items-center"><Building2 className="w-6 h-6"/></span>}
       </TenantSwitcher>
       <div className={`gerege-header-context h-full flex items-center gap-3 overflow-hidden transition-all duration-200 ${panelOpen?"is-open":""}`}>
-        <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(iconMap[selected.icon]||<Package className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
+        <span className="shrink-0 text-[var(--gerege-blue)]">{selected?(<MenuIcon name={selected.icon} className="w-5 h-5"/>):<LayoutGrid className="w-5 h-5"/>}</span>
         <span className="min-w-0"><small className="block text-[11px] leading-4 text-slate-500 truncate">{brand.name}</small><strong className="block text-[15px] leading-5 text-slate-900 truncate">{brandTitle}</strong></span>
       </div>
       <div className="gerege-menu-toggle h-full shrink-0 flex items-center justify-center gap-1">
-        <button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={t("web.action.toggle_menu")} aria-expanded={mobileOpen}><MenuIcon className="w-5 h-5"/></button>
+        <button onClick={togglePanel} className="grid place-items-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-50" aria-label={t("web.action.toggle_menu")} aria-expanded={mobileOpen}><HamburgerIcon className="w-5 h-5"/></button>
         {/* Beside the control that opens the panel, because it acts on what
             that panel contains. Icon-only: the words fit in a 14rem column,
             not in a header cell next to the menu button. */}
@@ -389,7 +350,7 @@ export default function Layout({children}:{children:React.ReactNode}){
       <div className="hidden lg:flex items-center gap-2 px-4 min-w-0"><span className="gerege-session-dot w-2 h-2 rounded-full shrink-0"/><strong className="text-base text-slate-800 font-semibold truncate max-w-56">{user?.tenant_name||"Demo Tenant"}</strong></div>
       <div className="gerege-header-search hidden md:flex flex-1 items-center justify-center min-w-0 px-5 relative">
         <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&results[0]){router.push(results[0].path);setQuery("")}}} placeholder={t("web.view.search_placeholder")} className="w-full h-10 rounded-full border border-slate-200 bg-slate-100/80 pl-10 pr-4 text-sm outline-none focus:border-[var(--gerege-blue)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--gerege-blue)_15%,transparent)]"/>
-          {results.length>0&&<div className="gerege-topbar-onlight absolute top-12 inset-x-0 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{iconMap[item.icon]||<Search className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
+          {results.length>0&&<div className="gerege-topbar-onlight absolute top-12 inset-x-0 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-[70]">{results.map(item=><button key={item.path} onClick={()=>{router.push(item.path);setQuery("")}} className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--gerege-surface-2)]"><span className="text-[var(--gerege-blue)]">{<MenuIcon name={item.icon} className="w-4 h-4"/>}</span><span className="min-w-0"><strong className="block text-sm truncate">{item.label}</strong><small className="text-slate-500 truncate">{item.app}</small></span></button>)}</div>}
         </div>
       </div>
       {/* Профайл нь аватарын цэсэн дотор. Толгой хэсэгт тусдаа товч байсныг
@@ -404,7 +365,7 @@ export default function Layout({children}:{children:React.ReactNode}){
       <div className={`gerege-sidebar top-16 bottom-0 left-0 z-40 flex overflow-hidden ${mobileOpen?"is-mobile-open":""} ${panelOpen?"is-desktop-open":""}`}>
         <nav className="w-16 min-w-16 shrink-0 py-3 flex flex-col items-center gap-2 border-r border-[var(--gerege-border)]">
           <AppRailLink href="/apps" active={platformActive} title={t("web.label.platform")} icon={<LayoutGrid className="w-5 h-5"/>}/>
-          {railApps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={iconMap[app.icon]||<Package className="w-5 h-5"/>}/>) }
+          {railApps.map(app=><AppRailLink key={app.id} href={app.path} external={!!app.externalUrl} active={selected?.id===app.id} title={app.name} icon={<MenuIcon name={app.icon} className="w-5 h-5"/>}/>) }
         </nav>
         <aside className="gerege-menu-panel overflow-hidden">
           <div className="w-56 py-4">
@@ -436,7 +397,6 @@ function RibbonBar({
   brandTitle,
   user,
   setShellSearchOpen,
-  iconMap,
   t,
   onLogout,
 }: {
@@ -444,7 +404,6 @@ function RibbonBar({
   brandTitle: string;
   user: any;
   setShellSearchOpen: (open: boolean) => void;
-  iconMap: Record<string, React.ReactNode>;
   t: (key: any) => string;
   onLogout: () => void;
 }) {
@@ -453,7 +412,7 @@ function RibbonBar({
     <div className="gerege-ribbon h-10 shrink-0 border-b border-[var(--gerege-border)] bg-[var(--gerege-chrome)] px-4 flex items-center justify-between text-xs z-30 select-none">
       <div className="flex items-center gap-2.5 min-w-0">
         <span className="text-[var(--gerege-blue)] shrink-0">
-          {selected ? (iconMap[selected.icon] || <Package className="w-4 h-4" />) : <LayoutGrid className="w-4 h-4" />}
+          {selected ? (<MenuIcon name={selected.icon} className="w-4 h-4"/>) : <LayoutGrid className="w-4 h-4" />}
         </span>
         <div className="flex items-center gap-1.5 text-xs min-w-0">
           <span className="font-bold text-slate-800 dark:text-slate-100">{brand.name}</span>
@@ -598,8 +557,8 @@ function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];
   // what the other entries claim.
   const here=currentPath(pathname,menus.map(item=>item.path||""));
   return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
-  ?<NavLink key={item.id} href={item.path} active={item.path===here} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>
-  :<ExternalNavLink key={item.id} href={item.external_url!} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
+  ?<NavLink key={item.id} href={item.path} active={item.path===here} icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>
+  :<ExternalNavLink key={item.id} href={item.external_url!} icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
 
 /**
  * The banner an operator's borrowed session wears.

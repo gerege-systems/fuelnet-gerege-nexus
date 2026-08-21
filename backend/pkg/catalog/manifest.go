@@ -70,6 +70,28 @@ type Manifest struct {
 	// catalogue is assembled. It is not authored here — see chronicle.go.
 	ReleaseNotes *ReleaseNote `json:"release_notes,omitempty"`
 
+	// Order is where this app sits in the shell's app rail. Lower comes first;
+	// an app that does not say goes after the ones that do, in id order.
+	//
+	// Optional, and optional on purpose: most apps have no opinion, and a
+	// deployment with four apps does not need four numbers. What it replaces is
+	// a list of app ids written into frontend/components/Layout.tsx, which no
+	// app outside this repository could add itself to.
+	Order int `json:"order,omitempty"`
+	// Chrome marks an app the shell presents as part of itself rather than as a
+	// tile in the app rail: its screens appear in the platform's own menu group.
+	//
+	// One app uses it — the organisation — and the reason is that it is not one
+	// of the things installed into an organisation, it *is* the organisation you
+	// are signed in to. Drawn as a tile, clicking one of its screens selected it
+	// as the current app and replaced the whole sidebar, so the menu you clicked
+	// in disappeared under you.
+	//
+	// Only a module may claim it. An external app runs somewhere else and is
+	// reached by handing the user over; presenting it as part of this shell
+	// would be a claim the platform cannot keep.
+	Chrome bool `json:"chrome,omitempty"`
+
 	// Visibility is who may be offered this app: every platform, or only the
 	// ones the registry has been told to offer it to.
 	//
@@ -226,12 +248,19 @@ func ValidateManifest(m Manifest, platformVersion string) error {
 			m.ID, m.Visibility, VisibilityPublic, VisibilityPrivate)
 	}
 
+	if m.Order < 0 {
+		return fmt.Errorf("app %s declares a negative rail order %d", m.ID, m.Order)
+	}
+
 	switch m.Type {
 	case "", TypeModule:
 		if m.External != nil {
 			return fmt.Errorf("app %s is a module but carries an external section", m.ID)
 		}
 	case TypeExternal:
+		if m.Chrome {
+			return fmt.Errorf("external app %s cannot be shell chrome; it runs somewhere else", m.ID)
+		}
 		if m.External == nil || m.External.LaunchURL == "" {
 			return fmt.Errorf("external app %s must declare external.launch_url", m.ID)
 		}

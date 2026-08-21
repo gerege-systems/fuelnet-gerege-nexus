@@ -20,6 +20,7 @@ import {
   History,
   Lock,
 } from "lucide-react";
+import { MenuIcon } from "@/lib/icons";
 
 interface AppItem {
   id: string;
@@ -39,6 +40,9 @@ interface AppItem {
   update_available: boolean;
   manifest: {
     dependencies?: Array<{ id: string; version_constraint: string }>;
+    // What the app registers in the sidebar. Read here for the first entry's
+    // icon, which is the app's own answer to what it looks like.
+    menus?: Array<{ icon?: string }>;
     // The chronicle entry for the version being offered. Its summary is the
     // one sentence that makes an update a decision rather than a badge.
     release_notes?: ManifestReleaseNotes;
@@ -58,11 +62,18 @@ const releaseTone: Partial<Record<NonNullable<ReleaseKind>, string>> = {
   security: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
-const appIcons: Record<string, React.ReactNode> = {
-  contacts: <Users className="w-8 h-8 text-indigo-500" />,
-  products: <Package className="w-8 h-8 text-emerald-500" />,
-  inventory: <Boxes className="w-8 h-8 text-amber-500" />,
-};
+
+/**
+ * An app's icon in the store, from the app's own manifest.
+ *
+ * There used to be a table here mapping three slugs to three icons. All three —
+ * contacts, products, inventory — had left for business-gerege-nexus, so every
+ * app in this catalogue already rendered the fallback and the table drew
+ * nothing at all. An app's icon is the app's to declare, and it already does:
+ * the first menu entry it registers names one, and that is the icon the sidebar
+ * draws it with too.
+ */
+const appIcon = (app: AppItem) => app.manifest?.menus?.find((m) => m.icon)?.icon || "boxes";
 
 /**
  * How the catalogue is laid out.
@@ -419,7 +430,7 @@ export default function AppStorePage() {
           {filteredApps.map((app) => (
             <div key={app.id} className="p-4 flex flex-wrap items-center gap-4">
               <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 shrink-0">
-                {appIcons[app.slug] || <Boxes className="w-8 h-8 text-indigo-500" />}
+                <MenuIcon name={appIcon(app)} className="w-8 h-8 text-indigo-500" />
               </div>
               {/* min-w-0 so the description truncates instead of pushing the
                   buttons off the end of the row. */}
@@ -462,7 +473,7 @@ export default function AppStorePage() {
               <div>
                 <div className="flex items-start justify-between mb-3">
                   <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                    {appIcons[app.slug] || <Boxes className="w-8 h-8 text-indigo-500" />}
+                    <MenuIcon name={appIcon(app)} className="w-8 h-8 text-indigo-500" />
                   </div>
                   {renderChips(app)}
                 </div>
