@@ -396,3 +396,54 @@ type StateRail struct {
 // wired to can change while it is running, and a snapshot would be wrong from
 // the moment it was taken.
 type StateRails func() []StateRail
+
+// ------------------------------------------------------------- rate limiting
+
+// RateLimit is a per-caller rate limit, as middleware.
+//
+// Published because every module that exposes something expensive needs one and
+// none of them should write it: a limiter written per app is a limiter that
+// counts per app, so five apps behind one gateway enforce five separate budgets
+// and the deployment has none.
+//
+// The platform's own implementation is installed by the platform;
+// a deployment that installs none gets middleware that limits nothing rather
+// than a nil panic, because a missing limiter must not take the route down.
+func RateLimit(perMinute float64, burst int) func(http.Handler) http.Handler {
+	limiter, err := Capability[RateLimiter]()
+	if err != nil {
+		slog.Warn("nexus: this deployment provides no rate limiter; the route is unlimited",
+			"per_minute", perMinute, "burst", burst)
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return limiter.Limit(perMinute, burst)
+}
+
+// RateLimiter is what the platform installs for RateLimit to use.
+type RateLimiter interface {
+	// Limit returns middleware admitting perMinute requests per caller, with
+	// burst allowed above the average.
+	Limit(perMinute float64, burst int) func(http.Handler) http.Handler
+}
+
+// ------------------------------------------------------------------- metrics
+
+// SignatureCounter counts signatures for the deployment's metrics.
+//
+// A module cannot import the platform's Prometheus registry — it is under
+// internal/, and a module that could would be able to declare a metric with a
+// tenant label, which is the one thing observability refuses. So the platform
+// keeps the collector and publishes the act.
+type SignatureCounter interface {
+	// Signed records one signature attempt on a named rail.
+	Signed(rail string, ok bool)
+}
+
+// RecordSigned counts one signature attempt, if this deployment is counting.
+// Silent when nothing is: a metric that cannot be recorded must not fail the
+// signature it is describing.
+func RecordSigned(rail string, ok bool) {
+	if counter, err := Capability[SignatureCounter](); err == nil {
+		counter.Signed(rail, ok)
+	}
+}

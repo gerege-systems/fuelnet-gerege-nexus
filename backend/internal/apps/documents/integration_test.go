@@ -67,7 +67,7 @@ func newFixture(t *testing.T) *fixture {
 
 	pool := testPool(t)
 	signer := newFakeSigner()
-	m := &DocumentsModule{db: pool, eidSvc: eid.NewEIDService(), danSvc: dan.NewDANService(), signer: signer}
+	m := &DocumentsModule{db: pool, eidSvc: eid.AsSigner(eid.NewEIDService()), danSvc: dan.AsAuthenticator(dan.NewDANService()), signer: signer}
 
 	var tenantID string
 	slug := fmt.Sprintf("docs-test-%s", randomSuffix(t))
@@ -1803,7 +1803,7 @@ func TestAnUnreachableDANIsProviderTroubleNotARejection(t *testing.T) {
 	// The same module, against a DAN service in the shape production runs it: no mock,
 	// so no gateway.
 	t.Setenv("DAN_MOCK_MODE", "false")
-	live := &DocumentsModule{db: f.m.db, eidSvc: f.m.eidSvc, danSvc: dan.NewDANService()}
+	live := &DocumentsModule{db: f.m.db, eidSvc: f.m.eidSvc, danSvc: dan.AsAuthenticator(dan.NewDANService())}
 
 	_, err = live.SignWithDAN(ctx, f.tenantID, doc.ID, "AA90010111", "123456")
 	if !errors.Is(err, ErrProviderUnavailable) {

@@ -71,10 +71,14 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// built first and handed in rather than registering themselves: there is one
 	// app here now, and only one thing may answer for io.gerege.nexus.documents.
 	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
+	// Published rather than handed to documents. The rail is the platform's —
+	// ADR 0002 is about why there is exactly one — and where its routes appear
+	// is the app's; a parameter made the app unable to be built anywhere else.
+	nexus.Provide[nexus.SigningRails](esignModule)
 	// The signing rail, as the SDK publishes it. A document that carries a file
 	// is signed over that file's digest through this; one that carries nothing
 	// is approved on the sign-in rail as before. See ADR 0003.
-	documents.New(p, esignModule, signer)
+	documents.New(p, signer)
 	sso_clients.New(sso)
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module
