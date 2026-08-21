@@ -51,8 +51,6 @@ func Bootstrap(p nexus.Platform) Runtime {
 	integrations := required[*integration.Manager]()
 	eidMN := required[*eidmongolia.Service]()
 	sso := required[*ssoprovider.SSOProvider]()
-	xyp := required[*gerege.GeregeService]()
-	rails := required[nexus.StateRails]()
 	link := required[nexus.Link]()
 	signer := required[nexus.Signer]()
 	installedApps := required[InstalledApps]()
@@ -68,7 +66,7 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// The state's systems, as an app rather than as two handlers in the
 	// platform's route table. The low-level clients stay where they are; this
 	// is their app-facing surface, and the thing contacts reaches through.
-	egov.New(p, xyp, rails)
+	egov.New(p)
 	// The documents app and the PDF signing rails it absorbed. The rails are
 	// built first and handed in rather than registering themselves: there is one
 	// app here now, and only one thing may answer for io.gerege.nexus.documents.

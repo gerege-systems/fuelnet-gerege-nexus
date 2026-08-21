@@ -26,6 +26,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
@@ -242,6 +243,13 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	nexus.Provide(eidMN)
 	nexus.Provide(ssoProvider)
 	nexus.Provide(geregeSvc)
+	// The state's registers and the audit trail, as contracts rather than as
+	// this repository's types. Both were reached for by internal/apps/egov —
+	// one through *gerege.GeregeService in a struct field, the other through
+	// its own SQL over audit_events — and both were the reason that module
+	// could not be compiled anywhere else.
+	nexus.Provide[nexus.StateRegistry](gerege.AsStateRegistry(geregeSvc))
+	nexus.Provide[nexus.AuditReader](audit.AsReader(db))
 	// What this deployment is wired to. Read per call rather than captured as a
 	// snapshot, and assembled here because this is the only place all three
 	// clients are in scope. The shape is staterail's, not the app's: the

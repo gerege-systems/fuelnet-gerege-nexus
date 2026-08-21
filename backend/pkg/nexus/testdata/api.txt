@@ -5,11 +5,31 @@
   AssistantTool.Description string
   AssistantTool.Name string
   AssistantTool.Parameters map[string]any
+  AuditEntry.Action string
+  AuditEntry.At time.Time
+  AuditEntry.Details map[string]any
+  AuditEntry.UserID string
+  AuditReader.RecentByPrefix(ctx context.Context, tenantID string, prefixes []string, limit int) ([]AuditEntry, error)
+  CitizenRecord.Address string
+  CitizenRecord.CivilID string
+  CitizenRecord.FirstName string
+  CitizenRecord.Gender string
+  CitizenRecord.LastName string
+  CitizenRecord.PassportStatus string
+  CitizenRecord.RegNumber string
+  CitizenRecord.Verified bool
   ColumnSpec.Chart ChartRole
   ColumnSpec.Key string
   ColumnSpec.Kind ColumnKind
   ColumnSpec.Titles map[string]string
   ColumnSpec.Total bool
+  CompanyRecord.Address string
+  CompanyRecord.CompanyReg string
+  CompanyRecord.Executive string
+  CompanyRecord.FoundingDate string
+  CompanyRecord.Name string
+  CompanyRecord.Status string
+  CompanyRecord.VatPayer bool
   DB.Begin(ctx context.Context) (pgx.Tx, error)
   DB.BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
   DB.Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
@@ -128,6 +148,8 @@
   StateRail.ID string
   StateRail.Mode string
   StateRail.Name string
+  StateRegistry.Citizen(ctx context.Context, regNumber string) (*CitizenRecord, error)
+  StateRegistry.Company(ctx context.Context, companyReg string) (*CompanyRecord, error)
   UserClaims.AllowedTenantIDs []string
   UserClaims.Email string
   UserClaims.Impersonated bool
@@ -174,6 +196,7 @@ func (SignatureState) Settled() bool
 func AllowedTenants(ctx context.Context) []string
 func AssistantToolset() []AssistantTool
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
+func AuditHistory() (AuditReader, error)
 func Capability[T any]() (T, error)
 func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error)
 func Documents() (DocumentFiler, error)
@@ -199,6 +222,7 @@ func RequirePermission(store PermissionStore, permissionCode string) func(http.H
 func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool)
 func Ring() (Link, error)
 func RoutePermissionPrefixOf(m Module) string
+func StateRegistryOf() (StateRegistry, error)
 func TenantID(ctx context.Context) (string, error)
 func TenantOf(ctx context.Context) string
 func TimezoneName() string
@@ -216,10 +240,14 @@ func WithoutTenant(ctx context.Context) context.Context
 type AccessPolicy interface
 type AssistantSource interface
 type AssistantTool struct
+type AuditEntry struct
+type AuditReader interface
 type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 type ChartRole string
+type CitizenRecord struct
 type ColumnKind string
 type ColumnSpec struct
+type CompanyRecord struct
 type DB interface
 type Dependency struct
 type DocumentDraft struct
@@ -254,6 +282,7 @@ type SignedDocument struct
 type Signer interface
 type StateRail struct
 type StateRails func() []StateRail
+type StateRegistry interface
 type UserClaims struct
 var ErrForbidden
 var ErrNoDocumentFiler

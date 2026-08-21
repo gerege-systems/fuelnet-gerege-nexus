@@ -88,8 +88,18 @@ func newFixture(t *testing.T) *fixture {
 	rails := func() []nexus.StateRail {
 		return []nexus.StateRail{{ID: "xyp", Name: "ХУР", Mode: "mock", Endpoint: "https://xyp.example.invalid"}}
 	}
-	module := egov.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)),
-		gerege.NewGeregeService(), rails)
+	// Provided rather than handed in, which is the change: the module asks the
+	// platform for the state's registers and for the audit trail, so a test
+	// stands them up the same way a deployment does.
+	nexus.Provide[nexus.StateRegistry](gerege.AsStateRegistry(gerege.NewGeregeService()))
+	nexus.Provide[nexus.StateRails](rails)
+	nexus.Provide[nexus.AuditReader](audit.AsReader(pool))
+	t.Cleanup(func() {
+		nexus.Provide[nexus.StateRegistry](nil)
+		nexus.Provide[nexus.StateRails](nil)
+		nexus.Provide[nexus.AuditReader](nil)
+	})
+	module := egov.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
 
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {
@@ -125,7 +135,7 @@ func (f *fixture) do(t *testing.T, method, target, body string) *httptest.Respon
 func TestTheRegistryLookupsAreNotHandedToEveryMember(t *testing.T) {
 	// No database and no permission store: this test reads what the module
 	// declares, which it does before it is wired to anything.
-	module := egov.New(nexus.NewPlatform(nil, nil), nil, nil)
+	module := egov.New(nexus.NewPlatform(nil, nil))
 
 	byCode := map[string]nexus.PermissionDefinition{}
 	for _, permission := range module.Permissions() {
