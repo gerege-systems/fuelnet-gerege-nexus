@@ -46,7 +46,10 @@ const CHECK = process.argv.includes("--check");
 async function walk(dir, suffixes) {
   const found = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === ".next" || entry.name === ".git") continue;
+    // testdata is skipped for the same reason the Go toolchain skips it: what
+    // is in there is a fixture, and backend/testdata/canary declares menus of
+    // its own. A test distribution must not put an icon in the shipped bundle.
+    if (["node_modules", ".next", ".git", "testdata"].includes(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) found.push(...(await walk(full, suffixes)));
     else if (suffixes.some((s) => entry.name.endsWith(s))) found.push(full);
