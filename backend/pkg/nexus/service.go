@@ -300,15 +300,18 @@ func RequirePermission(store PermissionStore, permissionCode string) func(http.H
 // see UseAuditSink.
 type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 
-var auditSink AuditSink
-
 // UseAuditSink installs the platform's audit recorder.
 //
 // It is a sink rather than an interface a module holds because an audit row is
 // not a service a module may decline to use: everything that records one should
 // reach the same table, and a module that was handed a recorder could be
 // constructed without one.
-func UseAuditSink(sink AuditSink) { auditSink = sink }
+//
+// Deprecated: use Provide[AuditSink] instead. This is a wrapper over it and
+// behaves identically, including UseAuditSink(nil) to withdraw. It stays for
+// one major version so a distribution pinned to v1 keeps compiling, and goes in
+// v2 — see docs/RELEASING.md.
+func UseAuditSink(sink AuditSink) { Provide[AuditSink](sink) }
 
 // Audit records that something happened, for the log that answers "who read my
 // data".
@@ -317,12 +320,13 @@ func UseAuditSink(sink AuditSink) { auditSink = sink }
 // describing. With no sink installed the event is logged and dropped, which is
 // what happens in a test that constructs a module without a platform.
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any) {
-	if auditSink == nil {
+	sink, err := Capability[AuditSink]()
+	if err != nil {
 		slog.Info("AUDIT_EVENT_UNSUNK", "tenant_id", tenantID, "user_id", userID,
 			"action", action, "resource", resource)
 		return
 	}
-	auditSink(ctx, tenantID, userID, action, resource, details)
+	sink(ctx, tenantID, userID, action, resource, details)
 }
 
 // -------------------------------------------------------------------- wiring
