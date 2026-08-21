@@ -42,6 +42,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
@@ -258,6 +259,10 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	nexus.Provide[nexus.DANAuthenticator](dan.AsAuthenticator(danSvc))
 	nexus.Provide[nexus.RateLimiter](security.AsRateLimiter())
 	nexus.Provide[nexus.SignatureCounter](observability.AsSignatureCounter())
+	// The report engine, as six methods rather than as fifteen package
+	// functions. See pkg/nexus/reportengine.go for why the three-step ones are
+	// one call.
+	nexus.Provide[nexus.ReportEngine](reporting.AsEngine(reporting.NewEngine(db)))
 	// What this deployment is wired to. Read per call rather than captured as a
 	// snapshot, and assembled here because this is the only place all three
 	// clients are in scope. The shape is staterail's, not the app's: the
