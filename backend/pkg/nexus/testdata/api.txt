@@ -88,6 +88,7 @@
   ParamSpec.Titles map[string]string
   PermissionDefinition.AdminOnly bool
   PermissionDefinition.Code string
+  PermissionDefinition.DefaultRoles []string
   PermissionDefinition.Description string
   PermissionDefinition.Name string
   PermissionStore.GetUserPermissions(ctx context.Context, tenantID, userID string) (map[string]bool, error)
@@ -139,6 +140,8 @@ const ColumnMonth
 const ColumnNumber
 const ColumnPercent
 const ColumnText
+const DefaultRoleManager
+const DefaultRoleUser
 const DefaultTimezone
 const ParamBool
 const ParamDateRange
@@ -161,6 +164,7 @@ func (Params) Raw() map[string]any
 func (Params) String(key string) string
 func (Params) Time(key string) time.Time
 func (Params) UUID(key string) string
+func (PermissionDefinition) Validate() error
 func (SignatureState) Settled() bool
 func AllowedTenants(ctx context.Context) []string
 func AssistantToolset() []AssistantTool
