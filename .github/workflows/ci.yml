@@ -267,6 +267,29 @@ jobs:
             echo "::error::tenant isolation tests skipped — TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
+      - name: Fail if the module migration tests were skipped
+        # A module bringing its own schema is the whole of Үе 3, and nothing
+        # else exercises it: no app has moved out of db/migrations yet. Skipped,
+        # the mechanism ships with no evidence it works.
+        run: |
+          go test -run 'TestAModuleBringsItsOwnSchemaAndItsOwnHistory' -v \
+            ./internal/platform/appinstaller/ | tee /tmp/modmigrate.log
+          if grep -q -- '--- SKIP' /tmp/modmigrate.log; then
+            echo "::error::module migration tests skipped — TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
+      - name: Fail if the tenant policy shape test was skipped
+        # Which tables a multi-organisation session can read across, and which
+        # ones it cannot. Both shapes are correct somewhere and only one is
+        # correct per table; skipped, a new table takes whichever its neighbour
+        # had and nothing says so.
+        run: |
+          go test -run 'TestTenantPoliciesHaveTheShapeOnRecord' -v \
+            ./internal/platform/tenant/ | tee /tmp/policyshape.log
+          if grep -q -- '--- SKIP' /tmp/policyshape.log; then
+            echo "::error::tenant policy shape test skipped — TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
       - name: Fail if the reporting isolation tests were skipped
         # A report is a query somebody else wrote against tables the platform
         # keeps a tenant apart in. The test that matters proves a report which
