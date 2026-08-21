@@ -372,7 +372,22 @@ func TenantOf(ctx context.Context) string {
 	return tenantID
 }
 
-// ReportScopeFull names the grant that lets one organisation run a report over
-// another's rows in full. Declared here so a module can say which scopes its
-// report supports.
-const ReportScopeFull = "full"
+// The grants a report may opt into, named here so a module can say which of
+// them it supports.
+//
+// ReportScopeFull was declared and its twin was not, which left half the
+// vocabulary inside internal/platform/reporting: a module could say "full" and
+// could not say "counterparty", and could not say "not counterparty" either.
+// Declaring an interface in internal types makes it an internal interface
+// however carefully it was inverted (see meetings.go); declaring half its
+// vocabulary there does the same to the half that is missing.
+const (
+	// ReportScopeFull is the hierarchical case: a parent organisation
+	// consolidating its subordinates' rows.
+	ReportScopeFull = "full"
+	// ReportScopeCounterparty is the contracted-parties case: one organisation
+	// seeing only the rows that name it. A report with nothing in it that
+	// identifies a counterparty must not offer this — a grant asking for it
+	// would quietly become a view of everything.
+	ReportScopeCounterparty = "counterparty"
+)

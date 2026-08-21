@@ -62,6 +62,7 @@ Spanish) — seven in total.
 | [`adr/0001-domain-first.md`](adr/0001-domain-first.md) | MN | Домэйн эхэнд: аппын дүрэм платформоо мэдэхгүй — хэрэгжилт, хоёр хойшлуулалт, дөрвөн дүрэм |
 | [`adr/0002-one-signing-rail.md`](adr/0002-one-signing-rail.md) | MN | Гарын үсгийн зам нэг (`eidmongolia`), ба «гарын үсэг» гэдэг үг хоёр зүйлийг нэрлэж байсан нь |
 | [`adr/0003-a-document-carries-what-is-signed.md`](adr/0003-a-document-carries-what-is-signed.md) | MN | Баримт файлаа авч явна; гурван хэлбэр — pades, detached, approval |
+| [`adr/0004-a-pilot-that-did-not-ship.md`](adr/0004-a-pilot-that-did-not-ship.md) | MN | Өртөө яагаад өнөөдөр distribution болж гарахгүй вэ — гурван хэмжсэн саад ба тэдгээрийн дараалал |
 | [`SHELL_CONTRACT.md`](SHELL_CONTRACT.md) | MN | Native бүрхүүл ба web ажлын мужийн `window.GeregeShell` гэрээ |
 | [`NATIVE_LOGIN_SPEC.md`](NATIVE_LOGIN_SPEC.md) | MN | Swift, C#, Kotlin клиентүүдийн нэвтрэлтийн зан төлөв |
 | [`NATIVE_SETTINGS_SPEC.md`](NATIVE_SETTINGS_SPEC.md) | MN | Бүрхүүл, төхөөрөмж, peripheral, fleet тохиргоо |

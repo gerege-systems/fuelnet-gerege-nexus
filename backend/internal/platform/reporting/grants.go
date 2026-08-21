@@ -28,7 +28,7 @@ const (
 	// ScopeCounterparty is the contracted-parties case: a mine seeing the
 	// transport company's rows *that relate to the mine*, and nothing else.
 	// The report is handed the counterparty reference and filters on it.
-	ScopeCounterparty = "counterparty"
+	ScopeCounterparty = nexus.ReportScopeCounterparty
 	// ScopeFull is the hierarchical case: a parent organisation consolidating
 	// a subsidiary it owns. The whole report, unfiltered.
 	ScopeFull = nexus.ReportScopeFull

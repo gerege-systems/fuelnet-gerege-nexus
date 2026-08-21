@@ -149,6 +149,7 @@ const ParamSelect
 const ParamText
 const ParamUUID
 const ReportCounterpartyKey
+const ReportScopeCounterparty
 const ReportScopeFull
 const SignatureCompleted
 const SignatureExpired

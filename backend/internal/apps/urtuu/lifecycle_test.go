@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	transport "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
@@ -640,15 +639,29 @@ func TestTheThreeReportsRun(t *testing.T) {
 	// Sharing is opt-in per scope. A report that cannot filter by counterparty
 	// must not offer to — a grant asking for it would otherwise quietly become
 	// a view of every subordinate.
+	// Asked of the report rather than of the platform's reporting package. The
+	// opt-in is a method the report declares, so a module outside this
+	// repository can make it — and this test can check it — without reaching
+	// into internal/platform. See docs/adr/0004-a-pilot-that-did-not-ship.md.
 	for _, report := range []nexus.Report{taskCompletion{}, slaBreaches{}, channelLoad{}} {
-		if !reporting.SupportsScope(report, reporting.ScopeFull) {
+		scopes := report.(interface{ Scopes() []string }).Scopes()
+		if !contains(scopes, nexus.ReportScopeFull) {
 			t.Errorf("%s cannot be shared at all", report.Key())
 		}
-		if reporting.SupportsScope(report, reporting.ScopeCounterparty) {
+		if contains(scopes, nexus.ReportScopeCounterparty) {
 			t.Errorf("%s offers counterparty scope, and nothing in a task carries a counterparty reference",
 				report.Key())
 		}
 	}
+}
+
+func contains(list []string, want string) bool {
+	for _, item := range list {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------- evidence
