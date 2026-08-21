@@ -10,6 +10,8 @@
   AuditEntry.Details map[string]any
   AuditEntry.UserID string
   AuditReader.RecentByPrefix(ctx context.Context, tenantID string, prefixes []string, limit int) ([]AuditEntry, error)
+  CeremonyState.Identity *SignerIdentity
+  CeremonyState.State string
   CitizenRecord.Address string
   CitizenRecord.CivilID string
   CitizenRecord.FirstName string
@@ -30,6 +32,16 @@
   CompanyRecord.Name string
   CompanyRecord.Status string
   CompanyRecord.VatPayer bool
+  DANAuthenticator.AuthenticateCitizen(ctx context.Context, regNumber, otpCode string) (*DANCitizen, error)
+  DANAuthenticator.Mode() string
+  DANCitizen.CivilID string
+  DANCitizen.Email string
+  DANCitizen.FirstName string
+  DANCitizen.LastName string
+  DANCitizen.MobileNumber string
+  DANCitizen.RegNumber string
+  DANCitizen.SessionID string
+  DANCitizen.VerifiedAt time.Time
   DB.Begin(ctx context.Context) (pgx.Tx, error)
   DB.BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
   DB.Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
@@ -46,6 +58,9 @@
   DocumentSignatureRequest.FullName string
   DocumentSignatureRequest.PDF []byte
   DocumentSignatureRequest.RegNumber string
+  EIDSigner.Mode() string
+  EIDSigner.Poll(ctx context.Context, sessionID string) (*CeremonyState, error)
+  EIDSigner.StartSignature(ctx context.Context, nationalID, displayText, callbackURL string) (*SignatureCeremony, error)
   FiledDocument.ID string
   FiledDocument.RequiredSignatures int
   FiledDocument.SignatureCount int
@@ -115,6 +130,7 @@
   Platform.DB() DB
   Platform.Permissions() PermissionStore
   Querier.Query(ctx context.Context, sql string, args ...any) (Rows, error)
+  RateLimiter.Limit(perMinute float64, burst int) func(http.Handler) http.Handler
   Report.App() string
   Report.Columns() []ColumnSpec
   Report.Key() string
@@ -129,6 +145,11 @@
   Rows.Err() error
   Rows.Next() bool
   Rows.Scan(dest ...any) error
+  SignatureCeremony.DeviceLinkURL string
+  SignatureCeremony.ExpiresAt string
+  SignatureCeremony.SessionID string
+  SignatureCeremony.VerificationCode string
+  SignatureCounter.Signed(rail string, ok bool)
   SignatureRequest.DigestHex string
   SignatureRequest.DisplayText string
   SignatureRequest.DocumentName string
@@ -144,6 +165,12 @@
   Signer.SignDocument(ctx context.Context, request DocumentSignatureRequest) (SignatureSession, error)
   Signer.SignedDocument(ctx context.Context, ownerRegNumber, sessionID string) (SignedDocument, error)
   Signer.VerifiedDigest(ctx context.Context, ownerRegNumber, sessionID string) (string, error)
+  SignerIdentity.CertificateIssuer string
+  SignerIdentity.CertificateSerial string
+  SignerIdentity.FirstName string
+  SignerIdentity.LastName string
+  SignerIdentity.RegNumber string
+  SigningRails.Mount(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler)
   StateRail.Endpoint string
   StateRail.ID string
   StateRail.Mode string
@@ -199,7 +226,9 @@ func Audit(ctx context.Context, tenantID, userID, action, resource string, detai
 func AuditHistory() (AuditReader, error)
 func Capability[T any]() (T, error)
 func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error)
+func DAN() (DANAuthenticator, error)
 func Documents() (DocumentFiler, error)
+func EID() (EIDSigner, error)
 func Error(w http.ResponseWriter, status int, message string)
 func Get(id string) (Module, bool)
 func JSON(w http.ResponseWriter, status int, value any)
@@ -216,12 +245,15 @@ func NewPlatform(db DB, permissions PermissionStore) Platform
 func Now() time.Time
 func ProvideAssistant(moduleID string, source AssistantSource)
 func Provide[T any](impl T)
+func RateLimit(perMinute float64, burst int) func(http.Handler) http.Handler
+func RecordSigned(rail string, ok bool)
 func Register(m Module)
 func RegisterReport(report Report)
 func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler
 func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool)
 func Ring() (Link, error)
 func RoutePermissionPrefixOf(m Module) string
+func SigningRailsOf() (SigningRails, error)
 func StateRegistryOf() (StateRegistry, error)
 func TenantID(ctx context.Context) (string, error)
 func TenantOf(ctx context.Context) string
@@ -243,16 +275,20 @@ type AssistantTool struct
 type AuditEntry struct
 type AuditReader interface
 type AuditSink func(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
+type CeremonyState struct
 type ChartRole string
 type CitizenRecord struct
 type ColumnKind string
 type ColumnSpec struct
 type CompanyRecord struct
+type DANAuthenticator interface
+type DANCitizen struct
 type DB interface
 type Dependency struct
 type DocumentDraft struct
 type DocumentFiler interface
 type DocumentSignatureRequest struct
+type EIDSigner interface
 type FiledDocument struct
 type Link interface
 type LinkMessage struct
@@ -271,20 +307,26 @@ type PermissionDefinition struct
 type PermissionStore interface
 type Platform interface
 type Querier interface
+type RateLimiter interface
 type Report interface
 type ReportSink func(Report)
 type Result struct
 type Rows interface
+type SignatureCeremony struct
+type SignatureCounter interface
 type SignatureRequest struct
 type SignatureSession struct
 type SignatureState string
 type SignedDocument struct
 type Signer interface
+type SignerIdentity struct
+type SigningRails interface
 type StateRail struct
 type StateRails func() []StateRail
 type StateRegistry interface
 type UserClaims struct
 var ErrForbidden
+var ErrIdentityRailUnavailable
 var ErrNoDocumentFiler
 var ErrNoLink
 var ErrPDFSigningUnavailable

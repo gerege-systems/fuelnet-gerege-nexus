@@ -250,6 +250,14 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// could not be compiled anywhere else.
 	nexus.Provide[nexus.StateRegistry](gerege.AsStateRegistry(geregeSvc))
 	nexus.Provide[nexus.AuditReader](audit.AsReader(db))
+	// The identity rails a module signs with, and the two platform services a
+	// module cannot build for itself: a rate limiter whose budget is shared
+	// across the deployment, and the signature counter, whose registry stays
+	// here so that no module can declare a metric with a tenant label.
+	nexus.Provide[nexus.EIDSigner](eid.AsSigner(eidSvc))
+	nexus.Provide[nexus.DANAuthenticator](dan.AsAuthenticator(danSvc))
+	nexus.Provide[nexus.RateLimiter](security.AsRateLimiter())
+	nexus.Provide[nexus.SignatureCounter](observability.AsSignatureCounter())
 	// What this deployment is wired to. Read per call rather than captured as a
 	// snapshot, and assembled here because this is the only place all three
 	// clients are in scope. The shape is staterail's, not the app's: the

@@ -23,17 +23,11 @@ import (
 	"time"
 
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"golang.org/x/time/rate"
 )
 
 // DocTypes enumerates the accepted document classifications. The column has no
@@ -133,8 +127,8 @@ type Document struct {
 
 type DocumentsModule struct {
 	db     nexus.DB
-	eidSvc *eid.EIDService
-	danSvc *dan.DANService
+	eidSvc nexus.EIDSigner
+	danSvc nexus.DANAuthenticator
 	// The interface rather than the concrete store, so the route table can be
 	// tested against a stub. What each route is checked against is the part of
 	// this module most easily changed by accident and least visible when it is.
@@ -144,8 +138,6 @@ type DocumentsModule struct {
 	// titleMatch: without one, a Cyrillic search is case-sensitive on a database
 	// initialised with LC_CTYPE=C, which is what the postgres:16-alpine image this
 	// stack deploys produces.
-	// signLimiter budgets the requests that reach a citizen's phone. See New.
-	signLimiter *security.IPRateLimiter
 
 	collationMu sync.Mutex
 	// collationKnown is set only when the answer is definitive. A failed probe must not
@@ -160,7 +152,7 @@ type DocumentsModule struct {
 	// means this deployment builds the module without them: the register, the
 	// approval chains and the record signing all work, and the PDF routes are
 	// simply not mounted.
-	pdf *esign.Rails
+	pdf nexus.SigningRails
 	// signer is the installation's qualified signing rail (nexus.Signer). A
 	// document that carries a file is signed over that file's digest through
 	// it; one that carries nothing is approved on the sign-in rail, which is a
@@ -195,16 +187,48 @@ const (
 )
 
 // pdf is the PDF signing rails, or nil on a deployment built without them.
-func New(p nexus.Platform, pdf *esign.Rails, signer nexus.Signer) *DocumentsModule {
+// identityRail is the rail this module signs on, or nil.
+//
+// Asked of the platform rather than constructed. It used to call
+// eid.NewEIDService() and dan.NewDANService() itself, which meant importing
+// two packages under internal/ — and building a second client beside the one
+// the platform already had, so a deployment in mock mode could have had one of
+// each.
+//
+// A deployment that provides neither leaves this module unable to start a
+// ceremony, which the handlers already report: signing was never guaranteed to
+// be available.
+func identityRail[T any](name string) T {
+	rail, err := nexus.Capability[T]()
+	if err != nil {
+		slog.Warn("documents: this deployment provides no signing rail", "rail", name, "error", err)
+	}
+	return rail
+}
+
+// signingRails is the PDF signing surface this deployment mounts, or nil.
+//
+// A deployment without it still runs the documents app: a document that carries
+// no file is approved on the sign-in rail, which is what ADR 0003 calls the
+// approval form. What it cannot do is sign a PDF, and the routes for that are
+// simply not mounted.
+func signingRails() nexus.SigningRails {
+	rails, err := nexus.SigningRailsOf()
+	if err != nil {
+		slog.Warn("documents: this deployment mounts no PDF signing rails", "error", err)
+	}
+	return rails
+}
+
+func New(p nexus.Platform, signer nexus.Signer) *DocumentsModule {
 	db := p.DB()
 	m := &DocumentsModule{
-		db:          db,
-		eidSvc:      eid.NewEIDService(),
-		danSvc:      dan.NewDANService(),
-		perms:       p.Permissions(),
-		signLimiter: security.NewIPRateLimiter(rate.Limit(float64(signPushRatePerMinute)/60.0), signPushBurst),
-		pdf:         pdf,
-		signer:      signer,
+		db:     db,
+		eidSvc: identityRail[nexus.EIDSigner]("eID"),
+		danSvc: identityRail[nexus.DANAuthenticator]("ДАН"),
+		perms:  p.Permissions(),
+		pdf:    signingRails(),
+		signer: signer,
 	}
 	nexus.Register(m)
 	// The capability, published for every other module — see filer.go. Done
@@ -357,16 +381,15 @@ func (m *DocumentsModule) RegisterRoutes(r chi.Router, tenantAuthMiddleware func
 		// watching would only lose approvals. DAN is a code the citizen reads out, so it
 		// pushes nothing, but it is budgeted with the same bucket because it is still an
 		// authentication attempt against a real person's credentials.
-		if m.signLimiter != nil {
-			dr.With(sign, security.RateLimitMiddleware(m.signLimiter)).
-				Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
-			dr.With(sign, security.RateLimitMiddleware(m.signLimiter)).
-				Post("/{id}/sign/dan", m.signWithDANHandler)
-		} else {
-			// A module built by hand in a test has no limiter; the routes still work.
-			dr.With(sign).Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
-			dr.With(sign).Post("/{id}/sign/dan", m.signWithDANHandler)
-		}
+		//
+		// One budget, shared by both routes: they are two ways to make the same
+		// demand on the same person. nexus.RateLimit returns pass-through
+		// middleware on a deployment that provides no limiter — a module built
+		// by hand in a test still routes, which is what the nil check here used
+		// to be for.
+		budget := nexus.RateLimit(float64(signPushRatePerMinute), signPushBurst)
+		dr.With(sign, budget).Post("/{id}/sign/eid/start", m.startEIDSignatureHandler)
+		dr.With(sign, budget).Post("/{id}/sign/dan", m.signWithDANHandler)
 		dr.With(sign).Post("/{id}/sign/eid/poll", m.pollEIDSignatureHandler)
 	})
 
@@ -806,8 +829,8 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 		return nil, err
 	}
 
-	profile, err := m.danSvc.AuthenticateDANCitizen(ctx, regNumber, otpCode)
-	if errors.Is(err, dan.ErrUnavailable) {
+	profile, err := m.danSvc.AuthenticateCitizen(ctx, regNumber, otpCode)
+	if errors.Is(err, nexus.ErrIdentityRailUnavailable) {
 		// The channel is not there, which is not the same as the citizen being refused.
 		// Answering 400 told an operator their signature had been rejected every time
 		// they picked DAN on a deployment without a live gateway — which is every
@@ -828,7 +851,7 @@ func (m *DocumentsModule) SignWithDAN(ctx context.Context, tenantID, docID, regN
 	signature := &verifiedSignature{
 		SignerName: strings.TrimSpace(profile.FirstName+" "+profile.LastName) + " (DAN баталгаажсан)",
 		RegNumber:  domain.NormaliseRegNumber(profile.RegNumber),
-		Hash:       "dan_sig_" + profile.DANSessionID,
+		Hash:       "dan_sig_" + profile.SessionID,
 	}
 
 	if err := checkSigner(pre.Position, pre.DocType, signature.RegNumber, pre.Policy.RequireNamedSigner); err != nil {
@@ -949,7 +972,7 @@ func (m *DocumentsModule) recordSignature(ctx context.Context, tenantID, docID, 
 	// documents_signed_total is counted. `method` is SignerEID or SignerDAN — a
 	// constant, never anything a request supplied.
 	doc, err := m.writeSignature(ctx, tenantID, docID, method, signature, sessionID)
-	observability.RecordDocumentSigned(method, err == nil)
+	nexus.RecordSigned(method, err == nil)
 	return doc, err
 }
 
