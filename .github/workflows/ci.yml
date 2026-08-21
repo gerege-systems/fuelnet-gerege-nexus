@@ -339,6 +339,14 @@ jobs:
       # early returns to survive editing.
       - name: Check the service worker caches nothing personal
         run: npm run pwa:check
+      # Warning mode, deliberately. 257 keys per language are untranslated
+      # today and this step is not the commit that fixes them — an untranslated
+      # key falls back to English, which is right at runtime and invisible in
+      # review. What it does catch as a failure is an orphaned translation and
+      # one filed under the wrong app, both of which are mistakes rather than
+      # backlog. The count is printed so it can be watched going the right way.
+      - name: Report the translation backlog
+        run: npm run i18n:check -- --warn
       - name: Build
         run: npm run build
 
