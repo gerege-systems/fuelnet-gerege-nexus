@@ -208,6 +208,18 @@ jobs:
             exit 1
           fi
 
+      - name: Fail if the seeded-role tests were skipped
+        # What a brand-new organisation's manager and user can do is decided by
+        # a trigger, not by Go, so nothing else observes it. It named five
+        # permissions belonging to an app that left this repository; skipped,
+        # a list like that can come back and no test would say so.
+        run: |
+          go test -run 'TestANewTenantsDefaultGrantsAreUnchanged' -v \
+            ./db/migrations/ | tee /tmp/seedroles.log
+          if grep -q -- '--- SKIP' /tmp/seedroles.log; then
+            echo "::error::seeded-role tests skipped — TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
       - name: Fail if the route policy test was skipped
         # This is the one that decides whether a route is reachable by a
         # stranger. Modules are handed the root router, so mounting a path

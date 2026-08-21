@@ -245,7 +245,25 @@ func (m *DocumentsModule) Permissions() []nexus.PermissionDefinition {
 	return []nexus.PermissionDefinition{
 		{Code: "documents.read", Name: "Read Documents", Description: "View documents, uploaded PDFs, signature status and the signature log"},
 		{Code: "documents.manage", Name: "Manage Documents", Description: "Create documents, upload PDFs, route them for approval, run signing batches, and configure templates, approval chains, signature policies, signing rails, stamp placement and retention rules"},
-		{Code: "documents.sign", Name: "Sign Documents", Description: "Apply an eID / DAN / HSM digital signature or reject a document"},
+		// Managers and ordinary users both, and said here rather than in the
+		// installer, where it used to be a named exception.
+		//
+		// The authority to sign is the citizen's own — an eID signature is made
+		// with their PIN2 on their own phone, the HSM rail makes them prove a
+		// certificate, and an approval chain only counts a signature from
+		// somebody it names — so withholding it would only stop people signing
+		// their own documents. Uploading, routing and configuring remain behind
+		// documents.manage.
+		//
+		// It was esign.sign until the two apps became one. The rule widened
+		// with the rename: record signing, which had been admin-only by
+		// omission rather than by argument, is the same act on the same
+		// authority as signing a PDF was.
+		{
+			Code: "documents.sign", Name: "Sign Documents",
+			Description:  "Apply an eID / DAN / HSM digital signature or reject a document",
+			DefaultRoles: []string{nexus.DefaultRoleManager, nexus.DefaultRoleUser},
+		},
 	}
 }
 
