@@ -209,10 +209,10 @@ func (g grants) GetUserPermissions(context.Context, string, string) (map[string]
 
 func TestAModuleWrittenAgainstTheSDKCanServeARequest(t *testing.T) {
 	var recorded []string
-	nexus.UseAuditSink(func(_ context.Context, tenantID, userID, action, _ string, _ map[string]any) {
+	nexus.Provide[nexus.AuditSink](func(_ context.Context, tenantID, userID, action, _ string, _ map[string]any) {
 		recorded = append(recorded, action+" "+tenantID+" "+userID)
 	})
-	t.Cleanup(func() { nexus.UseAuditSink(nil) })
+	t.Cleanup(func() { nexus.Provide[nexus.AuditSink](nil) })
 
 	call := func(permissions grants) *httptest.ResponseRecorder {
 		module := workingModule{p: nexus.NewPlatform(nil, permissions)}

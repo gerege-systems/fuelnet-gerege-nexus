@@ -211,7 +211,7 @@ func New(p nexus.Platform, pdf *esign.Rails, signer nexus.Signer) *DocumentsModu
 	// here rather than in the platform's boot so that a distribution which
 	// constructs this module gets it too, and one that does not gets the
 	// honest ErrNoDocumentFiler.
-	nexus.UseDocumentFiler(filer{m})
+	nexus.Provide[nexus.DocumentFiler](filer{m})
 	return m
 }
 

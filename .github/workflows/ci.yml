@@ -231,6 +231,18 @@ jobs:
             echo "::error::route table golden test skipped — AUTH_TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
+      - name: Fail if the capability wiring tests were skipped
+        # The eight things Bootstrap needs used to be parameters, so a missing
+        # one was a compile error. They are capabilities now and a missing one
+        # is a log line and a zero value. These tests are that compile error put
+        # back, and they need the real server to be built to run at all.
+        run: |
+          go test -run 'TestTheServerProvidesEverythingBootstrapAsksFor|TestABuiltServerProvidesTheBookingCapability' -v \
+            ./internal/platform/ | tee /tmp/capabilities.log
+          if grep -q -- '--- SKIP' /tmp/capabilities.log; then
+            echo "::error::capability wiring tests skipped — AUTH_TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
       - name: Fail if the login lockout tests were skipped
         # The lockout is one UPDATE. Whether a lapsed lock restarts the count or
         # adds to it is the difference between locking an account after five bad

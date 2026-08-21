@@ -178,13 +178,13 @@ func Run(opts Options) error {
 	// nexus.Audit; without this line those events would be logged and dropped
 	// while the platform's own reached the table, which is the worst of the
 	// three possible states because the trail would look complete.
-	nexus.UseAuditSink(audit.Record)
+	nexus.Provide[nexus.AuditSink](audit.Record)
 	// Reports arrive the same way and for the same reason: a module declares
 	// one against the SDK's contract, and the engine that runs it is inside the
 	// platform. Registrations made before this point are buffered and delivered
 	// here, so a distribution's main() may construct its modules in whatever
 	// order it likes.
-	nexus.UseReportSink(reporting.Register)
+	nexus.Provide[nexus.ReportSink](reporting.Register)
 
 	databaseReachable := db.Ping(ctx) == nil
 	if !databaseReachable {

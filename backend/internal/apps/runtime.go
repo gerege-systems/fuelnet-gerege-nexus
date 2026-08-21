@@ -5,6 +5,7 @@ package apps
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
@@ -35,9 +36,28 @@ type Runtime struct {
 // that question on this deployment and one place it is cached.
 type InstalledApps = reports.InstalledApps
 
-func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmongolia.Service,
-	sso *ssoprovider.SSOProvider, xyp *gerege.GeregeService, rails staterail.Rails,
-	link nexus.Link, signer nexus.Signer, installedApps InstalledApps) Runtime {
+// Bootstrap builds every module this binary carries, in the order they need.
+//
+// One parameter, and it stays one. Everything else is asked of the capability
+// registry, so the platform lending its modules something new is a Provide call
+// where this line used to be — see the note on this signature's history in
+// runtime_test.go.
+//
+// A missing capability is a platform bug rather than a distribution's mistake:
+// nothing outside this repository calls Bootstrap, and server.go provides all
+// eight immediately before it. So it is reported and the zero value is used,
+// which leaves one module degraded instead of refusing to start a deployment
+// over a dependency most of it does not touch.
+func Bootstrap(p nexus.Platform) Runtime {
+	integrations := required[*integration.Manager]()
+	eidMN := required[*eidmongolia.Service]()
+	sso := required[*ssoprovider.SSOProvider]()
+	xyp := required[*gerege.GeregeService]()
+	rails := required[staterail.Rails]()
+	link := required[nexus.Link]()
+	signer := required[nexus.Signer]()
+	installedApps := required[InstalledApps]()
+
 	// First, and not merely in order: organisation is what the others assume. It
 	// is the organisation, the people in it and how it is arranged — the module
 	// Odoo calls base.
@@ -74,4 +94,14 @@ func Bootstrap(p nexus.Platform, integrations *integration.Manager, eidMN *eidmo
 	// reports missing from the first listing until something else rebuilt it.
 	reportsModule := reports.New(p, installedApps)
 	return Runtime{Background: []BackgroundModule{esignModule, reportsModule}}
+}
+
+// required fetches a capability the platform is expected to have provided.
+func required[T any]() T {
+	value, err := nexus.Capability[T]()
+	if err != nil {
+		slog.Error("a module is being built without something the platform should have provided",
+			"error", err)
+	}
+	return value
 }
