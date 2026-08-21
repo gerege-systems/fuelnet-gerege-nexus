@@ -59,11 +59,49 @@ func openPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// seedTenant creates an organisation with one invoice, and removes both
+// probeTable is a tenant-scoped table these tests own.
+//
+// They used to seed `billing_invoices`, which was commerce's table and left
+// with commerce: migration 00075 dropped it and four tests failed at once. What
+// a report engine test needs is not that table — it is *a* table with a
+// tenant_id and the platform's policy on it, so that "a query with no WHERE
+// tenant_id returns only this organisation's rows" can be demonstrated at all.
+// Borrowing an app's made a test of the platform depend on which apps existed.
+//
+// The columns keep billing's names so the fixture report below still reads like
+// the report it is a copy of.
+func probeTable(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS reporting_probe (
+			id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+			contact_name text NOT NULL,
+			amount numeric NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT now())`,
+		`ALTER TABLE reporting_probe ENABLE ROW LEVEL SECURITY`,
+		`ALTER TABLE reporting_probe FORCE ROW LEVEL SECURITY`,
+		`DROP POLICY IF EXISTS tenant_isolation ON reporting_probe`,
+		`CREATE POLICY tenant_isolation ON reporting_probe TO gerege_nexus_app
+			USING (tenant_id IS NULL OR tenant_id = ANY (COALESCE(
+				NULLIF(current_setting('app.allowed_tenants', true), '')::uuid[],
+				ARRAY[NULLIF(current_setting('app.current_tenant', true), '')::uuid])))
+			WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON reporting_probe TO gerege_nexus_app`,
+	} {
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			t.Fatalf("prepare the probe table: %v", err)
+		}
+	}
+}
+
+// seedTenant creates an organisation with one probe row, and removes both
 // afterwards.
 func seedTenant(t *testing.T, pool *pgxpool.Pool, slug string, amount float64) string {
 	t.Helper()
 	ctx := context.Background()
+	probeTable(t, pool)
 
 	id := uuid.NewString()
 	_, err := pool.Exec(ctx,
@@ -76,13 +114,11 @@ func seedTenant(t *testing.T, pool *pgxpool.Pool, slug string, amount float64) s
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, id)
 	})
 
-	_, err = pool.Exec(ctx, `
-		INSERT INTO billing_invoices
-		    (tenant_id, invoice_number, contact_name, amount, vat_amount, ebarimt_status, status)
-		VALUES ($1, $2, 'Test contact', $3, $4, 'SENT_TO_ETAX', 'PENDING')`,
-		id, "INV-"+slug, amount, amount*0.1)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO reporting_probe (tenant_id, contact_name, amount) VALUES ($1, 'Test contact', $2)`,
+		id, amount)
 	if err != nil {
-		t.Fatalf("create invoice: %v", err)
+		t.Fatalf("create the probe row: %v", err)
 	}
 	return id
 }
@@ -113,7 +149,7 @@ func (revenueFixture) Columns() []reporting.ColumnSpec {
 
 func (revenueFixture) Run(ctx context.Context, q reporting.Querier, p reporting.Params) (reporting.Result, error) {
 	rows, err := q.Query(ctx, `
-		SELECT contact_name, amount FROM billing_invoices
+		SELECT contact_name, amount FROM reporting_probe
 		 WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3`,
 		reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
 	if err != nil {
@@ -142,7 +178,7 @@ func (leakyFixture) Key() string { return "test.leaky" }
 
 func (leakyFixture) Run(ctx context.Context, q reporting.Querier, _ reporting.Params) (reporting.Result, error) {
 	// No WHERE tenant_id. Deliberately.
-	rows, err := q.Query(ctx, `SELECT contact_name, amount FROM billing_invoices`)
+	rows, err := q.Query(ctx, `SELECT contact_name, amount FROM reporting_probe`)
 	if err != nil {
 		return reporting.Result{}, err
 	}
@@ -235,7 +271,7 @@ type writerFixture struct{ revenueFixture }
 func (writerFixture) Key() string { return "test.writer" }
 
 func (writerFixture) Run(ctx context.Context, q reporting.Querier, _ reporting.Params) (reporting.Result, error) {
-	rows, err := q.Query(ctx, `DELETE FROM billing_invoices WHERE tenant_id = $1 RETURNING contact_name, amount`,
+	rows, err := q.Query(ctx, `DELETE FROM reporting_probe WHERE tenant_id = $1 RETURNING contact_name, amount`,
 		reporting.TenantOf(ctx))
 	if err != nil {
 		return reporting.Result{}, err
