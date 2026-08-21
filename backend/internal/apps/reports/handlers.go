@@ -24,7 +24,6 @@ import (
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/go-chi/chi/v5"
 )
@@ -263,7 +262,7 @@ func decodeParams(w http.ResponseWriter, r *http.Request) (map[string]string, bo
 }
 
 // localeOf is the caller's language, as every screen-facing handler reads it.
-func localeOf(r *http.Request) string { return config.LocaleFromRequest(r) }
+func localeOf(r *http.Request) string { return nexus.LocaleFromRequest(r) }
 
 // record writes the audit entry. Every run and every export, by name.
 //

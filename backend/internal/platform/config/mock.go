@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"slices"
 	"strings"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // MockEnabled reports whether a national-integration connector (E-ID, DAN,
@@ -40,45 +41,21 @@ func IsProduction() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("ENVIRONMENT")), "production")
 }
 
-// SupportedLocales lists the languages the API can answer in. The first entry
-// is the default.
+// SupportedLocales and LocaleFromRequest moved to pkg/nexus.
 //
-// This must stay in step with the client's LOCALES list (frontend/lib/i18n).
-// While it held only mn and en, a browser asking for any of the other five got
-// SupportedLocales[0] — Mongolian — for everything the server owns. The result
-// was a single screen in three languages at once: menu labels in Mongolian
-// because the server fell back, body copy in the language the user actually
-// picked because the client had it, and English wherever neither did.
-var SupportedLocales = []string{"mn", "ar", "zh", "en", "fr", "ru", "es"}
+// They had to: a module cannot import internal/platform/config, and a module
+// that renders a menu label or a report title per locale has no other way to
+// learn which locale was asked for. internal/apps/reports imported this package
+// for exactly one function, which was the last reason it imported the platform
+// at all.
+//
+// Kept as aliases so the platform's own callers did not all have to change in
+// the same commit.
+var SupportedLocales = nexus.SupportedLocales
 
-// LocaleFromRequest resolves the caller's language from the `lang` query
-// parameter, falling back to Accept-Language and then to the default locale.
-// Server-owned content (menu labels, catalog copy) is translated with it, so a
-// client never has to ship translations for data it does not own.
-func LocaleFromRequest(r *http.Request) string {
-	if lang := normalizeLocale(r.URL.Query().Get("lang")); lang != "" {
-		return lang
-	}
-
-	// Accept-Language: mn-MN,mn;q=0.9,en;q=0.8
-	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
-		tag, _, _ := strings.Cut(part, ";")
-		if lang := normalizeLocale(tag); lang != "" {
-			return lang
-		}
-	}
-
-	return SupportedLocales[0]
-}
-
-func normalizeLocale(tag string) string {
-	tag = strings.ToLower(strings.TrimSpace(tag))
-	base, _, _ := strings.Cut(tag, "-")
-	if slices.Contains(SupportedLocales, base) {
-		return base
-	}
-	return ""
-}
+// LocaleFromRequest is the language this caller asked for. See
+// nexus.LocaleFromRequest.
+func LocaleFromRequest(r *http.Request) string { return nexus.LocaleFromRequest(r) }
 
 // SeedingEnabled reports whether the documented demo account should be created.
 //

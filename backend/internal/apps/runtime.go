@@ -20,7 +20,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 )
 
 type BackgroundModule interface {
@@ -53,7 +52,7 @@ func Bootstrap(p nexus.Platform) Runtime {
 	eidMN := required[*eidmongolia.Service]()
 	sso := required[*ssoprovider.SSOProvider]()
 	xyp := required[*gerege.GeregeService]()
-	rails := required[staterail.Rails]()
+	rails := required[nexus.StateRails]()
 	link := required[nexus.Link]()
 	signer := required[nexus.Signer]()
 	installedApps := required[InstalledApps]()
