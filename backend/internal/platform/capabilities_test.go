@@ -67,3 +67,27 @@ func provided[T any](t *testing.T) {
 		t.Errorf("%v — server.go has to Provide it before apps.Bootstrap", err)
 	}
 }
+
+// This binary lends the assistant nothing, and that is the point.
+//
+// /ai/copilot and /ai/stock-forecast used to answer from products, contacts,
+// warehouses and stock_levels — commerce's tables, which db/migrations still
+// creates. On a deployment without commerce the queries succeeded and returned
+// zeros: "0 products, 0 customers" from the copilot, `[]` from the forecast.
+// An empty reorder list reads as "nothing to reorder", not as "this deployment
+// cannot tell you".
+//
+// Nothing in this repository provides an assistant tool now, so the copilot
+// declares only the platform's knowledge search and the forecast endpoint
+// answers 404. Both routes stay mounted — a route table that changes shape with
+// the environment is one nobody can reason about — which is why routes.txt does
+// not move.
+func TestThisBinaryLendsTheAssistantNothing(t *testing.T) {
+	// Built for its side effects: every module in this binary is constructed,
+	// and any of them could register a tool.
+	_ = routerUnderTest(t)
+
+	if tools := nexus.AssistantToolset(); len(tools) != 0 {
+		t.Errorf("this binary provides assistant tools %v; the core is not supposed to have any", tools)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -193,88 +194,104 @@ func (s *CopilotService) systemPrompt(ctx context.Context, tenantID, lang string
 	// Applied to whatever won above — the shipped default, the global row, or a
 	// tenant's own — so a tenant that wants the product named in its prompt
 	// writes `{brand}` and stays right through a rename.
-	return strings.ReplaceAll(scope+"\n"+instructions, "{brand}", config.BrandName())
+	prompt := strings.ReplaceAll(scope+"\n"+instructions, "{brand}", config.BrandName())
+
+	// What this deployment can actually look up, said to the model in words.
+	//
+	// Code can stop the copilot counting rows in an app nobody installed; only
+	// the prompt can stop it filling the gap from the shape of the question.
+	// Both halves are needed, and this is the half that is easy to leave out —
+	// the tools simply would not be declared, and a model asked about stock
+	// would answer from what a system like this usually has.
+	if len(nexus.AssistantToolset()) == 0 {
+		prompt += "\n\nThis deployment has no app lending you organisation data: you can search " +
+			"platform knowledge and nothing else. If you are asked about inventory, products, " +
+			"customers, invoices or any other record, say that this deployment does not carry " +
+			"that information. Never answer such a question with a number, and never answer it " +
+			"with zero — zero is a count, and you have not counted anything."
+	}
+	return prompt
 }
 
+// searchKnowledge is the platform's own tool: the knowledge base an operator
+// curates in ai_knowledge, which every deployment has because the platform has
+// it. Everything else the model can call is lent by an app.
+const searchKnowledge = "search_knowledge"
+
 func toolDeclarations() []gemini.FunctionDeclaration {
-	return []gemini.FunctionDeclaration{
-		{Name: "erp_summary", Description: "Get current tenant product, contact, warehouse and inventory totals."},
-		{Name: "search_products", Description: "Search current tenant products and stock by name or SKU.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}, "required": []string{"query"}}},
-		{Name: "search_knowledge", Description: "Search approved Gerege Nexus platform knowledge.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}, "required": []string{"query"}}},
+	declarations := []gemini.FunctionDeclaration{{
+		Name:        searchKnowledge,
+		Description: "Search approved " + config.BrandName() + " platform knowledge.",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{
+			"query": map[string]any{"type": "string"}}, "required": []string{"query"}},
+	}}
+	for _, tool := range nexus.AssistantToolset() {
+		declarations = append(declarations, gemini.FunctionDeclaration{
+			Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters,
+		})
 	}
+	return declarations
 }
 
 func (s *CopilotService) executeTool(ctx context.Context, tenantID string, call gemini.FunctionCall) map[string]any {
+	if call.Name == searchKnowledge {
+		return s.searchKnowledge(ctx, tenantID, call)
+	}
+
+	for _, tool := range nexus.AssistantToolset() {
+		if tool.Name != call.Name || tool.Call == nil {
+			continue
+		}
+		result, err := tool.Call(ctx, tenantID, call.Args)
+		if err != nil {
+			// An error, not an empty result. The model states whatever it is
+			// handed as fact, so a tool that could not answer must not look
+			// like one that answered zero — which is the failure this whole
+			// change is about.
+			return map[string]any{"error": tool.Name + " is unavailable"}
+		}
+		return result
+	}
+	return map[string]any{"error": "tool not allowed"}
+}
+
+func (s *CopilotService) searchKnowledge(ctx context.Context, tenantID string, call gemini.FunctionCall) map[string]any {
 	if s.db == nil {
 		return map[string]any{"error": "database unavailable"}
 	}
-	switch call.Name {
-	case "erp_summary":
-		var products, contacts, warehouses int
-		var stock float64
-		err := s.db.QueryRow(ctx, `SELECT (SELECT count(*) FROM products WHERE tenant_id=$1 AND active), (SELECT count(*) FROM contacts WHERE tenant_id=$1 AND active), (SELECT count(*) FROM warehouses WHERE tenant_id=$1), (SELECT COALESCE(sum(quantity),0) FROM stock_levels WHERE tenant_id=$1)`, tenantID).Scan(&products, &contacts, &warehouses, &stock)
-		if err != nil {
-			return map[string]any{"error": "summary unavailable"}
-		}
-		return map[string]any{"products": products, "contacts": contacts, "warehouses": warehouses, "total_stock": stock}
-	case "search_products":
-		q := "%" + truncate(fmt.Sprint(call.Args["query"]), 100) + "%"
-		rows, err := s.db.Query(ctx, `SELECT p.sku,p.name,p.price,COALESCE(sum(sl.quantity),0) FROM products p LEFT JOIN stock_levels sl ON sl.product_id=p.id AND sl.tenant_id=p.tenant_id WHERE p.tenant_id=$1 AND p.active AND (p.name ILIKE $2 OR p.sku ILIKE $2) GROUP BY p.id ORDER BY p.name LIMIT 10`, tenantID, q)
-		if err != nil {
-			return map[string]any{"error": "search unavailable"}
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var sku, name string
-			var price, stock float64
-			if err := rows.Scan(&sku, &name, &price, &stock); err != nil {
-				return map[string]any{"error": "search unavailable"}
-			}
-			items = append(items, map[string]any{"sku": sku, "name": name, "price": price, "stock": stock})
-		}
-		// A partial result is worse than none here: the model states whatever it
-		// is handed as fact, so a stream that broke halfway would become "you do
-		// not stock that" rather than a question the user can retry.
-		if rows.Err() != nil {
-			return map[string]any{"error": "search unavailable"}
-		}
-		return map[string]any{"items": items}
-	case "search_knowledge":
-		q := "%" + truncate(fmt.Sprint(call.Args["query"]), 200) + "%"
-		rows, err := s.db.Query(ctx, `SELECT title,content,source_url FROM ai_knowledge WHERE (tenant_id IS NULL OR tenant_id=$1) AND (title ILIKE $2 OR content ILIKE $2) ORDER BY tenant_id NULLS LAST,updated_at DESC LIMIT 5`, tenantID, q)
-		if err != nil {
-			return map[string]any{"error": "knowledge unavailable"}
-		}
-		defer rows.Close()
-		items := []map[string]any{}
-		for rows.Next() {
-			var title, content, url string
-			if err := rows.Scan(&title, &content, &url); err != nil {
-				return map[string]any{"error": "knowledge unavailable"}
-			}
-			items = append(items, map[string]any{"title": title, "content": truncate(content, 1200), "source_url": url})
-		}
-		if rows.Err() != nil {
-			return map[string]any{"error": "knowledge unavailable"}
-		}
-		return map[string]any{"items": items}
-	default:
-		return map[string]any{"error": "tool not allowed"}
+	q := "%" + truncate(fmt.Sprint(call.Args["query"]), 200) + "%"
+	rows, err := s.db.Query(ctx, `SELECT title,content,source_url FROM ai_knowledge WHERE (tenant_id IS NULL OR tenant_id=$1) AND (title ILIKE $2 OR content ILIKE $2) ORDER BY tenant_id NULLS LAST,updated_at DESC LIMIT 5`, tenantID, q)
+	if err != nil {
+		return map[string]any{"error": "knowledge unavailable"}
 	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var title, content, url string
+		if err := rows.Scan(&title, &content, &url); err != nil {
+			return map[string]any{"error": "knowledge unavailable"}
+		}
+		items = append(items, map[string]any{"title": title, "content": truncate(content, 1200), "source_url": url})
+	}
+	// A partial result is worse than none here: the model states whatever it is
+	// handed as fact, so a stream that broke halfway would become an answer
+	// rather than a question the user can retry.
+	if rows.Err() != nil {
+		return map[string]any{"error": "knowledge unavailable"}
+	}
+	return map[string]any{"items": items}
 }
 
-func (s *CopilotService) localFallback(ctx context.Context, req CopilotRequest) *CopilotResponse {
-	intent := classifyIntent(req.Prompt)
-	res := &CopilotResponse{Intent: intent, Data: map[string]any{}, Degraded: true}
-	if s.db != nil && intent == "inventory_status" {
-		var n float64
-		_ = s.db.QueryRow(ctx, `SELECT COALESCE(SUM(quantity),0) FROM stock_levels WHERE tenant_id=$1`, req.TenantID).Scan(&n)
-		res.Answer = fmt.Sprintf("Нийт агуулахын үлдэгдэл: %.2f ширхэг.", n)
-		res.Data["total_stock"] = n
-	} else {
-		res.Answer = "AI үйлчилгээ түр боломжгүй байна. GEMINI_API_KEY тохиргоог шалгана уу."
-	}
+// localFallback is what comes back when the model cannot be reached.
+//
+// It used to answer one question itself — total stock — by querying
+// stock_levels, which is commerce's table and not this binary's. That made the
+// degraded path give a confident number on a deployment that has no inventory
+// at all. There is nothing the platform can answer on its own about an
+// organisation's data, and saying so is the honest degraded answer.
+func (s *CopilotService) localFallback(_ context.Context, _ CopilotRequest) *CopilotResponse {
+	res := &CopilotResponse{Intent: "general", Data: map[string]any{}, Degraded: true}
+	res.Answer = "AI үйлчилгээ түр боломжгүй байна. GEMINI_API_KEY тохиргоог шалгана уу."
 	res.Reply = res.Answer
 	return res
 }
@@ -331,27 +348,6 @@ func validateAudio(a *Audio) error {
 		return errors.New("invalid audio data")
 	}
 	return nil
-}
-func classifyIntent(p string) string {
-	p = strings.ToLower(p)
-	if containsAny(p, "stock", "inventory", "warehouse", "quantity", "үлдэгдэл", "агуулах") {
-		return "inventory_status"
-	}
-	if containsAny(p, "product", "sku", "price", "catalog", "бараа") {
-		return "product_count"
-	}
-	if containsAny(p, "contact", "customer", "vendor", "client", "харилцагч") {
-		return "contacts_count"
-	}
-	return "general"
-}
-func containsAny(s string, ks ...string) bool {
-	for _, k := range ks {
-		if strings.Contains(s, k) {
-			return true
-		}
-	}
-	return false
 }
 func truncate(s string, n int) string {
 	r := []rune(s)
