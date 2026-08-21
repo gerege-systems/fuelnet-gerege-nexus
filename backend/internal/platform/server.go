@@ -189,6 +189,10 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// files finished documents through it and gov_services books meetings
 	// through it, so it is a dependency of both rather than a peer.
 	integrationMgr := integration.NewManager(db)
+	// The booking contract, published rather than handed to one module. It was
+	// declared with an adapter and no way to get one; a module that books an
+	// appointment now asks nexus.Meetings() for it. See pkg/nexus/meetings.go.
+	nexus.Provide[nexus.MeetingBooker](integration.AsMeetingBooker(integrationMgr))
 
 	eidMN, err := eidmongolia.New(db)
 	if err != nil {
