@@ -50,8 +50,10 @@
   MeetingConnector.ID string
   MeetingConnector.Name string
   MeetingConnector.Provider string
+  MenuDefinition.AppChrome bool
   MenuDefinition.AppID string
   MenuDefinition.AppName string
+  MenuDefinition.AppOrder int
   MenuDefinition.ExternalURL string
   MenuDefinition.ID string
   MenuDefinition.Icon string
