@@ -137,6 +137,23 @@
   Report.Params() []ParamSpec
   Report.Run(ctx context.Context, q Querier, p Params) (Result, error)
   Report.Titles() map[string]string
+  ReportDescription.App string
+  ReportDescription.Key string
+  ReportDescription.Scopes []string
+  ReportDescription.Titles map[string]string
+  ReportEngine.Available(installed map[string]bool) []ReportDescription
+  ReportEngine.Deliverable() bool
+  ReportEngine.Describe(key string) (ReportDescription, bool)
+  ReportEngine.Export(ctx context.Context, tenantID, key string, params map[string]string, locale, format string) (*ReportExport, error)
+  ReportEngine.Run(ctx context.Context, tenantID, key string, params map[string]string, locale string) (*ReportRun, error)
+  ReportEngine.ValidateSchedule(key string, params map[string]string, locale, cron, format string) error
+  ReportExport.Bytes []byte
+  ReportExport.ContentType string
+  ReportExport.Filename string
+  ReportExport.Rows int
+  ReportRun.Key string
+  ReportRun.Result Result
+  ReportRun.Title string
   Result.Columns []ColumnSpec
   Result.Notes []Note
   Result.Rows []map[string]any
@@ -249,6 +266,7 @@ func RateLimit(perMinute float64, burst int) func(http.Handler) http.Handler
 func RecordSigned(rail string, ok bool)
 func Register(m Module)
 func RegisterReport(report Report)
+func Reports() (ReportEngine, error)
 func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler
 func RequireTenant(w http.ResponseWriter, r *http.Request) (string, bool)
 func Ring() (Link, error)
@@ -309,6 +327,10 @@ type Platform interface
 type Querier interface
 type RateLimiter interface
 type Report interface
+type ReportDescription struct
+type ReportEngine interface
+type ReportExport struct
+type ReportRun struct
 type ReportSink func(Report)
 type Result struct
 type Rows interface
