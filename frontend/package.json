@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "api:check": "node scripts/check-api-boundaries.mjs",
     "i18n:translate": "node scripts/i18n-translate.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
     "pwa:check": "node scripts/pwa-check.mjs",
