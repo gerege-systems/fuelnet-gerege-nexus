@@ -43,6 +43,26 @@ distribution байх үед энэ найдвар л тэднийг fork хий
 
 ### Эвдэх шаардлагатай бол
 
+### Одоо хүлээгдэж буй deprecation-ууд
+
+| Юу | Оронд нь | Хэзээ устах |
+| --- | --- | --- |
+| `nexus.UseLink` | `nexus.Provide[nexus.Link]` | **v2.0.0** |
+| `nexus.UseDocumentFiler` | `nexus.Provide[nexus.DocumentFiler]` | **v2.0.0** |
+| `nexus.UseAuditSink` | `nexus.Provide[nexus.AuditSink]` | **v2.0.0** |
+| `nexus.UseReportSink` | `nexus.Provide[nexus.ReportSink]` | **v2.0.0** |
+| Эрхийн `.read`/`.manage` дагаврын дүрэм | `PermissionDefinition.DefaultRoles` | **v2.0.0** |
+
+Тавуулаа 2026-08-21-нд v1.x дотор deprecated болсон. v2.0.0 гарах өдөр
+тодорхойгүй бөгөөд энэ жагсаалт нь тэр өдрийн ажлын жагсаалт: v2-ын tag
+гаргахын өмнө эдгээр устаж, `api.txt` дахин бичигдэнэ. v1 дотор бүгд бүрэн
+ажиллана — устгах нь major-ын ажил, minor-ынх биш.
+
+Дагаврын дүрэм нь бусад дөрвөөс өөр: тэр нь функц биш, зан төлөв. Устгах нь
+`DefaultRoles` зарлаагүй модулийн эрхийг **хэн ч авахгүй** болгоно, тиймээс
+v2-ын өмнө энэ репогийн модуль бүр зарлах ёстой — `internal/apps/default_roles_test.go`-ийн
+хүснэгт нь тэр ажлын жагсаалт.
+
 Deprecation → нэг major цикл хүлээх. Хуучин зүйлийг `// Deprecated:` тэмдэгтэй
 болгож, юугаар солихыг нь заана — үсгийн хэлбэр нь чухал: `godoc` ба
 staticcheck-ийн SA1019 нь яг энэ бичиглэлийг л таньдаг, `DEPRECATED:` бол
@@ -53,12 +73,40 @@ staticcheck-ийн SA1019 нь яг энэ бичиглэлийг л таньд�
 ## 2. Гэрээг хамгаалдаг механизм
 
 Хүн санаж байхад найдсан амлалт бол яаралтай өдөр эвдэрдэг амлалт. Тиймээс
-хоёр тест барьдаг:
+дөрвөн зүйл барьдаг:
 
-| Тест | Юуг барих | Хаана |
+| Юу | Юуг барих | Хаана |
 | --- | --- | --- |
 | `TestTheExportedAPIIsTheOneOnRecord` | Экспортолсон гадаргуугийн **аливаа** өөрчлөлт | `backend/pkg/nexus/testdata/api.txt` |
 | `TestTheSDKDoesNotDependOnInternal` | `pkg/nexus` `internal/` рүү хүрэх | Импортын графыг мөшгинө |
+| `Downstream / Canary distribution` | Бодит бүтээгдэхүүн энэ коммит дээр компиллогдож, тестээ дааж байгаа эсэх | `business-gerege-nexus`-ыг clone хийж `replace`-ээр энэ коммит руу заана |
+| `Downstream / Minimal distribution` | Хамгийн шинэ гадаргуунууд — `Provide`, `Capability`, `Migrations`, `ProvideAssistant`, `DefaultRoles` | `backend/testdata/canary` |
+
+### Golden файл юуг барьдаггүй вэ
+
+Энэ нь чухал бөгөөд амархан мартагддаг: **golden файл зөвхөн гарын үсгийг
+барина.** Дараах бүх өөрчлөлт `api.txt`-ыг ногоон үлдээж, distribution-ыг
+эвдэнэ:
+
+* метод хэвээр, буцаах утга нь өөр;
+* `Capability[T]()` байхгүй үед алдааны оронд тэг утга буцаах;
+* sink өөр дараалалд, эсвэл огт дуудагдахгүй байх;
+* бүртгэл хийгдэх ч хүчин төгөлдөр болохгүй байх.
+
+Гараар туршиж баталсан хоёр жишээ:
+
+| Гараар оруулсан эвдрэл | `api.txt` | Downstream |
+| --- | --- | --- |
+| `MenuPermissionOf` нь `AccessPolicy`-г уншихаа болиод `""` буцаана | 🟢 ногоон | 🔴 `menu permission: got "", want "contacts.read"` |
+| `Capability[T]()` байхгүй үед `nil, nil` буцаана | 🟢 ногоон | 🔴 `TestADistributionsModuleIsWiredUpAfterConstruction` |
+
+Downstream ажил нь тэр хоёр баганын ялгааны төлөө байгаа.
+
+Хоёр canary байгаа шалтгаан: `business-gerege-nexus` бол бодит бүтээгдэхүүн
+боловч `Provide`, `Capability`, `Migrations`, `ProvideAssistant` үүсэхээс өмнө
+бичигдсэн тул тэдгээрт хүрдэггүй. Яг тэдгээр нь чимээгүй эвдрэх магадлал
+хамгийн өндөртэй гадаргуунууд — репогийн гаднаас **одоохондоо хэн ч** тэдэн
+рүү компайл хийдэггүй.
 
 Эхнийх нь хөлдөөлт биш: API өөрчлөх нь зөв байх нь олонтоо. Гагцхүү
 **санамсаргүй** байж болохгүй. Зориудаар өөрчилсөн бол:

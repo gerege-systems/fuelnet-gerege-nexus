@@ -18,6 +18,22 @@ Fixes # (issue)
 - [ ] New and existing unit tests pass locally with my changes (`cd backend && go test ./...`).
 - [ ] Next.js frontend builds cleanly (`cd frontend && npm run build`).
 
+## The ecosystem's contract
+
+Only if `backend/pkg/nexus/testdata/api.txt` is in this diff. Every distribution
+repository compiles against that package and pins it by tag, so a change to it
+is a change to code that is not in this repository and cannot be fixed from it —
+see [`docs/RELEASING.md`](../docs/RELEASING.md) §1.
+
+- [ ] The description above says, in words, **what a caller has to do about it**.
+      Not what changed — the diff says that. What somebody with a working
+      distribution has to change, or that they have to change nothing.
+- [ ] Anything removed or renamed went through `// Deprecated:` and one major
+      cycle first, and the description names the version it goes in.
+
+The golden file's failure message already asks for this. The checkbox is what
+brings the request as far as the pull request, where it is read.
+
 ## Authors & Credits
 - Contributor: @username
 - Developed with: **Gerege Systems Development Team & Gemini AI**

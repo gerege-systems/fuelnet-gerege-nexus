@@ -1,0 +1,85 @@
+# Does this change break a product built on the platform?
+#
+# pkg/nexus/testdata/api.txt records the exported surface, and its header says
+# why: a contract is broken by renaming a parameter during a refactor, not by
+# anybody deciding to break it. But a golden file holds signatures and nothing
+# else. Every one of these keeps api.txt green and breaks a distribution:
+#
+#   * a method whose signature is unchanged and whose answer is not
+#   * Capability returning a zero value instead of an error
+#   * a sink called in a different order, or not at all
+#   * a registration that no longer takes effect
+#
+# The only thing that catches those is compiling and running real code against
+# the contract. Two kinds, because neither is enough alone.
+name: Downstream
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  distribution:
+    name: Canary distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: core
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: core/backend/go.mod
+          cache-dependency-path: core/backend/go.sum
+
+      # A real product, chosen because it is the smallest and it is public:
+      # four modules, 87 KB, pinning backend v1.9.0. gerege-gov,
+      # pos-gerege-nexus and appstore-gerege-mn are not reachable from here, so
+      # a token would be needed for them and a job nobody can run locally is a
+      # job nobody fixes.
+      - name: Clone the canary distribution
+        run: git clone --depth 1 https://github.com/gerege-systems/business-gerege-nexus.git canary
+
+      - name: Point it at this commit
+        working-directory: canary
+        run: |
+          go mod edit -replace github.com/gerege-systems/open-gerege-nexus/backend=../core/backend
+          go mod tidy
+
+      - name: Build and test it
+        id: canary
+        working-directory: canary
+        run: go build ./... && go test ./...
+
+      - if: failure() && steps.canary.outcome == 'failure'
+        run: |
+          echo "::error::business-gerege-nexus does not build or pass its tests against this commit."
+          echo "::error::This is a change to code that is not in this repository and cannot be fixed from it — see docs/RELEASING.md §1."
+
+  minimal:
+    name: Minimal distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      # backend/testdata/canary is a distribution written in this repository,
+      # and it is here because the real one does not reach far enough: it was
+      # written before Provide, Capability, Migrations, ProvideAssistant and
+      # DefaultRoles existed and touches none of them. Those are precisely the
+      # surfaces a behaviour change would break unnoticed — nothing outside this
+      # repository compiles against them yet.
+      - name: Build and test the minimal distribution
+        id: minimal
+        working-directory: backend/testdata/canary
+        run: go build ./... && go vet ./... && go test ./...
+
+      - if: failure() && steps.minimal.outcome == 'failure'
+        run: |
+          echo "::error::backend/testdata/canary does not build or pass its tests against this commit."
+          echo "::error::It uses the SDK the way a distribution does. If the change is deliberate, change the canary in the same pull request and say in the description what a caller has to do."
