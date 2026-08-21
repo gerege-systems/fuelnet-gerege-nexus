@@ -262,18 +262,33 @@ func (p Params) Raw() map[string]any {
 // that silently does not exist — no error, no empty list, just a report nobody
 // can find and no way to tell that from "not written yet". Buffering makes the
 // order in which a distribution's main() does things stop mattering.
+// ReportSink is what a Report is delivered to. Named, where it used to be a
+// bare func(Report), because a capability is looked up by its type and an
+// unnamed one is the same type as every other func(Report) in the ecosystem.
+type ReportSink func(Report)
+
 var (
 	reportMu      sync.Mutex
-	reportSink    func(Report)
 	pendingReport []Report
 )
 
-// UseReportSink installs the engine's registry. The platform calls this during
-// boot; anything registered before it does is delivered immediately after.
-func UseReportSink(sink func(Report)) {
+// UseReportSink installs the engine's registry.
+//
+// Deprecated: use Provide[ReportSink] instead. This is a wrapper over it and
+// behaves identically, including the delivery of anything registered before it.
+// It stays for one major version so a distribution pinned to v1 keeps
+// compiling, and goes in v2 — see docs/RELEASING.md.
+func UseReportSink(sink func(Report)) { Provide[ReportSink](sink) }
+
+// deliverBufferedReports hands the sink everything registered before it arrived.
+//
+// Called by Provide through the hook table in capability.go rather than from
+// inside Provide itself, which must not know one capability from another. The
+// buffer and the thing that drains it stay in this file.
+func deliverBufferedReports(sink ReportSink) {
 	reportMu.Lock()
 	queued := pendingReport
-	reportSink, pendingReport = sink, nil
+	pendingReport = nil
 	reportMu.Unlock()
 
 	for _, report := range queued {
@@ -284,14 +299,16 @@ func UseReportSink(sink func(Report)) {
 // RegisterReport adds a report to the platform. A module calls this from its
 // constructor, the way it calls Register for itself.
 func RegisterReport(report Report) {
+	// The lock is held across the lookup so that a sink arriving between the
+	// two cannot leave this report both unbuffered and undelivered.
 	reportMu.Lock()
-	sink := reportSink
-	if sink == nil {
+	sink, err := Capability[ReportSink]()
+	if err != nil {
 		pendingReport = append(pendingReport, report)
 	}
 	reportMu.Unlock()
 
-	if sink != nil {
+	if err == nil {
 		sink(report)
 	}
 }
