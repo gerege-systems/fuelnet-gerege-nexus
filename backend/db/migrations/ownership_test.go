@@ -5,16 +5,19 @@
  *
  * Whose tables these are.
  *
- * db/migrations is the platform's schema and the only place a table can be
- * created, which is why 28 of the 108 tables here belong to apps that are not
- * in this repository: commerce went to business-gerege-nexus, the government
- * services workflow to gerege-gov, point of sale to pos-gerege-nexus and the
- * registry to appstore-gerege-mn. Their tables could not follow, so every
- * deployment carries the schema of every app anybody ever wrote here.
+ * db/migrations is the platform's schema and the only place a table could be
+ * created, which is why 28 of its 108 tables belonged to apps that are not in
+ * this repository: commerce, the government services workflow, point of sale
+ * and the registry. Their tables could not follow them out, so every deployment
+ * carried the schema of every app anybody ever wrote here.
  *
- * nexus.Migrations is the way out — a module brings its own schema now. Moving
- * the 28 is a separate change with a data migration behind it. What these tests
- * do is stop the number growing while that is arranged.
+ * Migration 00075 dropped all twenty-eight. What made that possible was
+ * nexus.Migrations (Үе 3): a module brings its own schema, so
+ * business-gerege-nexus declares commerce's five itself. What made it safe was
+ * counting the routes first — the core served none of those apps' endpoints,
+ * so nothing here could read the tables anyway.
+ *
+ * Eighty remain, and this test is what keeps that true.
  */
 
 package migrations_test
@@ -48,8 +51,8 @@ var platformTables = map[string]string{
 	"document_retention_rules": "documents", "document_signature_policies": "documents",
 	"document_signatures": "documents", "document_templates": "documents",
 	"document_workflow_steps": "documents", "eid_sign_state": "eID",
-	"email_verification_clients": "email verification", "email_verifications": "email verification",
-	"esign_batch_items": "signing rail", "esign_batches": "signing rail",
+	"email_verifications": "email verification",
+	"esign_batch_items":   "signing rail", "esign_batches": "signing rail",
 	"esign_documents": "signing rail", "esign_settings": "signing rail",
 	"esign_sign_sessions": "signing rail", "esign_signature_logs": "signing rail",
 	"feature_flag_overrides": "control plane", "feature_flags": "control plane",
@@ -77,48 +80,28 @@ var platformTables = map[string]string{
 	"urtuu_tasks": "Өртөө", "usage_events": "usage",
 	"user_eid_identities": "identity", "user_sso_identities": "identity",
 	"users": "users", "ai_knowledge": "assistant", "ai_prompts": "assistant",
-
-	// ------------------------------------------------------------- departed
-	// Twenty-eight tables belonging to modules that are in other repositories.
-	// They are listed so this test is green, not because they belong here. The
-	// next change is moving each group out with its data; see
-	// docs/CORE_BOUNDARY_PLAN.md §5 Үе 3.
-
-	// TODO: departed — commerce, business-gerege-nexus (6)
-	"billing_invoices": "departed: commerce", "contacts": "departed: commerce",
-	"products": "departed: commerce", "stock_levels": "departed: commerce",
-	"stock_movements": "departed: commerce", "warehouses": "departed: commerce",
-
-	// TODO: departed — government services, gerege-gov (14)
-	"gov_application_events": "departed: gov", "gov_applications": "departed: gov",
-	"gov_appointments": "departed: gov", "gov_delivery_outbox": "departed: gov",
-	"gov_org_units": "departed: gov", "gov_routing_rules": "departed: gov",
-	"gov_services": "departed: gov", "gov_tasks": "departed: gov",
-	"gov_unit_members": "departed: gov", "gov_upstream_connectors": "departed: gov",
-	"gov_workflow_steps": "departed: gov", "gov_workflow_transitions": "departed: gov",
-	"gov_workflow_versions": "departed: gov", "gov_workflows": "departed: gov",
-
-	// TODO: departed — point of sale, pos-gerege-nexus (1)
-	"pos_shifts": "departed: pos",
-
-	// TODO: departed — the registry, appstore-gerege-mn (7). Not the same thing
-	// as the store screens every deployment has: those read `apps`,
-	// `app_installations` and `store_app_versions`, which are above. These are
-	// the registry's own — who publishes, what is under review, what the last
-	// catalogue build produced.
-	"store_app_texts": "departed: registry", "store_apps": "departed: registry",
-	"store_catalog_snapshots": "departed: registry", "store_external_registrations": "departed: registry",
-	"store_publishers": "departed: registry", "store_registry_state": "departed: registry",
-	"store_review_events": "departed: registry",
 }
 
 var (
 	createTable = regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z0-9_]+)`)
+	dropTable   = regexp.MustCompile(`(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?([a-z0-9_]+)`)
 	// Comments are stripped first. These files explain themselves at length,
 	// and a comment quoting `CREATE TABLE IF NOT EXISTS` was read as a table
 	// called "if".
 	sqlComment = regexp.MustCompile(`(?m)--.*$`)
 )
+
+// upSection is the half of a migration that runs going forward.
+//
+// Reading the whole file would count a Down section's DROP as a drop and its
+// CREATE as a creation, which is the opposite of what either does on `up`.
+func upSection(source string) string {
+	code := sqlComment.ReplaceAllString(source, "")
+	if idx := strings.Index(source, "-- +goose Down"); idx >= 0 {
+		code = sqlComment.ReplaceAllString(source[:idx], "")
+	}
+	return code
+}
 
 func TestPlatformMigrationsOwnNoAppTable(t *testing.T) {
 	files, err := filepath.Glob("*.sql")
@@ -126,15 +109,24 @@ func TestPlatformMigrationsOwnNoAppTable(t *testing.T) {
 		t.Fatalf("read the migration directory: %v", err)
 	}
 
+	// What the schema ends up with, not what its history mentions. An applied
+	// migration cannot be rewritten, so the twenty-eight tables migration 00075
+	// dropped are still created by 00003, 00006, 00007, 00038 and 00040 — and
+	// are not in any deployment's schema. Replaying creations and drops in
+	// order is how a text scan answers the question the database would.
+	sort.Strings(files)
 	found := map[string]string{}
 	for _, file := range files {
 		source, err := os.ReadFile(file) // #nosec G304 -- a glob of this directory
 		if err != nil {
 			t.Fatalf("read %s: %v", file, err)
 		}
-		code := sqlComment.ReplaceAllString(string(source), "")
+		code := upSection(string(source))
 		for _, match := range createTable.FindAllStringSubmatch(code, -1) {
 			found[strings.ToLower(match[1])] = file
+		}
+		for _, match := range dropTable.FindAllStringSubmatch(code, -1) {
+			delete(found, strings.ToLower(match[1]))
 		}
 	}
 
@@ -176,53 +168,38 @@ decision, and a review can disagree with it.`,
 	}
 }
 
-// The platform's Go code must not name an app's table either.
+// The platform's Go code must not name a table it does not own.
 //
 // internal/apps/boundaries_test.go already stops the platform importing an app
 // package; the compiler enforces that half. This is the other half, and it is
 // the half nothing enforces: a table name inside a SQL string is exactly the
 // same dependency, and it survives the app leaving. The query keeps compiling
 // and keeps returning rows — right up until the deployment that never had the
-// app runs it against a table that is not there, or worse, one that is there
-// and empty.
+// app runs it against a table that is not there.
 //
-// The names checked are the ones belonging to modules in other repositories,
-// matched only where SQL would put a table: after FROM, JOIN, INTO, UPDATE or
-// DELETE FROM. A prose mention of "products" in a comment is not a dependency.
+// The names are the twenty-eight that migration 00075 dropped. They no longer
+// exist in any deployment's schema, so a query naming one now fails outright
+// rather than quietly answering zero — which is the better failure, and still
+// not one to ship.
 func TestPlatformSQLNamesNoAppTable(t *testing.T) {
-	departed := []string{}
-	for table, owner := range platformTables {
-		if strings.HasPrefix(owner, "departed:") {
-			departed = append(departed, table)
-		}
+	departed := []string{
+		"billing_invoices", "contacts", "products", "stock_levels", "stock_movements", "warehouses",
+		"gov_application_events", "gov_applications", "gov_appointments", "gov_delivery_outbox",
+		"gov_org_units", "gov_routing_rules", "gov_services", "gov_tasks", "gov_unit_members",
+		"gov_upstream_connectors", "gov_workflow_steps", "gov_workflow_transitions",
+		"gov_workflow_versions", "gov_workflows",
+		"pos_shifts",
+		"store_app_texts", "store_apps", "store_catalog_snapshots", "store_external_registrations",
+		"store_publishers", "store_registry_state", "store_review_events",
 	}
 	sort.Strings(departed)
 
-	// What is allowed to name them, and why. Each entry is a debt with an owner,
-	// not an exemption: the change that moves the table is the change that
-	// deletes the line. A prefix matches a package or a single file.
-	allowed := map[string]string{
-		// The shift endpoints under /devices/shifts. Point of sale went to
-		// pos-gerege-nexus and these did not follow — the same arrangement the
-		// frontend is in, where lib/api/_departed/shifts.ts still serves the
-		// screens. Found by this test rather than by anybody noticing.
-		//
-		// TODO: moves with the point-of-sale extraction.
-		"internal/platform/native_operations_handlers.go": "pos extraction",
-
-		// Test fixtures. Each of these needs *some* tenant-scoped table to
-		// prove a property of the platform with — that a query without a
-		// WHERE tenant_id sees only its own rows, that an operator's console
-		// cannot read a tenant's data, that a report which forgets the tenant
-		// clause returns nothing — and each reached for a commerce table
-		// because one was there. The properties are the platform's; the tables
-		// they are demonstrated on are not.
-		//
-		// TODO: rewritten against a platform table when commerce's schema moves.
-		"internal/platform/controlplane/controlplane_db_test.go": "commerce schema move",
-		"internal/platform/dbguard/dbguard_test.go":              "commerce schema move",
-		"internal/platform/reporting/engine_integration_test.go": "commerce schema move",
-	}
+	// No allowlist. There were four entries when this test was written — the
+	// assistant's commerce queries, the till shift handlers and three test
+	// fixtures — and each was a debt with an owner. All four are paid: Үе 4a
+	// took the assistant's, and this change took the rest with the tables.
+	// A new entry here would be a new debt, which is a thing to argue about in
+	// a review rather than to add quietly.
 
 	// A table name where SQL would put one. Comments are stripped first, the
 	// same as in the migration scan above: these files explain themselves, and
@@ -231,7 +208,7 @@ func TestPlatformSQLNamesNoAppTable(t *testing.T) {
 	pattern := regexp.MustCompile(`(?i)\b(?:FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s+(?:public\.)?(` +
 		strings.Join(departed, "|") + `)\b`)
 
-	root := filepath.Join("..", "..", "internal", "platform")
+	root := filepath.Join("..", "..")
 	var offences []string
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") {
@@ -241,36 +218,30 @@ func TestPlatformSQLNamesNoAppTable(t *testing.T) {
 		if err != nil {
 			return err //nolint:wrapcheck
 		}
-		rel := filepath.ToSlash(strings.TrimPrefix(path, filepath.Join("..", "..")+string(filepath.Separator)))
-		for prefix := range allowed {
-			if rel == prefix || strings.HasPrefix(rel, prefix+"/") {
-				return nil
-			}
-		}
-		seen := map[string]bool{}
+		rel := filepath.ToSlash(strings.TrimPrefix(path, root+string(filepath.Separator)))
 		code := comments.ReplaceAllString(string(source), "")
+		seen := map[string]bool{}
 		for _, match := range pattern.FindAllStringSubmatch(code, -1) {
 			table := strings.ToLower(match[1])
 			if seen[table] {
 				continue
 			}
 			seen[table] = true
-			offences = append(offences, rel+" queries "+table+" ("+platformTables[table]+")")
+			offences = append(offences, rel+" queries "+table)
 		}
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("scan internal/platform: %v", err)
+		t.Fatalf("scan the backend: %v", err)
 	}
 
 	sort.Strings(offences)
 	for _, offence := range offences {
 		t.Errorf(`%s
 
-That table belongs to a module in another repository. A SQL string naming it is
-the same dependency a Go import would be, and the only difference is that no
-compiler reports it — which is why it outlived the module. On a deployment that
-never installed the app, the query either fails or, worse, succeeds against an
-empty table and reports zero as an answer.`, offence)
+That table belonged to a module in another repository and migration 00075
+dropped it. A SQL string naming it is the same dependency a Go import would be,
+and the only difference is that no compiler reports it — which is why these
+outlived their modules. There is no table behind this query on any deployment.`, offence)
 	}
 }

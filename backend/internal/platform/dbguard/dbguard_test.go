@@ -67,10 +67,48 @@ func openGuardedPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// seedTwoTenants leaves one contact in each of two tenants and returns their ids.
+// probeTable is a tenant-scoped table this test owns.
+//
+// These tests used to borrow `contacts`, which was a commerce table and left
+// with commerce: migration 00075 dropped it and five tests failed at once. What
+// they need is not that table, or any app's — it is *a* table with a tenant_id
+// and the platform's policy on it, which is a thing a test can make for itself.
+// Borrowing one made a test of the platform's tenant isolation depend on which
+// apps happened to be installed.
+func probeTable(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	ctx := context.Background()
+	name := "dbguard_probe"
+
+	// The login role owns it, and the policy names the app role the guard
+	// switches to — the same arrangement every platform table has.
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS ` + name + ` (
+			id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
+			name text NOT NULL)`,
+		`ALTER TABLE ` + name + ` ENABLE ROW LEVEL SECURITY`,
+		`ALTER TABLE ` + name + ` FORCE ROW LEVEL SECURITY`,
+		`DROP POLICY IF EXISTS tenant_isolation ON ` + name,
+		`CREATE POLICY tenant_isolation ON ` + name + ` TO ` + dbguard.AppRole + `
+			USING (tenant_id IS NULL OR tenant_id = ANY (COALESCE(
+				NULLIF(current_setting('app.allowed_tenants', true), '')::uuid[],
+				ARRAY[NULLIF(current_setting('app.current_tenant', true), '')::uuid])))
+			WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ` + name + ` TO ` + dbguard.AppRole,
+	} {
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			t.Fatalf("prepare the probe table: %v", err)
+		}
+	}
+	return name
+}
+
+// seedTwoTenants leaves one probe row in each of two tenants and returns their ids.
 func seedTwoTenants(t *testing.T, pool *pgxpool.Pool) (string, string) {
 	t.Helper()
 	ctx := context.Background()
+	probeTable(t, pool)
 	var first, second string
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 	for i, target := range []*string{&first, &second} {
@@ -80,8 +118,8 @@ func seedTwoTenants(t *testing.T, pool *pgxpool.Pool) (string, string) {
 			t.Fatal(err)
 		}
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO contacts (id, tenant_id, name, email, phone, company, active)
-			 VALUES ($1,$2,$3,'','','',true)`,
+			`INSERT INTO dbguard_probe (id, tenant_id, name)
+			 VALUES ($1,$2,$3)`,
 			uuid.NewString(), *target, "contact-"+slug); err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +138,7 @@ func TestQueryWithoutATenantClauseSeesOnlyItsOwnTenant(t *testing.T) {
 	pool := openGuardedPool(t)
 	first, second := seedTwoTenants(t, pool)
 
-	const noFilter = `SELECT count(*) FROM contacts WHERE name LIKE 'contact-guardtest-%'`
+	const noFilter = `SELECT count(*) FROM dbguard_probe WHERE name LIKE 'contact-guardtest-%'`
 
 	var visible int
 	ctx := tenant.WithTenantID(context.Background(), first)
@@ -136,8 +174,8 @@ func TestWritingIntoAnotherTenantIsRefused(t *testing.T) {
 
 	ctx := tenant.WithTenantID(context.Background(), first)
 	_, err := pool.Exec(ctx,
-		`INSERT INTO contacts (id, tenant_id, name, email, phone, company, active)
-		 VALUES ($1,$2,'planted','','','',true)`, uuid.NewString(), second)
+		`INSERT INTO dbguard_probe (id, tenant_id, name)
+		 VALUES ($1,$2,'planted')`, uuid.NewString(), second)
 	if err == nil {
 		t.Fatal("a tenant inserted a row belonging to another tenant")
 	}
@@ -146,7 +184,7 @@ func TestWritingIntoAnotherTenantIsRefused(t *testing.T) {
 	}
 
 	tag, err := pool.Exec(ctx,
-		`UPDATE contacts SET name='rewritten' WHERE tenant_id=$1`, second)
+		`UPDATE dbguard_probe SET name='rewritten' WHERE tenant_id=$1`, second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +243,7 @@ func TestConnectionReuseDoesNotLeakTheBinding(t *testing.T) {
 		ctx := tenant.WithTenantID(context.Background(), want)
 		var seen string
 		if err := pool.QueryRow(ctx,
-			`SELECT tenant_id::text FROM contacts WHERE name LIKE 'contact-guardtest-%'`).Scan(&seen); err != nil {
+			`SELECT tenant_id::text FROM dbguard_probe WHERE name LIKE 'contact-guardtest-%'`).Scan(&seen); err != nil {
 			t.Fatalf("round %d: %v", round, err)
 		}
 		if seen != want {

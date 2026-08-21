@@ -46,7 +46,6 @@ GET /api/v1/core/organisation
 GET /api/v1/core/people
 GET /api/v1/core/people/*
 GET /api/v1/devices/me
-GET /api/v1/devices/shifts/current
 GET /api/v1/installed-apps
 GET /api/v1/integrations/
 GET /api/v1/integrations/deliveries
@@ -141,8 +140,6 @@ POST /api/v1/core/organisation
 POST /api/v1/core/people
 POST /api/v1/core/people/*
 POST /api/v1/devices/enroll
-POST /api/v1/devices/shifts/close
-POST /api/v1/devices/shifts/open
 POST /api/v1/devices/staff/pin
 POST /api/v1/devices/telemetry
 POST /api/v1/devices/token/rotate
