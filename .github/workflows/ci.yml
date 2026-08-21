@@ -339,6 +339,11 @@ jobs:
       # early returns to survive editing.
       - name: Check the service worker caches nothing personal
         run: npm run pwa:check
+      # lib/api.ts was 1831 lines with every app's endpoints in one object, and
+      # was the file app work changed most often. It is split now; this is what
+      # keeps the core client from filling up again.
+      - name: Check the core API client owns only core paths
+        run: npm run api:check
       # Warning mode, deliberately. 257 keys per language are untranslated
       # today and this step is not the commit that fixes them — an untranslated
       # key falls back to English, which is right at runtime and invisible in
