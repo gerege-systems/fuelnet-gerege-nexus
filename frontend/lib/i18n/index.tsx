@@ -4,34 +4,14 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 
 import { DEFAULT_BRAND } from "../brand";
 import type { BrandCopy } from "../brandCopy";
-import { base } from "./base";
-import { web } from "./web";
-import { access } from "./addons/access";
-import { ai } from "./addons/ai";
-import { app_store } from "./addons/app_store";
-import { appstore_modules } from "./addons/appstore_modules";
-import { appearance } from "./addons/appearance";
-import { auth } from "./addons/auth";
-import { billing } from "./addons/billing";
-import { contacts } from "./addons/contacts";
-import { cp } from "./addons/cp";
-import { core } from "./addons/core";
-import { sso_clients } from "./addons/sso_clients";
-import { storefront } from "./addons/storefront";
-import { modules } from "./addons/modules";
-import { documents } from "./addons/documents";
-import { egov } from "./addons/egov";
-import { emailverify } from "./addons/emailverify";
-import { esign } from "./addons/esign";
-import { gov } from "./addons/gov";
-import { integrations } from "./addons/integrations";
-import { inventory } from "./addons/inventory";
-import { products } from "./addons/products";
-import { reports } from "./addons/reports";
-import { reportSharing } from "./addons/sharing";
-import { urtuu } from "./addons/urtuu";
-import { website } from "./addons/website";
+import { coreDictionary, type TranslationKey } from "./core";
+import { lookup } from "./registry";
 import { overlays } from "./locales";
+
+// Imported for its side effects: every app in this build registers its own
+// translations at import time. See apps/index.ts for why that happens here
+// rather than from each app's route.
+import "./apps";
 
 // The type and the two constants live in lib/locale.ts, which carries no
 // "use client": the server reads them too, and a value imported from a client
@@ -76,47 +56,7 @@ const STORAGE_KEY = LOCALE_KEY;
 const ENABLED_STORAGE_KEY = "locales.enabled";
 const DEFAULT_LOCALE = DEFAULT_LOCALE_VALUE;
 
-/**
- * The dictionary, assembled from one file per module the way Odoo gives each
- * addon its own translations. `base` and `web` are the shared ones: a term
- * that more than one screen shows belongs there, never duplicated per screen.
- *
- * Keys read `<module>.<kind>.<term>`, where kind classifies the term the way
- * Odoo does — field (a data label), action (a button), menu, state (a
- * selection value), model (a business object), view (screen copy) or message
- * (something said to the user).
- */
-const dictionary = {
-  ...base,
-  ...web,
-  ...access,
-  ...ai,
-  ...app_store,
-  ...appstore_modules,
-  ...appearance,
-  ...auth,
-  ...billing,
-  ...contacts,
-  ...cp,
-  ...core,
-  ...sso_clients,
-  ...storefront,
-  ...modules,
-  ...documents,
-  ...egov,
-  ...emailverify,
-  ...esign,
-  ...gov,
-  ...integrations,
-  ...inventory,
-  ...products,
-  ...reports,
-  ...reportSharing,
-  ...urtuu,
-  ...website,
-} as const;
-
-export type TranslationKey = keyof typeof dictionary;
+export type { TranslationKey };
 
 interface I18nValue {
   locale: Locale;
@@ -125,7 +65,12 @@ interface I18nValue {
   availableLocales: Locale[];
   /** Turn one of the optional locales on or off. The defaults ignore this. */
   setLocaleEnabled: (locale: Locale, enabled: boolean) => void;
-  t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
+  /**
+   * A platform key is checked at compile time; an app key is a string, because
+   * the app that defines it may not be in this repository. `(string & {})`
+   * rather than `string` so the union still offers the platform keys.
+   */
+  t: (key: TranslationKey | (string & {}), vars?: Record<string, string | number>) => string;
 }
 
 const I18nContext = createContext<I18nValue | null>(null);
@@ -233,10 +178,10 @@ export function I18nProvider({
     // beside it, and the header follows the same override (lib/brand.ts).
     const brandName = copy["brand.name"]?.[locale]?.trim() || brand;
 
-    const t = (key: TranslationKey, vars?: Record<string, string | number>) => {
+    const t = (key: TranslationKey | (string & {}), vars?: Record<string, string | number>) => {
       // Entries are authored with mn and en; the other five locales are filled
       // in progressively, so a lookup is widened to "this locale, maybe".
-      const entry = dictionary[key] as (Partial<Record<Locale, string>> & { en: string }) | undefined;
+      const entry = (coreDictionary as Record<string, Partial<Record<Locale, string>> | undefined>)[key];
       // The deployment's own wording first, when it wrote this key in this
       // language: it is the most specific statement anybody has made about what
       // this string should say, and the only one made about this deployment.
@@ -245,8 +190,18 @@ export function I18nProvider({
       // for the optional languages live. Then the entry's own locale, then the
       // English source term rather than the key, as gettext does — an
       // untranslated screen reads as English, not as plumbing.
+      //
+      // An app's words come last of the three sources and by the same rules:
+      // registry.lookup already prefers the language asked for, and falls back
+      // to the app's English before this does to the key. A key belonging to no
+      // app and no core entry renders as itself, which is what it always did.
       let text: string =
-        copy[key]?.[locale] || overlays[locale]?.[key] || (entry ? entry[locale] || entry.en : key);
+        copy[key]?.[locale] ||
+        overlays[locale]?.[key] ||
+        (entry ? entry[locale] || entry.en : undefined) ||
+        lookup(locale, key) ||
+        lookup("en", key) ||
+        key;
       // The brand is offered to every key, so a string that names the product
       // needs nothing at the call site. A caller that passes its own `brand`
       // still wins — the spread order says so — which is what a screen naming

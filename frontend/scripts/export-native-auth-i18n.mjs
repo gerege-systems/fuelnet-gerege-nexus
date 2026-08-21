@@ -22,7 +22,9 @@ async function loadTs(file) {
 const { auth } = await loadTs(path.resolve(root, "lib/i18n/addons/auth.ts"));
 const overlays = {};
 for (const locale of locales.slice(2)) {
-  const localeModule = await loadTs(path.resolve(root, `lib/i18n/locales/${locale}.ts`));
+  // core.ts, not the directory: auth is one of the platform's own dictionaries,
+  // and the files beside it belong to apps this export does not carry.
+  const localeModule = await loadTs(path.resolve(root, `lib/i18n/locales/${locale}/core.ts`));
   overlays[locale] = localeModule[locale] ?? {};
 }
 
