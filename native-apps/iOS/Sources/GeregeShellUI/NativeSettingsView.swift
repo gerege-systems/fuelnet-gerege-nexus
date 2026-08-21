@@ -189,7 +189,10 @@ public struct NativeShellView: View {
         HStack(spacing: 4) {
             tab("square.grid.2x2", "Аппууд", "/apps")
             tab("doc.text", "Баримт", "/documents")
-            tab("person.2", "Харилцагч", "/contacts")
+            // Харилцагч байсан. Тэр апп business-gerege-nexus руу нүүсэн,
+            // дэлгэц нь 2026-08-21-нд хамт явсан. Тайлан бол энэ бинарийн
+            // мөнтөддөг зүйл.
+            tab("chart.bar", "Тайлан", "/reports")
             Button { pane = .settings } label: {
                 Label("Тохиргоо", systemImage: "gearshape").frame(maxWidth: .infinity)
                     .foregroundStyle(pane == .settings ? WalletTheme.Brand.hi : WalletTheme.Text.tertiary)

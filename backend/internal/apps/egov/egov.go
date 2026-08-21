@@ -45,7 +45,6 @@ import (
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/domain/egov/postgres"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/go-chi/chi/v5"
@@ -82,7 +81,7 @@ type Module struct {
 // installed, and the rails are read from this process's configuration — so what
 // crosses into the domain is not the client but the answer: a value with this
 // app's own type on it, which is what lets the rules be run against a map.
-func New(p nexus.Platform, xyp *gerege.GeregeService, rails staterail.Rails) *Module {
+func New(p nexus.Platform, xyp *gerege.GeregeService, rails nexus.StateRails) *Module {
 	m := &Module{
 		svc:   domain.NewService(registry{xyp: xyp}, asRails(rails), postgres.New(p.DB())),
 		perms: p.Permissions(),
@@ -91,10 +90,10 @@ func New(p nexus.Platform, xyp *gerege.GeregeService, rails staterail.Rails) *Mo
 	return m
 }
 
-// asRails is staterail.Rails as domain/egov.Rails. The two structs are the same
+// asRails is nexus.StateRails as domain/egov.Rails. The two structs are the same
 // four fields with the same JSON, which is the point: neither side has to know
 // the other, and the screen sees no difference.
-func asRails(rails staterail.Rails) domain.Rails {
+func asRails(rails nexus.StateRails) domain.Rails {
 	if rails == nil {
 		return nil
 	}

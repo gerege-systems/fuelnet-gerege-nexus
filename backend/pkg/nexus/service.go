@@ -368,3 +368,31 @@ type staticPlatform struct {
 
 func (p staticPlatform) DB() DB                       { return p.db }
 func (p staticPlatform) Permissions() PermissionStore { return p.permissions }
+
+// ---------------------------------------------------------------- state rails
+
+// StateRail is one of the state's systems, as this deployment is wired to it.
+//
+// Published here because a module has to be able to say what it is connected
+// to. internal/apps/egov — the app-facing surface of the state integrations —
+// imported internal/platform/staterail for this type and nothing else, and that
+// package is eight lines of struct: a module was pinned into this repository by
+// a type declaration it could have carried itself.
+//
+// The clients stay where they are. What travels is the shape of the answer:
+// which rail, what it is called, whether it is live or mocked, and where it
+// points. A module renders that; it does not dial it.
+type StateRail struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Mode is "live" or "mock" — a deployment wired to the real registry and
+	// one answering from fixtures look identical to a screen otherwise, which
+	// is the difference an operator most needs to see.
+	Mode     string `json:"mode"`
+	Endpoint string `json:"endpoint,omitempty"`
+}
+
+// StateRails is read per call rather than captured: what this deployment is
+// wired to can change while it is running, and a snapshot would be wrong from
+// the moment it was taken.
+type StateRails func() []StateRail

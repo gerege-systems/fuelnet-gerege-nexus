@@ -124,6 +124,10 @@
   Signer.SignDocument(ctx context.Context, request DocumentSignatureRequest) (SignatureSession, error)
   Signer.SignedDocument(ctx context.Context, ownerRegNumber, sessionID string) (SignedDocument, error)
   Signer.VerifiedDigest(ctx context.Context, ownerRegNumber, sessionID string) (string, error)
+  StateRail.Endpoint string
+  StateRail.ID string
+  StateRail.Mode string
+  StateRail.Name string
   UserClaims.AllowedTenantIDs []string
   UserClaims.Email string
   UserClaims.Impersonated bool
@@ -177,6 +181,7 @@ func Error(w http.ResponseWriter, status int, message string)
 func Get(id string) (Module, bool)
 func JSON(w http.ResponseWriter, status int, value any)
 func List() []Module
+func LocaleFromRequest(r *http.Request) string
 func LocalizedTitle(titles map[string]string, locale, fallback string) string
 func Location() *time.Location
 func Meetings() (MeetingBooker, error)
@@ -247,6 +252,8 @@ type SignatureSession struct
 type SignatureState string
 type SignedDocument struct
 type Signer interface
+type StateRail struct
+type StateRails func() []StateRail
 type UserClaims struct
 var ErrForbidden
 var ErrNoDocumentFiler
@@ -255,3 +262,4 @@ var ErrPDFSigningUnavailable
 var ErrSigningUnavailable
 var ErrTenantMissing
 var ErrUnauthenticated
+var SupportedLocales

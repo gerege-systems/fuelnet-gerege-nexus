@@ -14,7 +14,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -55,7 +54,7 @@ func TestTheServerProvidesEverythingBootstrapAsksFor(t *testing.T) {
 	provided[*eidmongolia.Service](t)
 	provided[*ssoprovider.SSOProvider](t)
 	provided[*gerege.GeregeService](t)
-	provided[staterail.Rails](t)
+	provided[nexus.StateRails](t)
 	provided[nexus.Link](t)
 	provided[nexus.Signer](t)
 	provided[apps.InstalledApps](t)

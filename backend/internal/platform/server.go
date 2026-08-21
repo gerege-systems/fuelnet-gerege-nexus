@@ -46,7 +46,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staterail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -247,8 +246,8 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// snapshot, and assembled here because this is the only place all three
 	// clients are in scope. The shape is staterail's, not the app's: the
 	// platform may not import an app to name a type it builds.
-	nexus.Provide[staterail.Rails](func() []staterail.Rail {
-		return []staterail.Rail{
+	nexus.Provide[nexus.StateRails](func() []nexus.StateRail {
+		return []nexus.StateRail{
 			{ID: "xyp", Name: "ХУР", Mode: geregeSvc.Mode(), Endpoint: geregeSvc.Endpoint()},
 			{ID: "eid", Name: "eID Mongolia", Mode: eidSvc.Mode(), Endpoint: eidSvc.Endpoint()},
 			{ID: "dan", Name: "ДАН", Mode: danSvc.Mode(), Endpoint: danSvc.Endpoint()},

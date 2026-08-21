@@ -244,7 +244,7 @@ private enum class Pane { Work, Settings }
       // Bottom nav нь дэлгэц солигдох бүрд байрандаа үлдэнэ — энэ бол хүрээний
       // chrome, ажлын мужийн хэсэг биш.
       if (BuildConfig.FORM_FACTOR in setOf("mobile", "tablet")) NavigationBar(containerColor = LocalGw.current.surface1) {
-        listOf("▦" to ("Аппууд" to "/apps"), "▤" to ("Баримт" to "/documents"), "♙" to ("Харилцагч" to "/contacts")).forEach { (icon, item) ->
+        listOf("▦" to ("Аппууд" to "/apps"), "▤" to ("Баримт" to "/documents"), "▥" to ("Тайлан" to "/reports")).forEach { (icon, item) ->
           NavigationBarItem(selected = pane == Pane.Work && activeRoute == item.second, onClick = { activeRoute = item.second; pane = Pane.Work; nativeWebView.loadUrl(webOrigin + item.second) }, icon = { Text(icon, fontSize = 20.sp) }, label = { Text(item.first) })
         }
         NavigationBarItem(selected = pane == Pane.Settings, onClick = { pane = Pane.Settings }, icon = { Text("⚙", fontSize = 19.sp) }, label = { Text("Тохиргоо") })
