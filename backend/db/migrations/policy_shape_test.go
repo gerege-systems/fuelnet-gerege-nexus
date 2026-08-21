@@ -61,7 +61,6 @@ func TestTenantPoliciesHaveTheShapeOnRecord(t *testing.T) {
 		"devices":                 "device scope",
 		"push_tokens":             "device scope",
 		"staff_pin_credentials":   "device scope",
-		"pos_shifts":              "device scope",
 
 		// TODO: unreviewed. These four took the narrow form by copying, not by
 		// deciding, and each needs its own answer before it is widened — an
@@ -71,9 +70,6 @@ func TestTenantPoliciesHaveTheShapeOnRecord(t *testing.T) {
 		"document_files":   "unreviewed",
 		"report_grants":    "unreviewed",
 		"report_schedules": "unreviewed",
-
-		// Departed with the registry; see db/migrations/ownership_test.go.
-		"store_publishers": "departed: registry",
 	}
 
 	// Only the platform's own tables, which is why this test lives beside the

@@ -37,6 +37,11 @@
  * key is part of TranslationKey, and a distribution adds an app without
  * touching either this file or that one. Adding an in-repo app is one line
  * here, in a file that exists for that line.
+ *
+ * Six entries were removed on 2026-08-21 — contacts, products, inventory,
+ * billing, gov and appstore_modules. Their screens went with them: the core
+ * served no route for any of them, so every one of those pages was calling an
+ * endpoint that answered 404.
  */
 
 import "./ai";
@@ -47,12 +52,3 @@ import "./reports";
 import "./sso_clients";
 import "./storefront";
 import "./urtuu";
-
-// Departed: the modules are in other repositories, the screens are still here.
-// See docs/ECOSYSTEM_GIT_STRATEGY.md §2.3 and lib/api/_departed/README.md.
-import "./appstore_modules";
-import "./billing";
-import "./contacts";
-import "./gov";
-import "./inventory";
-import "./products";

@@ -15,6 +15,11 @@
 // Add nothing here. A new endpoint belongs in the file for the app it serves —
 // lib/api/<app>.ts — or, if it is genuinely the platform's, in lib/api/client.ts,
 // where scripts/check-api-boundaries.mjs will hold it to the core's own paths.
+//
+// lib/api/_departed/ is gone. It held clients for nine modules that had moved to
+// other repositories, on the argument that their screens were still working. The
+// core served no route for any of them: every one of those screens was calling
+// an endpoint that answered 404. They were removed with the clients.
 
 export * from "./api/client";
 export * from "./api/integrations";
@@ -28,15 +33,6 @@ export * from "./api/reports";
 export * from "./api/sso-clients";
 export * from "./api/urtuu";
 
-export * from "./api/_departed/appstore-registry";
-export * from "./api/_departed/billing";
-export * from "./api/_departed/contacts";
-export * from "./api/_departed/inventory";
-export * from "./api/_departed/pos";
-export * from "./api/_departed/products";
-export * from "./api/_departed/publisher";
-export * from "./api/_departed/shifts";
-export * from "./api/_departed/store-review";
 
 import { coreApi } from "./api/client";
 import { integrationsApi } from "./api/integrations";
@@ -50,15 +46,6 @@ import { reportsApi } from "./api/reports";
 import { ssoClientsApi } from "./api/sso-clients";
 import { urtuuApi } from "./api/urtuu";
 
-import { appstoreRegistryApi } from "./api/_departed/appstore-registry";
-import { billingApi } from "./api/_departed/billing";
-import { contactsApi } from "./api/_departed/contacts";
-import { inventoryApi } from "./api/_departed/inventory";
-import { posApi } from "./api/_departed/pos";
-import { productsApi } from "./api/_departed/products";
-import { publisherApi } from "./api/_departed/publisher";
-import { shiftsApi } from "./api/_departed/shifts";
-import { storeReviewApi } from "./api/_departed/store-review";
 
 export const api = {
   ...coreApi,
@@ -72,14 +59,4 @@ export const api = {
   ...reportsApi,
   ...ssoClientsApi,
   ...urtuuApi,
-
-  ...appstoreRegistryApi,
-  ...billingApi,
-  ...contactsApi,
-  ...inventoryApi,
-  ...posApi,
-  ...productsApi,
-  ...publisherApi,
-  ...shiftsApi,
-  ...storeReviewApi,
 };

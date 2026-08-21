@@ -951,9 +951,11 @@ func (s *Server) setupRoutes() {
 		api.With(s.deviceMiddleware).Get("/devices/me", s.handleDeviceMe)
 		api.With(s.deviceMiddleware).Post("/devices/token/rotate", s.handleRotateDeviceToken)
 		api.With(s.deviceMiddleware, security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/devices/staff/pin", s.handleDeviceStaffPIN)
-		api.With(s.deviceMiddleware).Get("/devices/shifts/current", s.handleCurrentShift)
-		api.With(s.deviceMiddleware, s.authMiddleware).Post("/devices/shifts/open", s.handleOpenShift)
-		api.With(s.deviceMiddleware, s.authMiddleware).Post("/devices/shifts/close", s.handleCloseShift)
+		// The till shift endpoints were here. Point of sale went to
+		// pos-gerege-nexus and they did not follow — three routes over
+		// pos_shifts, a table belonging to a module this binary does not have.
+		// Found by db/migrations/ownership_test.go rather than by anybody
+		// noticing; removed with the rest of the departed apps' remains.
 		api.With(s.deviceMiddleware).Post("/devices/telemetry", s.handleDeviceTelemetry)
 
 		// The OAuth redirect a connected provider sends the browser back to.

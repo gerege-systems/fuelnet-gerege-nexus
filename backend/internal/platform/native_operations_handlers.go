@@ -87,62 +87,6 @@ func (s *Server) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, map[string]any{"expires_at": expires, "membership_id": membershipID, "user": map[string]any{"id": userID, "name": name, "email": email, "tenant_id": device.TenantID}})
 }
 
-func (s *Server) handleOpenShift(w http.ResponseWriter, r *http.Request) {
-	device := r.Context().Value(deviceContextKey{}).(deviceClaims)
-	user, _ := auth.UserFromContext(r.Context())
-	var req struct {
-		OpeningFloat float64 `json:"opening_float"`
-		Notes        string  `json:"notes"`
-	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil || req.OpeningFloat < 0 {
-		httpx.Error(w, 400, "invalid shift")
-		return
-	}
-	var membershipID, shiftID string
-	err := s.db.QueryRow(r.Context(), `WITH member AS (SELECT id FROM memberships WHERE tenant_id=$1 AND user_id=$2 LIMIT 1) INSERT INTO pos_shifts(tenant_id,device_id,membership_id,opening_float,notes) SELECT $1,$3,id,$4,$5 FROM member RETURNING id::text`, user.TenantID, user.UserID, device.ID, req.OpeningFloat, strings.TrimSpace(req.Notes)).Scan(&shiftID)
-	_ = membershipID
-	if err != nil {
-		httpx.Error(w, 409, "device already has an open shift")
-		return
-	}
-	audit.Record(r.Context(), user.TenantID, user.UserID, "shift.opened", "shift", map[string]any{"shift_id": shiftID, "device_id": device.ID})
-	httpx.JSON(w, 201, map[string]any{"id": shiftID, "opened_at": time.Now()})
-}
-
-func (s *Server) handleCloseShift(w http.ResponseWriter, r *http.Request) {
-	device := r.Context().Value(deviceContextKey{}).(deviceClaims)
-	user, _ := auth.UserFromContext(r.Context())
-	var req struct {
-		ClosingTotal float64 `json:"closing_total"`
-		Notes        string  `json:"notes"`
-	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil || req.ClosingTotal < 0 {
-		httpx.Error(w, 400, "invalid shift")
-		return
-	}
-	var id string
-	err := s.db.QueryRow(r.Context(), `UPDATE pos_shifts SET closed_at=NOW(),closing_total=$3,notes=CASE WHEN $4='' THEN notes ELSE $4 END WHERE tenant_id=$1 AND device_id=$2 AND closed_at IS NULL RETURNING id::text`, user.TenantID, device.ID, req.ClosingTotal, strings.TrimSpace(req.Notes)).Scan(&id)
-	if err != nil {
-		httpx.Error(w, 404, "no open shift")
-		return
-	}
-	audit.Record(r.Context(), user.TenantID, user.UserID, "shift.closed", "shift", map[string]any{"shift_id": id})
-	httpx.JSON(w, 200, map[string]any{"id": id, "status": "CLOSED"})
-}
-
-func (s *Server) handleCurrentShift(w http.ResponseWriter, r *http.Request) {
-	device := r.Context().Value(deviceContextKey{}).(deviceClaims)
-	var id, membershipID string
-	var opened time.Time
-	var opening float64
-	err := s.db.QueryRow(r.Context(), `SELECT id::text,membership_id::text,opened_at,opening_float FROM pos_shifts WHERE tenant_id=$1 AND device_id=$2 AND closed_at IS NULL`, device.TenantID, device.ID).Scan(&id, &membershipID, &opened, &opening)
-	if err != nil {
-		httpx.JSON(w, 200, map[string]any{"shift": nil})
-		return
-	}
-	httpx.JSON(w, 200, map[string]any{"shift": map[string]any{"id": id, "membership_id": membershipID, "opened_at": opened, "opening_float": opening}})
-}
-
 type telemetryEvent struct {
 	Level, Event string
 	Payload      map[string]any
