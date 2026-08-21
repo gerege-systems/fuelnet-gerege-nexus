@@ -58,6 +58,7 @@ Spanish) — seven in total.
 | [`ARCHITECTURE_SPECIFICATION_EN.md`](ARCHITECTURE_SPECIFICATION_EN.md) | EN | Architecture specification |
 | [`SSO_FEDERATION.md`](SSO_FEDERATION.md) | MN | Нэг суулгацыг нөгөөгийн SSO клиент болгох: env, урсгал, гарах зам |
 | [`ECOSYSTEM_GIT_STRATEGY.md`](ECOSYSTEM_GIT_STRATEGY.md) | MN | Зуун платформ нэг цөм дээр: юу цөмд үлдэж, юу distribution болох, хилийг хэрхэн тестээр барих |
+| [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md) | MN | Цөмийн хил хаана байх ёстой вэ — аппын ажил цөмийн юуг хөдөлгөдгийн хэмжилт, оношилгоо, зургаан үе шат |
 | [`adr/0001-domain-first.md`](adr/0001-domain-first.md) | MN | Домэйн эхэнд: аппын дүрэм платформоо мэдэхгүй — хэрэгжилт, хоёр хойшлуулалт, дөрвөн дүрэм |
 | [`adr/0002-one-signing-rail.md`](adr/0002-one-signing-rail.md) | MN | Гарын үсгийн зам нэг (`eidmongolia`), ба «гарын үсэг» гэдэг үг хоёр зүйлийг нэрлэж байсан нь |
 | [`adr/0003-a-document-carries-what-is-signed.md`](adr/0003-a-document-carries-what-is-signed.md) | MN | Баримт файлаа авч явна; гурван хэлбэр — pades, detached, approval |
@@ -96,6 +97,7 @@ prompt-ын төлөвлөгөө ба эцэст нь хэрэгжсэн зүй�
 | [`MODULE_RENAME_PROMPT.md`](MODULE_RENAME_PROMPT.md) | MN | Цөмийн модулиудын нэршлийн засвар (салгалтын 0-р алхам) |
 | [`MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md`](MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md) | MN | Мониторинг ба тайлангийн системийг хэрэгжүүлэх prompt |
 | [`DOMAIN_FIRST_PROMPT.md`](DOMAIN_FIRST_PROMPT.md) | MN | Домэйн давхаргыг салгах prompt — үр дүн нь [`adr/0001-domain-first.md`](adr/0001-domain-first.md) |
+| [`CORE_BOUNDARY_PROMPTS.md`](CORE_BOUNDARY_PROMPTS.md) | MN | [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md)-ыг хэрэгжүүлэх үе шат бүрийн prompt |
 
 ## Төслийн журам — Project governance
 

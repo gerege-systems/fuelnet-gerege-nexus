@@ -1,8 +1,34 @@
 # Who has to look at a change before it lands.
 #
-# One entry, and deliberately one: a CODEOWNERS file that names an owner for
-# every directory turns review into a formality nobody reads. This names the
-# one place where a mistake is expensive in a way no test result shows.
+# This file used to name one path, on the argument that a CODEOWNERS naming an
+# owner for every directory turns review into a formality nobody reads. That
+# argument still holds and this list is still short: what has been added is not
+# "the core", it is the twelve paths docs/CORE_BOUNDARY_PLAN.md §2.1 measured as
+# the ones app work drags along with it. Of the last 300 commits, 133 touched
+# backend/internal/apps; the files below are the ones they touched at the same
+# time, most often. Every one of them is a place where an app's change lands in
+# the platform because the platform gave it nowhere else to go.
+#
+# Being here does not mean "do not change this". It means the change is worth a
+# second pair of eyes asking whether it belongs in the core at all.
+#
+# Owner: @erdenebatt. A person rather than a team, because
+# @gerege-systems/core-team holds no write access to this repository and GitHub
+# resolves an owner it cannot write as no owner at all — check with
+#
+#	gh api repos/gerege-systems/open-gerege-nexus/codeowners/errors
+#
+# What this buys and what it does not. GitHub never asks a pull request's own
+# author to review it, so on a branch pushed from here this file requests
+# nothing: almost every commit in this repository is the owner's. Where it does
+# work is the case this repository is open for — somebody else's pull request,
+# which now reaches the owner by name instead of by whoever happens to look.
+#
+# It is a request, not a gate. main requires its status checks and does not
+# require a review, so nothing here blocks a merge. The gates are the golden
+# files — testdata/api.txt and testdata/routes.txt — which fail the Test check
+# that branch protection does require. This file says where to look; those say
+# what changed.
 
 # The ecosystem's contract. Every distribution repository compiles against this
 # package and pins it by tag, so a change here is a change to code that is not
@@ -10,4 +36,38 @@
 #
 # The golden file beside it is part of the same review: its diff is the plain
 # statement of what the contract gained or lost.
-/backend/pkg/nexus/ @gerege-systems/core-team
+/backend/pkg/nexus/ @erdenebatt
+
+# The rest of the published surface: the app manifest schema every catalogue
+# entry is validated against, the Өртөө wire contract two installations speak
+# across a network, and the entry point a distribution's main.go calls.
+/backend/pkg/catalog/ @erdenebatt
+/backend/pkg/urtuu/ @erdenebatt
+/backend/pkg/platform/ @erdenebatt
+
+# The route table (37 commits) and the bootstrap that builds every module
+# (its signature went from 4 parameters to 9 in eleven days). Both are where an
+# app's need for one more line becomes the platform's permanent surface.
+/backend/internal/platform/server.go @erdenebatt
+/backend/internal/apps/runtime.go @erdenebatt
+
+# What a tenant gets when it installs an app: which permissions exist and which
+# system roles they reach by default (12 commits). A line here changes who can
+# do what, in every deployment, and no test failure looks like it.
+/backend/internal/platform/appinstaller/ @erdenebatt
+
+# The platform's schema. 104 tables, and the row-level policies that are the
+# whole of tenant isolation. An app's table added here is an app's table the
+# core now carries forever.
+/backend/db/migrations/ @erdenebatt
+
+# The frontend's three shared files, and the three at the top of §2.1's table:
+# the API client (40 commits), the translation dictionary that every app is
+# spliced into by hand (its locale files, 21 commits each), and the shell that
+# names each app's icon and position in a list in its own source.
+/frontend/lib/api.ts @erdenebatt
+/frontend/lib/i18n/index.tsx @erdenebatt
+/frontend/components/Layout.tsx @erdenebatt
+
+# The bundled catalogue (20 commits). What this binary claims it can install.
+/catalog/ @erdenebatt

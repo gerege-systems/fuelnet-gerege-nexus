@@ -88,11 +88,11 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    # The gov_services workflow invariants live partly in SQL — composite
-    # tenant foreign keys, the published-version immutability trigger,
-    # optimistic concurrency on row_version — so its integration tests need a
-    # real schema. Without a database they self-skip, which used to leave
-    # eleven tests green without ever running.
+    # Several packages hold their invariants partly in SQL — composite tenant
+    # foreign keys, immutability triggers, optimistic concurrency on
+    # row_version — so their integration tests need a real schema. Without a
+    # database they self-skip, which used to leave whole suites green without
+    # ever running.
     services:
       postgres:
         image: postgres:16-alpine
@@ -120,7 +120,6 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
-      GOV_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       DOCUMENTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       EMAILVERIFY_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       # Single-use code redemption and refresh rotation are enforced by SQL
@@ -155,21 +154,16 @@ jobs:
         run: go run ./cmd/migrate up
       - name: Run tests
         run: go test -race ./...
-      - name: Fail if the workflow integration tests were skipped
-        # A silent skip is indistinguishable from a pass in the summary. This
-        # keeps the database wiring honest: if it breaks, the job goes red
-        # instead of quietly testing nothing.
-        run: |
-          go test -run 'TestLocalFulfilmentHappyPath' -v ./internal/apps/gov_services/... \
-            | tee /tmp/gov.log
-          if grep -q -- '--- SKIP' /tmp/gov.log; then
-            echo "::error::gov_services integration tests skipped — GOV_TEST_DATABASE_URL is not reaching the test"
-            exit 1
-          fi
+      # A guard step of this shape belongs to the package it names, and has to
+      # leave with it. The gov_services one outlived its package: the app moved
+      # to gerege-gov, `./internal/apps/gov_services/...` matched nothing, and
+      # `go test` over no packages is a pass — so the step written to stop a
+      # silent skip became one. Removing a package means removing its step.
       - name: Fail if the documents integration tests were skipped
-        # Same reasoning: these hold the signing invariants that live in SQL —
-        # the status guard, the one-signature-per-signer constraint, and the
-        # counts the approval chain derives.
+        # A silent skip is indistinguishable from a pass in the summary, and
+        # these hold the signing invariants that live in SQL — the status
+        # guard, the one-signature-per-signer constraint, and the counts the
+        # approval chain derives.
         run: |
           go test -run 'TestSigningApprovesWhenNoChainIsConfigured' -v ./internal/apps/documents/... \
             | tee /tmp/documents.log
@@ -223,6 +217,18 @@ jobs:
             ./internal/platform/ | tee /tmp/routes.log
           if grep -q -- '--- SKIP' /tmp/routes.log; then
             echo "::error::route policy test skipped — AUTH_TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
+      - name: Fail if the route table golden test was skipped
+        # The golden file is the only thing that makes adding a route to the
+        # core a visible act. It is built from the real router, so it needs the
+        # real schema; skipped, the platform's surface can grow a line at a
+        # time with nothing in a review saying so.
+        run: |
+          go test -run 'TestTheRouteTableIsTheOneOnRecord' -v \
+            ./internal/platform/ | tee /tmp/routes_golden.log
+          if grep -q -- '--- SKIP' /tmp/routes_golden.log; then
+            echo "::error::route table golden test skipped — AUTH_TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
       - name: Fail if the login lockout tests were skipped
