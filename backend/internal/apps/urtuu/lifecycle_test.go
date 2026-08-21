@@ -688,8 +688,8 @@ func TestATaskCarriesAReferenceToItsOrderAndNotTheOrder(t *testing.T) {
 	parent, child, parentPeerID := linked(t, pool, 28, "local.count")
 
 	store := &oneDocument{}
-	nexus.UseDocumentFiler(store)
-	t.Cleanup(func() { nexus.UseDocumentFiler(nil) })
+	nexus.Provide[nexus.DocumentFiler](store)
+	t.Cleanup(func() { nexus.Provide[nexus.DocumentFiler](nil) })
 
 	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
 		"code":     "local.count",
@@ -745,8 +745,8 @@ func TestACompletionCanCarryItsOwnSignedReport(t *testing.T) {
 	parent, child, parentPeerID := linked(t, pool, 29, "local.count")
 
 	store := &oneDocument{signatures: 2}
-	nexus.UseDocumentFiler(store)
-	t.Cleanup(func() { nexus.UseDocumentFiler(nil) })
+	nexus.Provide[nexus.DocumentFiler](store)
+	t.Cleanup(func() { nexus.Provide[nexus.DocumentFiler](nil) })
 
 	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
 		"code": "local.count", "peer_ids": []string{parentPeerID},
@@ -782,7 +782,7 @@ func TestACompletionCanCarryItsOwnSignedReport(t *testing.T) {
 func TestAnAttachmentIsRefusedWithoutADocumentStore(t *testing.T) {
 	pool := openPool(t)
 	parent, _, parentPeerID := linked(t, pool, 30, "local.count")
-	nexus.UseDocumentFiler(nil)
+	nexus.Provide[nexus.DocumentFiler](nil)
 
 	parent.call(http.MethodPost, "/api/v1/urtuu/tasks", map[string]any{
 		"code": "local.count", "peer_ids": []string{parentPeerID},

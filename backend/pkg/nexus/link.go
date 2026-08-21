@@ -9,7 +9,6 @@ package nexus
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -112,28 +111,26 @@ type LinkMessage struct {
 // answer rather than a nil interface that panics on first use.
 var ErrNoLink = errors.New("nexus: this deployment has no installation link")
 
-var (
-	linkMu sync.RWMutex
-	link   Link
-)
-
-// UseLink installs the capability. The platform calls it while it boots; a
-// module never does.
-func UseLink(l Link) {
-	linkMu.Lock()
-	defer linkMu.Unlock()
-	link = l
-}
+// UseLink installs the capability.
+//
+// Deprecated: use Provide[Link] instead. This is a wrapper over it and behaves
+// identically, including UseLink(nil) to withdraw. It stays for one major
+// version so a distribution pinned to v1 keeps compiling, and goes in v2 — see
+// docs/RELEASING.md.
+func UseLink(l Link) { Provide[Link](l) }
 
 // Ring returns the link capability, or ErrNoLink.
 //
 // Asked for per use rather than captured at construction, because a module may
 // be built before the platform has installed it — the same reason Documents()
-// is a function.
+// is a function. That property is now Capability's, which this calls.
+//
+// The sentinel is kept rather than passing Capability's error through: callers
+// written against v1 may compare against ErrNoLink, and "this deployment has no
+// installation link" says more than the generic form can.
 func Ring() (Link, error) {
-	linkMu.RLock()
-	defer linkMu.RUnlock()
-	if link == nil {
+	link, err := Capability[Link]()
+	if err != nil {
 		return nil, ErrNoLink
 	}
 	return link, nil

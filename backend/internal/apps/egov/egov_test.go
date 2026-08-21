@@ -81,7 +81,7 @@ func newFixture(t *testing.T) *fixture {
 	// the second — and the history screen has nothing to read, which is exactly
 	// what this test is checking.
 	audit.UseDatabase(pool)
-	nexus.UseAuditSink(audit.Record)
+	nexus.Provide[nexus.AuditSink](audit.Record)
 
 	// Mock mode, which is the state a deployment without ХУР credentials is in
 	// and the only one a test can be in.

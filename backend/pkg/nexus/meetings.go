@@ -32,6 +32,13 @@ import (
 // dependency's *type* travels as far as the dependency does. An interface
 // written in internal types is an internal interface however carefully it was
 // inverted.
+//
+// There is a second lesson, learned from this very file. Declaring the
+// interface is half the work: the adapter satisfying it was written the same
+// day in internal/platform/integration, and for the six days after that
+// AsMeetingBooker had no callers — not because nobody wanted a booking, but
+// because there was no way to ask for one. A contract with no way to reach an
+// implementation is a contract nobody can use. Meetings, below, is that way.
 type MeetingBooker interface {
 	// FirstMeetingConnector returns a connector this tenant has that can host
 	// a meeting, or an error when there is none. "First" rather than "the":
@@ -67,3 +74,15 @@ type Meeting struct {
 	JoinURL         string `json:"join_url"`
 	ExternalID      string `json:"external_id,omitempty"`
 }
+
+// Meetings returns the booking capability this deployment provides.
+//
+// Asked for per use rather than captured at construction, the same as Ring and
+// Documents: a module that books an appointment may be built before the
+// platform has finished wiring its integrations.
+//
+// No sentinel of its own, unlike ErrNoLink and ErrNoDocumentFiler. Those two
+// predate the capability registry and are kept because callers may already
+// compare against them; a contract added afterwards has no such callers, and
+// Capability's error already names the type that is missing.
+func Meetings() (MeetingBooker, error) { return Capability[MeetingBooker]() }

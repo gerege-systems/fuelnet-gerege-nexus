@@ -189,6 +189,10 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// files finished documents through it and gov_services books meetings
 	// through it, so it is a dependency of both rather than a peer.
 	integrationMgr := integration.NewManager(db)
+	// The booking contract, published rather than handed to one module. It was
+	// declared with an adapter and no way to get one; a module that books an
+	// appointment now asks nexus.Meetings() for it. See pkg/nexus/meetings.go.
+	nexus.Provide[nexus.MeetingBooker](integration.AsMeetingBooker(integrationMgr))
 
 	eidMN, err := eidmongolia.New(db)
 	if err != nil {
@@ -220,7 +224,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// Published for every module, not handed to one. The Өртөө app is its first
 	// caller and should not be its only one: any module with something to say to
 	// another installation asks nexus.Ring() for it. See pkg/nexus/link.go.
-	nexus.UseLink(urtuuLink)
+	nexus.Provide[nexus.Link](urtuuLink)
 
 	modulePlatform := newModulePlatform(db)
 	// A distribution's modules register themselves here, beside the platform's
@@ -232,28 +236,39 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		}
 	}
 
-	appRuntime := apps.Bootstrap(modulePlatform, integrationMgr, eidMN, ssoProvider, geregeSvc,
-		// What this deployment is wired to. Read per call rather than captured
-		// as a snapshot, and assembled here because this is the only place all
-		// three clients are in scope. The shape is staterail's, not the app's:
-		// the platform may not import an app to name a type it builds.
-		func() []staterail.Rail {
-			return []staterail.Rail{
-				{ID: "xyp", Name: "ХУР", Mode: geregeSvc.Mode(), Endpoint: geregeSvc.Endpoint()},
-				{ID: "eid", Name: "eID Mongolia", Mode: eidSvc.Mode(), Endpoint: eidSvc.Endpoint()},
-				{ID: "dan", Name: "ДАН", Mode: danSvc.Mode(), Endpoint: danSvc.Endpoint()},
-			}
-		},
-		urtuuLink,
-		// The signing rail, as the SDK publishes it: a document that carries a
-		// file is signed over that file's digest through this. Handed over even
-		// when the installation has no eID registration — it answers Enabled()
-		// false, which is the state a module is meant to ask about rather than
-		// a nil it has to guard.
-		Signing(eidMN),
-		func(ctx context.Context, tenantID string) (map[string]bool, error) {
-			return server.installedAppSet(ctx, tenantID)
-		})
+	// What the platform lends its modules. Published rather than passed, so
+	// that lending one more is a line here instead of a change to a signature
+	// every distribution would have to chase — see pkg/nexus/capability.go.
+	// All of it before Bootstrap, which asks the registry for each in turn.
+	nexus.Provide(integrationMgr)
+	nexus.Provide(eidMN)
+	nexus.Provide(ssoProvider)
+	nexus.Provide(geregeSvc)
+	// What this deployment is wired to. Read per call rather than captured as a
+	// snapshot, and assembled here because this is the only place all three
+	// clients are in scope. The shape is staterail's, not the app's: the
+	// platform may not import an app to name a type it builds.
+	nexus.Provide[staterail.Rails](func() []staterail.Rail {
+		return []staterail.Rail{
+			{ID: "xyp", Name: "ХУР", Mode: geregeSvc.Mode(), Endpoint: geregeSvc.Endpoint()},
+			{ID: "eid", Name: "eID Mongolia", Mode: eidSvc.Mode(), Endpoint: eidSvc.Endpoint()},
+			{ID: "dan", Name: "ДАН", Mode: danSvc.Mode(), Endpoint: danSvc.Endpoint()},
+		}
+	})
+	// The signing rail, as the SDK publishes it: a document that carries a file
+	// is signed over that file's digest through this. Provided even when the
+	// installation has no eID registration — it answers Enabled() false, which
+	// is the state a module is meant to ask about rather than a nil it has to
+	// guard.
+	nexus.Provide[nexus.Signer](Signing(eidMN))
+	// A closure over the server pointer that is about to be filled, so the
+	// named type is what carries it: an unnamed func would key the registry on
+	// a shape every other callback of the same signature shares.
+	nexus.Provide[apps.InstalledApps](func(ctx context.Context, tenantID string) (map[string]bool, error) {
+		return server.installedAppSet(ctx, tenantID)
+	})
+
+	appRuntime := apps.Bootstrap(modulePlatform)
 
 	// The relying-party half. A deployment that names a provider but cannot
 	// reach it is a deployment nobody can sign in to, so a configuration that

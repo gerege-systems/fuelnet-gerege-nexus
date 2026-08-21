@@ -9,7 +9,6 @@ package nexus
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 )
 
@@ -102,30 +101,25 @@ func (d FiledDocument) Signed() bool {
 // contract; it just cannot file.
 var ErrNoDocumentFiler = errors.New("nexus: this deployment has no document store")
 
-var (
-	documentMu    sync.RWMutex
-	documentFiler DocumentFiler
-)
-
-// UseDocumentFiler installs the capability. The platform calls it when the
-// documents module is constructed.
-func UseDocumentFiler(filer DocumentFiler) {
-	documentMu.Lock()
-	defer documentMu.Unlock()
-	documentFiler = filer
-}
+// UseDocumentFiler installs the capability.
+//
+// Deprecated: use Provide[DocumentFiler] instead. This is a wrapper over it and
+// behaves identically, including UseDocumentFiler(nil) to withdraw. It stays
+// for one major version so a distribution pinned to v1 keeps compiling, and
+// goes in v2 — see docs/RELEASING.md.
+func UseDocumentFiler(filer DocumentFiler) { Provide[DocumentFiler](filer) }
 
 // Documents returns the document capability, or ErrNoDocumentFiler.
 //
 // An error rather than a nil interface: a module that forgets to check nil gets
 // a panic at the first filing, and a module that forgets to check an error gets
 // a vet warning. The failure should be loud where it is written, not where it
-// is used.
+// is used. Capability answers the same way and this calls it; the sentinel is
+// kept because callers written against v1 may compare against it.
 func Documents() (DocumentFiler, error) {
-	documentMu.RLock()
-	defer documentMu.RUnlock()
-	if documentFiler == nil {
+	filer, err := Capability[DocumentFiler]()
+	if err != nil {
 		return nil, ErrNoDocumentFiler
 	}
-	return documentFiler, nil
+	return filer, nil
 }
