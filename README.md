@@ -428,6 +428,7 @@ CI нь push ба pull request бүр дээр lint, тест, frontend build, D
 | --- | --- |
 | [Баримт бичгийн төв](docs/README.md) | Бүх баримтын индекс ба орчуулгууд |
 | [Архитектурын тодорхойлолт](docs/ARCHITECTURE_SPECIFICATION.md) | Платформын давхаргууд ба шийдвэрүүд |
+| [Цөмийн хилийн төлөвлөгөө](docs/CORE_BOUNDARY_PLAN.md) | Юу цөмд үлдэж, юу апп болж гарах вэ — хэмжилт ба үе шатууд |
 | [Модуль хөгжүүлэх заавар](docs/MODULE_AUTHORING_GUIDE.md) | Шинэ апп модуль бичих алхмууд |
 | [Bridge Contract v1](docs/SHELL_CONTRACT.md) | Native бүрхүүл ба вэб ажлын мужийн гэрээ |
 | [Хамтран ажиллах заавар](CONTRIBUTING.md) | Хувь нэмэр оруулах журам |
