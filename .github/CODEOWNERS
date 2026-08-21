@@ -12,14 +12,23 @@
 # Being here does not mean "do not change this". It means the change is worth a
 # second pair of eyes asking whether it belongs in the core at all.
 #
-# Owner: @gerege-systems/core-team. The team exists but currently holds only
-# read access to this repository, so GitHub resolves it as an unknown owner and
-# enforces none of these rules — check with
+# Owner: @erdenebatt. A person rather than a team, because
+# @gerege-systems/core-team holds no write access to this repository and GitHub
+# resolves an owner it cannot write as no owner at all — check with
 #
 #	gh api repos/gerege-systems/open-gerege-nexus/codeowners/errors
 #
-# Granting the team write access is what turns this file from a comment into a
-# required review; until then it documents the boundary without guarding it.
+# What this buys and what it does not. GitHub never asks a pull request's own
+# author to review it, so on a branch pushed from here this file requests
+# nothing: almost every commit in this repository is the owner's. Where it does
+# work is the case this repository is open for — somebody else's pull request,
+# which now reaches the owner by name instead of by whoever happens to look.
+#
+# It is a request, not a gate. main requires its status checks and does not
+# require a review, so nothing here blocks a merge. The gates are the golden
+# files — testdata/api.txt and testdata/routes.txt — which fail the Test check
+# that branch protection does require. This file says where to look; those say
+# what changed.
 
 # The ecosystem's contract. Every distribution repository compiles against this
 # package and pins it by tag, so a change here is a change to code that is not
@@ -27,38 +36,38 @@
 #
 # The golden file beside it is part of the same review: its diff is the plain
 # statement of what the contract gained or lost.
-/backend/pkg/nexus/ @gerege-systems/core-team
+/backend/pkg/nexus/ @erdenebatt
 
 # The rest of the published surface: the app manifest schema every catalogue
 # entry is validated against, the Өртөө wire contract two installations speak
 # across a network, and the entry point a distribution's main.go calls.
-/backend/pkg/catalog/ @gerege-systems/core-team
-/backend/pkg/urtuu/ @gerege-systems/core-team
-/backend/pkg/platform/ @gerege-systems/core-team
+/backend/pkg/catalog/ @erdenebatt
+/backend/pkg/urtuu/ @erdenebatt
+/backend/pkg/platform/ @erdenebatt
 
 # The route table (37 commits) and the bootstrap that builds every module
 # (its signature went from 4 parameters to 9 in eleven days). Both are where an
 # app's need for one more line becomes the platform's permanent surface.
-/backend/internal/platform/server.go @gerege-systems/core-team
-/backend/internal/apps/runtime.go @gerege-systems/core-team
+/backend/internal/platform/server.go @erdenebatt
+/backend/internal/apps/runtime.go @erdenebatt
 
 # What a tenant gets when it installs an app: which permissions exist and which
 # system roles they reach by default (12 commits). A line here changes who can
 # do what, in every deployment, and no test failure looks like it.
-/backend/internal/platform/appinstaller/ @gerege-systems/core-team
+/backend/internal/platform/appinstaller/ @erdenebatt
 
 # The platform's schema. 104 tables, and the row-level policies that are the
 # whole of tenant isolation. An app's table added here is an app's table the
 # core now carries forever.
-/backend/db/migrations/ @gerege-systems/core-team
+/backend/db/migrations/ @erdenebatt
 
 # The frontend's three shared files, and the three at the top of §2.1's table:
 # the API client (40 commits), the translation dictionary that every app is
 # spliced into by hand (its locale files, 21 commits each), and the shell that
 # names each app's icon and position in a list in its own source.
-/frontend/lib/api.ts @gerege-systems/core-team
-/frontend/lib/i18n/index.tsx @gerege-systems/core-team
-/frontend/components/Layout.tsx @gerege-systems/core-team
+/frontend/lib/api.ts @erdenebatt
+/frontend/lib/i18n/index.tsx @erdenebatt
+/frontend/components/Layout.tsx @erdenebatt
 
 # The bundled catalogue (20 commits). What this binary claims it can install.
-/catalog/ @gerege-systems/core-team
+/catalog/ @erdenebatt
