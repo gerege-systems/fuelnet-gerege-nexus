@@ -157,6 +157,7 @@ func (Params) UUID(key string) string
 func (SignatureState) Settled() bool
 func AllowedTenants(ctx context.Context) []string
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
+func Capability[T any]() (T, error)
 func Collect(rows Rows, scan func() (map[string]any, error)) ([]map[string]any, error)
 func Documents() (DocumentFiler, error)
 func Error(w http.ResponseWriter, status int, message string)
@@ -165,10 +166,12 @@ func JSON(w http.ResponseWriter, status int, value any)
 func List() []Module
 func LocalizedTitle(titles map[string]string, locale, fallback string) string
 func Location() *time.Location
+func Meetings() (MeetingBooker, error)
 func MenuPermissionOf(m Module) string
 func NewParams(values map[string]any, locale string) Params
 func NewPlatform(db DB, permissions PermissionStore) Platform
 func Now() time.Time
+func Provide[T any](impl T)
 func Register(m Module)
 func RegisterReport(report Report)
 func RequirePermission(store PermissionStore, permissionCode string) func(http.Handler) http.Handler
@@ -218,6 +221,7 @@ type PermissionStore interface
 type Platform interface
 type Querier interface
 type Report interface
+type ReportSink func(Report)
 type Result struct
 type Rows interface
 type SignatureRequest struct

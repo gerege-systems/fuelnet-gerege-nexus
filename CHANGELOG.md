@@ -15,6 +15,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Чадвар нэмэх нь SDK-гийн засвар байхаа болив
+
+`nexus.Provide[T](impl)` ба `nexus.Capability[T]()`. Чадвар нь өөрийнхөө
+төрлөөр түлхүүрлэгдсэн нэг бүртгэлд амьдардаг болсон тул distribution
+энэ репо сонсож ч байгаагүй чадвар нийтэлж чадна:
+
+```go
+nexus.Provide[mydist.Pricing](myPricing{db})   // main()-д
+p, err := nexus.Capability[mydist.Pricing]()   // модульд
+```
+
+`nexus.Meetings()` нэмэгдэв. `MeetingBooker` гэрээ 2026-08-15-нд
+зарлагдсан, адаптер нь тэр өдрөө бичигдсэн, авах арга нь хэзээ ч
+нэмэгдээгүй — зургаан хоног хэрэглэгдэх боломжгүй байсан.
+
+`nexus.ReportSink` нь нэрлэгдсэн төрөл болов (өмнө нь нэргүй
+`func(Report)`). Чадвар төрлөөрөө хайгддаг тул нэргүй төрөл нь ижил
+гарын үсэгтэй бүхнийг нэг түлхүүр дээр буулгана.
+
+`internal/apps.Bootstrap` нь есөн параметрийн оронд `nexus.Platform` нэгийг
+авдаг болов. Энэ нь `internal/` тул экспортолсон гадаргууд өөрчлөлт биш,
+гэхдээ дээрх бүртгэл яагаад байгааг тайлбарладаг: тэр гарын үсэг
+2026-08-09-өөс 08-20-ны хооронд 4-өөс 9 болж долоон удаа өөрчлөгдсөн.
+
+### Deprecated — Дөрвөн `Use*`
+
+`nexus.UseLink`, `nexus.UseDocumentFiler`, `nexus.UseAuditSink`,
+`nexus.UseReportSink` нь `Provide[T]`-ийн нимгэн бүрхүүл болов. Зан төлөв
+яг хэвээр, `Use*(nil)` нь чадварыг хураах нь ч хэвээр.
+
+Тус бүрийг `nexus.Provide[<төрөл>](impl)` -ээр солино:
+
+| Хуучин | Шинэ |
+| --- | --- |
+| `nexus.UseLink(l)` | `nexus.Provide[nexus.Link](l)` |
+| `nexus.UseDocumentFiler(f)` | `nexus.Provide[nexus.DocumentFiler](f)` |
+| `nexus.UseAuditSink(s)` | `nexus.Provide[nexus.AuditSink](s)` |
+| `nexus.UseReportSink(s)` | `nexus.Provide[nexus.ReportSink](s)` |
+
+Нэг major цикл үлдэнэ, дараагийн major дээр устана (`docs/RELEASING.md` §1).
+`Ring()`, `Documents()`, `Audit()`, `RegisterReport()` нь deprecated **биш** —
+дотроо `Capability`-ээр уншдаг болсон, гарын үсэг нь хэвээр.
+
 ### Added — Баримт гарын үсэг зурагдах зүйлээ өөртөө авч явдаг болов
 
 `documents` апп өнөөг хүртэл агуулгагүй байсан — гарчиг, төрөл, төлөв —
