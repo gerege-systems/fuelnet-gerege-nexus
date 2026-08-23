@@ -54,6 +54,9 @@ const CORE_PREFIXES = [
   "/verify",
   "/push-tokens",
   "/oauth2",
+  "/ai",
+  "/admin/ai",
+  "/integrations",
 ];
 
 const source = readFileSync(clientPath, "utf8");

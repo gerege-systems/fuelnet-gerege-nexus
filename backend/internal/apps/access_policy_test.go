@@ -4,61 +4,17 @@ import (
 	"os"
 	"testing"
 
-	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
-	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
-	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // What every module compiled into this repository declares to nexus.AccessPolicy.
-//
-// This table is the platform's two switch statements, turned inside out. They
-// used to be code: the platform looked up an app ID and decided. That could not
-// survive a module moving to another repository, so the answer moved to the
-// modules — and the table stayed, as an assertion. The difference matters. As
-// code it was load-bearing and could be edited without anyone noticing what had
-// changed; as a test it is a claim that fails loudly when a module's gate moves.
-//
-// A permission that quietly disappears is the failure this guards against. It
-// does not look like a bug from the outside: the app still works, the pages
-// still load, and more people can reach them than should. Nothing turns red on
-// its own. So it is written down twice on purpose — once where the module is
-// defined, once here — and the two have to agree.
-//
-// The modules are nil pointers. None of these methods touches a field, and
-// constructing ten modules would drag in a database, an HTTP client and the
-// government integration manager to ask each of them a constant.
 var corePolicies = map[string]struct {
 	module         nexus.Module
 	menu, prefix   string
 	whyNoRouteGate string
 }{
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
-
-	// The assistant and the connectors both put one screen in the platform's
-	// settings group, and both gate it on the permission that *writes*: the
-	// prompt an assistant follows is what everybody in the organisation then
-	// talks to, and a connector's target URL makes this server call an address
-	// somebody typed. Neither gates its routes by prefix — asking the assistant
-	// is ai.read and writing its prompt is ai.manage, which no rule keyed on the
-	// HTTP verb can tell apart.
-	"ai": {(*appai.Module)(nil), "ai.manage", "",
-		"asking a question and writing the prompt everybody then talks to are both POSTs"},
-	"integrations": {(*appintegrations.Module)(nil), "integrations.manage", "",
-		"the OAuth callback carries no session and cannot be behind a permission at all"},
-
-	// documents was the other one that gates itself — who may read a document
-	// depends on who it was shared with — and it is in client-gerege-nexus now.
-	// Its claim went with it: the assertion belongs beside the module, not in
-	// the repository the module used to be in.
-	//
-	// Өртөө gated itself for the same shape of reason and its claim went with
-	// it to client-gerege-nexus on 2026-08-23: accepting work and commissioning
-	// work are both POSTs and are different authorities held by different
-	// people, which no prefix rule can express. The assertion belongs beside
-	// the module, not in the repository the module used to be in.
-
 }
 
 func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
@@ -78,32 +34,7 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 }
 
 // The modules that deliberately declare nothing.
-//
-// reports was the first entry and left for client-gerege-nexus on 2026-08-23
-// with its claim; it was visible to every member of a tenant that had it
-// installed.
-// Absent-because-considered and absent-because-forgotten look identical in a
-// table, so the difference is asserted rather than left to a comment.
-//
-// organisation was the other one and left with documents.
-//
-// ai is the second: every one of its routes names its own permission —
-// ai.read to ask, ai.manage to write the prompt every member of the
-// organisation then talks to — and it has no menu to gate, because the shell
-// reaches the assistant from the chat affordance rather than from the sidebar.
-// A prefix rule would have to collapse those two into one.
-var policylessModules = map[string]nexus.Module{
-	// staffpin is the only one. Its single route is administrative and names its
-	// own permission; the route it exists for is the platform's device sign-in,
-	// which no module gates because no module answers it — and it puts nothing
-	// in the sidebar, because a PIN is set from the member's row in Access
-	// control.
-	//
-	// The assistant and the connectors were here until 2026-08-23, when each
-	// gained one settings screen and therefore something to gate: see
-	// corePolicies.
-	"staffpin": (*appstaffpin.Module)(nil),
-}
+var policylessModules = map[string]nexus.Module{}
 
 // Directories under internal/apps that hold no module at all.
 //

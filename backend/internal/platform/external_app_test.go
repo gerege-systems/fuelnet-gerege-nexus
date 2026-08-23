@@ -9,7 +9,6 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
@@ -26,7 +25,7 @@ const exampleExternalManifest = "../../../catalog/manifests/example-external.jso
 // externalCatalogApp is the shipped example as the store would carry it.
 func externalCatalogApp(t *testing.T) catalog.CatalogApp {
 	t.Helper()
-	manifest, err := appcatalog.LoadManifestFile(filepath.FromSlash(exampleExternalManifest), PlatformVersion)
+	manifest, err := catalog.LoadManifest(filepath.FromSlash(exampleExternalManifest), PlatformVersion)
 	if err != nil {
 		t.Fatalf("load the example external manifest: %v", err)
 	}

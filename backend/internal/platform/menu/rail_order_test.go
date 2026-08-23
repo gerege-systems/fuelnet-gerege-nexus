@@ -101,7 +101,7 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 	// affordance, the connectors from /settings/integrations, and a staff PIN
 	// is set from the member's row in Access control — all three shell screens.
 	// A tile on the rail would open nothing in every case.
-	wantChrome := []string{"io.gerege.nexus.ai", "io.gerege.nexus.integrations", "io.gerege.nexus.staff_pin"}
+	wantChrome := []string{}
 	if len(chrome) != len(wantChrome) {
 		t.Fatalf("the shell draws %v as part of itself, want %v", chrome, wantChrome)
 	}

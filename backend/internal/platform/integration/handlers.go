@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package integrations
+package integration
 
 import (
 	"errors"
@@ -18,17 +18,19 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 )
 
-// Integration connectors.
-//
-// Every handler here resolves the tenant from the session and passes it down.
-// The registry used to be a process-global map with no tenant column, so one
-// tenant's administrator listed — and dispatched to — every other tenant's
-// connectors.
+// Handler serves the platform's integration connectors API.
+type Handler struct {
+	mgr *Manager
+}
+
+// NewHandler constructs the integration HTTP handler.
+func NewHandler(mgr *Manager) *Handler {
+	return &Handler{mgr: mgr}
+}
 
 // integrationSaveRequest is the wire shape of the connector form.
 type integrationSaveRequest struct {
@@ -40,33 +42,26 @@ type integrationSaveRequest struct {
 	Config    map[string]string `json:"config"`
 }
 
-func (r integrationSaveRequest) toSave() integration.SaveRequest {
-	return integration.SaveRequest{
-		Provider:  integration.Provider(r.Provider),
+func (r integrationSaveRequest) toSave() SaveRequest {
+	return SaveRequest{
+		Provider:  Provider(r.Provider),
 		Name:      r.Name,
 		TargetURL: r.TargetURL,
 		Secret:    r.Secret,
-		Status:    integration.ConnectorStatus(r.Status),
+		Status:    ConnectorStatus(r.Status),
 		Config:    r.Config,
 	}
 }
 
-// integrationError maps a manager error onto a status.
-//
-// A connector that belongs to another tenant is reported as missing, not as
-// forbidden: the distinction would confirm the id exists. Everything the
-// administrator can act on carries its own sentence; everything else is a 500
-// with the detail in the log rather than in the browser, which is where a
-// driver's message about a constraint belongs.
 func integrationError(w http.ResponseWriter, err error) {
-	var invalid *integration.InvalidError
+	var invalid *InvalidError
 	switch {
-	case errors.Is(err, integration.ErrNotFound):
+	case errors.Is(err, ErrNotFound):
 		httpx.Error(w, http.StatusNotFound, "integration not found")
-	case errors.Is(err, integration.ErrDuplicateName):
+	case errors.Is(err, ErrDuplicateName):
 		httpx.Error(w, http.StatusConflict, err.Error())
-	case errors.Is(err, integration.ErrNoEncryptionKey),
-		errors.Is(err, integration.ErrProviderUnavailable):
+	case errors.Is(err, ErrNoEncryptionKey),
+		errors.Is(err, ErrProviderUnavailable):
 		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
 	case errors.As(err, &invalid):
 		httpx.Error(w, http.StatusBadRequest, invalid.Error())
@@ -76,12 +71,12 @@ func integrationError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (m *Module) handleListIntegrations(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	list, err := m.mgr.List(r.Context(), tenantID)
+	list, err := h.mgr.List(r.Context(), tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load integrations")
 		return
@@ -89,18 +84,15 @@ func (m *Module) handleListIntegrations(w http.ResponseWriter, r *http.Request) 
 	httpx.JSON(w, http.StatusOK, list)
 }
 
-// handleIntegrationProviders tells the screen which connectors this deployment
-// can actually offer, so an administrator is not given a form for a provider
-// whose OAuth client was never configured.
-func (m *Module) handleIntegrationProviders(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleProviders(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"providers":             integration.Catalog(),
-		"encryption_configured": integration.EncryptionConfigured(),
-		"redirect_uri":          integration.RedirectURI(),
+		"providers":             Catalog(),
+		"encryption_configured": EncryptionConfigured(),
+		"redirect_uri":          RedirectURI(),
 	})
 }
 
-func (m *Module) handleRegisterIntegration(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -110,7 +102,7 @@ func (m *Module) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 		httpx.Error(w, http.StatusBadRequest, "invalid integration configuration")
 		return
 	}
-	conn, err := m.mgr.Create(r.Context(), tenantID, req.toSave())
+	conn, err := h.mgr.Create(r.Context(), tenantID, req.toSave())
 	if err != nil {
 		integrationError(w, err)
 		return
@@ -121,7 +113,7 @@ func (m *Module) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 	httpx.JSON(w, http.StatusCreated, conn)
 }
 
-func (m *Module) handleUpdateIntegration(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -131,7 +123,7 @@ func (m *Module) handleUpdateIntegration(w http.ResponseWriter, r *http.Request)
 		httpx.Error(w, http.StatusBadRequest, "invalid integration configuration")
 		return
 	}
-	conn, err := m.mgr.Update(r.Context(), tenantID, chi.URLParam(r, "id"), req.toSave())
+	conn, err := h.mgr.Update(r.Context(), tenantID, chi.URLParam(r, "id"), req.toSave())
 	if err != nil {
 		integrationError(w, err)
 		return
@@ -142,13 +134,13 @@ func (m *Module) handleUpdateIntegration(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, conn)
 }
 
-func (m *Module) handleDeleteIntegration(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := m.mgr.Delete(r.Context(), tenantID, id); err != nil {
+	if err := h.mgr.Delete(r.Context(), tenantID, id); err != nil {
 		integrationError(w, err)
 		return
 	}
@@ -158,16 +150,13 @@ func (m *Module) handleDeleteIntegration(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// handleConnectIntegration starts the OAuth grant and answers with the URL to
-// send the administrator to. It returns the URL rather than redirecting so the
-// caller is an ordinary fetch from the settings screen.
-func (m *Module) handleConnectIntegration(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	claims, _ := auth.UserFromContext(r.Context())
-	authURL, err := m.mgr.BeginConnect(r.Context(), tenantID, claims.UserID, chi.URLParam(r, "id"))
+	authURL, err := h.mgr.BeginConnect(r.Context(), tenantID, claims.UserID, chi.URLParam(r, "id"))
 	if err != nil {
 		integrationError(w, err)
 		return
@@ -175,13 +164,13 @@ func (m *Module) handleConnectIntegration(w http.ResponseWriter, r *http.Request
 	httpx.JSON(w, http.StatusOK, map[string]string{"authorization_url": authURL})
 }
 
-func (m *Module) handleDisconnectIntegration(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDisconnect(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := m.mgr.Disconnect(r.Context(), tenantID, id); err != nil {
+	if err := h.mgr.Disconnect(r.Context(), tenantID, id); err != nil {
 		integrationError(w, err)
 		return
 	}
@@ -191,10 +180,7 @@ func (m *Module) handleDisconnectIntegration(w http.ResponseWriter, r *http.Requ
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
-// handleIntegrationDeliveries returns what has recently left the platform. A
-// signed document reaching an outside account is a disclosure, and the record
-// of it is the only thing that can answer for it afterwards.
-func (m *Module) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDeliveries(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -205,7 +191,7 @@ func (m *Module) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Requ
 			limit = parsed
 		}
 	}
-	list, err := m.mgr.Deliveries(r.Context(), tenantID, limit)
+	list, err := h.mgr.Deliveries(r.Context(), tenantID, limit)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load delivery history")
 		return
@@ -213,14 +199,7 @@ func (m *Module) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Requ
 	httpx.JSON(w, http.StatusOK, list)
 }
 
-// handleIntegrationOAuthCallback receives the provider's redirect.
-//
-// It is deliberately outside the authenticated API group: the browser arrives
-// here from Google or Dropbox, and whether it still carries a session cookie
-// depends on SameSite and on which tab the consent screen opened in. Authority
-// comes from the single-use state row instead, which binds the callback to the
-// tenant, the connector and the administrator who started it.
-func (m *Module) handleIntegrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	settingsURL := strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/") + "/settings/integrations"
 	if strings.TrimSpace(settingsURL) == "/settings/integrations" {
@@ -228,23 +207,17 @@ func (m *Module) handleIntegrationOAuthCallback(w http.ResponseWriter, r *http.R
 	}
 
 	if providerErr := query.Get("error"); providerErr != "" {
-		// The citizen-facing half of this is an administrator who pressed
-		// "Cancel" on a consent screen; that is not a server error.
 		http.Redirect(w, r, settingsURL+"?connected=0&reason="+url.QueryEscape(providerErr), http.StatusFound)
 		return
 	}
 
-	res, err := m.mgr.CompleteConnect(r.Context(), query.Get("state"), query.Get("code"))
+	res, err := h.mgr.CompleteConnect(r.Context(), query.Get("state"), query.Get("code"))
 	if err != nil {
 		slog.Warn("integration: oauth callback failed", "error", err)
 		http.Redirect(w, r, settingsURL+"?connected=0&reason="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
 
-	// Binding an outside account to a tenant is the act this whole flow exists
-	// to perform, and it was the one integration action that left no record.
-	// The actor is the administrator who began the flow, carried here by the
-	// state row — there is no session on this request to read one from.
 	audit.Record(r.Context(), res.TenantID, res.UserID, "integration.connected", "integration",
 		map[string]any{
 			"id":            res.Connector.ID,

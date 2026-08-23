@@ -88,21 +88,21 @@ export default function manifest(): MetadataRoute.Manifest {
     // so this is a small list of destinations rather than a second menu.
     shortcuts: [
       {
-        name: "Баримт ба цахим гарын үсэг",
-        short_name: "Баримт",
-        url: "/documents",
-        icons: [{ src: "/icons/app-192.png", sizes: "192x192" }],
-      },
-      {
         name: "Аппын дэлгүүр",
         short_name: "Аппууд",
         url: "/apps",
         icons: [{ src: "/icons/app-192.png", sizes: "192x192" }],
       },
       {
-        name: "Тайлан",
-        short_name: "Тайлан",
-        url: "/reports",
+        name: "SSO клиентүүд",
+        short_name: "SSO",
+        url: "/sso-clients",
+        icons: [{ src: "/icons/app-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Тохиргоо",
+        short_name: "Тохиргоо",
+        url: "/settings/apps",
         icons: [{ src: "/icons/app-192.png", sizes: "192x192" }],
       },
     ],

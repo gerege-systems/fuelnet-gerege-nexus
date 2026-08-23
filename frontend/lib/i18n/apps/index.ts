@@ -44,11 +44,6 @@
  * endpoint that answered 404.
  */
 
-import "./ai";
-import "./documents";
-import "./egov";
-import "./esign";
-import "./reports";
 import "./sso_clients";
 import "./storefront";
 import "./urtuu";

@@ -48,21 +48,21 @@ export const LINES: Record<ShellPlatform, LineContent> = {
     alloyRGB: "107 122 153",
     actions: [
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
-      { label: "Баримт", hint: "Боловсруулах, батлах, архивлах", href: "/documents", icon: "file" },
-      { label: "Гарын үсэг", hint: "eID болон HSM-ээр зурах", href: "/module/documents/pdf", icon: "pen" },
+      { label: "SSO клиентүүд", hint: "OAuth2 клиент бүртгэл", href: "/sso-clients", icon: "key" },
+      { label: "Холбогч", hint: "Интеграц тохиргоо", href: "/settings/integrations", icon: "link" },
       { label: "Төхөөрөмжийн парк", hint: "Бүртгэсэн төхөөрөмжүүд", href: "/settings/devices", icon: "monitor" },
     ],
   },
   windows: {
     eyebrow: "ГЭРЭГЭ · WIN ШУГАМ",
     title: "Албаны ширээ",
-    lede: "Байгууллагын өдөр тутмын ажил — баримт, тооцоо, нөөц нэг дороос.",
+    lede: "Байгууллагын өдөр тутмын ажил — модуль, тохиргоо, нөөц нэг дороос.",
     posture: "desk",
     alloy: "#2F6FED",
     alloyRGB: "47 111 237",
     actions: [
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
-      { label: "Баримт", hint: "Боловсруулах, батлах, архивлах", href: "/documents", icon: "file" },
+      { label: "SSO клиентүүд", hint: "OAuth2 клиент бүртгэл", href: "/sso-clients", icon: "key" },
       { label: "Хандах эрх", hint: "Хэрэглэгч, үүрэг", href: "/settings/access", icon: "shield" },
       { label: "Төхөөрөмжийн парк", hint: "Бүртгэсэн төхөөрөмжүүд", href: "/settings/devices", icon: "monitor" },
     ],
@@ -70,32 +70,27 @@ export const LINES: Record<ShellPlatform, LineContent> = {
   ios: {
     eyebrow: "ГЭРЭГЭ · IOS ШУГАМ",
     title: "Гарын алганд",
-    lede: "Хөдөлгөөнд байхад хэрэгтэй нь: зөвшөөрөх, гарын үсэг зурах, хянах.",
+    lede: "Хөдөлгөөнд байхад хэрэгтэй нь: зөвшөөрөх, хянах, тохируулах.",
     posture: "hand",
     alloy: "#0E9AA7",
     alloyRGB: "14 154 167",
     actions: [
-      { label: "Батлах хүлээж буй", hint: "Таны шийдвэр хүлээсэн баримт", href: "/documents", icon: "file" },
-      { label: "Гарын үсэг", hint: "Face ID-аар баталгаажуулж зурна", href: "/module/documents/pdf", icon: "pen" },
       { label: "Апп дэлгүүр", hint: "Модуль асаах, унтраах", href: "/apps", icon: "grid" },
+      { label: "Профайл", hint: "Хэл, нэвтрэлт", href: "/profile", icon: "settings" },
+      { label: "Хандах эрх", hint: "Хэрэглэгч, үүрэг", href: "/settings/access", icon: "shield" },
     ],
   },
-  // Агуулахын гар утас ба касс хоёрын үйлдлүүд нь тэдний апп болох бараа,
-  // нөөц, кассынх байсан. Гурвуулаа өөр репод нүүсэн (business-gerege-nexus,
-  // pos-gerege-nexus) бөгөөд 2026-08-21-нд дэлгэцүүд нь хамт явсан. Үлдсэн нь
-  // энэ бинарийн үнэхээр мөнтөддөг платформын дэлгэцүүд: тэдгээр аппыг
-  // авчирсан distribution нь өөрийн шугамын агуулгыг өөрөө өгнө.
   android: {
     eyebrow: "ГЭРЭГЭ · ANDROID ШУГАМ",
     title: "Талбарт",
-    lede: "Агуулах, хүргэлт, үзлэг. Уншуулаад бүртгэнэ — гар оролт багатай.",
+    lede: "Талбар, хяналт, үзлэг. Уншуулаад бүртгэнэ — гар оролт багатай.",
     posture: "hand",
     alloy: "#2E9E5B",
     alloyRGB: "46 158 91",
     actions: [
-      { label: "Баримт", hint: "Гарын үсэг, батламж", href: "/documents", icon: "file-text" },
       { label: "Аппууд", hint: "Суулгасан, суулгаж болох", href: "/apps", icon: "grid" },
       { label: "Профайл", hint: "Хэл, төхөөрөмж, нэвтрэлт", href: "/profile", icon: "settings" },
+      { label: "Төхөөрөмж", hint: "Бүртгэсэн төхөөрөмжүүд", href: "/settings/devices", icon: "monitor" },
     ],
   },
   kiosk: {

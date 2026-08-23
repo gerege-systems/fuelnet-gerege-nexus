@@ -159,18 +159,6 @@ jobs:
       # to gerege-gov, `./internal/apps/gov_services/...` matched nothing, and
       # `go test` over no packages is a pass — so the step written to stop a
       # silent skip became one. Removing a package means removing its step.
-      - name: Fail if the documents integration tests were skipped
-        # A silent skip is indistinguishable from a pass in the summary, and
-        # these hold the signing invariants that live in SQL — the status
-        # guard, the one-signature-per-signer constraint, and the counts the
-        # approval chain derives.
-        run: |
-          go test -run 'TestSigningApprovesWhenNoChainIsConfigured' -v ./internal/apps/documents/... \
-            | tee /tmp/documents.log
-          if grep -q -- '--- SKIP' /tmp/documents.log; then
-            echo "::error::documents integration tests skipped — DOCUMENTS_TEST_DATABASE_URL is not reaching the test"
-            exit 1
-          fi
       - name: Fail if the email verification integration tests were skipped
         # Same reasoning again: a confirmation is claimed by one conditional
         # UPDATE, and a skipped test is how that stops being true without
@@ -189,22 +177,10 @@ jobs:
         # are not observable without a database. Skipped, every one of them
         # reports green having asserted nothing.
         run: |
-          go test -run 'TestAuthorizationCodeIsSingleUse' -v \
+          go test -run 'TestAuthorizationCodeCannotBeUsedTwice|TestRefreshTokenRotation|TestConcurrentRefreshRevokesFamily' -v \
             ./internal/platform/ssoprovider/... | tee /tmp/oauth.log
           if grep -q -- '--- SKIP' /tmp/oauth.log; then
             echo "::error::OAuth2 flow tests skipped — OAUTH_TEST_DATABASE_URL is not reaching the test"
-            exit 1
-          fi
-      - name: Fail if the reports app tests were skipped
-        # These are the net under the reports app: which reports an app gate
-        # lets through, what a schedule body must satisfy, and the rule that
-        # only the owning organisation may agree to share. The app had no tests
-        # at all until the domain split, and a skip puts it back there.
-        run: |
-          go test -run 'TestOnlyTheOwnerAgreesToShareAndEitherSideMayEnd' -v \
-            ./internal/apps/reports/... | tee /tmp/reports.log
-          if grep -q -- '--- SKIP' /tmp/reports.log; then
-            echo "::error::reports app tests skipped — REPORTING_TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
 
