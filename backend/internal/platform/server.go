@@ -795,7 +795,21 @@ func (s *Server) syncCatalogFromRegistry(ctx context.Context) (changed bool, err
 // startup, where there is nobody to hand an error to, and an installation left
 // where it is is the safe outcome — the store still offers the update.
 func (s *Server) applyCatalogToInstallations(ctx context.Context) {
-	// The distribution's default apps first: a tenant that never got one has no
+	// The modules' own schemas first, and on every sweep rather than only at
+	// the install that first needed them: a module can gain a schema — or have
+	// one moved into it out of db/migrations — long after its app was
+	// installed, and the install path is not reached again for an app that is
+	// already there. See MigrateModules for what that cost the first time.
+	//
+	// Logged and not fatal, like the catalogue sync above it. A database that
+	// is not up yet must not stop the process from booting; this runs again on
+	// the next sweep, and the error says what is broken until it does.
+	if err := s.installer.MigrateModules(ctx); err != nil {
+		slog.Error("catalog: a module's own schema could not be applied — its routes will fail until it is",
+			"error", err)
+	}
+
+	// The distribution's default apps next: a tenant that never got one has no
 	// way to install it either, because on a deployment where the store itself
 	// sits behind an app the missing app is what would have carried it.
 	// A no-op where the list is empty, which is every deployment that has not

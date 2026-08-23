@@ -8,10 +8,12 @@ package appinstaller
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"testing"
 	"testing/fstest"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -92,6 +94,86 @@ DROP TABLE brought_its_own;
 		t.Errorf("running a module's migrations twice failed: %v", err)
 	}
 }
+
+// A schema arrives even though nobody installs anything.
+//
+// The case this covers is an upgrade, not an install: the app is already
+// installed — days ago, by the version of the platform that carried its tables
+// in db/migrations — and the install path that runs a module's migrations is
+// never reached again. Until MigrateModules existed, the tables a release moved
+// into the module simply never appeared, and the first sign was a request into
+// the app answering "relation ... does not exist".
+//
+// So this test installs nothing. That is the assertion.
+func TestAModuleSchemaIsAppliedWithoutAnybodyInstallingTheApp(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set TEST_DATABASE_URL to a migrated test database to run the module migration tests")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	nexus.Register(alreadyInstalledModule{})
+	nexus.Migrations(alreadyInstalledAppID, fstest.MapFS{
+		"00001_create.sql": &fstest.MapFile{Data: []byte(`-- +goose Up
+CREATE TABLE arrived_late (id uuid PRIMARY KEY);
+-- +goose Down
+DROP TABLE arrived_late;
+`)},
+	})
+	drop := func() {
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS arrived_late`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS goose_db_version_arrived_late`)
+	}
+	t.Cleanup(func() {
+		// The module stays in the registry — nexus has no unregister — but
+		// without migrations it is skipped, so a later sweep in this binary
+		// does nothing with it.
+		nexus.Migrations(alreadyInstalledAppID, nil)
+		drop()
+	})
+	drop()
+
+	installer := NewAppInstaller(pool, nil, "1.0.0")
+	if err := installer.MigrateModules(ctx); err != nil {
+		t.Fatalf("apply the compiled-in modules' schemas: %v", err)
+	}
+
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'arrived_late')`,
+	).Scan(&exists); err != nil {
+		t.Fatalf("look for the table: %v", err)
+	}
+	if !exists {
+		t.Error("a module compiled into this binary did not get its schema; an installed app would answer 500 for every request")
+	}
+
+	// The sweep runs on a timer as well as at startup, so a second round has to
+	// be free rather than an error.
+	if err := installer.MigrateModules(ctx); err != nil {
+		t.Errorf("sweeping a second time failed: %v", err)
+	}
+}
+
+const alreadyInstalledAppID = "io.example.arrived_late"
+
+// A module of the smallest shape the registry accepts: this test is about the
+// schema sweep, and the sweep asks a module for nothing but its id.
+type alreadyInstalledModule struct{}
+
+func (alreadyInstalledModule) ID() string                                { return alreadyInstalledAppID }
+func (alreadyInstalledModule) Name() string                              { return "Arrived Late" }
+func (alreadyInstalledModule) Version() string                           { return "1.0.0" }
+func (alreadyInstalledModule) Dependencies() []nexus.Dependency          { return nil }
+func (alreadyInstalledModule) Permissions() []nexus.PermissionDefinition { return nil }
+func (alreadyInstalledModule) Menus() []nexus.MenuDefinition             { return nil }
+
+func (alreadyInstalledModule) RegisterRoutes(chi.Router, func(http.Handler) http.Handler) {}
 
 // A module with no schema of its own is the ordinary case, not a missing
 // registration: every app in this repository is still in db/migrations.
