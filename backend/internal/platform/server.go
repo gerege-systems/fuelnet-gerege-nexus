@@ -1214,3 +1214,13 @@ func withQuery(path string, r *http.Request) string {
 }
 
 // Handlers
+
+// SetDefaultApps records which apps every organisation gets without asking.
+//
+// The distribution's decision, arriving through platform.Options.DefaultApps.
+// It is a function rather than a parameter of NewServer because the list is
+// read in two places that are not both reachable from a constructor argument —
+// the catalogue check here and the sweep in appinstaller — and threading it
+// through both would put a distribution's choice in the signature of everything
+// between.
+func SetDefaultApps(appIDs []string) { appinstaller.DefaultApps = appIDs }

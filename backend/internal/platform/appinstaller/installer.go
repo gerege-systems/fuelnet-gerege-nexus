@@ -42,7 +42,14 @@ import (
 // client-gerege-nexus. A default app has to be one this binary carries: the
 // catalogue check below refuses to start when it is not, which is what caught
 // the omission the moment the module left.
-var DefaultApps = []string{"io.gerege.nexus.organisation"}
+// Set by the distribution through platform.Options.DefaultApps. It used to be
+// a literal naming this repository's own apps, which stopped being possible the
+// moment one of them moved out: a deployment could carry an app every tenant
+// should have and no way to say so.
+//
+// Empty until a distribution says otherwise, which is the honest default —
+// a platform with no apps of its own installs none.
+var DefaultApps []string
 
 // IsDefaultApp reports whether an app is installed for new tenants without
 // anybody asking. It does not mean the app is permanent — nothing is.

@@ -36,6 +36,17 @@ func organisationCatalogApp() catalog.CatalogApp {
 // import an app to learn one constant.
 const defaultAppID = "io.gerege.nexus.organisation"
 
+// The list is a distribution's now, set through platform.Options.DefaultApps
+// rather than declared in this package. A test stands it up the same way a
+// deployment does — and puts it back, because it is package-level state that
+// another test would otherwise inherit.
+func withDefaultApp(t *testing.T) {
+	t.Helper()
+	previous := appinstaller.DefaultApps
+	appinstaller.DefaultApps = []string{defaultAppID}
+	t.Cleanup(func() { appinstaller.DefaultApps = previous })
+}
+
 // defaultAppModule stands in for whatever module answers for that id. Its two
 // permissions are the organisation's, because the assertion downstream is that
 // a default app's permissions reach the tenant's roles — the names have to be
@@ -99,6 +110,7 @@ func newSweptTenant(t *testing.T) (*appinstaller.AppInstaller, string) {
 }
 
 func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
+	withDefaultApp(t)
 	pool := testPool(t)
 	ctx := context.Background()
 	installer, tenantID := newSweptTenant(t)
@@ -138,6 +150,7 @@ func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
 // back within the hour, which is indistinguishable from the removal having
 // silently failed.
 func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T) {
+	withDefaultApp(t)
 	pool := testPool(t)
 	ctx := context.Background()
 	installer, tenantID := newSweptTenant(t)
