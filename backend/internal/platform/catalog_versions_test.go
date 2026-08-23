@@ -80,6 +80,12 @@ func TestAnAppWithNoCompiledModuleIsAccepted(t *testing.T) {
 // And the refusal itself: a catalogue with no default app is one this build must
 // not run on, whatever else it carries.
 func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
+	// The list is a distribution's now. This test is about the check, so it
+	// declares one and puts it back.
+	previous := appinstaller.DefaultApps
+	appinstaller.DefaultApps = []string{"io.gerege.nexus.organisation"}
+	t.Cleanup(func() { appinstaller.DefaultApps = previous })
+
 	err := verifyCatalogVersions([]catalog.CatalogApp{{
 		ID: "mn.example.hrms", Slug: "hrms", Version: "2026.8.0",
 		Manifest: catalog.Manifest{ID: "mn.example.hrms", Name: "HRMS", Version: "2026.8.0"},

@@ -11,9 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
@@ -29,12 +26,9 @@ import (
 // TestEveryModuleInThisRepositoryIsClassified beside it is what stops one being
 // left out.
 var everyModule = map[string]nexus.Module{
-	"documents":    (*documents.DocumentsModule)(nil),
-	"egov":         (*egov.Module)(nil),
-	"organisation": (*organisation.Module)(nil),
-	"reports":      (*reports.Module)(nil),
-	"sso_clients":  (*sso_clients.SSOClientsModule)(nil),
-	"urtuu":        (*urtuu.Module)(nil),
+	"reports":     (*reports.Module)(nil),
+	"sso_clients": (*sso_clients.SSOClientsModule)(nil),
+	"urtuu":       (*urtuu.Module)(nil),
 }
 
 // Who every permission in this binary reaches when an app is installed.
@@ -46,27 +40,15 @@ var everyModule = map[string]nexus.Module{
 // answer, and the two have to agree.
 //
 // "suffix" means the module declares nothing and the deprecated grammar rule
-// decides — `.read` to managers and users, `.manage` to managers. That is most
+// decides — `.read` to managers and users, `.manage` to managers. That is all
 // of this table today, which is the honest picture: the mechanism landed, and
 // converting each module to say what it means is separate work with a security
 // review attached. What has changed is that saying it is now possible, from
-// outside this repository as well as inside.
+// outside this repository as well as inside — documents was the one module that
+// stated a grant (`documents.sign` to managers and users), and it states it
+// from client-gerege-nexus now, which is the proof that it can be said out
+// there.
 var defaultGrants = map[string]string{
-	// documents — the one module that states it.
-	"documents.read":   "suffix",
-	"documents.manage": "suffix",
-	"documents.sign":   "manager,user",
-
-	"egov.read": "suffix",
-	// Administrative by consequence rather than by grammar: a national
-	// registry lookup is a `.read` whose subject is not this organisation's
-	// own rows. AdminOnly, so no default role at all.
-	"egov.citizen.read": "admin only",
-	"egov.company.read": "admin only",
-
-	"organisation.read":   "suffix",
-	"organisation.manage": "suffix",
-
 	"reports.view":     "suffix",
 	"reports.schedule": "suffix",
 	"reports.share":    "suffix",

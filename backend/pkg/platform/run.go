@@ -89,6 +89,24 @@ type Options struct {
 	// nexus.Platform the built-in modules get, after the pool exists and before
 	// any route is mounted — a module that registers later would not be served.
 	Modules func(nexus.Platform)
+
+	// DefaultApps are installed for every organisation without anybody asking.
+	//
+	// A distribution's decision, not the platform's. The list used to be a
+	// package variable in internal/platform/appinstaller naming this
+	// repository's own apps; when the first of them moved out
+	// (client-gerege-nexus, 2026-08-23) the behaviour moved with it and had
+	// nowhere to be declared — a deployment could carry an app that every
+	// tenant should have and no way to say so.
+	//
+	// A default app must be one this binary carries: the catalogue check at
+	// startup refuses an id with no module behind it, which is what turns a
+	// stale catalogue into a failure to start rather than a store full of
+	// installs that fail on a foreign key.
+	//
+	// Empty is an ordinary answer. A deployment where every app is chosen is a
+	// deployment that installs nothing by default.
+	DefaultApps []string
 }
 
 // Run starts the platform and blocks until it is asked to stop.
@@ -219,6 +237,11 @@ func Run(opts Options) error {
 	slog.Info("cache invalidation configured", "shared", bus.Redis())
 
 	// Initialize Platform Server
+	// Before the server is built: NewServer checks the catalogue against this
+	// list and refuses to start when an id has no module behind it, which is
+	// the check that catches a stale catalogue.
+	core.SetDefaultApps(opts.DefaultApps)
+
 	srv, err := core.NewServer(db, catalogPath, bus, core.ExtraModules(opts.Modules))
 	if err != nil {
 		return fmt.Errorf("failed to initialize platform server: %w", err)

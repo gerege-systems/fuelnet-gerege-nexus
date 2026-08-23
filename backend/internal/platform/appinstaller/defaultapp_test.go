@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
@@ -35,6 +36,17 @@ func organisationCatalogApp() catalog.CatalogApp {
 // here as a string rather than taken from the module, so this package does not
 // import an app to learn one constant.
 const defaultAppID = "io.gerege.nexus.organisation"
+
+// The list is a distribution's now, set through platform.Options.DefaultApps
+// rather than declared in this package. A test stands it up the same way a
+// deployment does — and puts it back, because it is package-level state that
+// another test would otherwise inherit.
+func withDefaultApp(t *testing.T) {
+	t.Helper()
+	previous := appinstaller.DefaultApps
+	appinstaller.DefaultApps = []string{defaultAppID}
+	t.Cleanup(func() { appinstaller.DefaultApps = previous })
+}
 
 // defaultAppModule stands in for whatever module answers for that id. Its two
 // permissions are the organisation's, because the assertion downstream is that
@@ -98,7 +110,55 @@ func newSweptTenant(t *testing.T) (*appinstaller.AppInstaller, string) {
 	return installer, tenantID
 }
 
+// appTable stands in for a table the default app would own.
+//
+// Created here rather than migrated: an app's schema is the app's, and this
+// package has no app. It cascades from the tenant so the fixture's own cleanup
+// takes the rows with it, and it is left in place between runs — CI runs every
+// package against one database, and a table dropped at the end of one test is a
+// table the next parallel package finds missing.
+func appTable(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	// One transaction, because DDL here is transactional and the alternative is
+	// a race: CI runs every package against one database, and a table that
+	// exists for a moment with a tenant_id and no policy is what
+	// TestEveryTenantTableHasForcedRLS would catch in the package next door.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS default_app_probe (
+		     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+		     code      TEXT NOT NULL,
+		     name      TEXT NOT NULL,
+		     PRIMARY KEY (tenant_id, code)
+		 )`,
+		// The platform's own policy. A fixture that skipped the rule the schema
+		// is held to would not behave like the thing it stands in for.
+		`ALTER TABLE default_app_probe ENABLE ROW LEVEL SECURITY`,
+		`ALTER TABLE default_app_probe FORCE ROW LEVEL SECURITY`,
+		`DROP POLICY IF EXISTS tenant_isolation ON default_app_probe`,
+		`CREATE POLICY tenant_isolation ON default_app_probe TO gerege_nexus_app
+			USING (tenant_id IS NULL OR tenant_id = ANY (COALESCE(
+				NULLIF(current_setting('app.allowed_tenants', true), '')::uuid[],
+				ARRAY[NULLIF(current_setting('app.current_tenant', true), '')::uuid])))
+			WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON default_app_probe TO gerege_nexus_app`,
+	} {
+		if _, err := tx.Exec(ctx, statement); err != nil {
+			t.Fatalf("prepare the fixture table: %v", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit the fixture table: %v", err)
+	}
+}
+
 func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
+	withDefaultApp(t)
 	pool := testPool(t)
 	ctx := context.Background()
 	installer, tenantID := newSweptTenant(t)
@@ -138,16 +198,22 @@ func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
 // back within the hour, which is indistinguishable from the removal having
 // silently failed.
 func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T) {
+	withDefaultApp(t)
 	pool := testPool(t)
 	ctx := context.Background()
 	installer, tenantID := newSweptTenant(t)
 
 	// Something in the app's own tables, so "the data survived" is a row and
-	// not an assumption.
+	// not an assumption. The table is this test's own: it used to write a
+	// department, and `departments` left with the organisation app on
+	// 2026-08-23. A platform test that reaches for an app's table is a platform
+	// test that stops compiling every time an app moves — and the claim here is
+	// about the installer, which does not care whose table it is.
+	appTable(t, pool)
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO departments (tenant_id, code, name) VALUES ($1, 'hq', 'Төв оффис')`,
+		`INSERT INTO default_app_probe (tenant_id, code, name) VALUES ($1, 'hq', 'Төв оффис')`,
 		tenantID); err != nil {
-		t.Fatalf("department: %v", err)
+		t.Fatalf("probe row: %v", err)
 	}
 
 	if err := installer.DisableApp(ctx, tenantID, "organisation", "someone"); err != nil {
@@ -185,10 +251,10 @@ func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T)
 	}
 	var name string
 	if err := pool.QueryRow(ctx,
-		`SELECT name FROM departments WHERE tenant_id = $1 AND code = 'hq'`, tenantID).Scan(&name); err != nil {
-		t.Fatalf("the department did not survive the removal: %v", err)
+		`SELECT name FROM default_app_probe WHERE tenant_id = $1 AND code = 'hq'`, tenantID).Scan(&name); err != nil {
+		t.Fatalf("the row did not survive the removal: %v", err)
 	}
 	if name != "Төв оффис" {
-		t.Fatalf("department came back as %q", name)
+		t.Fatalf("the row came back as %q", name)
 	}
 }

@@ -4,9 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
@@ -38,14 +35,14 @@ var corePolicies = map[string]struct {
 }{
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
 
-	// The two that gate themselves, and why the verb is not enough for them.
-	"documents": {(*documents.DocumentsModule)(nil), "documents.read", "",
-		"who may read a document depends on who it was shared with"},
-	"egov": {(*egov.Module)(nil), "egov.read", "",
-		"a citizen-registry lookup is a GET that must not be a read every member holds"},
-	// Өртөө gates itself for the same shape of reason as the other two, but a
-	// sharper one: accepting a task and sending a task are both POSTs and are
-	// different authorities held by different people — urtuu.process answers
+	// documents was the other one that gates itself — who may read a document
+	// depends on who it was shared with — and it is in client-gerege-nexus now.
+	// Its claim went with it: the assertion belongs beside the module, not in
+	// the repository the module used to be in.
+	//
+	// Өртөө gates itself for the same shape of reason, but a sharper one:
+	// accepting a task and sending a task are both POSTs and are different
+	// authorities held by different people — urtuu.process answers
 	// for work this organisation has been given, urtuu.manage commits somebody
 	// else's time. A prefix rule keyed on the verb would collapse them into one.
 	"urtuu": {(*urtuu.Module)(nil), "urtuu.read", "",
@@ -68,13 +65,14 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 	}
 }
 
-// The modules that deliberately declare nothing. organisation and reports are
-// visible to every member of a tenant that has them installed.
+// The modules that deliberately declare nothing. reports is visible to every
+// member of a tenant that has it installed.
 // Absent-because-considered and absent-because-forgotten look identical in a
 // table, so the difference is asserted rather than left to a comment.
+//
+// organisation was the other one and left with documents.
 var policylessModules = map[string]nexus.Module{
-	"organisation": (*organisation.Module)(nil),
-	"reports":      (*reports.Module)(nil),
+	"reports": (*reports.Module)(nil),
 }
 
 // Directories under internal/apps that hold no module at all.

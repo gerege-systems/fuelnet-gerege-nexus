@@ -11,13 +11,18 @@
  * and the registry. Their tables could not follow them out, so every deployment
  * carried the schema of every app anybody ever wrote here.
  *
- * Migration 00075 dropped all twenty-eight. What made that possible was
+ * Migration 00075 dropped all twenty-eight, and 00077 dropped eleven more:
+ * the nine document_* tables, `departments` and `organisation_people`, which
+ * went with their apps to client-gerege-nexus. Those eleven are a different
+ * case and a harder one. The twenty-eight were unreachable from here — this
+ * repository served none of those apps' routes — while these were being read
+ * by code in this tree until the commit that dropped them. What made that possible was
  * nexus.Migrations (Үе 3): a module brings its own schema, so
  * business-gerege-nexus declares commerce's five itself. What made it safe was
  * counting the routes first — the core served none of those apps' endpoints,
  * so nothing here could read the tables anyway.
  *
- * Eighty remain, and this test is what keeps that true.
+ * Sixty-nine remain, and this test is what keeps that true.
  */
 
 package migrations_test
@@ -44,13 +49,9 @@ var platformTables = map[string]string{
 	"app_dependencies": "app store", "app_installations": "app store",
 	"app_versions": "app store", "apps": "app store",
 	"audit_events": "audit", "credential_grants": "access recovery",
-	"departments": "organisation", "organisation_people": "organisation", "device_enrollment_codes": "devices",
-	"device_telemetry": "devices", "devices": "devices",
-	"document_approval_steps": "documents", "document_eid_sign_sessions": "documents",
-	"document_files": "documents", "document_records": "documents",
-	"document_retention_rules": "documents", "document_signature_policies": "documents",
-	"document_signatures": "documents", "document_templates": "documents",
-	"document_workflow_steps": "documents", "eid_sign_state": "eID",
+	"device_enrollment_codes": "devices",
+	"device_telemetry":        "devices", "devices": "devices",
+	"eid_sign_state":      "eID",
 	"email_verifications": "email verification",
 	"esign_batch_items":   "signing rail", "esign_batches": "signing rail",
 	"esign_documents": "signing rail", "esign_settings": "signing rail",

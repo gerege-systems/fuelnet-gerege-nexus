@@ -66,7 +66,30 @@ async function collect(dir, suffixes, pattern) {
   return names;
 }
 
+/**
+ * Icons this image must draw for apps that are not in this repository.
+ *
+ * The generator's premise is that a distribution runs it in its own frontend
+ * build. client-gerege-nexus does not have one: it ships the web image this
+ * repository publishes and carries three apps that used to be here — the
+ * organisation, documents and the e-Government link. Their menus arrive from
+ * that deployment's own API with these icon names on them, and nothing in this
+ * tree names them any more, so the shell would draw the fallback box on every
+ * entry of every screen those apps own.
+ *
+ * Four names, and the list shrinks to nothing the day that distribution builds
+ * its own frontend. Not a general escape hatch: an icon goes here only when
+ * this image is the one drawing it for somebody else.
+ */
+const forDistributionsWithoutAFrontend = [
+  "file-text", // documents
+  "landmark", //  the e-Government link
+  "network", //   the organisation's departments
+  "users", //     its people
+];
+
 const declared = new Set([
+  ...forDistributionsWithoutAFrontend,
   ...(await collect(path.join(ROOT, "backend"), [".go"], /Icon:\s*"([a-z0-9-]+)"/g)),
   ...(await collect(path.join(ROOT, "catalog"), [".json"], /"icon"\s*:\s*"([a-z0-9-]+)"/g)),
   ...(await collect(path.join(ROOT, "frontend", "app"), [".tsx"], /icon:\s*"([a-z0-9-]+)"/g)),

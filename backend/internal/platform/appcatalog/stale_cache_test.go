@@ -39,7 +39,11 @@ func TestACacheThatDoesNotMatchThisBuildIsNotUsed(t *testing.T) {
 
 	// What the platform passes as Verify: this build's own opinion of what a
 	// catalogue must contain.
-	required := "io.gerege.nexus.organisation"
+	// An app this build carries. It was the organisation until that module
+	// moved to client-gerege-nexus on 2026-08-23; what the check is about is
+	// the catalogue being older than the binary, and any of this binary's own
+	// apps answers that.
+	required := "io.gerege.nexus.reports"
 	verify := func(apps []catalog.CatalogApp) error {
 		for _, app := range apps {
 			if app.ID == required {

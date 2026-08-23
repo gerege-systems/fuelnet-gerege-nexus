@@ -35,6 +35,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
@@ -228,14 +229,6 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	nexus.Provide[nexus.Link](urtuuLink)
 
 	modulePlatform := newModulePlatform(db)
-	// A distribution's modules register themselves here, beside the platform's
-	// own, so appregistry sees one list and the store, the menu and the gate
-	// cannot tell the two apart — which is the point of the SDK.
-	for _, register := range extra {
-		if register != nil {
-			register(modulePlatform)
-		}
-	}
 
 	// What the platform lends its modules. Published rather than passed, so
 	// that lending one more is a line here instead of a change to a signature
@@ -285,12 +278,43 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// is the state a module is meant to ask about rather than a nil it has to
 	// guard.
 	nexus.Provide[nexus.Signer](Signing(eidMN))
+	// The PDF signing rails, built here rather than in apps.Bootstrap.
+	//
+	// They are what nexus.SigningRails names, and a module that signs a PDF
+	// asks for that in its constructor — so the rails have to exist before any
+	// module does, distribution's or this repository's. Bootstrap still owns
+	// the housekeeping loop; it asks for the same value back.
+	esignRails := esign.New(modulePlatform, gerege.NewEsignService(), eidMN, integrationMgr)
+	nexus.Provide(esignRails)
+	// Published rather than handed to documents. The rail is the platform's —
+	// ADR 0002 is about why there is exactly one — and where its routes appear
+	// is the app's; a parameter made the app unable to be built anywhere else.
+	nexus.Provide[nexus.SigningRails](esignRails)
 	// A closure over the server pointer that is about to be filled, so the
 	// named type is what carries it: an unnamed func would key the registry on
 	// a shape every other callback of the same signature shares.
 	nexus.Provide[apps.InstalledApps](func(ctx context.Context, tenantID string) (map[string]bool, error) {
 		return server.installedAppSet(ctx, tenantID)
 	})
+
+	// A distribution's modules register themselves here, beside the platform's
+	// own, so appregistry sees one list and the store, the menu and the gate
+	// cannot tell the two apart — which is the point of the SDK.
+	//
+	// After every Provide above and before Bootstrap below, and both halves of
+	// that matter. This loop used to run first, which meant a module carried by
+	// a distribution was constructed before the platform had published anything
+	// — so client-gerege-nexus's e-Government module asked for the state
+	// registry, got nothing, logged a warning and served a degraded screen on a
+	// deployment that had the rail all along. Nothing failed; the app was
+	// simply built too early. Before Bootstrap, because the reports app is
+	// constructed last on purpose: a module that registers a report after it
+	// would be missing from the first listing.
+	for _, register := range extra {
+		if register != nil {
+			register(modulePlatform)
+		}
+	}
 
 	appRuntime := apps.Bootstrap(modulePlatform)
 
@@ -1214,3 +1238,13 @@ func withQuery(path string, r *http.Request) string {
 }
 
 // Handlers
+
+// SetDefaultApps records which apps every organisation gets without asking.
+//
+// The distribution's decision, arriving through platform.Options.DefaultApps.
+// It is a function rather than a parameter of NewServer because the list is
+// read in two places that are not both reachable from a constructor argument —
+// the catalogue check here and the sweep in appinstaller — and threading it
+// through both would put a distribution's choice in the signature of everything
+// between.
+func SetDefaultApps(appIDs []string) { appinstaller.DefaultApps = appIDs }

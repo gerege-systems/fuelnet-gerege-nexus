@@ -66,8 +66,12 @@ func TestTenantPoliciesHaveTheShapeOnRecord(t *testing.T) {
 		// deciding, and each needs its own answer before it is widened — an
 		// audit trail and a signed file are not obviously things a sibling
 		// organisation should read just because one person belongs to both.
-		"audit_events":     "unreviewed",
-		"document_files":   "unreviewed",
+		"audit_events": "unreviewed",
+		// document_files was here — a signed file is not obviously something a
+		// sibling organisation should read — and it went to
+		// client-gerege-nexus with the documents app. Its policy is declared in
+		// that repository's own migration, in the same narrow form and for the
+		// same unreviewed reason.
 		"report_grants":    "unreviewed",
 		"report_schedules": "unreviewed",
 	}
