@@ -4,6 +4,7 @@ CONNECT /metrics
 DELETE /api/v1/admin/access/roles/{id}
 DELETE /api/v1/core/me/preferences
 DELETE /api/v1/core/organisation
+DELETE /api/v1/integrations/{id}
 DELETE /cp/api/announcements/{id}
 DELETE /cp/api/flags/{key}
 DELETE /cp/api/session
@@ -13,10 +14,13 @@ GET /.well-known/jwks.json
 GET /.well-known/openid-configuration
 GET /.well-known/urtuu.json
 GET /api/v1/admin/access/overview
+GET /api/v1/admin/ai/knowledge
+GET /api/v1/admin/ai/prompts
 GET /api/v1/admin/devices
 GET /api/v1/admin/email-verification/overview
 GET /api/v1/admin/store/overview
 GET /api/v1/admin/store/status
+GET /api/v1/ai/stock-forecast
 GET /api/v1/auth/bind/session
 GET /api/v1/auth/credential
 GET /api/v1/auth/google/callback
@@ -31,6 +35,10 @@ GET /api/v1/core/me/preferences
 GET /api/v1/core/organisation
 GET /api/v1/devices/me
 GET /api/v1/installed-apps
+GET /api/v1/integrations/
+GET /api/v1/integrations/deliveries
+GET /api/v1/integrations/oauth/callback
+GET /api/v1/integrations/providers
 GET /api/v1/menus
 GET /api/v1/oauth2/client-info
 GET /api/v1/oauth2/consent
@@ -78,8 +86,14 @@ PATCH /api/v1/core/me/preferences
 PATCH /api/v1/core/organisation
 PATCH /metrics
 POST /api/v1/admin/access/roles
+POST /api/v1/admin/ai/knowledge
 POST /api/v1/admin/devices/enrollment-codes
 POST /api/v1/admin/store/sync
+POST /api/v1/ai/chat
+POST /api/v1/ai/copilot
+POST /api/v1/ai/stt
+POST /api/v1/ai/translate
+POST /api/v1/ai/tts
 POST /api/v1/auth/bind/consent
 POST /api/v1/auth/bind/eid/poll
 POST /api/v1/auth/bind/eid/start
@@ -101,6 +115,9 @@ POST /api/v1/devices/enroll
 POST /api/v1/devices/staff/pin
 POST /api/v1/devices/telemetry
 POST /api/v1/devices/token/rotate
+POST /api/v1/integrations/
+POST /api/v1/integrations/{id}/connect
+POST /api/v1/integrations/{id}/disconnect
 POST /api/v1/oauth2/consent
 POST /api/v1/profile/identities/unlink
 POST /api/v1/push-tokens
@@ -146,9 +163,12 @@ POST /oauth2/userinfo
 PUT /api/v1/admin/access/memberships/{id}/roles
 PUT /api/v1/admin/access/roles/{id}
 PUT /api/v1/admin/access/roles/{id}/permissions
+PUT /api/v1/admin/ai/prompts/{key}
+PUT /api/v1/admin/devices/staff-pin
 PUT /api/v1/admin/devices/status
 PUT /api/v1/core/me/preferences
 PUT /api/v1/core/organisation
+PUT /api/v1/integrations/{id}
 PUT /api/v1/profile/preferences
 PUT /api/v1/tenant/profile
 PUT /api/v1/urtuu/codes/{id}
@@ -166,44 +186,24 @@ TRACE /metrics
 [app] DELETE /api/v1/developer/apps/{clientID}
 [app] DELETE /api/v1/developer/apps/{clientID}/consents/{userID}
 [app] DELETE /api/v1/developer/apps/{clientID}/tokens
-[app] DELETE /api/v1/integrations/{id}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/consents/{userID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/tokens
-[app] GET /api/v1/admin/ai/knowledge
-[app] GET /api/v1/admin/ai/prompts
-[app] GET /api/v1/ai/stock-forecast
 [app] GET /api/v1/developer/apps/
 [app] GET /api/v1/developer/apps/{clientID}
 [app] GET /api/v1/developer/audit
 [app] GET /api/v1/developer/endpoints
 [app] GET /api/v1/developer/scopes
 [app] GET /api/v1/developer/signing-keys
-[app] GET /api/v1/integrations/
-[app] GET /api/v1/integrations/deliveries
-[app] GET /api/v1/integrations/oauth/callback
-[app] GET /api/v1/integrations/providers
 [app] GET /api/v1/sso-clients/apps/
 [app] GET /api/v1/sso-clients/apps/{clientID}
 [app] GET /api/v1/sso-clients/audit
 [app] GET /api/v1/sso-clients/endpoints
 [app] GET /api/v1/sso-clients/scopes
 [app] GET /api/v1/sso-clients/signing-keys
-[app] POST /api/v1/admin/ai/knowledge
-[app] POST /api/v1/ai/chat
-[app] POST /api/v1/ai/copilot
-[app] POST /api/v1/ai/stt
-[app] POST /api/v1/ai/translate
-[app] POST /api/v1/ai/tts
 [app] POST /api/v1/developer/apps/
 [app] POST /api/v1/developer/apps/{clientID}/rotate-secret
-[app] POST /api/v1/integrations/
-[app] POST /api/v1/integrations/{id}/connect
-[app] POST /api/v1/integrations/{id}/disconnect
 [app] POST /api/v1/sso-clients/apps/
 [app] POST /api/v1/sso-clients/apps/{clientID}/rotate-secret
-[app] PUT /api/v1/admin/ai/prompts/{key}
-[app] PUT /api/v1/admin/devices/staff-pin
 [app] PUT /api/v1/developer/apps/{clientID}
-[app] PUT /api/v1/integrations/{id}
 [app] PUT /api/v1/sso-clients/apps/{clientID}
