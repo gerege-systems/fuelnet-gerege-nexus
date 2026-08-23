@@ -12,10 +12,11 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
+	"slices"
 	"sync"
 	"time"
 
@@ -282,18 +283,32 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	//
 	// They are what nexus.SigningRails names, and a module that signs a PDF
 	// asks for that in its constructor — so the rails have to exist before any
-	// module does, distribution's or this repository's. Bootstrap still owns
-	// the housekeeping loop; it asks for the same value back.
+	// module does, distribution's or this repository's. Their housekeeping is
+	// appended to the runtime below, where this value is still in scope.
 	esignRails := esign.New(modulePlatform, gerege.NewEsignService(), eidMN, integrationMgr)
-	nexus.Provide(esignRails)
 	// Published rather than handed to documents. The rail is the platform's —
 	// ADR 0002 is about why there is exactly one — and where its routes appear
 	// is the app's; a parameter made the app unable to be built anywhere else.
+	//
+	// One key, and the exported one. Publishing the concrete *esign.Rails
+	// beside it bought nothing: the only reader was apps.Bootstrap, thirty
+	// lines down the same function, and it keyed a background loop on a type
+	// from internal/ that no distribution can name or replace — so a Provide
+	// deleted by accident became a nil *Rails that boots clean and panics into
+	// a recovered goroutine five minutes later.
 	nexus.Provide[nexus.SigningRails](esignRails)
 	// A closure over the server pointer that is about to be filled, so the
 	// named type is what carries it: an unnamed func would key the registry on
 	// a shape every other callback of the same signature shares.
+	//
+	// The nil check is not decoration. Distribution modules are constructed
+	// below, while this pointer is still nil, and this capability is the one
+	// they can now resolve before it means anything — an error is the answer
+	// the SDK promises for that, not a panic inside NewServer.
 	nexus.Provide[apps.InstalledApps](func(ctx context.Context, tenantID string) (map[string]bool, error) {
+		if server == nil {
+			return nil, errors.New("the platform is still starting; ask which apps a tenant has after it has")
+		}
 		return server.installedAppSet(ctx, tenantID)
 	})
 
@@ -317,6 +332,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	}
 
 	appRuntime := apps.Bootstrap(modulePlatform)
+	// The rails' sweep of abandoned signing ceremonies, on the same list as
+	// every module's housekeeping. Appended here rather than inside Bootstrap
+	// because this is where the value lives, and a value handed over is one
+	// the compiler checks.
+	appRuntime.Background = append(appRuntime.Background, esignRails)
 
 	// The relying-party half. A deployment that names a provider but cannot
 	// reach it is a deployment nobody can sign in to, so a configuration that
@@ -775,9 +795,11 @@ func (s *Server) syncCatalogFromRegistry(ctx context.Context) (changed bool, err
 // startup, where there is nobody to hand an error to, and an installation left
 // where it is is the safe outcome — the store still offers the update.
 func (s *Server) applyCatalogToInstallations(ctx context.Context) {
-	// The platform's own apps first: a tenant without them has no organisation
-	// screen, and no way to install one — the store is behind the app that is
-	// missing.
+	// The distribution's default apps first: a tenant that never got one has no
+	// way to install it either, because on a deployment where the store itself
+	// sits behind an app the missing app is what would have carried it.
+	// A no-op where the list is empty, which is every deployment that has not
+	// set platform.Options.DefaultApps — this repository's own included.
 	if err := s.installer.EnsureDefaultApps(ctx); err != nil {
 		slog.Error("catalog: could not install the default apps", "error", err)
 	}
@@ -1186,11 +1208,12 @@ func (s *Server) registerAppModuleRoutes() {
 //
 // /api/v1/core was the organisation app before it was called that, and the tree
 // under it has since been split in two: the legal profile and a person's
-// preferences became platform routes, and departments and people stayed in the
-// app. A redirect rather than a second mount, because the two halves now live
-// behind different middleware and duplicating the route table would mean
-// duplicating that decision as well — and getting it wrong here is how a
-// deprecated path quietly becomes the one without the permission check.
+// preferences became platform routes, and departments and people stayed with
+// the app — which has since left this repository, so only the platform half is
+// still redirected. A redirect rather than a second mount, because a duplicated
+// route table would mean duplicating the middleware decision as well, and
+// getting that wrong here is how a deprecated path quietly becomes the one
+// without the permission check.
 //
 // 308 and not 302: the method and body survive it, so a PUT stays a PUT.
 //
@@ -1208,10 +1231,13 @@ func (s *Server) registerRenamedRouteAliases() {
 		cr.Use(s.authMiddleware)
 		cr.Handle("/organisation", movedTo("/api/v1/tenant/profile"))
 		cr.Handle("/me/preferences", movedTo("/api/v1/profile/preferences"))
-		for _, path := range []string{"/departments", "/people"} {
-			cr.Handle(path, movedUnder("/api/v1/core", "/api/v1/organisation"))
-			cr.Handle(path+"/*", movedUnder("/api/v1/core", "/api/v1/organisation"))
-		}
+		// /departments and /people were redirected under /api/v1/organisation
+		// until 2026-08-23, when the app that served that prefix left for
+		// client-gerege-nexus. A redirect outliving its target is worse than no
+		// redirect: 308 preserves the method and the body, so a PUT followed
+		// the Location header into a 404 and lost the write, and the client was
+		// told to cache the dead address permanently. A distribution that
+		// carries the app can re-register the pair beside its own routes.
 	})
 }
 
@@ -1219,14 +1245,6 @@ func (s *Server) registerRenamedRouteAliases() {
 func movedTo(target string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, withQuery(target, r), http.StatusPermanentRedirect)
-	}
-}
-
-// movedUnder redirects a whole subtree by swapping its prefix.
-func movedUnder(from, to string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, withQuery(to+strings.TrimPrefix(r.URL.Path, from), r),
-			http.StatusPermanentRedirect)
 	}
 }
 
@@ -1242,9 +1260,11 @@ func withQuery(path string, r *http.Request) string {
 // SetDefaultApps records which apps every organisation gets without asking.
 //
 // The distribution's decision, arriving through platform.Options.DefaultApps.
-// It is a function rather than a parameter of NewServer because the list is
-// read in two places that are not both reachable from a constructor argument —
-// the catalogue check here and the sweep in appinstaller — and threading it
-// through both would put a distribution's choice in the signature of everything
-// between.
-func SetDefaultApps(appIDs []string) { appinstaller.DefaultApps = appIDs }
+// Call it before NewServer: the catalogue check reads the list while the server
+// is built, and the sweep in appinstaller reads it afterwards on a timer.
+//
+// Cloned rather than kept. The caller's slice is usually a literal and never
+// touched again, but a header shared with something that appends later would be
+// read by that timer with no synchronisation at all, and the list decides what
+// gets installed into every tenant.
+func SetDefaultApps(appIDs []string) { appinstaller.DefaultApps = slices.Clone(appIDs) }

@@ -12,7 +12,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 )
 
@@ -38,9 +37,11 @@ type InstalledApps = reports.InstalledApps
 //
 // A missing capability is a platform bug rather than a distribution's mistake:
 // nothing outside this repository calls Bootstrap, and server.go provides all
-// of them immediately before it. So it is reported and the zero value is used,
-// which leaves one module degraded instead of refusing to start a deployment
-// over a dependency most of it does not touch.
+// of them before it — before a distribution's modules too, which are built in
+// between. So it is reported and the zero value is used, which leaves one
+// module degraded instead of refusing to start a deployment over a dependency
+// most of it does not touch. Anything whose zero value is a nil that something
+// would later call is handed over as a parameter instead; see the rails below.
 func Bootstrap(p nexus.Platform) Runtime {
 	sso := required[*ssoprovider.SSOProvider]()
 	link := required[nexus.Link]()
@@ -59,12 +60,15 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// an app that ships inside the platform is one every deployment carries
 	// whether it has a use for it or not, and a queue kiosk has no use for a
 	// staff directory.
-	// The PDF signing rails. Constructed in server.go now, not here: a module
-	// that signs a PDF asks for nexus.SigningRails in its constructor, and a
-	// distribution's modules are built before this function is called. Asked
-	// for rather than rebuilt — a second Rails would be a second housekeeping
-	// loop over the same tables.
-	esignModule := required[*esign.Rails]()
+	//
+	// The PDF signing rails left too, upward rather than sideways: server.go
+	// builds them before any module, because a module that signs a PDF asks for
+	// nexus.SigningRails in its constructor and a distribution's modules are
+	// built before this function is called. Their housekeeping is appended to
+	// this runtime's list there, where the value is in scope — not asked back
+	// out of the capability registry, which would key a housekeeping loop on an
+	// internal/ type no distribution can name and turn a deleted Provide into a
+	// nil that only panics five minutes after a clean boot.
 	sso_clients.New(sso)
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module
@@ -80,7 +84,7 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// serves the registry, and a module constructed after it would have its
 	// reports missing from the first listing until something else rebuilt it.
 	reportsModule := reports.New(p, installedApps)
-	return Runtime{Background: []BackgroundModule{esignModule, reportsModule}}
+	return Runtime{Background: []BackgroundModule{reportsModule}}
 }
 
 // required fetches a capability the platform is expected to have provided.

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,39 +22,32 @@ import (
 
 // DefaultApps are installed for every tenant that has never had them.
 //
-// "Default" and not "core": the platform is what runs underneath, and it now
-// owns everything a deployment cannot do without — sign-in, the tenant and its
-// legal profile, settings, the store itself. What is left in this list is an
-// app a new organisation almost certainly wants on day one and can remove on
-// day two. A queue kiosk has no use for an internal staff directory, and being
-// unable to say so is what stopped this platform from booting with no apps at
-// all.
+// A distribution's decision, set through platform.Options.DefaultApps. It used
+// to be a literal naming this repository's own apps, which stopped being
+// possible the moment the last of them moved out: a deployment could carry an
+// app every tenant should have and no way to say so.
+//
+// Empty until a distribution says otherwise, and empty is an ordinary answer —
+// a platform with no apps of its own installs none. Note what empty also
+// switches off: the catalogue-staleness refusal in internal/platform's
+// verifyCatalogVersions is written against this list, so a deployment that
+// declares nothing here is a deployment where a catalogue older than the
+// binary is accepted whole.
+//
+// A default app should be one this binary carries, but nothing checks that at
+// startup: verifyCatalogVersions asks only whether the catalogue names the id,
+// and it skips any id with no compiled module by design. An id with a
+// catalogue entry and no module boots clean and then fails once per tenant,
+// for ever, inside EnsureDefaultApps.
 //
 // Uninstalling one is a gate, not a deletion: DisableApp leaves the
 // installation row in place, which is also what keeps EnsureDefaultApps from
 // putting back what somebody has just removed.
 //
-// It is a list in the platform rather than a flag in the manifest, because a
-// third party publishing an app that installs itself everywhere is not a thing
-// this store should be able to express.
-// The e-Government link was here until 2026-08-23, when it moved to
-// client-gerege-nexus. A default app has to be one this binary carries: the
-// catalogue check below refuses to start when it is not, which is what caught
-// the omission the moment the module left.
-// Set by the distribution through platform.Options.DefaultApps. It used to be
-// a literal naming this repository's own apps, which stopped being possible the
-// moment one of them moved out: a deployment could carry an app every tenant
-// should have and no way to say so.
-//
-// Empty until a distribution says otherwise, which is the honest default —
-// a platform with no apps of its own installs none.
+// It is a list rather than a flag in the manifest, because a third party
+// publishing an app that installs itself everywhere is not a thing this store
+// should be able to express.
 var DefaultApps []string
-
-// IsDefaultApp reports whether an app is installed for new tenants without
-// anybody asking. It does not mean the app is permanent — nothing is.
-func IsDefaultApp(appID string) bool {
-	return slices.Contains(DefaultApps, appID)
-}
 
 // ErrAppNotFound is returned when a slug names no app in the catalogue.
 //
