@@ -5,87 +5,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"golang.org/x/crypto/chacha20poly1305"
 )
-
-var validStaffPIN = regexp.MustCompile(`^[0-9]{4,12}$`)
-
-func (s *Server) handleSetStaffPIN(w http.ResponseWriter, r *http.Request) {
-	claims, _ := auth.UserFromContext(r.Context())
-	var req struct {
-		MembershipID string `json:"membership_id"`
-		PIN          string `json:"pin"`
-	}
-	if httpx.DecodeLimited(r, &req, 8<<10) != nil || !validStaffPIN.MatchString(req.PIN) {
-		httpx.Error(w, 400, "PIN must contain 4-12 digits")
-		return
-	}
-	hash, err := auth.HashPassword(req.PIN)
-	if err != nil {
-		httpx.Error(w, 500, "failed to protect PIN")
-		return
-	}
-	result, err := s.db.Exec(r.Context(), `INSERT INTO staff_pin_credentials(membership_id,tenant_id,pin_hash) SELECT id,tenant_id,$3 FROM memberships WHERE id=$1 AND tenant_id=$2 ON CONFLICT(membership_id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash,active=true,failed_attempts=0,locked_until=NULL,updated_at=NOW()`, req.MembershipID, claims.TenantID, hash)
-	if err != nil || result.RowsAffected() != 1 {
-		httpx.Error(w, 404, "membership not found")
-		return
-	}
-	audit.Record(r.Context(), claims.TenantID, claims.UserID, "staff.pin_changed", "membership", map[string]any{"membership_id": req.MembershipID})
-	httpx.JSON(w, 200, map[string]string{"status": "updated"})
-}
-
-func (s *Server) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
-	device := r.Context().Value(deviceContextKey{}).(deviceClaims)
-	if device.FormFactor != "pos" && device.FormFactor != "tablet" {
-		httpx.Error(w, 403, "staff switching is unavailable on this device")
-		return
-	}
-	var req struct {
-		PIN string `json:"pin"`
-	}
-	if httpx.DecodeLimited(r, &req, 4<<10) != nil || !validStaffPIN.MatchString(req.PIN) {
-		httpx.Error(w, 401, "invalid PIN")
-		return
-	}
-	rows, err := s.db.Query(r.Context(), `SELECT p.membership_id::text,p.pin_hash,m.user_id::text,u.name,u.email,p.locked_until FROM staff_pin_credentials p JOIN memberships m ON m.id=p.membership_id JOIN users u ON u.id=m.user_id WHERE p.tenant_id=$1 AND p.active`, device.TenantID)
-	if err != nil {
-		httpx.Error(w, 503, "staff authentication unavailable")
-		return
-	}
-	defer rows.Close()
-	var membershipID, userID, name, email string
-	matched := false
-	for rows.Next() {
-		var mid, hash, uid, n, e string
-		var locked *time.Time
-		if rows.Scan(&mid, &hash, &uid, &n, &e, &locked) == nil && (locked == nil || locked.Before(time.Now())) && auth.CheckPasswordHash(req.PIN, hash) {
-			membershipID, userID, name, email, matched = mid, uid, n, e, true
-			break
-		}
-	}
-	if !matched {
-		audit.Record(r.Context(), device.TenantID, "device:"+device.ID, "staff.pin_failed", "device", nil)
-		httpx.Error(w, 401, "invalid PIN")
-		return
-	}
-	token, expires, err := s.issueSession(r, userID, device.TenantID, "staff-pin")
-	if err != nil {
-		reportSessionFailure(w, err)
-		return
-	}
-	auth.SetSessionCookie(w, token, expires)
-	audit.Record(r.Context(), device.TenantID, userID, "staff.pin_success", "device", map[string]any{"device_id": device.ID})
-	httpx.JSON(w, 200, map[string]any{"expires_at": expires, "membership_id": membershipID, "user": map[string]any{"id": userID, "name": name, "email": email, "tenant_id": device.TenantID}})
-}
 
 type telemetryEvent struct {
 	Level, Event string
@@ -174,4 +105,75 @@ func (s *Server) handleRegisterPushToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeviceStaffPIN signs a person in on an enrolled shared device.
+//
+// The sign-in is the platform's and the credential is not. What the secret is —
+// a PIN today — belongs to whichever app implements nexus.StaffCredential, and
+// this handler knows only that somebody typed something at a till and that a
+// session may be opened for whoever it turns out to be. Minting the session is
+// the part no app may do, which is why the route stayed here when the PIN left
+// for internal/apps/staffpin on 2026-08-23.
+//
+// The route stays mounted on a deployment carrying no such app and answers 404,
+// the same rule /ai/stock-forecast follows: a route table that changes shape
+// with the environment is a route table nobody can reason about.
+func (s *Server) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
+	device := r.Context().Value(deviceContextKey{}).(deviceClaims)
+	if device.FormFactor != "pos" && device.FormFactor != "tablet" {
+		httpx.Error(w, http.StatusForbidden, "staff switching is unavailable on this device")
+		return
+	}
+	// "pin" is the wire's history rather than this handler's opinion: the field
+	// was named when the platform held the PIN itself, and the tills in the
+	// field send it.
+	var req struct {
+		PIN string `json:"pin"`
+	}
+	if httpx.DecodeLimited(r, &req, 4<<10) != nil || strings.TrimSpace(req.PIN) == "" {
+		httpx.Error(w, http.StatusUnauthorized, "invalid PIN")
+		return
+	}
+
+	credential, err := nexus.Capability[nexus.StaffCredential]()
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "no app on this deployment authenticates staff on a device")
+		return
+	}
+
+	identity, err := credential.Verify(r.Context(), device.TenantID, req.PIN)
+	switch {
+	case errors.Is(err, nexus.ErrStaffCredentialRejected):
+		// One answer for a wrong secret, a locked credential and an
+		// organisation without the app: the caller is a shared till in a shop,
+		// and telling it which of the three would tell everybody standing at it.
+		audit.Record(r.Context(), device.TenantID, "device:"+device.ID, "staff.pin_failed", "device", nil)
+		httpx.Error(w, http.StatusUnauthorized, "invalid PIN")
+		return
+	case err != nil:
+		// A credential that could not be read is not a credential that was
+		// wrong, and answering 401 here would have somebody retyping a correct
+		// PIN at a database outage.
+		slog.Error("staff sign-in: the credential could not be read", "tenant_id", device.TenantID, "error", err)
+		httpx.Error(w, http.StatusServiceUnavailable, "staff authentication unavailable")
+		return
+	}
+
+	token, expires, err := s.issueSession(r, identity.UserID, device.TenantID, "staff-pin")
+	if err != nil {
+		reportSessionFailure(w, err)
+		return
+	}
+	auth.SetSessionCookie(w, token, expires)
+	audit.Record(r.Context(), device.TenantID, identity.UserID, "staff.pin_success", "device",
+		map[string]any{"device_id": device.ID})
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"expires_at":    expires,
+		"membership_id": identity.MembershipID,
+		"user": map[string]any{
+			"id": identity.UserID, "name": identity.Name, "email": identity.Email,
+			"tenant_id": device.TenantID,
+		},
+	})
 }

@@ -8,6 +8,7 @@ import (
 	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
+	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
@@ -87,6 +88,10 @@ var policylessModules = map[string]nexus.Module{
 	// menu gate and a route prefix would both name integrations.manage and say
 	// nothing the routes do not already say for themselves.
 	"integrations": (*appintegrations.Module)(nil),
+	// staffpin is the fourth. Its one route is administrative and names its own
+	// permission; the route it exists for is the platform's device sign-in,
+	// which no module gates because no module answers it.
+	"staffpin": (*appstaffpin.Module)(nil),
 }
 
 // Directories under internal/apps that hold no module at all.

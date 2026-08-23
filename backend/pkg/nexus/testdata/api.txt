@@ -206,6 +206,11 @@
   SignerIdentity.LastName string
   SignerIdentity.RegNumber string
   SigningRails.Mount(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler)
+  StaffCredential.Verify(ctx context.Context, tenantID, secret string) (StaffIdentity, error)
+  StaffIdentity.Email string
+  StaffIdentity.MembershipID string
+  StaffIdentity.Name string
+  StaffIdentity.UserID string
   StateRail.Endpoint string
   StateRail.ID string
   StateRail.Mode string
@@ -367,6 +372,8 @@ type SignedDocument struct
 type Signer interface
 type SignerIdentity struct
 type SigningRails interface
+type StaffCredential interface
+type StaffIdentity struct
 type StateRail struct
 type StateRails func() []StateRail
 type StateRegistry interface
@@ -377,6 +384,7 @@ var ErrNoDocumentFiler
 var ErrNoLink
 var ErrPDFSigningUnavailable
 var ErrSigningUnavailable
+var ErrStaffCredentialRejected
 var ErrTenantMissing
 var ErrUnauthenticated
 var SupportedLocales

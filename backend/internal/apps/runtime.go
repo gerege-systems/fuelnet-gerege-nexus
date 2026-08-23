@@ -13,6 +13,7 @@ import (
 	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
+	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
@@ -83,6 +84,13 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// one dispatch loop, one encryption key — so it is asked for rather than
 	// built, the same way every other rail this repository's apps reach for is.
 	appintegrations.New(p, required[*integration.Manager]())
+	// The till's staff PIN. It publishes nexus.StaffCredential, which the
+	// platform's device sign-in route asks for — the credential is a product's
+	// and the session it opens is the platform's, and this is the seam between
+	// them. Handed the same installed-apps gate the reports app takes, because
+	// the route that consumes the credential carries a device token and no
+	// session, so the app gate cannot stand in front of it.
+	appstaffpin.New(p, appstaffpin.InstalledApps(installedApps))
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module
 	// registers the readers for the task envelopes, and a deployment given a key
