@@ -5,18 +5,6 @@ import (
 	"testing"
 )
 
-func TestStaffPINFormat(t *testing.T) {
-	for _, pin := range []string{"0000", "123456", "123456789012"} {
-		if !validStaffPIN.MatchString(pin) {
-			t.Fatalf("valid PIN rejected: %s", pin)
-		}
-	}
-	for _, pin := range []string{"123", "1234567890123", "12ab"} {
-		if validStaffPIN.MatchString(pin) {
-			t.Fatalf("invalid PIN accepted: %s", pin)
-		}
-	}
-}
 func TestPushTokenEncryptionDoesNotPersistPlaintext(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {

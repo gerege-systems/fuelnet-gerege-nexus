@@ -1098,7 +1098,10 @@ func (s *Server) setupRoutes() {
 			pr.Get("/menus", s.handleMenus)
 			pr.With(s.requireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
 			pr.With(s.requireAdmin).Get("/admin/devices", s.handleListDevices)
-			pr.With(s.requireAdmin).Put("/admin/devices/staff-pin", s.handleSetStaffPIN)
+			// Setting a member's staff PIN was here until 2026-08-23. It is
+			// internal/apps/staffpin's route now — the credential is a
+			// product's, the sign-in it feeds is the platform's, and the two
+			// halves are split along that line rather than along this file.
 			pr.With(s.requireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
 			pr.Post("/push-tokens", s.handleRegisterPushToken)
 

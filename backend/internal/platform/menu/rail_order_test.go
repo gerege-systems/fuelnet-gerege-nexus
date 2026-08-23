@@ -94,12 +94,12 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 	// It is reached from the shell's chat affordance, so a tile on the rail
 	// would be a tile that opens nothing. The flag is what keeps an app out of
 	// the rail without pretending it is not installed.
-	// Both for the same reason, and it is not the organisation's: neither has a
-	// screen of its own. The assistant is reached from the shell's chat
-	// affordance and the connectors from /settings/integrations, which the
-	// shell draws in its own settings group — a tile on the rail would open
-	// nothing in either case.
-	wantChrome := []string{"io.gerege.nexus.ai", "io.gerege.nexus.integrations"}
+	// All three for the same reason, and it is not the organisation's: none has
+	// a screen of its own. The assistant is reached from the shell's chat
+	// affordance, the connectors from /settings/integrations, and a staff PIN
+	// is set from the member's row in Access control — all three shell screens.
+	// A tile on the rail would open nothing in every case.
+	wantChrome := []string{"io.gerege.nexus.ai", "io.gerege.nexus.integrations", "io.gerege.nexus.staff_pin"}
 	if len(chrome) != len(wantChrome) {
 		t.Fatalf("the shell draws %v as part of itself, want %v", chrome, wantChrome)
 	}

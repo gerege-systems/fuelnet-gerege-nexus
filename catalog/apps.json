@@ -208,5 +208,47 @@
         "category": "Plataforma"
       }
     }
+  },
+  {
+    "id": "io.gerege.nexus.staff_pin",
+    "slug": "staff-pin",
+    "name": "Staff PIN",
+    "description": "Shift changes at a shared till: a member types a short PIN and the device signs them in, without anybody typing a password in front of a queue.",
+    "icon_url": "/icons/staff-pin.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Ажилтны PIN",
+        "description": "Хуваалцсан касс дээрх ээлж солилт: ажилтан богино PIN бичихэд төхөөрөмж түүнийг нэвтрүүлнэ — дараалалны өмнө нууц үг бичих шаардлагагүй.",
+        "category": "Платформ"
+      },
+      "ar": {
+        "name": "رمز الموظف",
+        "description": "تبديل الورديات على نقطة بيع مشتركة: يُدخل الموظف رمزًا قصيرًا فيسجّله الجهاز للدخول، دون كتابة كلمة مرور أمام الطابور.",
+        "category": "المنصة"
+      },
+      "zh": {
+        "name": "员工 PIN",
+        "description": "共用收银台的交接班：员工输入简短 PIN，设备即为其登录，无需当着排队的顾客输入密码。",
+        "category": "平台"
+      },
+      "fr": {
+        "name": "Code personnel",
+        "description": "Changement d'équipe sur une caisse partagée : un membre saisit un code court et l'appareil le connecte, sans taper un mot de passe devant la file.",
+        "category": "Plateforme"
+      },
+      "ru": {
+        "name": "PIN сотрудника",
+        "description": "Пересменка на общей кассе: сотрудник вводит короткий PIN, и устройство выполняет вход — без пароля на глазах у очереди.",
+        "category": "Платформа"
+      },
+      "es": {
+        "name": "PIN de personal",
+        "description": "Cambio de turno en una caja compartida: la persona escribe un PIN corto y el dispositivo la registra, sin teclear una contraseña delante de la cola.",
+        "category": "Plataforma"
+      }
+    }
   }
 ]

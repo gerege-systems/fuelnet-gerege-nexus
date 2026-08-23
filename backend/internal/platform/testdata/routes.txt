@@ -146,7 +146,6 @@ POST /oauth2/userinfo
 PUT /api/v1/admin/access/memberships/{id}/roles
 PUT /api/v1/admin/access/roles/{id}
 PUT /api/v1/admin/access/roles/{id}/permissions
-PUT /api/v1/admin/devices/staff-pin
 PUT /api/v1/admin/devices/status
 PUT /api/v1/core/me/preferences
 PUT /api/v1/core/organisation
@@ -227,6 +226,7 @@ TRACE /metrics
 [app] POST /api/v1/urtuu/tasks/{id}/delegate
 [app] POST /api/v1/urtuu/tasks/{id}/return
 [app] PUT /api/v1/admin/ai/prompts/{key}
+[app] PUT /api/v1/admin/devices/staff-pin
 [app] PUT /api/v1/developer/apps/{clientID}
 [app] PUT /api/v1/integrations/{id}
 [app] PUT /api/v1/reports/schedules/{id}
