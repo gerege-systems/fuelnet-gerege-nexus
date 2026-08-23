@@ -31,8 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -133,11 +133,11 @@ func (g *Guard) Install(cfg *pgxpool.Config) {
 	// timestamptz as an instant; the session's zone is what reads it. Left to
 	// the server's default the answer would be UTC, and a daily figure for a
 	// Mongolian office would end at eight in the morning — see
-	// internal/platform/config/timezone.go.
+	// pkg/nexus/clock.go.
 	if cfg.ConnConfig.RuntimeParams == nil {
 		cfg.ConnConfig.RuntimeParams = map[string]string{}
 	}
-	cfg.ConnConfig.RuntimeParams["timezone"] = config.TimezoneName()
+	cfg.ConnConfig.RuntimeParams["timezone"] = nexus.TimezoneName()
 
 	cfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
 		if !g.enabled.Load() {

@@ -205,10 +205,6 @@ func normaliseHost(raw string) string {
 // no alternative; here there is one.
 func requestHost(r *http.Request) string { return normaliseHost(r.Host) }
 
-// productionEnv reports whether this process runs as a deployment rather than
-// on somebody's machine.
-func productionEnv() bool { return os.Getenv("ENVIRONMENT") == "production" }
-
 // Timings the console is built around.
 const (
 	// SessionTTL bounds one operator sign-in end to end. Shorter than the

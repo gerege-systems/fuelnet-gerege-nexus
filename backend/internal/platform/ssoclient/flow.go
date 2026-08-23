@@ -12,9 +12,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 )
 
 // CookieSpec names a cookie and the path it is confined to.
@@ -104,7 +105,7 @@ func SetFlowCookie(w http.ResponseWriter, spec CookieSpec, flow Flow) {
 		Path:     spec.Path,
 		MaxAge:   int(flowTTL.Seconds()),
 		HttpOnly: true,
-		Secure:   isProduction(),
+		Secure:   config.IsProduction(),
 		// Lax, not Strict. The callback is a top-level navigation arriving from
 		// the provider's origin, which is by definition cross-site, and a
 		// Strict cookie is not sent on one — the flow would lose its own state
@@ -143,7 +144,7 @@ func ReadFlow(w http.ResponseWriter, r *http.Request, spec CookieSpec, state str
 func ClearFlowCookie(w http.ResponseWriter, spec CookieSpec) {
 	http.SetCookie(w, &http.Cookie{
 		Name: spec.Name, Value: "", Path: spec.Path,
-		MaxAge: -1, HttpOnly: true, Secure: isProduction(), SameSite: http.SameSiteLaxMode,
+		MaxAge: -1, HttpOnly: true, Secure: config.IsProduction(), SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -157,7 +158,7 @@ func SetIDTokenCookie(w http.ResponseWriter, idToken string, expiresAt time.Time
 		Path:     IDTokenCookiePath,
 		Expires:  expiresAt,
 		HttpOnly: true,
-		Secure:   isProduction(),
+		Secure:   config.IsProduction(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -176,7 +177,7 @@ func IDTokenFromRequest(r *http.Request) string {
 func ClearIDTokenCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name: IDTokenCookieName, Value: "", Path: IDTokenCookiePath,
-		MaxAge: -1, HttpOnly: true, Secure: isProduction(), SameSite: http.SameSiteLaxMode,
+		MaxAge: -1, HttpOnly: true, Secure: config.IsProduction(), SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -194,5 +195,3 @@ func SafeNext(raw, fallback string) string {
 	}
 	return raw
 }
-
-func isProduction() bool { return os.Getenv("ENVIRONMENT") == "production" }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -265,7 +266,7 @@ func SetSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) 
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
-		Secure:   productionEnv(),
+		Secure:   config.IsProduction(),
 		SameSite: http.SameSiteStrictMode,
 	})
 }
@@ -279,7 +280,7 @@ func ClearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   productionEnv(),
+		Secure:   config.IsProduction(),
 		SameSite: http.SameSiteStrictMode,
 	})
 }

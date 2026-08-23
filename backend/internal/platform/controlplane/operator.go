@@ -133,10 +133,6 @@ func (r Role) Can(c Capability) bool { return capabilities[r][c] }
 // Valid reports whether r is one of the four.
 func (r Role) Valid() bool { _, known := capabilities[r]; return known }
 
-// Roles lists the four in the order they appear in the plan, most privileged
-// first. Used by the bootstrap command's help text and by the console's UI.
-func Roles() []Role { return []Role{RoleSuperadmin, RoleOperator, RoleSupport, RoleAuditor} }
-
 // Operator is an account, as the console needs to know it.
 type Operator struct {
 	ID    string `json:"id"`

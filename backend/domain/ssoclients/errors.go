@@ -6,8 +6,6 @@
 
 package ssoclients
 
-import "errors"
-
 // Every refusal here is answered as a 400 and reads as a sentence an integrator
 // can act on, which is why several of them name the offending value.
 var (
@@ -46,12 +44,6 @@ func notWeb(raw string) error {
 // allowlist. The operator wrote that rule; restating it here would be a second
 // opinion about their configuration.
 func Refused(err error) error { return rule(err.Error()) }
-
-// IsRefusal separates what the caller sent from what failed underneath them.
-func IsRefusal(err error) bool {
-	var refusal *ruleError
-	return errors.As(err, &refusal)
-}
 
 type ruleError struct{ message string }
 

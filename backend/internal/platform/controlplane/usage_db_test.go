@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // CP-5's promises: the numbers are counted from the database rather than from
@@ -210,7 +210,7 @@ func TestUsageBelongsToADayOnThePlatformsClock(t *testing.T) {
 		t.Fatalf("write an audit row: %v", err)
 	}
 
-	here := config.Now()
+	here := nexus.Now()
 	shift := 13 * time.Hour
 	if here.Hour() < 11 {
 		shift = -shift
