@@ -2,12 +2,9 @@
  * Gerege Nexus
  * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
  * Distributed under the Apache 2.0 License.
- *
- * Package platform provides the core HTTP Server orchestrator, routing table,
- * authentication middleware, and app installer wiring.
  */
 
-package platform
+package integrations
 
 import (
 	"errors"
@@ -79,12 +76,12 @@ func integrationError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleListIntegrations(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleListIntegrations(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	list, err := s.integrationMgr.List(r.Context(), tenantID)
+	list, err := m.mgr.List(r.Context(), tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load integrations")
 		return
@@ -95,7 +92,7 @@ func (s *Server) handleListIntegrations(w http.ResponseWriter, r *http.Request) 
 // handleIntegrationProviders tells the screen which connectors this deployment
 // can actually offer, so an administrator is not given a form for a provider
 // whose OAuth client was never configured.
-func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleIntegrationProviders(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"providers":             integration.Catalog(),
 		"encryption_configured": integration.EncryptionConfigured(),
@@ -103,17 +100,17 @@ func (s *Server) handleIntegrationProviders(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleRegisterIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	var req integrationSaveRequest
-	if decodeLimitedJSON(r, &req, 32<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 32<<10) != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid integration configuration")
 		return
 	}
-	conn, err := s.integrationMgr.Create(r.Context(), tenantID, req.toSave())
+	conn, err := m.mgr.Create(r.Context(), tenantID, req.toSave())
 	if err != nil {
 		integrationError(w, err)
 		return
@@ -124,17 +121,17 @@ func (s *Server) handleRegisterIntegration(w http.ResponseWriter, r *http.Reques
 	httpx.JSON(w, http.StatusCreated, conn)
 }
 
-func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleUpdateIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	var req integrationSaveRequest
-	if decodeLimitedJSON(r, &req, 32<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 32<<10) != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid integration configuration")
 		return
 	}
-	conn, err := s.integrationMgr.Update(r.Context(), tenantID, chi.URLParam(r, "id"), req.toSave())
+	conn, err := m.mgr.Update(r.Context(), tenantID, chi.URLParam(r, "id"), req.toSave())
 	if err != nil {
 		integrationError(w, err)
 		return
@@ -145,13 +142,13 @@ func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, conn)
 }
 
-func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleDeleteIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := s.integrationMgr.Delete(r.Context(), tenantID, id); err != nil {
+	if err := m.mgr.Delete(r.Context(), tenantID, id); err != nil {
 		integrationError(w, err)
 		return
 	}
@@ -164,13 +161,13 @@ func (s *Server) handleDeleteIntegration(w http.ResponseWriter, r *http.Request)
 // handleConnectIntegration starts the OAuth grant and answers with the URL to
 // send the administrator to. It returns the URL rather than redirecting so the
 // caller is an ordinary fetch from the settings screen.
-func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleConnectIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	claims, _ := auth.UserFromContext(r.Context())
-	authURL, err := s.integrationMgr.BeginConnect(r.Context(), tenantID, claims.UserID, chi.URLParam(r, "id"))
+	authURL, err := m.mgr.BeginConnect(r.Context(), tenantID, claims.UserID, chi.URLParam(r, "id"))
 	if err != nil {
 		integrationError(w, err)
 		return
@@ -178,13 +175,13 @@ func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request
 	httpx.JSON(w, http.StatusOK, map[string]string{"authorization_url": authURL})
 }
 
-func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleDisconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	if err := s.integrationMgr.Disconnect(r.Context(), tenantID, id); err != nil {
+	if err := m.mgr.Disconnect(r.Context(), tenantID, id); err != nil {
 		integrationError(w, err)
 		return
 	}
@@ -197,7 +194,7 @@ func (s *Server) handleDisconnectIntegration(w http.ResponseWriter, r *http.Requ
 // handleIntegrationDeliveries returns what has recently left the platform. A
 // signed document reaching an outside account is a disclosure, and the record
 // of it is the only thing that can answer for it afterwards.
-func (s *Server) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -208,7 +205,7 @@ func (s *Server) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Requ
 			limit = parsed
 		}
 	}
-	list, err := s.integrationMgr.Deliveries(r.Context(), tenantID, limit)
+	list, err := m.mgr.Deliveries(r.Context(), tenantID, limit)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load delivery history")
 		return
@@ -223,7 +220,7 @@ func (s *Server) handleIntegrationDeliveries(w http.ResponseWriter, r *http.Requ
 // depends on SameSite and on which tab the consent screen opened in. Authority
 // comes from the single-use state row instead, which binds the callback to the
 // tenant, the connector and the administrator who started it.
-func (s *Server) handleIntegrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleIntegrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	settingsURL := strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/") + "/settings/integrations"
 	if strings.TrimSpace(settingsURL) == "/settings/integrations" {
@@ -237,7 +234,7 @@ func (s *Server) handleIntegrationOAuthCallback(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	res, err := s.integrationMgr.CompleteConnect(r.Context(), query.Get("state"), query.Get("code"))
+	res, err := m.mgr.CompleteConnect(r.Context(), query.Get("state"), query.Get("code"))
 	if err != nil {
 		slog.Warn("integration: oauth callback failed", "error", err)
 		http.Redirect(w, r, settingsURL+"?connected=0&reason="+url.QueryEscape(err.Error()), http.StatusFound)

@@ -166,5 +166,47 @@
         "category": "Productividad"
       }
     }
+  },
+  {
+    "id": "io.gerege.nexus.integrations",
+    "slug": "integrations",
+    "name": "Integrations",
+    "description": "The accounts and endpoints this organisation connects to: Zoom and Teams meeting rooms, Google and Dropbox storage, webhook targets, and the log of what has been sent to them.",
+    "icon_url": "/icons/integrations.png",
+    "category": "Platform",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "Холбогч",
+        "description": "Байгууллагын холбогдох бүртгэл, хаягууд: Zoom, Teams хурлын өрөө, Google, Dropbox хадгалалт, webhook хаяг, мөн тэдгээрт юу илгээснийг харуулах бүртгэл.",
+        "category": "Платформ"
+      },
+      "ar": {
+        "name": "عمليات الربط",
+        "description": "الحسابات والعناوين التي ترتبط بها المؤسسة: غرف اجتماعات Zoom وTeams، وتخزين Google وDropbox، وعناوين الويب هوك، وسجل ما أُرسل إليها.",
+        "category": "المنصة"
+      },
+      "zh": {
+        "name": "集成连接",
+        "description": "本组织连接的账户与地址：Zoom 与 Teams 会议室、Google 与 Dropbox 存储、Webhook 目标，以及发送记录。",
+        "category": "平台"
+      },
+      "fr": {
+        "name": "Intégrations",
+        "description": "Les comptes et adresses auxquels l'organisation se connecte : salles Zoom et Teams, stockage Google et Dropbox, cibles webhook, et le journal de ce qui leur a été envoyé.",
+        "category": "Plateforme"
+      },
+      "ru": {
+        "name": "Интеграции",
+        "description": "Учётные записи и адреса, к которым подключается организация: комнаты Zoom и Teams, хранилища Google и Dropbox, webhook-адреса и журнал отправленного.",
+        "category": "Платформа"
+      },
+      "es": {
+        "name": "Integraciones",
+        "description": "Las cuentas y direcciones a las que se conecta la organización: salas de Zoom y Teams, almacenamiento de Google y Dropbox, destinos webhook, y el registro de lo enviado.",
+        "category": "Plataforma"
+      }
+    }
   }
 ]

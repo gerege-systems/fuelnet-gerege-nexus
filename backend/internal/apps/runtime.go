@@ -10,9 +10,11 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
+	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 )
 
@@ -77,6 +79,10 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// keeps the rest — the prompt, the knowledge, the model traffic — to
 	// itself, which is what makes it removable.
 	appai.New(p)
+	// The connector administration. The manager it edits is the platform's —
+	// one dispatch loop, one encryption key — so it is asked for rather than
+	// built, the same way every other rail this repository's apps reach for is.
+	appintegrations.New(p, required[*integration.Manager]())
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module
 	// registers the readers for the task envelopes, and a deployment given a key

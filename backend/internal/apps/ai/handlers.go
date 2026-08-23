@@ -8,7 +8,6 @@ package ai
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -59,7 +58,7 @@ func (m *Module) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req CopilotRequest
-	if err := decodeLimitedJSON(r, &req, 1<<20); err != nil {
+	if err := httpx.DecodeLimited(r, &req, 1<<20); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid AI request")
 		return
 	}
@@ -78,7 +77,7 @@ func (m *Module) handleAISTT(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Audio Audio `json:"audio"`
 	}
-	if err := decodeLimitedJSON(r, &req, 1<<20); err != nil {
+	if err := httpx.DecodeLimited(r, &req, 1<<20); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid audio request")
 		return
 	}
@@ -96,7 +95,7 @@ func (m *Module) handleAITTS(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Text string `json:"text"`
 	}
-	if err := decodeLimitedJSON(r, &req, 16<<10); err != nil || req.Text == "" {
+	if err := httpx.DecodeLimited(r, &req, 16<<10); err != nil || req.Text == "" {
 		httpx.Error(w, http.StatusBadRequest, "text is required")
 		return
 	}
@@ -117,7 +116,7 @@ func (m *Module) handleAITranslate(w http.ResponseWriter, r *http.Request) {
 		Target string `json:"target_lang"`
 		Speak  bool   `json:"speak"`
 	}
-	if err := decodeLimitedJSON(r, &req, 1<<20); err != nil || req.Target == "" {
+	if err := httpx.DecodeLimited(r, &req, 1<<20); err != nil || req.Target == "" {
 		httpx.Error(w, http.StatusBadRequest, "invalid translation request")
 		return
 	}
@@ -184,7 +183,7 @@ func (m *Module) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 		Content string `json:"content"`
 		Active  bool   `json:"active"`
 	}
-	if decodeLimitedJSON(r, &req, 32<<10) != nil || strings.TrimSpace(req.Content) == "" {
+	if httpx.DecodeLimited(r, &req, 32<<10) != nil || strings.TrimSpace(req.Content) == "" {
 		httpx.Error(w, 400, "content is required")
 		return
 	}
@@ -232,7 +231,7 @@ func (m *Module) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request)
 		Content   string `json:"content"`
 		SourceURL string `json:"source_url"`
 	}
-	if decodeLimitedJSON(r, &req, 256<<10) != nil || strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Content) == "" {
+	if httpx.DecodeLimited(r, &req, 256<<10) != nil || strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Content) == "" {
 		httpx.Error(w, 400, "title and content are required")
 		return
 	}
@@ -245,9 +244,6 @@ func (m *Module) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, 201, map[string]string{"id": id})
 }
 
-func decodeLimitedJSON(r *http.Request, dst any, max int64) error {
-	return json.NewDecoder(io.LimitReader(r.Body, max)).Decode(dst)
-}
 func aiStatus(error) int { return http.StatusBadGateway }
 
 // handleAIForecast asks whichever app lends a stock forecast for one.

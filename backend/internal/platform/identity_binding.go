@@ -169,7 +169,7 @@ func (s *Server) handleBindingConsent(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Binding string `json:"binding"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -196,7 +196,7 @@ func (s *Server) handleBindingEIDStart(w http.ResponseWriter, r *http.Request) {
 		Binding    string `json:"binding"`
 		NationalID string `json:"national_id"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -238,7 +238,7 @@ func (s *Server) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 		Binding   string `json:"binding"`
 		SessionID string `json:"session_id"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil || strings.TrimSpace(req.SessionID) == "" {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil || strings.TrimSpace(req.SessionID) == "" {
 		httpx.Error(w, http.StatusBadRequest, "session_id is required")
 		return
 	}
