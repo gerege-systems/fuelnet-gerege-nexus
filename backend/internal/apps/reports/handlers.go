@@ -24,7 +24,6 @@ import (
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -46,12 +45,9 @@ func (m *Module) handleList(w http.ResponseWriter, r *http.Request) {
 	nexus.JSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
-// paramView is a parameter as the form needs it: the spec, plus the options for
-// a UUID parameter resolved against this tenant's own rows.
-type paramView struct {
-	reporting.ParamSpec
-	Options []reporting.ParamOption `json:"options,omitempty"`
-}
+// paramView was a parameter as the form needs it — the spec plus the options
+// resolved against this tenant's rows — and is nexus.ReportForm now: filling a
+// dropdown means running SQL a report declared, which is the engine's to do.
 
 // handleMetadata describes one report: its parameters and its columns.
 func (m *Module) handleMetadata(w http.ResponseWriter, r *http.Request) {
@@ -60,30 +56,12 @@ func (m *Module) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := make([]paramView, 0, len(report.Params()))
-	for _, spec := range report.Params() {
-		view := paramView{ParamSpec: spec, Options: spec.Options}
-		if spec.Kind == reporting.ParamUUID && spec.OptionsQuery != "" {
-			options, err := m.loadOptions(r, tenantID, spec)
-			if err != nil {
-				nexus.Error(w, http.StatusInternalServerError, "could not load the parameter options")
-				return
-			}
-			view.Options = options
-		}
-		// The query is not sent to the browser. It is SQL this platform runs,
-		// and a client has no use for it.
-		view.OptionsQuery = ""
-		params = append(params, view)
+	form, err := m.engine.Form(r.Context(), tenantID, report.Key, localeOf(r))
+	if err != nil {
+		nexus.Error(w, http.StatusInternalServerError, "could not describe the report")
+		return
 	}
-
-	nexus.JSON(w, http.StatusOK, map[string]any{
-		"key":     report.Key(),
-		"app":     report.App(),
-		"titles":  report.Titles(),
-		"params":  params,
-		"columns": report.Columns(),
-	})
+	nexus.JSON(w, http.StatusOK, form)
 }
 
 // handleRun executes a report and answers with the rows.
@@ -97,30 +75,21 @@ func (m *Module) handleRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	locale := localeOf(r)
 
-	params, err := reporting.Bind(report, raw, locale)
-	if err != nil {
-		nexus.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	result, err := m.engine.Run(r.Context(), tenantID, report, params)
+	// One call rather than bind-then-run: the contract offers them together
+	// because a caller that could run without binding would be running a report
+	// with whatever the browser sent.
+	run, err := m.engine.Run(r.Context(), tenantID, report.Key, raw, localeOf(r))
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "the report could not be produced: "+err.Error())
 		return
 	}
 
-	m.record(r, tenantID, "reports.run", report.Key(), map[string]any{
-		"rows":   len(result.Rows),
+	m.record(r, tenantID, "reports.run", report.Key, map[string]any{
+		"rows":   len(run.Result.Rows),
 		"params": raw,
 	})
-
-	nexus.JSON(w, http.StatusOK, map[string]any{
-		"key":    report.Key(),
-		"title":  reporting.LocalizedTitle(report.Titles(), locale, report.Key()),
-		"result": result,
-	})
+	nexus.JSON(w, http.StatusOK, run)
 }
 
 // handleExport runs a report and answers with a file.
@@ -130,110 +99,66 @@ func (m *Module) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	format, err := reporting.ParseFormat(r.URL.Query().Get("format"))
-	if err != nil {
-		nexus.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	raw, ok := decodeParams(w, r)
 	if !ok {
 		return
 	}
-	locale := localeOf(r)
 
-	params, err := reporting.Bind(report, raw, locale)
+	// Run and render in one call, for the same reason: the format is parsed,
+	// the parameters are bound and the file is named by the engine that knows
+	// what it produced.
+	export, err := m.engine.Export(r.Context(), tenantID, report.Key, raw,
+		localeOf(r), r.URL.Query().Get("format"))
 	if err != nil {
 		nexus.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	result, err := m.engine.Run(r.Context(), tenantID, report, params)
-	if err != nil {
-		nexus.Error(w, http.StatusInternalServerError, "the report could not be produced: "+err.Error())
-		return
-	}
-
-	title := reporting.LocalizedTitle(report.Titles(), locale, report.Key())
-	payload, err := reporting.Export(format, title, result, locale)
-	if err != nil {
-		nexus.Error(w, http.StatusInternalServerError, "the export could not be written")
 		return
 	}
 
 	// An export is a copy of the organisation's data leaving the platform, so
 	// it is a separate audit entry from the run rather than the same one.
-	m.record(r, tenantID, "reports.export", report.Key(), map[string]any{
-		"rows":   len(result.Rows),
-		"format": string(format),
+	m.record(r, tenantID, "reports.export", report.Key, map[string]any{
+		"rows":   export.Rows,
+		"format": r.URL.Query().Get("format"),
 		"params": raw,
 	})
 
-	filename := reporting.Filename(report.Key(), format)
-	w.Header().Set("Content-Type", format.ContentType())
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Type", export.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", export.Filename))
 	// The bytes are a spreadsheet built from a tenant's data; a cache anywhere
 	// between here and the browser is a copy of it nobody accounted for.
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(payload)
+	_, _ = w.Write(export.Bytes)
 }
 
 // resolve is the guard every report endpoint shares, asked of the domain: a
 // report that exists, and an app this organisation has installed.
 //
-// It answers with the engine's report rather than the domain's description,
-// because what happens next is running it. The gate has already been decided by
-// then, which is the half that was easy to leave out.
-func (m *Module) resolve(w http.ResponseWriter, r *http.Request) (string, reporting.Report, bool) {
+// It answers with the domain's description — a key, an app and the scopes the
+// report was written for. Running it is a call to the engine with that key, so
+// there is nothing here to hold the engine's own type for.
+func (m *Module) resolve(w http.ResponseWriter, r *http.Request) (string, domain.Report, bool) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
-		return "", nil, false
+		return "", domain.Report{}, false
 	}
 	described, err := m.svc.Resolve(r.Context(), tenantID, chi.URLParam(r, "key"))
 	if err != nil {
 		fail(w, r, err)
-		return "", nil, false
+		return "", domain.Report{}, false
 	}
-	report, found := reporting.Get(described.Key)
-	if !found {
-		// Unreachable: the domain answered from this same registry a moment
-		// ago. Written out rather than asserted because a nil Report here would
-		// be a panic in a handler.
-		nexus.Error(w, http.StatusNotFound, "no such report")
-		return "", nil, false
-	}
-	return tenantID, report, true
+	return tenantID, described, true
 }
 
-// loadOptions fills a UUID parameter's dropdown from the tenant's own rows.
-func (m *Module) loadOptions(r *http.Request, tenantID string, spec reporting.ParamSpec) ([]reporting.ParamOption, error) {
-	ctx := nexus.WithTenantID(r.Context(), tenantID)
-	rows, err := m.db.Query(ctx, spec.OptionsQuery, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	options := make([]reporting.ParamOption, 0, 16)
-	for rows.Next() {
-		var value, label string
-		if err := rows.Scan(&value, &label); err != nil {
-			return nil, err
-		}
-		// One label for every locale: it is a row's own name, not a phrase.
-		options = append(options, reporting.ParamOption{
-			Value: value, Titles: map[string]string{"mn": label},
-		})
-	}
-	return options, rows.Err()
-}
+// loadOptions was here until 2026-08-23: a dropdown filled by running SQL a
+// report declares, with a database handle this app kept for the purpose.
+// Running a report's SQL is the engine's to do and ReportEngine.Form does it.
 
 // decodeParams reads the parameter object from the body.
 //
 // A JSON object of strings rather than typed values: every parameter goes
-// through reporting.Bind, which is the one place that knows what a report
+// through the engine's own binding, which is the one place that knows what a report
 // accepts, and giving the client a typed channel would be a second path into
 // the same validation.
 func decodeParams(w http.ResponseWriter, r *http.Request) (map[string]string, bool) {

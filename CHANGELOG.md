@@ -15,6 +15,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Тайлангийн гэрээ бүрдэв: `ReportSchedules`, `ReportGrants`, `Form`, `RunConsolidated`
+
+`pkg/nexus/reportengine.go` гурван цоорхойгоо нэрлээд «эдгээр буутал reports
+апп `internal/platform/reporting`-ийн импортоо хадгалж, энэ репод үлдэнэ» гэж
+бичсэн байсан. Гурвуулаа буув.
+
+- **`nexus.ReportSchedules`, `nexus.ReportGrants`** — хуваарь ба хуваалцах
+  гэрээний бичлэгүүд. Engine дээр наагаагүй, тусдаа хоёр гэрээ: тэдгээрийг
+  гурван цагт шуудангаар илгээдэг нь платформын sweep, өөр байгууллагын мөр
+  уншихыг зөвшөөрдөг нь платформын consolidated run.
+- **`ReportEngine.Form`** — параметрийн маягт, dropdown нь дүүргэгдсэн.
+  Dropdown нь тайлангийн зарласан SQL тул түүнийг ажиллуулах нь engine-ийнх;
+  апп үүний тулд өөрийн өгөгдлийн сангийн бариул барьдаг байв.
+- **`ReportEngine.RunConsolidated`** — `Run`-аас тусдаа: нэг нь аюулгүй, нөгөө
+  нь өөр байгууллагын мөрийг уншина, хоёуланг нэг дуудлага болгох нь тэр
+  ялгааг арилгана.
+- **`ReportEngine.ValidateCron`, `NormalizeFormat`** — дэлгэц талбар бөглөх
+  бүрд шалгадаг тул бүтэн хуваарь зохиох шаардлагагүй.
+
+`nexus.ErrReportScheduleNotFound`, `ErrReportGrantExists`,
+`ErrReportGrantNotPending`, `ErrReportGrantNotFound`, `ErrOrganisationNotFound`
+нэмэгдэв — апп бүрийг өөр хариулт болгодог тул sentinel.
+
+### Changed — Тайлангийн sweep платформынх болов
+
+Гурван цагт тайлан илгээдэг давталтыг reports апп эхлүүлдэг байсан нь дэлгэцийг
+суулгацын аж ахуйн ажилд хариуцлагатай болгож байв: аппыг устгасан байгууллага
+хуваариа чимээгүй хүлээж авахаа болино. Одоо платформ эхлүүлнэ.
+
+Мөн `internal/apps/reports` нь `internal/platform`-ийн нэг ч импортгүй болов —
+`domain/reports/postgres` устаж, түүний бичилтүүд платформын адаптерт орлоо.
+
 ### Removed — Өртөөгийн даалгаврын самбар цөмөөс гарав
 
 `internal/apps/urtuu` ба `domain/urtuu` нь

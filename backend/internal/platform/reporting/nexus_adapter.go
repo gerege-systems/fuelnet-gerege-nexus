@@ -10,6 +10,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -48,6 +50,72 @@ func (a engineAdapter) Describe(key string) (nexus.ReportDescription, bool) {
 		return nexus.ReportDescription{}, false
 	}
 	return describe(report), true
+}
+
+// Form fills a report's parameter form, dropdowns included.
+//
+// The options query is a report's own SQL and is run here, under the caller's
+// tenant binding, because running a report's SQL is the engine's to do — the
+// app that shows the form did it with a database handle of its own until
+// 2026-08-23, which is one of the things that kept it in this repository. What
+// comes back never carries the query: it is a statement this platform runs and
+// a browser has no use for it.
+func (a engineAdapter) ValidateCron(expression string) error {
+	_, err := ParseCron(expression)
+	return err
+}
+
+func (a engineAdapter) NormalizeFormat(raw string) (string, error) {
+	format, err := ParseFormat(raw)
+	return string(format), err
+}
+
+func (a engineAdapter) Form(ctx context.Context, tenantID, key, locale string) (*nexus.ReportForm, error) {
+	report, found := Get(key)
+	if !found {
+		return nil, fmt.Errorf("no report is registered as %q", key)
+	}
+	_ = locale
+
+	specs := report.Params()
+	params := make([]nexus.ParamSpec, 0, len(specs))
+	for _, spec := range specs {
+		if spec.Kind == nexus.ParamUUID && spec.OptionsQuery != "" {
+			options, err := a.options(ctx, tenantID, spec.OptionsQuery)
+			if err != nil {
+				return nil, err
+			}
+			spec.Options = options
+		}
+		spec.OptionsQuery = ""
+		params = append(params, spec)
+	}
+	return &nexus.ReportForm{
+		Key: report.Key(), App: report.App(), Titles: report.Titles(),
+		Params: params, Columns: report.Columns(),
+	}, nil
+}
+
+// options fills one dropdown from this organisation's own rows.
+func (a engineAdapter) options(ctx context.Context, tenantID, query string) ([]nexus.ParamOption, error) {
+	rows, err := a.engine.db.Query(tenant.WithTenantID(ctx, tenantID), query, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	options := make([]nexus.ParamOption, 0, 16)
+	for rows.Next() {
+		var value, label string
+		if err := rows.Scan(&value, &label); err != nil {
+			return nil, err
+		}
+		// One label for every locale: it is a row's own name, not a phrase.
+		options = append(options, nexus.ParamOption{
+			Value: value, Titles: map[string]string{"mn": label},
+		})
+	}
+	return options, rows.Err()
 }
 
 func (a engineAdapter) Run(ctx context.Context, tenantID, key string, raw map[string]string, locale string) (*nexus.ReportRun, error) {
@@ -110,6 +178,31 @@ func (a engineAdapter) Deliverable() bool { return NewSMTPDeliverer() != nil }
 // bind is the step a caller cannot skip: it refuses a parameter the report did
 // not declare, which is the difference between running a report and running
 // whatever a browser sent.
+// RunConsolidated runs a report over everything shared with this organisation.
+//
+// The engine's own method takes a bound report and the actor; this binds and
+// forwards, the same way Run does. The actor is here rather than read from the
+// context because the audit entry on the *other* organisation's side names it,
+// and a caller that could omit it would be a caller that could read somebody
+// else's rows anonymously.
+func (a engineAdapter) RunConsolidated(ctx context.Context, tenantID, key string,
+	raw map[string]string, locale, actorUserID string) (*nexus.ReportRun, error) {
+
+	report, params, err := a.bind(key, raw, locale)
+	if err != nil {
+		return nil, err
+	}
+	result, err := a.engine.RunConsolidated(ctx, tenantID, report, params, actorUserID)
+	if err != nil {
+		return nil, err
+	}
+	return &nexus.ReportRun{
+		Key:    report.Key(),
+		Title:  LocalizedTitle(report.Titles(), locale, report.Key()),
+		Result: result,
+	}, nil
+}
+
 func (a engineAdapter) bind(key string, raw map[string]string, locale string) (Report, Params, error) {
 	report, found := Get(key)
 	if !found {

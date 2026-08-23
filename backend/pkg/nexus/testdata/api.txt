@@ -179,15 +179,71 @@
   ReportEngine.Deliverable() bool
   ReportEngine.Describe(key string) (ReportDescription, bool)
   ReportEngine.Export(ctx context.Context, tenantID, key string, params map[string]string, locale, format string) (*ReportExport, error)
+  ReportEngine.Form(ctx context.Context, tenantID, key, locale string) (*ReportForm, error)
+  ReportEngine.NormalizeFormat(raw string) (string, error)
   ReportEngine.Run(ctx context.Context, tenantID, key string, params map[string]string, locale string) (*ReportRun, error)
+  ReportEngine.RunConsolidated(ctx context.Context, tenantID, key string, params map[string]string, locale, actorUserID string) (*ReportRun, error)
+  ReportEngine.ValidateCron(expression string) error
   ReportEngine.ValidateSchedule(key string, params map[string]string, locale, cron, format string) error
   ReportExport.Bytes []byte
   ReportExport.ContentType string
   ReportExport.Filename string
   ReportExport.Rows int
+  ReportForm.App string
+  ReportForm.Columns []ColumnSpec
+  ReportForm.Key string
+  ReportForm.Params []ParamSpec
+  ReportForm.Titles map[string]string
+  ReportGrant.AcceptedAt *time.Time
+  ReportGrant.CounterpartyRef string
+  ReportGrant.CreatedAt time.Time
+  ReportGrant.CreatedBy string
+  ReportGrant.Direction string
+  ReportGrant.GranteeName string
+  ReportGrant.GranteeTenantID string
+  ReportGrant.GrantorName string
+  ReportGrant.GrantorTenantID string
+  ReportGrant.ID string
+  ReportGrant.Note string
+  ReportGrant.ReportKey string
+  ReportGrant.RevokedAt *time.Time
+  ReportGrant.Scope string
+  ReportGrant.Titles map[string]string
+  ReportGrant.ValidFrom time.Time
+  ReportGrant.ValidUntil *time.Time
+  ReportGrantUse.At time.Time
+  ReportGrantUse.ReaderName string
+  ReportGrantUse.ReportKey string
+  ReportGrantUse.Rows int
+  ReportGrantUse.Scope string
+  ReportGrants.Accept(ctx context.Context, grantorTenantID, id, actorUserID string) (reportKey string, err error)
+  ReportGrants.History(ctx context.Context, tenantID string) ([]ReportGrantUse, error)
+  ReportGrants.List(ctx context.Context, tenantID string) ([]ReportGrant, error)
+  ReportGrants.OrganisationByRegistration(ctx context.Context, registration string) (tenantID string, err error)
+  ReportGrants.RegistrationOf(ctx context.Context, tenantID string) (string, error)
+  ReportGrants.Request(ctx context.Context, grant ReportGrant) (string, error)
+  ReportGrants.Revoke(ctx context.Context, tenantID, id string) (reportKey, side string, err error)
   ReportRun.Key string
   ReportRun.Result Result
   ReportRun.Title string
+  ReportSchedule.Active bool
+  ReportSchedule.CreatedAt time.Time
+  ReportSchedule.CreatedBy string
+  ReportSchedule.Cron string
+  ReportSchedule.Format string
+  ReportSchedule.ID string
+  ReportSchedule.LastError string
+  ReportSchedule.LastRunAt *time.Time
+  ReportSchedule.LastStatus string
+  ReportSchedule.Name string
+  ReportSchedule.Params map[string]string
+  ReportSchedule.Recipients []string
+  ReportSchedule.ReportKey string
+  ReportSchedule.Titles map[string]string
+  ReportSchedules.Create(ctx context.Context, tenantID string, schedule ReportSchedule) (string, error)
+  ReportSchedules.Delete(ctx context.Context, tenantID, id string) (reportKey string, err error)
+  ReportSchedules.List(ctx context.Context, tenantID string) ([]ReportSchedule, error)
+  ReportSchedules.Update(ctx context.Context, tenantID, id string, schedule ReportSchedule) (bool, error)
   RequestCode.Active bool
   RequestCode.Code string
   RequestCode.Line string
@@ -385,7 +441,13 @@ type Report interface
 type ReportDescription struct
 type ReportEngine interface
 type ReportExport struct
+type ReportForm struct
+type ReportGrant struct
+type ReportGrantUse struct
+type ReportGrants interface
 type ReportRun struct
+type ReportSchedule struct
+type ReportSchedules interface
 type ReportSink func(Report)
 type RequestCode struct
 type Result struct
@@ -409,7 +471,12 @@ var ErrForbidden
 var ErrIdentityRailUnavailable
 var ErrNoDocumentFiler
 var ErrNoLink
+var ErrOrganisationNotFound
 var ErrPDFSigningUnavailable
+var ErrReportGrantExists
+var ErrReportGrantNotFound
+var ErrReportGrantNotPending
+var ErrReportScheduleNotFound
 var ErrSigningUnavailable
 var ErrStaffCredentialRejected
 var ErrTenantMissing

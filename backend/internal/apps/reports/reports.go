@@ -21,8 +21,6 @@ import (
 	"net/http"
 
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
-	"github.com/gerege-systems/open-gerege-nexus/backend/domain/reports/postgres"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -53,15 +51,16 @@ type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, 
 // Module is the reports app: the catalogue entry, the routes, the engine it
 // serves and the rules it applies before it does.
 //
-// The database handle is still a field, and deliberately. Two screens here read
-// through the platform's own listers — the schedules the scheduler owns, the
-// grants the consolidated run owns — and one reads the audit trail; those are
-// the engine's rows rather than this app's, and a reader of its own for each
-// would be a second shape for the same row.
+// Four contracts and no database handle. The rows this app shows are the
+// platform's — a schedule is mailed by the platform's sweep, a grant is checked
+// by the platform's consolidated run, and the audit trail behind the access
+// history is the platform's too — so all three are read through contracts
+// rather than with SQL of this app's own. That is what lets these screens run
+// anywhere the platform does.
 type Module struct {
-	db        nexus.DB
-	engine    *reporting.Engine
-	scheduler *reporting.Scheduler
+	engine    nexus.ReportEngine
+	schedules nexus.ReportSchedules
+	grants    nexus.ReportGrants
 	perms     nexus.PermissionStore
 	svc       *domain.Service
 }
@@ -71,23 +70,20 @@ type Module struct {
 // installedApps is the platform's own gate, handed in: a tenant sees the
 // reports of the apps it has installed and no others, and "which apps" has
 // exactly one answer on this deployment.
-func New(p nexus.Platform, installedApps InstalledApps) *Module {
-	db := p.DB()
-	engine := reporting.NewEngine(db)
+func New(p nexus.Platform, installedApps InstalledApps,
+	engine nexus.ReportEngine, schedules nexus.ReportSchedules, grants nexus.ReportGrants) *Module {
+
 	m := &Module{
-		db:        db,
 		engine:    engine,
-		scheduler: reporting.NewScheduler(engine, reporting.NewSMTPDeliverer()),
+		schedules: schedules,
+		grants:    grants,
 		perms:     p.Permissions(),
 		svc: domain.NewService(
-			catalogue{},
-			// The tenant binding is handed to the store rather than imported by
-			// it: which organisation a query runs as is the platform's
-			// mechanism, and domain/ may not name the SDK that carries it.
-			postgres.New(db, postgres.Tenancy{
-				Bind:    nexus.WithTenantID,
-				Unbound: nexus.WithoutTenant,
-			}),
+			catalogue{engine},
+			// The store is the two record contracts, translated: the domain
+			// says what a schedule and an agreement have to satisfy, and the
+			// platform keeps them.
+			records{schedules: schedules, grants: grants},
 			domain.Installations(installedApps),
 		),
 	}
@@ -125,11 +121,10 @@ func (m *Module) Menus() []nexus.MenuDefinition {
 	}
 }
 
-// StartHousekeeping runs the schedule sweep. The platform calls it for every
-// module that has one, so scheduled reports need no process of their own.
-func (m *Module) StartHousekeeping(ctx context.Context) {
-	m.scheduler.Start(ctx)
-}
+// The schedule sweep was started here until 2026-08-23 and is the platform's
+// now. A screen was responsible for a deployment's housekeeping, which meant an
+// organisation that removed this app quietly stopped receiving the schedules it
+// still had.
 
 // RegisterRoutes mounts the API behind the app gate.
 //

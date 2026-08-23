@@ -120,13 +120,14 @@ type Server struct {
 	// suspended answers "is this organisation closed" without a query per
 	// request. Registered on the invalidation bus, so resuming one takes
 	// effect everywhere rather than after every replica's own TTL.
-	suspended      *memo.Cache[bool]
-	bus            *cache.Bus
-	sharedLogin    *security.SharedLimiter
-	sharedPoll     *security.SharedLimiter
-	sharedVerify   *security.SharedLimiter
-	backgroundApps []apps.BackgroundModule
-	eidMN          *eidmongolia.Service
+	suspended       *memo.Cache[bool]
+	bus             *cache.Bus
+	sharedLogin     *security.SharedLimiter
+	sharedPoll      *security.SharedLimiter
+	sharedVerify    *security.SharedLimiter
+	backgroundApps  []apps.BackgroundModule
+	reportScheduler *reporting.Scheduler
+	eidMN           *eidmongolia.Service
 	// cp is the operator console. It is a field on this server rather than a
 	// process of its own for the reason the plan gives: one binary. What keeps
 	// it separate is everything else — its own hostname, accounts, sessions,
@@ -263,7 +264,14 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// The report engine, as six methods rather than as fifteen package
 	// functions. See pkg/nexus/reportengine.go for why the three-step ones are
 	// one call.
-	nexus.Provide[nexus.ReportEngine](reporting.AsEngine(reporting.NewEngine(db)))
+	reportEngine := reporting.NewEngine(db)
+	nexus.Provide[nexus.ReportEngine](reporting.AsEngine(reportEngine))
+	// The two records a reports screen shows and this platform keeps: a
+	// schedule is mailed by the sweep below with nobody present, and a grant is
+	// what lets one organisation's report read another's rows. Both were
+	// written by the app with its own SQL, which is what kept it here.
+	nexus.Provide[nexus.ReportSchedules](reporting.AsSchedules(db))
+	nexus.Provide[nexus.ReportGrants](reporting.AsGrants(db))
 	// Who belongs to an organisation. The platform's most careful tables, and
 	// the ones a module was reading with its own SQL until migration 00076 and
 	// pkg/nexus/directory.go between them made that unnecessary.
@@ -343,6 +351,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// because this is where the value lives, and a value handed over is one
 	// the compiler checks.
 	appRuntime.Background = append(appRuntime.Background, esignRails)
+	// The schedule sweep, on the same list. It ran because the reports app
+	// happened to start it, which made a screen responsible for a deployment's
+	// housekeeping — and meant a deployment that removed the app quietly
+	// stopped mailing the schedules it still had. The schedules are this
+	// platform's rows and the mail is its rail, so the sweep is its own.
+	reportScheduler := reporting.NewScheduler(reportEngine, reporting.NewSMTPDeliverer())
 
 	// The relying-party half. A deployment that names a provider but cannot
 	// reach it is a deployment nobody can sign in to, so a configuration that
@@ -412,13 +426,14 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	}
 
 	s := &Server{
-		db:            db,
-		installer:     installer,
-		catalogSource: catalogSource,
-		router:        chi.NewRouter(),
-		sessions:      auth.NewSessionStore(db, auth.DefaultSessionTTL),
-		loginLimiter:  newLoginLimiter(),
-		pollLimiter:   newPollLimiter(),
+		db:              db,
+		installer:       installer,
+		reportScheduler: reportScheduler,
+		catalogSource:   catalogSource,
+		router:          chi.NewRouter(),
+		sessions:        auth.NewSessionStore(db, auth.DefaultSessionTTL),
+		loginLimiter:    newLoginLimiter(),
+		pollLimiter:     newPollLimiter(),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
@@ -599,6 +614,12 @@ func (s *Server) StartBackgroundJobs(ctx context.Context) {
 		module.StartHousekeeping(ctx)
 	}
 	s.eidMN.StartHousekeeping(ctx)
+	// The schedule sweep. It ran because the reports app happened to start it
+	// until 2026-08-23, which made a screen responsible for a deployment's
+	// housekeeping — and meant a deployment that removed the app quietly
+	// stopped mailing the schedules it still had. The schedules are this
+	// platform's rows and the mail is its rail.
+	s.reportScheduler.Start(ctx)
 	// Every sign-in writes a session row and nothing else ever removes one.
 	s.sessions.StartHousekeeping(ctx)
 	// Yesterday's usage, every night: what the console charts and what the AI
