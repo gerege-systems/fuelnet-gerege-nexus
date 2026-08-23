@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Суулгасан ч бинарь үүрдэггүй апп чимээгүй алга болдог байсныг хэлдэг болов
+
+Апп өөр репод нүүхэд суулгацын мөр нь үлддэг. Тэр байгууллагын хувьд апп нь
+маршрут нь 404, цэсний API-д байхгүй — өөрөөр хэлбэл **хаанаас ч харагдахгүй**
+болно. Утсан дээр аппуудын хооронд явах цорын ганц зам нь доод таб мөр тул
+энэ нь «цэс эвдэрлээ» гэж уншигдана.
+
+Суулгац буруу байгаа хэрэг биш — аппын явалтыг давж шинэчилсэн оператор тэр
+байдалд хууль ёсоор орно — харин **юу ч дуугардаггүй** байсан нь алдаа. Одоо
+асалт бүрт нэрсийг нь бичнэ:
+
+```
+catalog: organisations have apps installed that this binary does not carry;
+their routes answer 404 and they appear in no sidebar.
+Either deploy a distribution that compiles them, or uninstall them
+apps=[io.gerege.nexus.documents io.gerege.nexus.egov io.gerege.nexus.organisation]
+```
+
+Гадаад апп үүнд ороогүй: тэдгээр нь өөр газар ажилладаг бөгөөд энэ бинарь
+тэднийг үүрэх ёсгүй.
+
+
 ### Removed — Цэсний blueprint пакет устав; модуль өөрийн цэсээ бүрэн зарлана
 
 `internal/platform/menu/blueprints.go` нь аппын id-гаар түлхүүрлэгдсэн хүснэгт

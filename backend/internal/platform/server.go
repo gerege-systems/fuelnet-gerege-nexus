@@ -828,6 +828,11 @@ func (s *Server) applyCatalogToInstallations(ctx context.Context) {
 	// Logged and not fatal, like the catalogue sync above it. A database that
 	// is not up yet must not stop the process from booting; this runs again on
 	// the next sweep, and the error says what is broken until it does.
+	// Which installed apps this binary cannot serve. Not a fault to correct
+	// here — an operator upgrading past an app's departure is in that state
+	// legitimately — but a fault to say out loud, because nothing else does.
+	s.installer.ReportUncarriedApps(ctx)
+
 	if err := s.installer.MigrateModules(ctx); err != nil {
 		slog.Error("catalog: a module's own schema could not be applied — its routes will fail until it is",
 			"error", err)
