@@ -13,7 +13,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const maxToolRounds = 4
@@ -50,7 +49,7 @@ type generator interface {
 	GenerateContent(context.Context, gemini.Request) (gemini.Response, error)
 }
 type CopilotService struct {
-	db  *pgxpool.Pool
+	db  nexus.DB
 	tts generator
 	// base and key are held so the chat client can be rebuilt when the model
 	// changes. They are the two things that never change at runtime — an
@@ -85,7 +84,7 @@ func (s *CopilotService) chatClient() generator {
 	return s.chat
 }
 
-func NewCopilotService(db *pgxpool.Pool) *CopilotService {
+func NewCopilotService(db nexus.DB) *CopilotService {
 	base, key := os.Getenv("GEMINI_API_BASE"), os.Getenv("GEMINI_API_KEY")
 	ttsModel := os.Getenv("GEMINI_TTS_MODEL")
 	if ttsModel == "" {

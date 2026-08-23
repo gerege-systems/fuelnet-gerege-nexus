@@ -382,13 +382,13 @@ const (
 	pollRatePerMinute  = 60
 	pollBurst          = 15
 
-	// The AI endpoints spend somebody else's paid quota and the verification
-	// endpoint spends a mailbox credential the whole platform shares, so both
-	// have always been budgeted. The numbers move up here because they are now
-	// also the deployment-wide budget, and a limit stated in two places drifts.
-	aiRatePerMinute = 20
-	aiBurst         = 10
-
+	// The AI budget was here until 2026-08-23. It moved to the app that spends
+	// it — internal/apps/ai — which asks for the same numbers through
+	// nexus.RateLimit, so the deployment-wide bucket is still one bucket.
+	//
+	// The verification endpoint spends a mailbox credential the whole platform
+	// shares, which is why it is budgeted and why it stays here: it is the
+	// platform's own route.
 	verifyRatePerMinute = 60
 	verifyBurst         = 20
 )

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
+	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
@@ -70,6 +71,12 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// internal/ type no distribution can name and turn a deleted Provide into a
 	// nil that only panics five minutes after a clean boot.
 	sso_clients.New(sso)
+	// The assistant. An app since 2026-08-23 rather than ten routes in
+	// server.go: it asks the platform for the deployment's rate limit and the
+	// organisation's monthly allowance (nexus.RateLimit, nexus.QuotaGate) and
+	// keeps the rest — the prompt, the knowledge, the model traffic — to
+	// itself, which is what makes it removable.
+	appai.New(p)
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module
 	// registers the readers for the task envelopes, and a deployment given a key

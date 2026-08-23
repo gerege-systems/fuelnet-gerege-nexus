@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
@@ -71,8 +72,15 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 // table, so the difference is asserted rather than left to a comment.
 //
 // organisation was the other one and left with documents.
+//
+// ai is the second: every one of its routes names its own permission —
+// ai.read to ask, ai.manage to write the prompt every member of the
+// organisation then talks to — and it has no menu to gate, because the shell
+// reaches the assistant from the chat affordance rather than from the sidebar.
+// A prefix rule would have to collapse those two into one.
 var policylessModules = map[string]nexus.Module{
 	"reports": (*reports.Module)(nil),
+	"ai":      (*appai.Module)(nil),
 }
 
 // Directories under internal/apps that hold no module at all.

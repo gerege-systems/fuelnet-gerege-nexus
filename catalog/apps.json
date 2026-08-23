@@ -124,5 +124,47 @@
         "category": "Plataforma"
       }
     }
+  },
+  {
+    "id": "io.gerege.nexus.ai",
+    "slug": "ai",
+    "name": "AI Assistant",
+    "description": "The organisation's assistant: ask it about what the installed apps know, dictate and have text read back, translate, and give it the prompt and knowledge it should work from.",
+    "icon_url": "/icons/ai.png",
+    "category": "Productivity",
+    "visibility": "public",
+    "version": "1.0.0",
+    "translations": {
+      "mn": {
+        "name": "AI туслах",
+        "description": "Байгууллагын туслах: суулгасан аппуудын мэдэхийг асуух, ярианаас бичвэр болгох, бичвэрийг уншуулах, орчуулах, мөн ямар prompt, ямар мэдлэгээр ажиллахыг нь өөрөө өгөх.",
+        "category": "Бүтээмж"
+      },
+      "ar": {
+        "name": "المساعد الذكي",
+        "description": "مساعد المؤسسة: اسأله عمّا تعرفه التطبيقات المثبّتة، وأملِ نصًا واستمع إليه، وترجم، وحدّد التعليمات والمعرفة التي يعمل بها.",
+        "category": "الإنتاجية"
+      },
+      "zh": {
+        "name": "AI 助手",
+        "description": "组织的助手：询问已安装应用所掌握的信息，语音转文字并朗读，翻译，并设定它所依据的提示词与知识。",
+        "category": "生产力"
+      },
+      "fr": {
+        "name": "Assistant IA",
+        "description": "L'assistant de l'organisation : l'interroger sur ce que savent les applications installées, dicter et faire lire un texte, traduire, et lui donner l'invite et les connaissances dont il part.",
+        "category": "Productivité"
+      },
+      "ru": {
+        "name": "ИИ-помощник",
+        "description": "Помощник организации: спросить о том, что знают установленные приложения, надиктовать и прослушать текст, перевести и задать подсказку и знания, с которыми он работает.",
+        "category": "Продуктивность"
+      },
+      "es": {
+        "name": "Asistente de IA",
+        "description": "El asistente de la organización: preguntarle lo que saben las aplicaciones instaladas, dictar y escuchar texto, traducir, y darle la instrucción y el conocimiento con los que trabaja.",
+        "category": "Productividad"
+      }
+    }
   }
 ]

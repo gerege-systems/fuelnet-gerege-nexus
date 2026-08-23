@@ -2,12 +2,9 @@
  * Gerege Nexus
  * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
  * Distributed under the Apache 2.0 License.
- *
- * Package platform provides the core HTTP Server orchestrator, routing table,
- * authentication middleware, and app installer wiring.
  */
 
-package platform
+package ai
 
 import (
 	"encoding/json"
@@ -16,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
@@ -26,9 +22,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("copilot")
-	s.recordAIUse(r, "copilot")
+	m.recordAIUse(r, "copilot")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -42,7 +38,7 @@ func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.copilotSvc.Query(r.Context(), ai.CopilotRequest{
+	res, err := m.copilot.Query(r.Context(), CopilotRequest{
 		Prompt:   req.Prompt,
 		TenantID: tenantID,
 	})
@@ -55,20 +51,20 @@ func (s *Server) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("chat")
-	s.recordAIUse(r, "chat")
+	m.recordAIUse(r, "chat")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	var req ai.CopilotRequest
+	var req CopilotRequest
 	if err := decodeLimitedJSON(r, &req, 1<<20); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid AI request")
 		return
 	}
 	req.TenantID = tenantID
-	res, err := s.copilotSvc.Query(r.Context(), req)
+	res, err := m.copilot.Query(r.Context(), req)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
@@ -76,17 +72,17 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, res)
 }
 
-func (s *Server) handleAISTT(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAISTT(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("stt")
-	s.recordAIUse(r, "stt")
+	m.recordAIUse(r, "stt")
 	var req struct {
-		Audio ai.Audio `json:"audio"`
+		Audio Audio `json:"audio"`
 	}
 	if err := decodeLimitedJSON(r, &req, 1<<20); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid audio request")
 		return
 	}
-	text, err := s.copilotSvc.Transcribe(r.Context(), req.Audio)
+	text, err := m.copilot.Transcribe(r.Context(), req.Audio)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
@@ -94,9 +90,9 @@ func (s *Server) handleAISTT(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"text": text})
 }
 
-func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAITTS(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("tts")
-	s.recordAIUse(r, "tts")
+	m.recordAIUse(r, "tts")
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -104,7 +100,7 @@ func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "text is required")
 		return
 	}
-	audio, err := s.copilotSvc.Speak(r.Context(), req.Text)
+	audio, err := m.copilot.Speak(r.Context(), req.Text)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
@@ -112,14 +108,14 @@ func (s *Server) handleAITTS(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, audio)
 }
 
-func (s *Server) handleAITranslate(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAITranslate(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("translate")
-	s.recordAIUse(r, "translate")
+	m.recordAIUse(r, "translate")
 	var req struct {
-		Text   string    `json:"text"`
-		Audio  *ai.Audio `json:"audio"`
-		Target string    `json:"target_lang"`
-		Speak  bool      `json:"speak"`
+		Text   string `json:"text"`
+		Audio  *Audio `json:"audio"`
+		Target string `json:"target_lang"`
+		Speak  bool   `json:"speak"`
 	}
 	if err := decodeLimitedJSON(r, &req, 1<<20); err != nil || req.Target == "" {
 		httpx.Error(w, http.StatusBadRequest, "invalid translation request")
@@ -127,32 +123,32 @@ func (s *Server) handleAITranslate(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Text == "" && req.Audio != nil {
 		var err error
-		req.Text, err = s.copilotSvc.Transcribe(r.Context(), *req.Audio)
+		req.Text, err = m.copilot.Transcribe(r.Context(), *req.Audio)
 		if err != nil {
 			httpx.Error(w, aiStatus(err), err.Error())
 			return
 		}
 	}
-	translated, err := s.copilotSvc.Translate(r.Context(), req.Text, req.Target)
+	translated, err := m.copilot.Translate(r.Context(), req.Text, req.Target)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
 	}
 	result := map[string]any{"source_text": req.Text, "translated": translated}
 	if req.Speak {
-		if sound, e := s.copilotSvc.Speak(r.Context(), translated); e == nil {
+		if sound, e := m.copilot.Speak(r.Context(), translated); e == nil {
 			result["audio"] = sound
 		}
 	}
 	httpx.JSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
+	rows, err := m.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load AI prompts")
 		return
@@ -174,7 +170,7 @@ func (s *Server) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, 200, items)
 }
-func (s *Server) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -192,19 +188,19 @@ func (s *Server) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "content is required")
 		return
 	}
-	_, err := s.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
+	_, err := m.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save AI prompt")
 		return
 	}
 	httpx.JSON(w, 200, map[string]string{"status": "saved"})
 }
-func (s *Server) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
+	rows, err := m.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load knowledge")
 		return
@@ -226,7 +222,7 @@ func (s *Server) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, 200, items)
 }
-func (s *Server) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -241,7 +237,7 @@ func (s *Server) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var id string
-	err := s.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
+	err := m.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save knowledge")
 		return
@@ -265,9 +261,9 @@ func aiStatus(error) int { return http.StatusBadGateway }
 // environment is a route table nobody can reason about — the same principle the
 // health and readiness endpoints follow — so the endpoint answers 404 when
 // nothing provides the tool rather than disappearing from the router.
-func (s *Server) handleAIForecast(w http.ResponseWriter, r *http.Request) {
+func (m *Module) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("forecast")
-	s.recordAIUse(r, "forecast")
+	m.recordAIUse(r, "forecast")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -305,7 +301,7 @@ const stockForecastTool = "stock_forecast"
 //
 // Best effort, like every audit write: an organisation's copilot must not stop
 // working because a row could not be inserted.
-func (s *Server) recordAIUse(r *http.Request, kind string) {
+func (m *Module) recordAIUse(r *http.Request, kind string) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
 		return

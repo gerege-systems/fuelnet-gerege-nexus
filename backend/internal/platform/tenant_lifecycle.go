@@ -21,6 +21,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // suspendedTTL bounds how long a replica keeps believing an organisation is
@@ -161,6 +162,27 @@ func (s *Server) checkUserQuota(ctx context.Context, tenantID string) error {
 	return ErrQuotaExceeded
 }
 
+// quotaRail publishes the platform's metered allowances to modules, and is what
+// nexus.QuotaGate resolves to.
+//
+// It holds the pool rather than the Server because of when it is asked: a
+// module is constructed before the server pointer it would otherwise close over
+// is filled, and it asks for its gate in its constructor. The pool exists by
+// then; the server does not.
+//
+// An unmetered kind gets middleware that admits everything. A module asking for
+// a meter this deployment does not keep is not an error — it is a module that
+// runs on more deployments than this one.
+type quotaRail struct{ db *pgxpool.Pool }
+
+func (q quotaRail) Gate(kind string) func(http.Handler) http.Handler {
+	if kind != "ai" {
+		slog.Warn("a module asked for a quota this platform does not meter; the route is ungated", "kind", kind)
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return aiQuota(q.db)
+}
+
 // aiQuota refuses an AI request from an organisation that has spent its month.
 //
 // This is the enforcement CP-2 could not do: the limit was recorded then and
@@ -174,55 +196,61 @@ func (s *Server) checkUserQuota(ctx context.Context, tenantID string) error {
 // two collections. That is deliberate: the alternative is a counter written on
 // every request, and an AI limit is a commercial boundary rather than a
 // security one.
-func (s *Server) aiQuota(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantID, err := tenant.FromContext(r.Context())
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		var limit int
-		var enforcement string
-		if err := s.db.QueryRow(r.Context(),
-			`SELECT COALESCE(max_ai_calls_monthly, -1), enforcement
-			   FROM tenant_quotas WHERE tenant_id = $1::uuid`, tenantID).
-			Scan(&limit, &enforcement); err != nil {
-			// No row is the ordinary case: an organisation nobody has set a
-			// limit for has no limit.
-			if !errors.Is(err, pgx.ErrNoRows) {
-				slog.Warn("could not read the AI limit", "tenant_id", tenantID, "error", err)
+//
+// The assistant left for internal/apps/ai on 2026-08-23 and this stayed: the
+// allowance is the deployment's, sold by the control plane, and a module that
+// enforced its own would be enforcing a number nobody sold.
+func aiQuota(db *pgxpool.Pool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tenantID, err := tenant.FromContext(r.Context())
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
 			}
-			next.ServeHTTP(w, r)
-			return
-		}
-		if limit < 0 {
-			next.ServeHTTP(w, r)
-			return
-		}
 
-		used, err := metering.MonthToDate(r.Context(), s.db, tenantID, metering.AICalls)
-		if err != nil {
-			slog.Warn("could not read the month's AI usage", "tenant_id", tenantID, "error", err)
-			next.ServeHTTP(w, r)
-			return
-		}
-		if used < int64(limit) {
-			next.ServeHTTP(w, r)
-			return
-		}
+			var limit int
+			var enforcement string
+			if err := db.QueryRow(r.Context(),
+				`SELECT COALESCE(max_ai_calls_monthly, -1), enforcement
+				   FROM tenant_quotas WHERE tenant_id = $1::uuid`, tenantID).
+				Scan(&limit, &enforcement); err != nil {
+				// No row is the ordinary case: an organisation nobody has set a
+				// limit for has no limit.
+				if !errors.Is(err, pgx.ErrNoRows) {
+					slog.Warn("could not read the AI limit", "tenant_id", tenantID, "error", err)
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			if limit < 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
 
-		if enforcement != "hard" {
-			slog.Warn("an organisation is over its monthly AI limit",
-				"tenant_id", tenantID, "limit", limit, "used", used)
-			next.ServeHTTP(w, r)
-			return
-		}
-		// 429 rather than 403: the request is not forbidden, the allowance is
-		// spent, and it refills next month.
-		httpx.JSON(w, http.StatusTooManyRequests, map[string]any{
-			"error": "Энэ байгууллагын сарын AI дуудлагын хязгаар дуусав.",
-			"limit": limit, "used": used,
+			used, err := metering.MonthToDate(r.Context(), db, tenantID, metering.AICalls)
+			if err != nil {
+				slog.Warn("could not read the month's AI usage", "tenant_id", tenantID, "error", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+			if used < int64(limit) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if enforcement != "hard" {
+				slog.Warn("an organisation is over its monthly AI limit",
+					"tenant_id", tenantID, "limit", limit, "used", used)
+				next.ServeHTTP(w, r)
+				return
+			}
+			// 429 rather than 403: the request is not forbidden, the allowance
+			// is spent, and it refills next month.
+			httpx.JSON(w, http.StatusTooManyRequests, map[string]any{
+				"error": "Энэ байгууллагын сарын AI дуудлагын хязгаар дуусав.",
+				"limit": limit, "used": used,
+			})
 		})
-	})
+	}
 }
