@@ -75,10 +75,10 @@ var platformTables = map[string]string{
 	"store_app_versions": "app store", "tenant_profiles": "tenants",
 	"tenant_quotas": "tenants", "tenants": "tenants",
 	"urtuu_deliveries": "Өртөө", "urtuu_inbox": "Өртөө",
-	"urtuu_numbers": "Өртөө", "urtuu_outbox": "Өртөө",
+	"urtuu_outbox":     "Өртөө",
 	"urtuu_peer_codes": "Өртөө", "urtuu_peers": "Өртөө",
-	"urtuu_request_codes": "Өртөө", "urtuu_task_events": "Өртөө",
-	"urtuu_tasks": "Өртөө", "usage_events": "usage",
+	"urtuu_request_codes": "Өртөө",
+	"usage_events":        "usage",
 	"user_eid_identities": "identity", "user_sso_identities": "identity",
 	"users": "users", "ai_knowledge": "assistant", "ai_prompts": "assistant",
 }

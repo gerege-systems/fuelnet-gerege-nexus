@@ -195,9 +195,6 @@ TRACE /metrics
 [app] GET /api/v1/sso-clients/endpoints
 [app] GET /api/v1/sso-clients/scopes
 [app] GET /api/v1/sso-clients/signing-keys
-[app] GET /api/v1/urtuu/tasks/
-[app] GET /api/v1/urtuu/tasks/board
-[app] GET /api/v1/urtuu/tasks/{id}
 [app] POST /api/v1/admin/ai/knowledge
 [app] POST /api/v1/ai/chat
 [app] POST /api/v1/ai/copilot
@@ -218,13 +215,6 @@ TRACE /metrics
 [app] POST /api/v1/reports/{key}/run-consolidated
 [app] POST /api/v1/sso-clients/apps/
 [app] POST /api/v1/sso-clients/apps/{clientID}/rotate-secret
-[app] POST /api/v1/urtuu/tasks/
-[app] POST /api/v1/urtuu/tasks/{id}/accept
-[app] POST /api/v1/urtuu/tasks/{id}/assign
-[app] POST /api/v1/urtuu/tasks/{id}/close
-[app] POST /api/v1/urtuu/tasks/{id}/complete
-[app] POST /api/v1/urtuu/tasks/{id}/delegate
-[app] POST /api/v1/urtuu/tasks/{id}/return
 [app] PUT /api/v1/admin/ai/prompts/{key}
 [app] PUT /api/v1/admin/devices/staff-pin
 [app] PUT /api/v1/developer/apps/{clientID}
