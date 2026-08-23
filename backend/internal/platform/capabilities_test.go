@@ -9,7 +9,6 @@ package platform
 import (
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
@@ -57,7 +56,9 @@ func TestTheServerProvidesEverythingBootstrapAsksFor(t *testing.T) {
 	provided[nexus.StateRails](t)
 	provided[nexus.Link](t)
 	provided[nexus.Signer](t)
-	provided[apps.InstalledApps](t)
+	// Keyed on the SDK's type since 2026-08-23, not on internal/apps' alias for
+	// it: a distribution asking for this is asking by the exported name.
+	provided[nexus.InstalledApps](t)
 }
 
 func provided[T any](t *testing.T) {

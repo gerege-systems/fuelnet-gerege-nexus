@@ -319,7 +319,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// below, while this pointer is still nil, and this capability is the one
 	// they can now resolve before it means anything — an error is the answer
 	// the SDK promises for that, not a panic inside NewServer.
-	nexus.Provide[apps.InstalledApps](func(ctx context.Context, tenantID string) (map[string]bool, error) {
+	nexus.Provide[nexus.InstalledApps](func(ctx context.Context, tenantID string) (map[string]bool, error) {
 		if server == nil {
 			return nil, errors.New("the platform is still starting; ask which apps a tenant has after it has")
 		}

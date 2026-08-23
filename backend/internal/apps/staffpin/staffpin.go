@@ -60,12 +60,11 @@ var validPIN = regexp.MustCompile(`^[0-9]{4,12}$`)
 
 // InstalledApps answers which apps an organisation has.
 //
-// Declared here rather than imported: the platform publishes this as a
-// capability under internal/apps' own name, and an app that imported that
-// package would import the runtime that constructs it. A named function type
-// with the same signature is assignable from it, which is the whole of what is
-// needed.
-type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, error)
+// An alias for the SDK's since 2026-08-23. It was a named type of this app's
+// own, declared here because the platform published the capability under
+// internal/apps' name — which a module outside this repository cannot ask for.
+// The contract is exported now and this is one name for one thing again.
+type InstalledApps = nexus.InstalledApps
 
 // Module is the app.
 type Module struct {
