@@ -77,10 +77,31 @@ func (m *Module) Permissions() []nexus.PermissionDefinition {
 	}
 }
 
-// Menus is empty: the screen is /settings/integrations, which the shell draws
-// in its own settings group rather than as an app of its own — see the manifest,
-// which marks this app chrome for that reason.
-func (m *Module) Menus() []nexus.MenuDefinition { return nil }
+// Menus is the connector screen, in the platform's own settings group — which
+// is where it has always been drawn, and until 2026-08-23 the shell wrote the
+// link out itself. A link the shell owns shows on every deployment whether or
+// not the app is installed; one the module declares leaves with it.
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{{
+		ID: "integrations_settings", Label: "Integrations", Path: "/settings/integrations",
+		Icon: "share-2", Order: 30, Group: nexus.MenuGroupSettings,
+		Labels: map[string]string{
+			"mn": "Интеграцууд", "ar": "التكاملات", "zh": "集成",
+			"fr": "Intégrations", "ru": "Интеграции", "es": "Integraciones",
+		},
+	}}
+}
+
+// MenuPermission is this app's only permission, which is administrative for the
+// reason given above it: there is nothing here to read that is not also the
+// power to change it.
+func (m *Module) MenuPermission() string { return PermissionManage }
+
+// RoutePermissionPrefix is empty: the routes are gated by RequirePermission
+// where they are mounted, and the OAuth callback deliberately is not gated at
+// all — a prefix rule would put a permission check in front of a request that
+// carries no session.
+func (m *Module) RoutePermissionPrefix() string { return "" }
 
 // RegisterRoutes mounts the connector administration, and one route that is not
 // administration at all.
