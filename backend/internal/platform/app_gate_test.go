@@ -156,35 +156,25 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	f := newGateFixture(t)
 
-	// Nothing installed yet.
-	if res := f.do(t, http.MethodGet, "/api/v1/admin/ai/prompts", ""); res.Code != http.StatusForbidden {
-		t.Fatalf("the assistant answered %d without the app installed; expected 403: %s",
+	// Nothing installed yet: sso-clients is refused.
+	if res := f.do(t, http.MethodGet, "/api/v1/sso-clients/apps/", ""); res.Code != http.StatusForbidden {
+		t.Fatalf("sso-clients answered %d without the app installed; expected 403: %s",
 			res.Code, res.Body.String())
 	}
 
-	// The reports app's own routes are unaffected by the assistant being absent.
-	//
-	// The 404 check is not decoration. This used to ask for /api/v1/contacts,
-	// which was the right question when the contact register was part of the
-	// organisation app; commerce took the register and migration 00075 took its
-	// table, so the route stopped existing — and the assertion, which only
-	// refuses a 403, went on passing against a 404. A test that cannot fail is
-	// worse than no test.
+	// Platform routes are unaffected by whether optional apps are installed.
+	res := f.do(t, http.MethodGet, "/api/v1/admin/ai/prompts", "")
+	if res.Code != http.StatusOK {
+		t.Fatalf("platform core AI answered %d: %s", res.Code, res.Body.String())
+	}
+
+	// And with the app installed the gate opens.
 	f.install(t, "io.gerege.nexus.sso_clients")
-	res := f.do(t, http.MethodGet, "/api/v1/sso-clients/apps/", "")
+	res = f.do(t, http.MethodGet, "/api/v1/sso-clients/apps/", "")
 	if res.Code == http.StatusForbidden {
-		t.Fatalf("sso-clients was refused while the assistant was absent: %s", res.Body.String())
+		t.Fatalf("sso-clients was refused after installation: %s", res.Body.String())
 	}
 	if res.Code == http.StatusNotFound {
 		t.Fatalf("sso-clients answered 404; this test asserts nothing unless the route is served")
-	}
-
-	// And with the app installed the gate opens. A 403 here would mean the
-	// permission was refused rather than the app; the caller is a tenant
-	// administrator, who bypasses permission checks.
-	f.install(t, "io.gerege.nexus.ai")
-	res = f.do(t, http.MethodGet, "/api/v1/admin/ai/prompts", "")
-	if res.Code != http.StatusOK {
-		t.Fatalf("the assistant answered %d with the app installed: %s", res.Code, res.Body.String())
 	}
 }
