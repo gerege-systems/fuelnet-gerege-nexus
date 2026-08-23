@@ -36,6 +36,18 @@ var corePolicies = map[string]struct {
 }{
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
 
+	// The assistant and the connectors both put one screen in the platform's
+	// settings group, and both gate it on the permission that *writes*: the
+	// prompt an assistant follows is what everybody in the organisation then
+	// talks to, and a connector's target URL makes this server call an address
+	// somebody typed. Neither gates its routes by prefix — asking the assistant
+	// is ai.read and writing its prompt is ai.manage, which no rule keyed on the
+	// HTTP verb can tell apart.
+	"ai": {(*appai.Module)(nil), "ai.manage", "",
+		"asking a question and writing the prompt everybody then talks to are both POSTs"},
+	"integrations": {(*appintegrations.Module)(nil), "integrations.manage", "",
+		"the OAuth callback carries no session and cannot be behind a permission at all"},
+
 	// documents was the other one that gates itself — who may read a document
 	// depends on who it was shared with — and it is in client-gerege-nexus now.
 	// Its claim went with it: the assertion belongs beside the module, not in
@@ -81,15 +93,15 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 // reaches the assistant from the chat affordance rather than from the sidebar.
 // A prefix rule would have to collapse those two into one.
 var policylessModules = map[string]nexus.Module{
-	"ai": (*appai.Module)(nil),
-	// integrations is the third, and its single permission is administrative:
-	// there is nothing to read that is not also the power to change it, so a
-	// menu gate and a route prefix would both name integrations.manage and say
-	// nothing the routes do not already say for themselves.
-	"integrations": (*appintegrations.Module)(nil),
-	// staffpin is the fourth. Its one route is administrative and names its own
-	// permission; the route it exists for is the platform's device sign-in,
-	// which no module gates because no module answers it.
+	// staffpin is the only one. Its single route is administrative and names its
+	// own permission; the route it exists for is the platform's device sign-in,
+	// which no module gates because no module answers it — and it puts nothing
+	// in the sidebar, because a PIN is set from the member's row in Access
+	// control.
+	//
+	// The assistant and the connectors were here until 2026-08-23, when each
+	// gained one settings screen and therefore something to gate: see
+	// corePolicies.
 	"staffpin": (*appstaffpin.Module)(nil),
 }
 

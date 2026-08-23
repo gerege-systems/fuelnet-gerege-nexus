@@ -98,12 +98,40 @@ func (m *Module) Permissions() []nexus.PermissionDefinition {
 	}
 }
 
-// Menus is empty, and that is what the shell already does: the assistant is
-// reached from the chat affordance rather than from the sidebar, and its two
-// settings screens do not exist in this repository's shell at all — the API
-// client is there, nothing imports it. A menu entry pointing at a page nobody
-// has written is a dead link in every deployment.
-func (m *Module) Menus() []nexus.MenuDefinition { return nil }
+// Menus is the one screen this app has: where an organisation writes the prompt
+// the assistant follows and the knowledge it is given.
+//
+// Declared here rather than hard-coded in the shell, which is where it was
+// until 2026-08-23. A link the shell writes out itself is a link that shows on
+// every deployment whether or not the app is installed — and after the
+// assistant became an app, an organisation without it was still being offered
+// its settings screen. A menu entry the module declares disappears with the
+// app, which is the only way that stays true.
+//
+// The chat affordance is not here: it is part of the shell's own chrome rather
+// than a page, and nothing in the sidebar points at it.
+func (m *Module) Menus() []nexus.MenuDefinition {
+	return []nexus.MenuDefinition{{
+		ID: "ai_settings", Label: "AI settings", Path: "/settings/ai",
+		Icon: "brain-circuit", Order: 40, Group: nexus.MenuGroupSettings,
+		Labels: map[string]string{
+			"mn": "AI тохиргоо", "ar": "إعدادات الذكاء الاصطناعي", "zh": "AI 设置",
+			"fr": "Paramètres AI", "ru": "Настройки AI", "es": "Configuración de IA",
+		},
+	}}
+}
+
+// MenuPermission is the permission that writes the prompt rather than the one
+// that asks a question: the screen this app puts in the sidebar decides what
+// the assistant is for everybody in the organisation, and every member holds
+// ai.read.
+func (m *Module) MenuPermission() string { return PermissionManage }
+
+// RoutePermissionPrefix is empty: every route names its own permission, and the
+// two are not the same — asking is ai.read, writing the prompt is ai.manage,
+// and a prefix rule keyed on the HTTP verb would make a POST to /ai/chat an
+// administrative act.
+func (m *Module) RoutePermissionPrefix() string { return "" }
 
 // RegisterRoutes mounts the API behind the app gate.
 //

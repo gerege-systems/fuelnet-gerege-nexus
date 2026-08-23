@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, APP_MENU_CHANGED_EVENT } from "@/lib/api";
@@ -14,7 +14,7 @@ import AICopilot from "@/components/AICopilot";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
 import { MenuIcon } from "@/lib/icons";
-import { LayoutGrid, Settings, Share2, Menu as HamburgerIcon, Palette, Building2, BrainCircuit, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { LayoutGrid, Settings, Menu as HamburgerIcon, Palette, Building2, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
 
 // app_order and app_chrome describe the app rather than the entry: where its
 // tile sits in the rail, and whether it has a tile at all. Both come from the
@@ -181,7 +181,18 @@ export default function Layout({children}:{children:React.ReactNode}){
   // and selecting an app replaces the whole sidebar: the menu you clicked in
   // disappeared and you were somewhere else. The screens are the same; where
   // you are should not change under you for opening one.
-  const organisation=apps.find(app=>app.chrome)||null;
+  // Every app the shell presents as part of itself, not one. Three claim it
+  // today — the organisation, the assistant and the connectors — and the shell
+  // used to take the first, which meant the other two put nothing anywhere: on
+  // a phone, where the tab bar lists only rail apps, their screens had no route
+  // at all.
+  //
+  // Each entry lands in the group its module asked for. The platform decides
+  // the parent — an app cannot file a screen under another app's heading — and
+  // the id it stamps is what says which of the two this is.
+  const chromeApps=useMemo(()=>apps.filter(app=>app.chrome),[apps]);
+  const chromeEntries=useCallback((group:"modules"|"settings")=>chromeApps.flatMap(app=>
+    app.menus.filter(item=>item.path&&item.parent_id?.endsWith(`_${group}`))),[chromeApps]);
   const railApps=useMemo(()=>apps.filter(app=>!app.chrome),[apps]);
   const selected=railApps.find(app=>app.menus.some(m=>m.path&&isUnder(pathname,m.path)))||null;
   const platformActive=!selected;
@@ -254,7 +265,7 @@ export default function Layout({children}:{children:React.ReactNode}){
         Taken from the server rather than written out here, so a tenant that
         has removed the app sees the profile screen and not two links to 403s —
         and so the labels stay in the seven languages the module declares. */}
-    {organisation?.menus.filter(item=>item.path).map(item=>
+    {chromeEntries("modules").map(item=>
       <NavLink key={item.id} href={item.path!} active={item.path===pathname}
         icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>)}
   </MenuGroup><MenuGroup id={PLATFORM_GROUPS.settings} title={t("web.group.settings")} closed={closedGroups.includes(PLATFORM_GROUPS.settings)} onToggle={toggleGroup}>
@@ -263,13 +274,15 @@ export default function Layout({children}:{children:React.ReactNode}){
         somebody to hold two answers for where the same page is. */}
     <NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("web.menu.installed_apps")}/>
     <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("web.menu.appearance")}/>
-    {/* Both of these are administrator-only on the server, so they are
-        hidden the way Access control already was. The pages still explain
-        themselves to anyone who arrives by URL. */}
-    {user?.is_admin&&<NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Share2 className="w-5 h-5"/>} label={t("web.menu.integrations")}/>}
-    {/* Under Settings, not Modules: it configures the copilot the platform
-        already ships, rather than being something a tenant installs. */}
-    {user?.is_admin&&<NavLink href="/settings/ai" active={pathname==="/settings/ai"} icon={<BrainCircuit className="w-5 h-5"/>} label={t("web.menu.ai_settings")}/>}
+    {/* The connectors and the assistant were written out here until
+        2026-08-23, when both became apps. A link the shell owns is a link every
+        deployment shows whether or not the app is installed — and an
+        organisation that had never installed the assistant was still being
+        offered its settings screen. They arrive with their app now, in the
+        group it asked for, and leave with it. */}
+    {chromeEntries("settings").map(item=>
+      <NavLink key={item.id} href={item.path!} active={item.path===pathname}
+        icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>)}
     {/* Issuing a key that sends mail in the tenant's name is administrative, and
         the API behind this screen is admin-only, so the link follows it. */}
     {user?.is_admin&&<NavLink href="/settings/email-verification" active={pathname==="/settings/email-verification"} icon={<MailCheck className="w-5 h-5"/>} label={t("web.menu.email_verification")}/>}
