@@ -224,6 +224,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// caller and should not be its only one: any module with something to say to
 	// another installation asks nexus.Ring() for it. See pkg/nexus/link.go.
 	nexus.Provide[nexus.Link](urtuuLink)
+	// The reading half of the same channel: who is on the other end of a link,
+	// what a request code means, whether it has been announced there. Published
+	// because the task board asked those questions by joining the channel's own
+	// tables — the coupling ADR 0004 named as what kept it in this repository.
+	nexus.Provide[nexus.PeerDirectory](urtuu.AsPeerDirectory(urtuuLink))
 
 	modulePlatform := newModulePlatform(db)
 

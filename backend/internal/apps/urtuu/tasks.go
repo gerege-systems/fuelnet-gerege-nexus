@@ -100,24 +100,24 @@ type TaskEvent struct {
 const taskColumns = `
 	t.id::text, t.number, t.origin_number, t.code, t.line, t.title, t.payload,
 	t.applicant, t.answer,
-	coalesce(t.origin_peer_id::text, ''), coalesce(op.name, ''), t.origin_task_id,
-	coalesce(t.target_peer_id::text, ''), coalesce(tp.name, ''),
+	coalesce(t.origin_peer_id::text, ''), t.origin_task_id,
+	coalesce(t.target_peer_id::text, ''),
 	coalesce(t.parent_task_id::text, ''), t.origin_chain, t.status, t.deadline,
 	coalesce(t.assigned_user_id::text, ''), '',
 	t.note, t.evidence, t.created_at, t.updated_at`
 
+// taskFrom no longer joins the channel's peer table. The two names it used to
+// fetch per row are filled by namePeers from one read per page — see peers.go.
 const taskFrom = `
-	FROM urtuu_tasks t
-	LEFT JOIN urtuu_peers op ON op.id = t.origin_peer_id
-	LEFT JOIN urtuu_peers tp ON tp.id = t.target_peer_id`
+	FROM urtuu_tasks t`
 
 func scanTask(rows pgx.Rows, now time.Time) (Task, error) {
 	var task Task
 	if err := rows.Scan(&task.ID, &task.Number, &task.OriginNumber,
 		&task.Code, &task.Line, &task.Title, &task.Payload,
 		&task.Applicant, &task.Answer,
-		&task.OriginPeerID, &task.OriginPeerName, &task.originTaskID,
-		&task.TargetPeerID, &task.TargetPeerName,
+		&task.OriginPeerID, &task.originTaskID,
+		&task.TargetPeerID,
 		&task.ParentTaskID, &task.OriginChain, &task.Status, &task.Deadline,
 		&task.AssignedUserID, &task.AssignedName, &task.Note, &task.Evidence,
 		&task.CreatedAt, &task.UpdatedAt); err != nil {
@@ -198,6 +198,7 @@ func (m *Module) listTasks(ctx context.Context, tenantID string, filter taskFilt
 		return nil, err
 	}
 	m.nameAssignees(ctx, tenantID, tasks)
+	m.namePeers(ctx, tenantID, tasks)
 	return tasks, nil
 }
 
@@ -243,15 +244,15 @@ func (m *Module) getTask(ctx context.Context, tenantID, id string) (Task, error)
 	// nameAssignees fills the slice in place, so the copy is what to return.
 	named := []Task{task}
 	m.nameAssignees(ctx, tenantID, named)
+	m.namePeers(ctx, tenantID, named)
 	return named[0], nil
 }
 
 func (m *Module) taskEvents(ctx context.Context, tenantID, id string) ([]TaskEvent, error) {
 	rows, err := m.db.Query(nexus.WithTenantID(ctx, tenantID), `
-		SELECT e.from_status, e.to_status, coalesce(e.actor_user_id::text, ''), coalesce(p.name, ''),
-		       e.note, e.created_at
+		SELECT e.from_status, e.to_status, coalesce(e.actor_user_id::text, ''),
+		       coalesce(e.actor_peer_id::text, ''), e.note, e.created_at
 		  FROM urtuu_task_events e
-		  LEFT JOIN urtuu_peers p ON p.id = e.actor_peer_id
 		 WHERE e.task_id = $1
 		 ORDER BY e.created_at`, id)
 	if err != nil {
@@ -272,16 +273,25 @@ func (m *Module) taskEvents(ctx context.Context, tenantID, id string) ([]TaskEve
 		return nil, err
 	}
 
-	// ActorName holds a user id at this point, not a name: the query stopped
-	// joining `users`, which is the platform's table. One directory read turns
-	// every id on the page into a name — an event with no actor is a peer's
-	// act and keeps the empty string it already has.
+	// ActorName and PeerName hold ids at this point, not names: the query joins
+	// neither `users` nor `urtuu_peers`, which belong to the platform and to
+	// the channel. Two reads per page turn every id into a name — an event has
+	// one actor or the other, never both, so each loop skips what the other
+	// filled.
 	people := m.directory(ctx, tenantID)
+	var peers map[string]string
 	for i := range events {
-		if events[i].ActorName == "" {
+		if events[i].ActorName != "" {
+			events[i].ActorName = people[events[i].ActorName].Name
 			continue
 		}
-		events[i].ActorName = people[events[i].ActorName].Name
+		if events[i].PeerName == "" {
+			continue
+		}
+		if peers == nil {
+			peers = m.peerNames(ctx, tenantID)
+		}
+		events[i].PeerName = peers[events[i].PeerName]
 	}
 	return events, nil
 }
@@ -356,21 +366,27 @@ func (m *Module) record(ctx context.Context, tx pgx.Tx, tenantID, taskID, status
 
 // ------------------------------------------------------------- the vocabulary
 
-// lookupCode reads a code out of the transport's table rather than through an
-// accessor. The two packages are one product split by layer, sharing one schema
-// and one tenant binding; an interface between them would be a second
-// description of the same three columns.
+// lookupCode asks the channel what a code means.
+//
+// It read urtuu_request_codes directly until 2026-08-23 on the argument that
+// "the two packages are one product split by layer, sharing one schema" — true
+// while both live in one repository and the reason ADR 0004 gave for this app
+// staying in it. nexus.PeerDirectory is that argument turned into a contract.
 //
 // What comes back is the domain's RequestCode: what the rules ask of a code —
 // its name in every language, its norm, its promise and whether it is in use.
 func (m *Module) lookupCode(ctx context.Context, tenantID, code string) (domain.RequestCode, error) {
-	var found domain.RequestCode
-	err := m.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
-		SELECT code, names, EXTRACT(EPOCH FROM default_sla)::bigint, line, active, source
-		  FROM urtuu_request_codes WHERE tenant_id = $1 AND code = $2`,
-		tenantID, code).Scan(&found.Code, &found.Names, &found.SLA, &found.Line,
-		&found.Active, &found.Source)
-	return found, err
+	found, ok, err := m.peers.RequestCode(ctx, tenantID, code)
+	if err != nil {
+		return domain.RequestCode{}, err
+	}
+	if !ok {
+		return domain.RequestCode{}, pgx.ErrNoRows
+	}
+	return domain.RequestCode{
+		Code: found.Code, Names: found.Names, SLA: found.SLA,
+		Line: found.Line, Active: found.Active, Source: found.Source,
+	}, nil
 }
 
 // codeOpenOn reports whether a code has been announced on a link. A parent that
@@ -378,11 +394,8 @@ func (m *Module) lookupCode(ctx context.Context, tenantID, code string) (domain.
 // child would receive a task naming a code it has never been told about, and
 // the whole point of announcing the vocabulary is that it does not have to
 // guess.
+//
+// Through the contract rather than urtuu_peer_codes, for the reason above.
 func (m *Module) codeOpenOn(ctx context.Context, tenantID, peerID, code string) (bool, error) {
-	var open bool
-	err := m.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
-		SELECT EXISTS (SELECT 1 FROM urtuu_peer_codes
-		                WHERE tenant_id = $1 AND peer_id = $2 AND code = $3)`,
-		tenantID, peerID, code).Scan(&open)
-	return open, err
+	return m.peers.CodeOpenOn(ctx, tenantID, peerID, code)
 }

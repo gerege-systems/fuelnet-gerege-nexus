@@ -139,7 +139,11 @@ func newSite(t *testing.T, pool *pgxpool.Pool, name string, seed byte) *site {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
 	})
 
-	module := New(nexus.NewPlatform(pool, everyPermission{}), link)
+	// The reading half of the channel, from the same transport this test stood
+	// up. The app asks it for peer names and codes rather than joining the
+	// channel's tables, so a test that did not provide it would be testing a
+	// module with half its dependencies missing.
+	module := New(nexus.NewPlatform(pool, everyPermission{}), link, transport.AsPeerDirectory(link))
 
 	// The session middleware, in miniature: everything below it acts for this
 	// organisation as one of its members.
@@ -615,7 +619,12 @@ func TestTheThreeReportsRun(t *testing.T) {
 		channelLoad{}.Key():    true,
 	}
 
-	for _, report := range []nexus.Report{taskCompletion{}, slaBreaches{}, channelLoad{}} {
+	// The reports are built with the channel's directory, the same one the
+	// module hands them: two of the three name peers with it and the third
+	// reads the outbox through it, so a nil one would be testing the empty
+	// answer rather than the report.
+	peers := transport.AsPeerDirectory(parent.link)
+	for _, report := range []nexus.Report{taskCompletion{peers}, slaBreaches{peers}, channelLoad{peers}} {
 		t.Run(report.Key(), func(t *testing.T) {
 			result, err := report.Run(ctx, poolQuerier{pool}, params)
 			if err != nil {

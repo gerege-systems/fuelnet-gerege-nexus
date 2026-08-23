@@ -24,15 +24,19 @@ package urtuu
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-func registerReports() {
-	nexus.RegisterReport(taskCompletion{})
-	nexus.RegisterReport(slaBreaches{})
-	nexus.RegisterReport(channelLoad{})
+// The directory is handed to each report rather than fetched inside it: a
+// report runs minutes or months after construction, and a dependency looked up
+// at that moment is one nothing checks at boot.
+func registerReports(peers nexus.PeerDirectory) {
+	nexus.RegisterReport(taskCompletion{peers})
+	nexus.RegisterReport(slaBreaches{peers})
+	nexus.RegisterReport(channelLoad{peers})
 }
 
 // period is the parameter all three share.
@@ -53,7 +57,7 @@ func fullOnly() []string { return []string{nexus.ReportScopeFull} }
 
 // ------------------------------------------------------- task completion
 
-type taskCompletion struct{}
+type taskCompletion struct{ peers nexus.PeerDirectory }
 
 func (taskCompletion) Key() string      { return "urtuu.task_completion" }
 func (taskCompletion) App() string      { return ID }
@@ -99,14 +103,14 @@ func (taskCompletion) Columns() []nexus.ColumnSpec {
 // "The installation" is whichever end of the link this row is about — where it
 // came from for received work, where it went for delegated. Both are the same
 // question from the reader's side: who this task was between.
-func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
+func (r taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	// Grouped by line as well as by code, because the two lines answer to
 	// different people: a service request's completion is owed to somebody
 	// outside the platform, and mixing the two into one rate would average
 	// away exactly the number a citizen-facing office is judged on.
 	const query = `
 		SELECT t.code, t.line,
-		       coalesce(nullif(op.name, ''), nullif(tp.name, ''), '—')       AS peer,
+		       coalesce(t.origin_peer_id::text, t.target_peer_id::text, '')   AS peer_id,
 		       count(*)                                                       AS raised,
 		       count(*) FILTER (WHERE t.status IN ('COMPLETED', 'CLOSED'))     AS completed,
 		       count(*) FILTER (WHERE t.status = 'RETURNED')                   AS returned,
@@ -116,8 +120,6 @@ func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) 
 		       coalesce(avg(EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 86400)
 		                FILTER (WHERE t.status IN ('COMPLETED', 'CLOSED')), 0) AS avg_days
 		  FROM urtuu_tasks t
-		  LEFT JOIN urtuu_peers op ON op.id = t.origin_peer_id
-		  LEFT JOIN urtuu_peers tp ON tp.id = t.target_peer_id
 		 WHERE t.tenant_id = $1 AND t.created_at >= $2 AND t.created_at <= $3
 		 GROUP BY 1, 2, 3
 		 ORDER BY 4 DESC, 1
@@ -129,13 +131,18 @@ func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) 
 		return nexus.Result{}, err
 	}
 
+	// The peer is grouped by id and named afterwards: the name lives in the
+	// channel's table and this app stopped reading it (see peers.go). Two links
+	// with one name stay two rows, which is the more honest grouping anyway.
+	names := reportPeerNames(ctx, r.peers)
 	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
-		var code, line, peer string
+		var code, line, peerID string
 		var raised, completed, returned int64
 		var avgDays float64
-		if err := rows.Scan(&code, &line, &peer, &raised, &completed, &returned, &avgDays); err != nil {
+		if err := rows.Scan(&code, &line, &peerID, &raised, &completed, &returned, &avgDays); err != nil {
 			return nil, err
 		}
+		peer := peerLabel(names, peerID)
 		rate := 0.0
 		if raised > 0 {
 			rate = float64(completed) / float64(raised) * 100
@@ -153,7 +160,7 @@ func (taskCompletion) Run(ctx context.Context, q nexus.Querier, p nexus.Params) 
 
 // ------------------------------------------------------------ SLA breaches
 
-type slaBreaches struct{}
+type slaBreaches struct{ peers nexus.PeerDirectory }
 
 func (slaBreaches) Key() string      { return "urtuu.sla_breaches" }
 func (slaBreaches) App() string      { return ID }
@@ -198,17 +205,15 @@ func (slaBreaches) Columns() []nexus.ColumnSpec {
 // it finished, so a fortnight late and settled is not the same row as a
 // fortnight late and still open. Closed tasks are excluded: the originator
 // accepting the outcome is what ends the question.
-func (slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
+func (r slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT t.title, t.code, t.line,
-		       coalesce(nullif(op.name, ''), nullif(tp.name, ''), '—') AS peer,
+		       coalesce(t.origin_peer_id::text, t.target_peer_id::text, '') AS peer_id,
 		       t.status, t.deadline::date,
 		       EXTRACT(EPOCH FROM (
 		           CASE WHEN t.status IN ('COMPLETED', 'RETURNED') THEN t.updated_at
 		                ELSE NOW() END - t.deadline)) / 86400          AS days_late
 		  FROM urtuu_tasks t
-		  LEFT JOIN urtuu_peers op ON op.id = t.origin_peer_id
-		  LEFT JOIN urtuu_peers tp ON tp.id = t.target_peer_id
 		 WHERE t.tenant_id = $1
 		   AND t.deadline IS NOT NULL AND t.status <> 'CLOSED'
 		   AND t.created_at >= $2 AND t.created_at <= $3
@@ -223,13 +228,15 @@ func (slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (ne
 		return nexus.Result{}, err
 	}
 
+	names := reportPeerNames(ctx, r.peers)
 	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
-		var title, code, line, peer, status string
+		var title, code, line, peerID, status string
 		var deadline time.Time
 		var late float64
-		if err := rows.Scan(&title, &code, &line, &peer, &status, &deadline, &late); err != nil {
+		if err := rows.Scan(&title, &code, &line, &peerID, &status, &deadline, &late); err != nil {
 			return nil, err
 		}
+		peer := peerLabel(names, peerID)
 		return map[string]any{
 			"title": title, "code": code, "line": line, "peer": peer, "status": status,
 			"deadline": deadline, "days_late": round1(late),
@@ -243,7 +250,7 @@ func (slaBreaches) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (ne
 
 // ------------------------------------------------------------ channel load
 
-type channelLoad struct{}
+type channelLoad struct{ peers nexus.PeerDirectory }
 
 func (channelLoad) Key() string      { return "urtuu.channel_load" }
 func (channelLoad) App() string      { return ID }
@@ -283,44 +290,74 @@ func (channelLoad) Columns() []nexus.ColumnSpec {
 // Retries are `attempts - 1` summed rather than `attempts`: an envelope that
 // went first time has one attempt and no retry, and a column that counted it as
 // one would make a healthy channel look like a struggling one.
-func (channelLoad) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
-	const query = `
-		SELECT coalesce(nullif(p.name, ''), '—')                     AS peer,
-		       count(*)                                              AS envelopes,
-		       count(*) FILTER (WHERE d.delivered_at IS NOT NULL)     AS delivered,
-		       count(*) FILTER (WHERE d.delivered_at IS NULL)         AS pending,
-		       coalesce(sum(greatest(d.attempts - 1, 0)), 0)          AS retries
-		  FROM urtuu_deliveries d
-		  JOIN urtuu_peers p ON p.id = d.peer_id
-		 WHERE d.tenant_id = $1 AND d.created_at >= $2 AND d.created_at <= $3
-		 GROUP BY 1
-		 ORDER BY 2 DESC
-		 LIMIT 500`
-
-	rows, err := q.Query(ctx, query,
-		nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
+func (r channelLoad) Run(ctx context.Context, _ nexus.Querier, p nexus.Params) (nexus.Result, error) {
+	// Not a query. Deliveries are the channel's rows — the outbox, the
+	// attempts, the acknowledgements — and this app stopped reading them on
+	// 2026-08-23. The contract answers the one question a report can ask about
+	// them, and the engine's Querier is unused here because there is nothing of
+	// this app's to join it to.
+	load, err := r.peers.DeliveryLoad(ctx, nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
 	if err != nil {
 		return nexus.Result{}, err
 	}
+	names := reportPeerNames(ctx, r.peers)
 
-	collected, err := nexus.Collect(rows, func() (map[string]any, error) {
-		var peer string
-		var envelopes, delivered, pending, retries int64
-		if err := rows.Scan(&peer, &envelopes, &delivered, &pending, &retries); err != nil {
-			return nil, err
-		}
-		return map[string]any{
-			"peer": peer, "envelopes": envelopes, "delivered": delivered,
-			"pending": pending, "retries": retries,
-		}, nil
-	})
-	if err != nil {
-		return nexus.Result{}, err
+	rows := make([]map[string]any, 0, len(load))
+	for _, one := range load {
+		rows = append(rows, map[string]any{
+			"peer": peerLabel(names, one.PeerID), "envelopes": one.Envelopes,
+			"delivered": one.Delivered, "pending": one.Pending, "retries": one.Retries,
+		})
 	}
-	return truncated(collected), nil
+	return truncated(rows), nil
 }
 
 // ----------------------------------------------------------------- helpers
+
+// reportPeerNames is the page-level peer read a report does instead of a join.
+//
+// A report runs inside the engine's read-only transaction and this read is
+// outside it, which is the right way round: the names are the channel's and are
+// not part of the snapshot the report is measuring. A deployment that cannot
+// answer gets a report with the ids left as labels rather than no report — see
+// peerLabel.
+func reportPeerNames(ctx context.Context, directory nexus.PeerDirectory) map[string]string {
+	if directory == nil {
+		// A report constructed without one. Nothing in this binary does it —
+		// registerReports hands every report the same directory — and a nil
+		// dereference inside a report is a panic in whatever goroutine the
+		// engine happens to be running it on, which is worse than a column of
+		// ids.
+		return nil
+	}
+	peers, err := directory.Peers(ctx, nexus.TenantOf(ctx))
+	if err != nil {
+		slog.Warn("urtuu: the links could not be read; a report will name peers by id", "error", err)
+		return nil
+	}
+	names := make(map[string]string, len(peers))
+	for _, peer := range peers {
+		names[peer.ID] = peer.Name
+	}
+	return names
+}
+
+// peerLabel is what to print for a peer id.
+//
+// An empty id is a task that never left this installation — the dash it gets is
+// the same one the SQL used to produce. An id with no name is a link that has
+// been revoked since the work went over it: the id is worse than a name and far
+// better than an empty column, which would read as "local".
+func peerLabel(names map[string]string, peerID string) string {
+	switch {
+	case peerID == "":
+		return "—"
+	case names[peerID] != "":
+		return names[peerID]
+	default:
+		return peerID
+	}
+}
 
 // truncated says so when the limit was reached. A limit that is not said is a
 // lie: five hundred rows read as the whole answer.

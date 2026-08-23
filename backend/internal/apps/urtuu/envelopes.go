@@ -423,9 +423,8 @@ func (m *Module) gatherAnswers(ctx context.Context, tenantID, parentID string) {
 	}
 
 	rows, err := m.db.Query(ctx, `
-		SELECT coalesce(nullif(p.name, ''), '—'), t.answer
+		SELECT coalesce(t.target_peer_id::text, ''), t.answer
 		  FROM urtuu_tasks t
-		  LEFT JOIN urtuu_peers p ON p.id = t.target_peer_id
 		 WHERE t.parent_task_id = $1 AND t.target_peer_id IS NOT NULL AND t.answer <> ''
 		 ORDER BY t.created_at`, parentID)
 	if err != nil {
@@ -444,6 +443,18 @@ func (m *Module) gatherAnswers(ctx context.Context, tenantID, parentID string) {
 	}
 	if err := rows.Err(); err != nil {
 		return
+	}
+	// Peer holds an id at this point: the query stopped joining the channel's
+	// table (see peers.go). The joined answer names who said what, so a link
+	// that has been revoked since keeps its id rather than losing the
+	// attribution — a dash beside one of three answers is worse than an id.
+	if len(branches) > 0 {
+		names := m.peerNames(ctx, nexus.TenantOf(ctx))
+		for i := range branches {
+			if name := names[branches[i].Peer]; name != "" {
+				branches[i].Peer = name
+			}
+		}
 	}
 	answer := domain.JoinAnswers(branches)
 	if answer == "" {

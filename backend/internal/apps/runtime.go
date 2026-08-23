@@ -95,7 +95,7 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// Constructed whether or not this deployment has a signing key — the module
 	// registers the readers for the task envelopes, and a deployment given a key
 	// later must not need a second restart before its backlog is read.
-	appurtuu.New(p, link)
+	appurtuu.New(p, link, required[nexus.PeerDirectory]())
 	// The App Store's three modules used to be constructed here. They are a
 	// product of their own now — github.com/gerege-systems/appstore-gerege-nexus
 	// — and reach this list through platform.Options.Modules, the same way any
