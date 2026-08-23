@@ -263,10 +263,14 @@ func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
 	ctx := context.Background()
 
 	here, there := seedTwoTenants(t, pool)
+	// The probe table, like every other test in this file. This one used to
+	// borrow `departments`, which was the organisation app's and left with it
+	// on 2026-08-23 — the same mistake `contacts` taught, made again against a
+	// different app's table. See probeTable.
 	seed := func(tenantID, code string) {
 		t.Helper()
 		if _, err := pool.Exec(tenant.Without(ctx),
-			`INSERT INTO departments (tenant_id, code, name) VALUES ($1, $2, $2)`, tenantID, code); err != nil {
+			`INSERT INTO dbguard_probe (tenant_id, name) VALUES ($1, $2)`, tenantID, code); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -278,7 +282,7 @@ func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
 
 	var seen int
 	if err := pool.QueryRow(both,
-		`SELECT count(*) FROM departments WHERE code IN ('here-unit', 'there-unit')`).Scan(&seen); err != nil {
+		`SELECT count(*) FROM dbguard_probe WHERE name IN ('here-unit', 'there-unit')`).Scan(&seen); err != nil {
 		t.Fatal(err)
 	}
 	if seen != 2 {
@@ -288,7 +292,7 @@ func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
 	// The same connection, the same set: a row may still only be created in the
 	// organisation being acted in.
 	_, err := pool.Exec(both,
-		`INSERT INTO departments (tenant_id, code, name) VALUES ($1, 'sneaked', 'Sneaked')`, there)
+		`INSERT INTO dbguard_probe (tenant_id, name) VALUES ($1, 'sneaked')`, there)
 	if err == nil {
 		t.Fatal("a row was written into an organisation the session is not acting in")
 	}
@@ -299,7 +303,7 @@ func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
 	// And into the acting one it works, which is what makes the refusal above
 	// about the organisation rather than about writing at all.
 	if _, err := pool.Exec(both,
-		`INSERT INTO departments (tenant_id, code, name) VALUES ($1, 'written', 'Written')`, here); err != nil {
+		`INSERT INTO dbguard_probe (tenant_id, name) VALUES ($1, 'written')`, here); err != nil {
 		t.Fatalf("writing into the acting organisation was refused: %v", err)
 	}
 
@@ -307,7 +311,7 @@ func TestASessionReadsAcrossItsOrganisationsButWritesIntoOne(t *testing.T) {
 	// as before this existed.
 	var alone int
 	if err := pool.QueryRow(tenant.WithTenantID(ctx, here),
-		`SELECT count(*) FROM departments WHERE code IN ('here-unit', 'there-unit')`).Scan(&alone); err != nil {
+		`SELECT count(*) FROM dbguard_probe WHERE name IN ('here-unit', 'there-unit')`).Scan(&alone); err != nil {
 		t.Fatal(err)
 	}
 	if alone != 1 {

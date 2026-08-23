@@ -9,8 +9,6 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
@@ -46,31 +44,27 @@ type InstalledApps = reports.InstalledApps
 func Bootstrap(p nexus.Platform) Runtime {
 	sso := required[*ssoprovider.SSOProvider]()
 	link := required[nexus.Link]()
-	signer := required[nexus.Signer]()
 	installedApps := required[InstalledApps]()
 
-	// First, and not merely in order: organisation is what the others assume. It
-	// is the organisation, the people in it and how it is arranged — the module
-	// Odoo calls base.
+	// Three apps were constructed here and are not any more. All three moved to
+	// client-gerege-nexus on 2026-08-23, in the order their contracts were
+	// published: the e-Government link once the state's registers and the audit
+	// trail were nexus.StateRegistry and nexus.AuditReader; documents once the
+	// identity rails and the PDF signing rail were nexus.EIDSigner,
+	// nexus.DANAuthenticator and nexus.SigningRails; the organisation once who
+	// belongs to it was nexus.Directory and its two columns had a table of
+	// their own (migration 00076).
 	//
-	// The contact register was briefly part of it and is not: it went to
-	// commerce-gerege-nexus, because everybody has departments and only a
-	// business has customers.
-	organisation.New(p)
-	// The e-Government link was constructed here. It moved to
-	// client-gerege-nexus on 2026-08-23: the state's registers and the audit
-	// trail are contracts now (nexus.StateRegistry, nexus.AuditReader), so the
-	// module had nothing left that only this repository could give it.
+	// None of them was removed for being bad. They were removed for being apps:
+	// an app that ships inside the platform is one every deployment carries
+	// whether it has a use for it or not, and a queue kiosk has no use for a
+	// staff directory.
 	// The PDF signing rails. Constructed in server.go now, not here: a module
 	// that signs a PDF asks for nexus.SigningRails in its constructor, and a
 	// distribution's modules are built before this function is called. Asked
 	// for rather than rebuilt — a second Rails would be a second housekeeping
 	// loop over the same tables.
 	esignModule := required[*esign.Rails]()
-	// The signing rail, as the SDK publishes it. A document that carries a file
-	// is signed over that file's digest through this; one that carries nothing
-	// is approved on the sign-in rail as before. See ADR 0003.
-	documents.New(p, signer)
 	sso_clients.New(sso)
 	// Өртөө: the task board over the platform's channel to other installations.
 	// Constructed whether or not this deployment has a signing key — the module

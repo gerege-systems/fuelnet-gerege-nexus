@@ -69,11 +69,11 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 	}
 
 	wantRail := []string{
-		"io.gerege.nexus.documents",   // order 10
 		"io.gerege.nexus.sso_clients", // order 20
 		// No order declared, so id order among themselves — which is where the
-		// list this replaced also put them, by falling through to 999. egov was
-		// here until it moved to client-gerege-nexus on 2026-08-23.
+		// list this replaced also put them, by falling through to 999. egov,
+		// documents and the organisation were here until they moved to
+		// client-gerege-nexus on 2026-08-23.
 		"io.gerege.nexus.reports",
 		"io.gerege.nexus.urtuu",
 	}
@@ -86,8 +86,12 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 		}
 	}
 
-	if len(chrome) != 1 || chrome[0] != "io.gerege.nexus.organisation" {
-		t.Errorf("the shell draws %v as part of itself, want only the organisation", chrome)
+	// Nothing is chrome any more. The organisation was — the shell drew its
+	// screens as part of itself rather than as a tile on the rail — and it is a
+	// distribution's app now. A deployment that carries it gets the chrome back
+	// from its own manifest, which is the flag doing what it is for.
+	if len(chrome) != 0 {
+		t.Errorf("the shell draws %v as part of itself, want nothing", chrome)
 	}
 }
 

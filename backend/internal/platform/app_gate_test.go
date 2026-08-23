@@ -148,18 +148,20 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 //
 // This was written about the e-Government link, whose routes had been platform
 // routes before it became an app. That module moved to client-gerege-nexus on
-// 2026-08-23, so the test asks about two apps this binary still carries. The
-// claim did not move with it.
+// 2026-08-23, and documents and the organisation followed it the same day, so
+// the test asks about two apps this binary still carries. The claim has now
+// outlived three of its subjects, which is the argument for keeping it: what is
+// being asserted is the gate, not any app in particular.
 func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	f := newGateFixture(t)
 
 	// Nothing installed yet.
-	if res := f.do(t, http.MethodGet, "/api/v1/documents", ""); res.Code != http.StatusForbidden {
-		t.Fatalf("documents answered %d without the app installed; expected 403: %s",
+	if res := f.do(t, http.MethodGet, "/api/v1/urtuu/tasks/board", ""); res.Code != http.StatusForbidden {
+		t.Fatalf("Өртөө answered %d without the app installed; expected 403: %s",
 			res.Code, res.Body.String())
 	}
 
-	// The organisation's own routes are unaffected by documents being absent.
+	// The reports app's own routes are unaffected by Өртөө being absent.
 	//
 	// The 404 check is not decoration. This used to ask for /api/v1/contacts,
 	// which was the right question when the contact register was part of the
@@ -167,21 +169,21 @@ func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	// table, so the route stopped existing — and the assertion, which only
 	// refuses a 403, went on passing against a 404. A test that cannot fail is
 	// worse than no test.
-	f.install(t, "io.gerege.nexus.organisation")
-	res := f.do(t, http.MethodGet, "/api/v1/organisation/departments", "")
+	f.install(t, "io.gerege.nexus.reports")
+	res := f.do(t, http.MethodGet, "/api/v1/reports/", "")
 	if res.Code == http.StatusForbidden {
-		t.Fatalf("departments was refused while documents was absent: %s", res.Body.String())
+		t.Fatalf("reports was refused while Өртөө was absent: %s", res.Body.String())
 	}
 	if res.Code == http.StatusNotFound {
-		t.Fatalf("departments answered 404; this test asserts nothing unless the route is served")
+		t.Fatalf("reports answered 404; this test asserts nothing unless the route is served")
 	}
 
 	// And with the app installed the gate opens. A 403 here would mean the
 	// permission was refused rather than the app; the caller is a tenant
 	// administrator, who bypasses permission checks.
-	f.install(t, "io.gerege.nexus.documents")
-	res = f.do(t, http.MethodGet, "/api/v1/documents", "")
+	f.install(t, "io.gerege.nexus.urtuu")
+	res = f.do(t, http.MethodGet, "/api/v1/urtuu/tasks/board", "")
 	if res.Code != http.StatusOK {
-		t.Fatalf("documents answered %d with the app installed: %s", res.Code, res.Body.String())
+		t.Fatalf("Өртөө answered %d with the app installed: %s", res.Code, res.Body.String())
 	}
 }
