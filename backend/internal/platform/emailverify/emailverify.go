@@ -27,6 +27,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
@@ -743,6 +744,11 @@ func hashSecret(secret string) string {
 func truncate(value string, max int) string {
 	if len(value) <= max {
 		return value
+	}
+	// Back up to the start of the rune the cut landed inside; Purpose is prose
+	// a caller writes, and Cyrillic cut mid-rune is stored as mojibake.
+	for max > 0 && !utf8.RuneStart(value[max]) {
+		max--
 	}
 	return value[:max]
 }

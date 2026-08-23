@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // The nightly run is scheduled on the platform's clock, not the process's.
@@ -15,7 +15,7 @@ import (
 // would land in the middle of the working day and yesterday's total would be
 // settled eight hours late.
 func TestTheCollectionIsScheduledOnThePlatformsClock(t *testing.T) {
-	here := config.Location()
+	here := nexus.Location()
 
 	// Half past midnight where the platform lives, handed over the way a
 	// container hands it over: as an instant with no local zone attached.
@@ -35,7 +35,7 @@ func TestTheCollectionIsScheduledOnThePlatformsClock(t *testing.T) {
 
 // And a run that has already passed today waits for tomorrow's.
 func TestACollectionAlreadyPastWaitsForTheNextDay(t *testing.T) {
-	here := config.Location()
+	here := nexus.Location()
 	when := time.Date(2026, 8, 16, 9, 0, 0, 0, here).UTC()
 
 	next := when.Add(untilNextRun(when)).In(here)

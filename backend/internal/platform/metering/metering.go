@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -102,7 +102,7 @@ func untilNextRun(now time.Time) time.Duration {
 	// On the platform's clock, so "a little after midnight" is the midnight the
 	// people using this platform have rather than the one the container was
 	// built with.
-	now = now.In(config.Location())
+	now = now.In(nexus.Location())
 	next := time.Date(now.Year(), now.Month(), now.Day(), collectionHour, 10, 0, 0, now.Location())
 	if !next.After(now) {
 		next = next.AddDate(0, 0, 1)
@@ -125,7 +125,7 @@ func (c *Collector) CollectDay(ctx context.Context, day time.Time) {
 			// storage query is slow should still know how many people signed
 			// in.
 			slog.Warn("metering: could not collect a metric",
-				"metric", metric, "day", day.In(config.Location()).Format("2006-01-02"),
+				"metric", metric, "day", day.In(nexus.Location()).Format("2006-01-02"),
 				"error", err)
 		}
 	}

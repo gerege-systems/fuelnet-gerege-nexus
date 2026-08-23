@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
 
 import Layout from "@/components/Layout";
 import InstallApp from "@/components/InstallApp";
@@ -34,10 +33,6 @@ export default function Providers({
   copy: BrandCopy;
   children: React.ReactNode;
 }) {
-  // Created per mount rather than at module scope so the cache is not shared
-  // across requests when the bundle is reused.
-  const [queryClient] = useState(() => new QueryClient());
-
   // The brand name reaches every translation as {brand}; see lib/i18n. I18n is
   // the outer provider because the name itself is translatable — BrandProvider
   // resolves it against the language being read.
@@ -45,10 +40,8 @@ export default function Providers({
     <I18nProvider brand={brand.name} copy={copy}>
       <BrandProvider brand={brand} copy={copy}>
         <ThemeProvider>
-          <QueryClientProvider client={queryClient}>
-            <Layout>{children}</Layout>
-            <InstallApp />
-          </QueryClientProvider>
+          <Layout>{children}</Layout>
+          <InstallApp />
         </ThemeProvider>
       </BrandProvider>
     </I18nProvider>

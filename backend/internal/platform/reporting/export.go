@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -322,7 +322,7 @@ func formatTime(when time.Time, kind ColumnKind) string {
 	if kind == ColumnMonth {
 		return when.Format("2006-01")
 	}
-	return when.In(config.Location()).Format("2006-01-02")
+	return when.In(nexus.Location()).Format("2006-01-02")
 }
 
 // totalsLabel is the only string this package renders for a person, so it is
@@ -353,5 +353,5 @@ func totalsLabel(locale string) string {
 // what somebody searching their downloads folder a month later will remember.
 func Filename(key string, format Format) string {
 	safe := strings.NewReplacer(".", "-", "/", "-", " ", "-").Replace(key)
-	return fmt.Sprintf("%s-%s.%s", safe, config.Now().Format("2006-01-02"), format)
+	return fmt.Sprintf("%s-%s.%s", safe, nexus.Now().Format("2006-01-02"), format)
 }

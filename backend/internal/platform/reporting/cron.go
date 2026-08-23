@@ -30,18 +30,14 @@ import (
 // the UI offers a picker rather than a text box, and a name in a stored
 // schedule would be a value the picker cannot round-trip.
 type Schedule struct {
-	minutes    fieldSet
-	hours      fieldSet
-	days       fieldSet
-	months     fieldSet
-	weekdays   fieldSet
-	expression string
+	minutes  fieldSet
+	hours    fieldSet
+	days     fieldSet
+	months   fieldSet
+	weekdays fieldSet
 }
 
 type fieldSet [60]bool
-
-// String returns the expression the schedule was parsed from.
-func (s Schedule) String() string { return s.expression }
 
 // ParseCron validates and parses a five-field expression.
 func ParseCron(expression string) (Schedule, error) {
@@ -50,7 +46,7 @@ func ParseCron(expression string) (Schedule, error) {
 		return Schedule{}, fmt.Errorf("a cron expression has five fields (minute hour day month weekday), got %d", len(fields))
 	}
 
-	schedule := Schedule{expression: strings.Join(fields, " ")}
+	var schedule Schedule
 	var err error
 	if schedule.minutes, err = parseField(fields[0], 0, 59); err != nil {
 		return Schedule{}, fmt.Errorf("minute: %w", err)

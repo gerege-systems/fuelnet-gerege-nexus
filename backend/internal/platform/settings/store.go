@@ -97,21 +97,13 @@ func Get(key string) string {
 	return spec.Default
 }
 
-// Bool, Int and Duration are Get with the parse the caller would otherwise
+// Bool and Duration are Get with the parse the caller would otherwise
 // write. Each falls back to the default on a value that cannot be parsed,
 // which cannot happen unless the registry and the parse disagree.
 func Bool(key string) bool {
 	parsed, err := strconv.ParseBool(Get(key))
 	if err != nil {
 		return false
-	}
-	return parsed
-}
-
-func Int(key string) int {
-	parsed, err := strconv.Atoi(Get(key))
-	if err != nil {
-		return 0
 	}
 	return parsed
 }

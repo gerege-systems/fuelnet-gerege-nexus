@@ -13,11 +13,12 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -89,7 +90,7 @@ func (s *Scheduler) sweep(ctx context.Context) {
 	// Ulaanbaatar, which is what the person who typed it meant. Matches reads
 	// the wall-clock fields of whatever it is given, so the zone has to be
 	// decided here rather than left to the container's.
-	due, err := s.claimDue(sweepCtx, config.Now())
+	due, err := s.claimDue(sweepCtx, nexus.Now())
 	if err != nil {
 		slog.Error("reports: could not read the schedules", "error", err)
 		return
@@ -308,7 +309,7 @@ func (s *Scheduler) produceAndDeliver(ctx context.Context, schedule dueSchedule)
 	}
 	body := fmt.Sprintf(
 		"%s\n\nХугацаа: %s\nМөрийн тоо: %d\n\nЭнэ бол Gerege Nexus-ийн товлосон тайлан. Хавсралтыг үзнэ үү.\n",
-		title, config.Now().Format("2006-01-02 15:04"), len(result.Rows))
+		title, nexus.Now().Format("2006-01-02 15:04"), len(result.Rows))
 
 	return s.deliverer.Deliver(ctx, schedule.Recipients, subject, body,
 		Filename(report.Key(), schedule.Format), payload)
@@ -343,6 +344,11 @@ func stringifyParams(params map[string]any) map[string]string {
 func truncate(value string, limit int) string {
 	if len(value) <= limit {
 		return value
+	}
+	// Back up to the start of the rune the cut landed inside: a failure
+	// message is prose, and Cyrillic prose cut mid-rune is stored as mojibake.
+	for limit > 0 && !utf8.RuneStart(value[limit]) {
+		limit--
 	}
 	return value[:limit]
 }

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -335,8 +335,8 @@ func TestConnectionsReadTheCalendarOnThePlatformsClock(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT current_setting('timezone')`).Scan(&zone); err != nil {
 		t.Fatalf("read the session timezone: %v", err)
 	}
-	if zone != config.TimezoneName() {
-		t.Errorf("connections are in %q, want the platform's %q", zone, config.TimezoneName())
+	if zone != nexus.TimezoneName() {
+		t.Errorf("connections are in %q, want the platform's %q", zone, nexus.TimezoneName())
 	}
 
 	// And the reduction that matters actually follows it: the same instant, in

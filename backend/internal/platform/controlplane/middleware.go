@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 )
@@ -57,14 +58,14 @@ func (s *Service) HostGate(next http.Handler) http.Handler {
 
 func (s *Service) hostAllowed(r *http.Request) bool {
 	if s.host == "" {
-		return !productionEnv()
+		return !config.IsProduction()
 	}
 	return requestHost(r) == s.host
 }
 
 // Enabled reports whether this deployment has a console at all. Used by the
 // route table so that the frontend's own check has something to agree with.
-func (s *Service) Enabled() bool { return s.host != "" || !productionEnv() }
+func (s *Service) Enabled() bool { return s.host != "" || !config.IsProduction() }
 
 // RequireOperator resolves the console session and puts the request on the
 // operator's database role.
