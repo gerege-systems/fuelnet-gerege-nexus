@@ -147,6 +147,7 @@
   Platform.DB() DB
   Platform.Permissions() PermissionStore
   Querier.Query(ctx context.Context, sql string, args ...any) (Rows, error)
+  Quota.Gate(kind string) func(http.Handler) http.Handler
   RateLimiter.Limit(perMinute float64, burst int) func(http.Handler) http.Handler
   Report.App() string
   Report.Columns() []ColumnSpec
@@ -280,6 +281,7 @@ func Now() time.Time
 func People() (Directory, error)
 func ProvideAssistant(moduleID string, source AssistantSource)
 func Provide[T any](impl T)
+func QuotaGate(kind string) func(http.Handler) http.Handler
 func RateLimit(perMinute float64, burst int) func(http.Handler) http.Handler
 func RecordSigned(rail string, ok bool)
 func Register(m Module)
@@ -346,6 +348,7 @@ type PermissionDefinition struct
 type PermissionStore interface
 type Platform interface
 type Querier interface
+type Quota interface
 type RateLimiter interface
 type Report interface
 type ReportDescription struct

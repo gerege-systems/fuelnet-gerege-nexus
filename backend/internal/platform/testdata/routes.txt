@@ -14,13 +14,10 @@ GET /.well-known/jwks.json
 GET /.well-known/openid-configuration
 GET /.well-known/urtuu.json
 GET /api/v1/admin/access/overview
-GET /api/v1/admin/ai/knowledge
-GET /api/v1/admin/ai/prompts
 GET /api/v1/admin/devices
 GET /api/v1/admin/email-verification/overview
 GET /api/v1/admin/store/overview
 GET /api/v1/admin/store/status
-GET /api/v1/ai/stock-forecast
 GET /api/v1/auth/bind/session
 GET /api/v1/auth/credential
 GET /api/v1/auth/google/callback
@@ -86,14 +83,8 @@ PATCH /api/v1/core/me/preferences
 PATCH /api/v1/core/organisation
 PATCH /metrics
 POST /api/v1/admin/access/roles
-POST /api/v1/admin/ai/knowledge
 POST /api/v1/admin/devices/enrollment-codes
 POST /api/v1/admin/store/sync
-POST /api/v1/ai/chat
-POST /api/v1/ai/copilot
-POST /api/v1/ai/stt
-POST /api/v1/ai/translate
-POST /api/v1/ai/tts
 POST /api/v1/auth/bind/consent
 POST /api/v1/auth/bind/eid/poll
 POST /api/v1/auth/bind/eid/start
@@ -163,7 +154,6 @@ POST /oauth2/userinfo
 PUT /api/v1/admin/access/memberships/{id}/roles
 PUT /api/v1/admin/access/roles/{id}
 PUT /api/v1/admin/access/roles/{id}/permissions
-PUT /api/v1/admin/ai/prompts/{key}
 PUT /api/v1/admin/devices/staff-pin
 PUT /api/v1/admin/devices/status
 PUT /api/v1/core/me/preferences
@@ -190,6 +180,9 @@ TRACE /metrics
 [app] DELETE /api/v1/sso-clients/apps/{clientID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/consents/{userID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/tokens
+[app] GET /api/v1/admin/ai/knowledge
+[app] GET /api/v1/admin/ai/prompts
+[app] GET /api/v1/ai/stock-forecast
 [app] GET /api/v1/developer/apps/
 [app] GET /api/v1/developer/apps/{clientID}
 [app] GET /api/v1/developer/audit
@@ -210,6 +203,12 @@ TRACE /metrics
 [app] GET /api/v1/urtuu/tasks/
 [app] GET /api/v1/urtuu/tasks/board
 [app] GET /api/v1/urtuu/tasks/{id}
+[app] POST /api/v1/admin/ai/knowledge
+[app] POST /api/v1/ai/chat
+[app] POST /api/v1/ai/copilot
+[app] POST /api/v1/ai/stt
+[app] POST /api/v1/ai/translate
+[app] POST /api/v1/ai/tts
 [app] POST /api/v1/developer/apps/
 [app] POST /api/v1/developer/apps/{clientID}/rotate-secret
 [app] POST /api/v1/reports/grants
@@ -228,6 +227,7 @@ TRACE /metrics
 [app] POST /api/v1/urtuu/tasks/{id}/complete
 [app] POST /api/v1/urtuu/tasks/{id}/delegate
 [app] POST /api/v1/urtuu/tasks/{id}/return
+[app] PUT /api/v1/admin/ai/prompts/{key}
 [app] PUT /api/v1/developer/apps/{clientID}
 [app] PUT /api/v1/reports/schedules/{id}
 [app] PUT /api/v1/sso-clients/apps/{clientID}

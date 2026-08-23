@@ -23,7 +23,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
@@ -86,7 +85,6 @@ type Server struct {
 	sessions      *auth.SessionStore
 	loginLimiter  *security.IPRateLimiter
 	pollLimiter   *security.IPRateLimiter
-	aiLimiter     *security.IPRateLimiter
 	verifyLimiter *security.IPRateLimiter
 	// emailVerify is the shared "prove this address" service. It belongs to
 	// every app module rather than to the platform's own handlers, so when a
@@ -94,7 +92,6 @@ type Server struct {
 	// only because no module has asked yet, and an exported accessor nobody
 	// called read as a dependency the modules already had.
 	emailVerify *emailverify.Service
-	copilotSvc  *ai.CopilotService
 	eidSvc      *eid.EIDService
 	danSvc      *dan.DANService
 	ssoProvider *ssoprovider.SSOProvider
@@ -127,7 +124,6 @@ type Server struct {
 	bus            *cache.Bus
 	sharedLogin    *security.SharedLimiter
 	sharedPoll     *security.SharedLimiter
-	sharedAI       *security.SharedLimiter
 	sharedVerify   *security.SharedLimiter
 	backgroundApps []apps.BackgroundModule
 	eidMN          *eidmongolia.Service
@@ -252,7 +248,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// here so that no module can declare a metric with a tenant label.
 	nexus.Provide[nexus.EIDSigner](eid.AsSigner(eidSvc))
 	nexus.Provide[nexus.DANAuthenticator](dan.AsAuthenticator(danSvc))
-	nexus.Provide[nexus.RateLimiter](security.AsRateLimiter())
+	nexus.Provide[nexus.RateLimiter](security.AsRateLimiter(bus.Client()))
+	// The monthly allowance the control plane sold, as middleware a module can
+	// ask for by name. The assistant is the one metered kind today and it is an
+	// app now, so without this the app would be enforcing a number nobody sold
+	// — or nothing at all.
+	nexus.Provide[nexus.Quota](quotaRail{db: db})
 	nexus.Provide[nexus.SignatureCounter](observability.AsSignatureCounter())
 	// The report engine, as six methods rather than as fifteen package
 	// functions. See pkg/nexus/reportengine.go for why the three-step ones are
@@ -413,13 +414,11 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		sessions:      auth.NewSessionStore(db, auth.DefaultSessionTTL),
 		loginLimiter:  newLoginLimiter(),
 		pollLimiter:   newPollLimiter(),
-		aiLimiter:     security.NewIPRateLimiter(rate.Limit(float64(aiRatePerMinute)/60.0), aiBurst),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
 		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
 		emailVerify:    emailverify.NewService(db),
-		copilotSvc:     ai.NewCopilotService(db),
 		eidSvc:         eidSvc,
 		danSvc:         danSvc,
 		ssoProvider:    ssoProvider,
@@ -508,7 +507,6 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	client := s.bus.Client()
 	s.sharedLogin = security.NewSharedLimiter(client, "login", loginRatePerMinute, time.Minute)
 	s.sharedPoll = security.NewSharedLimiter(client, "poll", pollRatePerMinute, time.Minute)
-	s.sharedAI = security.NewSharedLimiter(client, "ai", aiRatePerMinute, time.Minute)
 	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
 
 	// The console borrows two of the platform's own services: the installer,
@@ -1137,16 +1135,12 @@ func (s *Server) setupRoutes() {
 			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
 			// AI Copilot & Forecasting
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/copilot", s.handleAICopilot)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/chat", s.handleAIChat)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/stt", s.handleAISTT)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/tts", s.handleAITTS)
-			pr.With(security.SharedRateLimitMiddleware(s.aiLimiter, s.sharedAI), s.aiQuota).Post("/ai/translate", s.handleAITranslate)
-			pr.With(s.aiQuota).Get("/ai/stock-forecast", s.handleAIForecast)
-			pr.With(s.requireAdmin).Get("/admin/ai/prompts", s.handleAIListPrompts)
-			pr.With(s.requireAdmin).Put("/admin/ai/prompts/{key}", s.handleAIUpdatePrompt)
-			pr.With(s.requireAdmin).Get("/admin/ai/knowledge", s.handleAIListKnowledge)
-			pr.With(s.requireAdmin).Post("/admin/ai/knowledge", s.handleAICreateKnowledge)
+			// The assistant's ten routes were here until 2026-08-23. They are
+			// internal/apps/ai's now — mounted by the module, behind the app
+			// gate, so a deployment that does not want an assistant can remove
+			// one instead of serving it. What stayed is underneath: the shared
+			// rate limiter and the monthly allowance, published as
+			// nexus.RateLimiter and nexus.Quota.
 
 			// External Integrations Manager (admin-only: a connector target URL
 			// makes the server issue arbitrary outbound requests, and an OAuth

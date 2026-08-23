@@ -1,0 +1,21 @@
+{
+  "app_id": "io.gerege.nexus.ai",
+  "entries": [
+    {
+      "version": "1.0.0",
+      "released_at": "2026-08-23",
+      "kind": "feature",
+      "summary": {
+        "mn": "Туслах нь платформын хэсэг байхаа болиод суулгаж, устгаж болдог апп болов.",
+        "en": "The assistant stopped being part of the platform and became an app that can be installed and removed."
+      },
+      "details": {
+        "mn": "Copilot, ярианаас бичвэр, бичвэрээс яриа, орчуулга, түүнчлэн байгууллагын өөрийн prompt ба мэдлэгийн дэлгэц — өмнө нь эдгээр нь server.go-гийн арван маршрут байсан тул суулгац бүр туслахыг үүрдэг, аль нь ч устгаж чаддаггүй байв. Одоо аппын хаалганы ард: суулгаагүй байгууллага 404 авна, эрх нь ai.read (асуух) ба ai.manage (prompt бичих) хоёр. Доорх рельс нь платформынх хэвээр — хүсэлтийн хурдны хязгаар ба сарын квот нь суулгацынх бөгөөд nexus.RateLimit, nexus.QuotaGate-ээр ирдэг.",
+        "en": "The copilot, speech to text, text to speech, translation, and the organisation's own prompt and knowledge screens were ten routes in server.go, which meant every deployment carried an assistant and none could remove it. They are behind the app gate now: an organisation without it installed gets 404, and two permissions divide the app — ai.read to ask, ai.manage to write the prompt everyone else then talks to. The rail underneath stays the platform's: the request budget and the monthly allowance are the deployment's, and arrive through nexus.RateLimit and nexus.QuotaGate."
+      },
+      "authors": [
+        "craftzbay"
+      ]
+    }
+  ]
+}

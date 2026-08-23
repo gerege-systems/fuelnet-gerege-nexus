@@ -86,12 +86,17 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 		}
 	}
 
-	// Nothing is chrome any more. The organisation was — the shell drew its
-	// screens as part of itself rather than as a tile on the rail — and it is a
-	// distribution's app now. A deployment that carries it gets the chrome back
-	// from its own manifest, which is the flag doing what it is for.
-	if len(chrome) != 0 {
-		t.Errorf("the shell draws %v as part of itself, want nothing", chrome)
+	// The assistant is chrome, and it is the only thing that is. The
+	// organisation was — the shell drew its screens as part of itself rather
+	// than as a tile on the rail — and it is a distribution's app now.
+	//
+	// The assistant claims it for a different reason: it has no screens at all.
+	// It is reached from the shell's chat affordance, so a tile on the rail
+	// would be a tile that opens nothing. The flag is what keeps an app out of
+	// the rail without pretending it is not installed.
+	wantChrome := []string{"io.gerege.nexus.ai"}
+	if len(chrome) != len(wantChrome) || (len(chrome) > 0 && chrome[0] != wantChrome[0]) {
+		t.Errorf("the shell draws %v as part of itself, want %v", chrome, wantChrome)
 	}
 }
 

@@ -68,6 +68,7 @@ func TestADistributionsModuleIsBuiltAfterTheCapabilitiesExist(t *testing.T) {
 	withdrawn[nexus.MeetingBooker]()
 	withdrawn[nexus.Link]()
 	withdrawn[nexus.SigningRails]()
+	withdrawn[nexus.Quota]()
 
 	// Everything a module carried by another repository reaches for today,
 	// asserted inside the callback because that is the moment in question:
@@ -92,6 +93,9 @@ func TestADistributionsModuleIsBuiltAfterTheCapabilitiesExist(t *testing.T) {
 		provided[nexus.MeetingBooker](t)
 		provided[nexus.Link](t)
 		provided[nexus.SigningRails](t)
+		// The assistant is an app now and asks for this in its constructor; a
+		// distribution's assistant would ask at the same moment.
+		provided[nexus.Quota](t)
 	}
 
 	if _, err := NewServer(pool, filepath.FromSlash("../../../catalog/apps.json"),

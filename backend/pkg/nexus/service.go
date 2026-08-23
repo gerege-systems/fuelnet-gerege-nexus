@@ -426,6 +426,37 @@ type RateLimiter interface {
 	Limit(perMinute float64, burst int) func(http.Handler) http.Handler
 }
 
+// ------------------------------------------------------------------- quotas
+
+// QuotaGate holds a route to the organisation's allowance for a metered act.
+//
+// Published for the same reason RateLimit is, and it is not the same thing: a
+// rate limit is about the next second and is enforced per caller; a quota is
+// about the month and is enforced per organisation, from what the control
+// plane sold it. A module that enforced its own would be enforcing a number
+// nobody sold.
+//
+// kind names the metered act — "ai" is the one this platform meters today. A
+// deployment that meters nothing, or a kind nothing meters, gets middleware
+// that admits everything rather than a nil panic: a missing meter must not take
+// the route down, the same rule the rate limiter follows.
+func QuotaGate(kind string) func(http.Handler) http.Handler {
+	quota, err := Capability[Quota]()
+	if err != nil {
+		slog.Warn("nexus: this deployment enforces no quotas; the route is ungated", "kind", kind)
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return quota.Gate(kind)
+}
+
+// Quota is what the platform installs for QuotaGate to use.
+type Quota interface {
+	// Gate returns middleware that refuses a request once the organisation has
+	// spent its allowance for kind this month, and admits everything for a kind
+	// this deployment does not meter.
+	Gate(kind string) func(http.Handler) http.Handler
+}
+
 // ------------------------------------------------------------------- metrics
 
 // SignatureCounter counts signatures for the deployment's metrics.
