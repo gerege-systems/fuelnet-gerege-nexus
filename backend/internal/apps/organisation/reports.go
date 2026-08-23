@@ -158,13 +158,27 @@ func (headcountByUnit) Columns() []nexus.ColumnSpec {
 //
 // The "no unit" row is the point of the report as often as the others are: it
 // is where somebody who joined and was never assigned shows up.
+// The one place this app still names a platform table, and the reason it is
+// allowed to.
+//
+// A report is SQL the app *declares* and the platform's engine *runs*: bound to
+// the caller's organisation, read-only, inside a transaction the app does not
+// open. That is not the same act as the app querying `memberships` itself,
+// which is what migration 00076 and nexus.Directory between them removed.
+//
+// It cannot be answered from organisation_people alone. That table holds a row
+// only for somebody who was given a job title or a unit, and the "no unit"
+// bucket — where somebody who joined and was never assigned shows up — is the
+// half of this report that is worth reading. The count of people is the
+// platform's number; the grouping is this app's.
 func (headcountByUnit) Run(ctx context.Context, q nexus.Querier, p nexus.Params) (nexus.Result, error) {
 	const query = `
 		SELECT coalesce(d.name, $2) AS unit,
 		       count(m.id)          AS people
 		  FROM memberships m
+		  LEFT JOIN organisation_people op ON op.membership_id = m.id
 		  LEFT JOIN departments d
-		    ON d.id = m.department_id AND d.tenant_id = m.tenant_id
+		    ON d.id = op.department_id AND d.tenant_id = m.tenant_id
 		 WHERE m.tenant_id = $1
 		 GROUP BY 1
 		 ORDER BY 2 DESC, 1`
