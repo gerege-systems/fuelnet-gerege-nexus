@@ -93,9 +93,42 @@ func (m *SSOClientsModule) Permissions() []nexus.PermissionDefinition {
 	}
 }
 
+// Menus is the one screen that exists and the five that are planned.
+//
+// The five were a blueprint inside the platform — internal/platform/menu/
+// blueprints.go, a table keyed by app id that no module outside this repository
+// could add itself to. They are declared here now, in the group each belongs
+// to, which is what deleting that table needed. Their paths follow the same
+// convention the blueprint produced, /module/<slug>/<id>, so nothing the shell
+// routes to has moved.
 func (m *SSOClientsModule) Menus() []nexus.MenuDefinition {
 	return []nexus.MenuDefinition{
-		{ID: "sso_clients_apps", Label: "SSO clients", Path: "/sso-clients", Icon: "code-2", Order: 10, Labels: map[string]string{"mn": "SSO клиентүүд", "ar": "عملاء SSO", "zh": "SSO 客户端", "fr": "Clients SSO", "ru": "SSO-клиенты", "es": "Clientes SSO"}},
+		{ID: "sso_clients_apps", Label: "SSO clients", Path: "/sso-clients", Icon: "code-2", Order: 10,
+			Labels: map[string]string{"mn": "SSO клиентүүд", "ar": "عملاء SSO", "zh": "SSO 客户端", "fr": "Clients SSO", "ru": "SSO-клиенты", "es": "Clientes SSO"}},
+
+		// API, OAuth and Webhook are product vocabulary, not prose. They stay
+		// Latin even in the scripts that would otherwise transliterate them.
+		{ID: "sso-clients_api-keys", Label: "API keys", Path: "/module/sso-clients/api-keys",
+			Icon: "key-round", Order: 20,
+			Labels: map[string]string{"mn": "API түлхүүр", "ar": "مفاتيح API", "zh": "API 密钥", "fr": "Clés API", "ru": "Ключи API", "es": "Claves API"}},
+		// Access audit sits under Modules rather than Settings: it is something
+		// you read, not something you configure.
+		{ID: "sso-clients_audit", Label: "Access audit", Path: "/module/sso-clients/audit",
+			Icon: "scroll-text", Order: 30,
+			Labels: map[string]string{"mn": "Хандалтын аудит", "ar": "تدقيق الوصول", "zh": "访问审计", "fr": "Audit des accès", "ru": "Аудит доступа", "es": "Auditoría de acceso"}},
+		// No Webhooks entry: Settings → Integrations already registers webhook
+		// listeners with a target URL and a signing secret, and a second screen
+		// over the same records would only disagree with the first eventually.
+
+		{ID: "sso-clients_scopes", Label: "OAuth scopes", Path: "/module/sso-clients/scopes",
+			Icon: "shield-check", Order: 10, Group: nexus.MenuGroupSettings,
+			Labels: map[string]string{"mn": "OAuth scope", "ar": "نطاقات OAuth", "zh": "OAuth 权限范围", "fr": "Portées OAuth", "ru": "Области OAuth", "es": "Ámbitos OAuth"}},
+		{ID: "sso-clients_redirects", Label: "Redirect policies", Path: "/module/sso-clients/redirects",
+			Icon: "route", Order: 20, Group: nexus.MenuGroupSettings,
+			Labels: map[string]string{"mn": "Redirect бодлого", "ar": "سياسات إعادة التوجيه", "zh": "重定向策略", "fr": "Politiques de redirection", "ru": "Политики перенаправления", "es": "Políticas de redirección"}},
+		{ID: "sso-clients_signing-keys", Label: "Signing keys", Path: "/module/sso-clients/signing-keys",
+			Icon: "key-square", Order: 30, Group: nexus.MenuGroupSettings,
+			Labels: map[string]string{"mn": "Гарын үсгийн түлхүүр", "ar": "مفاتيح التوقيع", "zh": "签名密钥", "fr": "Clés de signature", "ru": "Ключи подписи", "es": "Claves de firma"}},
 	}
 }
 

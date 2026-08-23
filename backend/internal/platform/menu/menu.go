@@ -2,7 +2,6 @@ package menu
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -54,33 +53,30 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		// what happened to the organisation app — a blueprint lists the entries
 		// still to be built, so having none of those is an ordinary state, not
 		// a reason to go unlisted.
-		bp, ok := blueprints[mod.ID()]
-		if !ok {
-			bp = blueprint{Slug: routeSlug(mod.ID())}
-		}
-		modulesID, settingsID := bp.Slug+"_modules", bp.Slug+"_settings"
+		slug := routeSlug(mod.ID())
+		modulesID, settingsID := slug+"_modules", slug+"_settings"
 		before := len(menus)
 		menus = append(menus,
 			localized(nexus.MenuDefinition{ID: modulesID, AppID: mod.ID(), AppName: mod.Name(), Label: "Modules", Icon: "boxes", Order: 10, Labels: groupModules}, locale),
 			localized(nexus.MenuDefinition{ID: settingsID, AppID: mod.ID(), AppName: mod.Name(), Label: "Settings", Icon: "settings", Order: 20, Labels: groupSettings}, locale),
 		)
 		for _, item := range mod.Menus() {
-			// The parent is the platform's to decide; the order is the
-			// module's. It used to be overwritten with 10 for every entry,
-			// which left the organisation app's screens — departments and
-			// people — sorting equal and coming out in whatever order the sort
+			// The parent is the platform's to decide and the group is the
+			// module's: an app has two headers and only it knows which of them
+			// a screen belongs under. Anything else — the order, the label —
+			// stays as the module declared it. The order used to be overwritten
+			// with 10 for every entry, which left the organisation app's
+			// screens sorting equal and coming out in whatever order the sort
 			// happened to leave them, changing between builds.
-			item.AppID, item.AppName, item.ParentID = mod.ID(), mod.Name(), modulesID
+			parent := modulesID
+			if item.Group == nexus.MenuGroupSettings {
+				parent = settingsID
+			}
+			item.AppID, item.AppName, item.ParentID = mod.ID(), mod.Name(), parent
 			if item.Order == 0 {
 				item.Order = defaultMenuOrder
 			}
 			menus = append(menus, localized(item, locale))
-		}
-		for i, item := range bp.Modules {
-			menus = append(menus, futureDefinition(mod.ID(), mod.Name(), modulesID, bp.Slug, item, 20+i*10, locale))
-		}
-		for i, item := range bp.Settings {
-			menus = append(menus, futureDefinition(mod.ID(), mod.Name(), settingsID, bp.Slug, item, 10+i*10, locale))
 		}
 		// Stamped afterwards rather than threaded through four construction
 		// sites: it is the same answer for every row this module contributed.
@@ -89,9 +85,9 @@ func GetTenantMenus(ctx context.Context, store InstalledAppStore, tenantID, loca
 		}
 	}
 	// External apps: a third-party service the tenant has installed. There is no
-	// Go module behind them and no blueprint of screens still to be built, so
-	// what they contribute is exactly what their manifest declares — usually one
-	// entry pointing out of this platform altogether.
+	// Go module behind them, so what they contribute is exactly what their
+	// manifest declares — usually one entry pointing out of this platform
+	// altogether.
 	for _, app := range store.GetCatalog() {
 		if !app.Manifest.IsExternal() || !enabled[app.ID] {
 			continue
@@ -139,19 +135,19 @@ func localized(item nexus.MenuDefinition, locale string) nexus.MenuDefinition {
 	item.Label = item.LocalizedLabel(locale)
 	return item
 }
-func futureDefinition(appID, appName, parent, slug string, item futureMenu, order int, locale string) nexus.MenuDefinition {
-	// Resolving through LocalizedLabel rather than an if/else on "mn" is what
-	// lets a blueprint entry answer in all seven languages: an unknown locale
-	// falls back to EN instead of silently returning Mongolian.
-	return localized(nexus.MenuDefinition{
-		ID:       fmt.Sprintf("%s_%s", slug, item.ID),
-		AppID:    appID,
-		AppName:  appName,
-		ParentID: parent,
-		Label:    item.EN,
-		Path:     fmt.Sprintf("/module/%s/%s", slug, item.ID),
-		Icon:     item.Icon,
-		Order:    order,
-		Labels:   item.Labels,
-	}, locale)
-}
+
+// The two group headers every app's menu hangs under. They are the platform's
+// words rather than an app's: every app has the same two, and an app that could
+// name them would be an app that could call its settings something else.
+var (
+	groupModules = map[string]string{
+		"mn": "Модуль", "ar": "الوحدات", "zh": "模块", "fr": "Modules", "ru": "Модули", "es": "Módulos"}
+	groupSettings = map[string]string{
+		"mn": "Тохиргоо", "ar": "الإعدادات", "zh": "设置", "fr": "Paramètres", "ru": "Настройки", "es": "Configuración"}
+)
+
+// futureDefinition turned a blueprint entry into a menu row until 2026-08-23.
+// A module declares its own entries now, in whichever of its two groups it
+// means — see nexus.MenuDefinition.Group — and internal/platform/menu no longer
+// holds a table of screens keyed by app id that only this repository's apps
+// could appear in.
