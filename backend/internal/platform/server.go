@@ -104,7 +104,7 @@ type Server struct {
 	// googleLogin is a button on this platform's own sign-in screen rather than
 	// a replacement for it — see google_login_handlers.go for why the two are
 	// separate despite sharing every line of protocol.
-	googleLogin    *ssoclient.Client
+	googleLogin        *ssoclient.Client
 	geregeSvc          *gerege.GeregeService
 	integrationMgr     *integration.Manager
 	integrationHandler *integration.Handler
@@ -442,27 +442,27 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
-		verifyLimiter:  security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
-		emailVerify:    emailverify.NewService(db),
-		eidSvc:         eidSvc,
-		danSvc:         danSvc,
-		ssoProvider:    ssoProvider,
-		ssoClient:      federatedSignIn,
-		googleLogin:    googleLogin,
+		verifyLimiter:      security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
+		emailVerify:        emailverify.NewService(db),
+		eidSvc:             eidSvc,
+		danSvc:             danSvc,
+		ssoProvider:        ssoProvider,
+		ssoClient:          federatedSignIn,
+		googleLogin:        googleLogin,
 		geregeSvc:          geregeSvc,
 		integrationMgr:     integrationMgr,
 		integrationHandler: integration.NewHandler(integrationMgr),
 		aiSvc:              ai.NewService(db),
 		staffPIN:           staffpin.NewService(db),
 		urtuuLink:          urtuuLink,
-		permissions:    permissions,
-		appGate:        memo.New[bool](appGateTTL),
-		suspended:      memo.New[bool](suspendedTTL),
-		settings:       settings.NewStore(db),
-		featureFlags:   flags.NewStore(db),
-		bus:            bus,
-		backgroundApps: appRuntime.Background,
-		eidMN:          eidMN,
+		permissions:        permissions,
+		appGate:            memo.New[bool](appGateTTL),
+		suspended:          memo.New[bool](suspendedTTL),
+		settings:           settings.NewStore(db),
+		featureFlags:       flags.NewStore(db),
+		bus:                bus,
+		backgroundApps:     appRuntime.Background,
+		eidMN:              eidMN,
 	}
 
 	// And now the closure above has something to call.
