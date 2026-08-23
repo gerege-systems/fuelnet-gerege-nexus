@@ -75,7 +75,10 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 		// documents and the organisation were here until they moved to
 		// client-gerege-nexus on 2026-08-23.
 		"io.gerege.nexus.reports",
-		"io.gerege.nexus.urtuu",
+		// Өртөө was here until 2026-08-23, when the task board left for
+		// client-gerege-nexus. The channel it runs on did not: a deployment can
+		// be on the ring with no app on top of it, which is the arrangement the
+		// module's own comment described from the day it was written.
 	}
 	if len(rail) != len(wantRail) {
 		t.Fatalf("the rail holds %v, want %v", rail, wantRail)

@@ -9,7 +9,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -43,13 +42,12 @@ var corePolicies = map[string]struct {
 	// Its claim went with it: the assertion belongs beside the module, not in
 	// the repository the module used to be in.
 	//
-	// Өртөө gates itself for the same shape of reason, but a sharper one:
-	// accepting a task and sending a task are both POSTs and are different
-	// authorities held by different people — urtuu.process answers
-	// for work this organisation has been given, urtuu.manage commits somebody
-	// else's time. A prefix rule keyed on the verb would collapse them into one.
-	"urtuu": {(*urtuu.Module)(nil), "urtuu.read", "",
-		"accepting work and commissioning work are both POSTs and are not the same authority"},
+	// Өртөө gated itself for the same shape of reason and its claim went with
+	// it to client-gerege-nexus on 2026-08-23: accepting work and commissioning
+	// work are both POSTs and are different authorities held by different
+	// people, which no prefix rule can express. The assertion belongs beside
+	// the module, not in the repository the module used to be in.
+
 }
 
 func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {

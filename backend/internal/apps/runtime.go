@@ -14,7 +14,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
-	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 )
@@ -48,17 +47,17 @@ type InstalledApps = reports.InstalledApps
 // would later call is handed over as a parameter instead; see the rails below.
 func Bootstrap(p nexus.Platform) Runtime {
 	sso := required[*ssoprovider.SSOProvider]()
-	link := required[nexus.Link]()
 	installedApps := required[InstalledApps]()
 
-	// Three apps were constructed here and are not any more. All three moved to
+	// Four apps were constructed here and are not any more. All four moved to
 	// client-gerege-nexus on 2026-08-23, in the order their contracts were
 	// published: the e-Government link once the state's registers and the audit
 	// trail were nexus.StateRegistry and nexus.AuditReader; documents once the
 	// identity rails and the PDF signing rail were nexus.EIDSigner,
 	// nexus.DANAuthenticator and nexus.SigningRails; the organisation once who
 	// belongs to it was nexus.Directory and its two columns had a table of
-	// their own (migration 00076).
+	// their own (migration 00076); and Өртөө's task board once the channel it
+	// reads was nexus.PeerDirectory rather than five tables it joined.
 	//
 	// None of them was removed for being bad. They were removed for being apps:
 	// an app that ships inside the platform is one every deployment carries
@@ -91,11 +90,12 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// the route that consumes the credential carries a device token and no
 	// session, so the app gate cannot stand in front of it.
 	appstaffpin.New(p, appstaffpin.InstalledApps(installedApps))
-	// Өртөө: the task board over the platform's channel to other installations.
-	// Constructed whether or not this deployment has a signing key — the module
-	// registers the readers for the task envelopes, and a deployment given a key
-	// later must not need a second restart before its backlog is read.
-	appurtuu.New(p, link, required[nexus.PeerDirectory]())
+	// Өртөө's task board was constructed here until 2026-08-23. It is
+	// client-gerege-nexus's now, and it reaches the channel the way any
+	// distribution's module does: nexus.Link to send, nexus.PeerDirectory to
+	// read. The channel itself did not move — a link an administrator
+	// established keeps carrying what is in flight over it whatever apps come
+	// and go.
 	// The App Store's three modules used to be constructed here. They are a
 	// product of their own now — github.com/gerege-systems/appstore-gerege-nexus
 	// — and reach this list through platform.Options.Modules, the same way any

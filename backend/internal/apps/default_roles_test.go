@@ -11,9 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -26,9 +28,11 @@ import (
 // TestEveryModuleInThisRepositoryIsClassified beside it is what stops one being
 // left out.
 var everyModule = map[string]nexus.Module{
-	"reports":     (*reports.Module)(nil),
-	"sso_clients": (*sso_clients.SSOClientsModule)(nil),
-	"urtuu":       (*urtuu.Module)(nil),
+	"reports":      (*reports.Module)(nil),
+	"sso_clients":  (*sso_clients.SSOClientsModule)(nil),
+	"ai":           (*ai.Module)(nil),
+	"integrations": (*integrations.Module)(nil),
+	"staffpin":     (*staffpin.Module)(nil),
 }
 
 // Who every permission in this binary reaches when an app is installed.
@@ -56,10 +60,18 @@ var defaultGrants = map[string]string{
 	"sso_clients.read":   "suffix",
 	"sso_clients.manage": "suffix",
 
-	"urtuu.read":    "suffix",
-	"urtuu.manage":  "suffix",
-	"urtuu.process": "suffix",
+	// The assistant and the connectors say who they reach rather than leaving it
+	// to the suffix: asking the assistant spends the organisation's allowance,
+	// writing its prompt decides what it is for everybody, and a connector's
+	// target URL makes this server call an address somebody typed.
+	"ai.read":             "manager,user",
+	"ai.manage":           "manager",
+	"integrations.manage": "admin only",
+	"staff_pin.manage":    "admin only",
 }
+
+// Өртөө's three permissions were here until 2026-08-23. They are
+// client-gerege-nexus's now, and so is the claim about them.
 
 func TestEveryPermissionSaysWhoItReaches(t *testing.T) {
 	seen := map[string]bool{}

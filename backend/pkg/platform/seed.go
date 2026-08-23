@@ -87,9 +87,12 @@ var demoTenants = []struct {
 	// There is no default app to fall back on any more either, so a seed that
 	// names nothing real leaves both tenants with an empty sidebar rather than
 	// merely a shorter one.
-	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"reports", "urtuu"}},
-	// The two tenants keep different sets: without Өртөө, this one's sidebar is
-	// still visibly not the first one's.
+	// "urtuu" left this list on 2026-08-23 with the app: the task board is
+	// client-gerege-nexus's now and its slug names nothing this binary carries.
+	// The same failure the note above describes, arriving for the fourth time.
+	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"reports", "ai"}},
+	// The two tenants keep different sets: without the assistant, this one's
+	// sidebar is still visibly not the first one's.
 	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"reports"}},
 }
 

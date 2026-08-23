@@ -148,20 +148,20 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 //
 // This was written about the e-Government link, whose routes had been platform
 // routes before it became an app. That module moved to client-gerege-nexus on
-// 2026-08-23, and documents and the organisation followed it the same day, so
-// the test asks about two apps this binary still carries. The claim has now
-// outlived three of its subjects, which is the argument for keeping it: what is
-// being asserted is the gate, not any app in particular.
+// 2026-08-23; documents, the organisation and Өртөө's task board followed it
+// the same day. The claim has now outlived four of its subjects, which is the
+// argument for keeping it: what is being asserted is the gate, not any app in
+// particular. It asks about the assistant and the reports app today.
 func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	f := newGateFixture(t)
 
 	// Nothing installed yet.
-	if res := f.do(t, http.MethodGet, "/api/v1/urtuu/tasks/board", ""); res.Code != http.StatusForbidden {
-		t.Fatalf("Өртөө answered %d without the app installed; expected 403: %s",
+	if res := f.do(t, http.MethodGet, "/api/v1/admin/ai/prompts", ""); res.Code != http.StatusForbidden {
+		t.Fatalf("the assistant answered %d without the app installed; expected 403: %s",
 			res.Code, res.Body.String())
 	}
 
-	// The reports app's own routes are unaffected by Өртөө being absent.
+	// The reports app's own routes are unaffected by the assistant being absent.
 	//
 	// The 404 check is not decoration. This used to ask for /api/v1/contacts,
 	// which was the right question when the contact register was part of the
@@ -172,7 +172,7 @@ func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	f.install(t, "io.gerege.nexus.reports")
 	res := f.do(t, http.MethodGet, "/api/v1/reports/", "")
 	if res.Code == http.StatusForbidden {
-		t.Fatalf("reports was refused while Өртөө was absent: %s", res.Body.String())
+		t.Fatalf("reports was refused while the assistant was absent: %s", res.Body.String())
 	}
 	if res.Code == http.StatusNotFound {
 		t.Fatalf("reports answered 404; this test asserts nothing unless the route is served")
@@ -181,9 +181,9 @@ func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	// And with the app installed the gate opens. A 403 here would mean the
 	// permission was refused rather than the app; the caller is a tenant
 	// administrator, who bypasses permission checks.
-	f.install(t, "io.gerege.nexus.urtuu")
-	res = f.do(t, http.MethodGet, "/api/v1/urtuu/tasks/board", "")
+	f.install(t, "io.gerege.nexus.ai")
+	res = f.do(t, http.MethodGet, "/api/v1/admin/ai/prompts", "")
 	if res.Code != http.StatusOK {
-		t.Fatalf("Өртөө answered %d with the app installed: %s", res.Code, res.Body.String())
+		t.Fatalf("the assistant answered %d with the app installed: %s", res.Code, res.Body.String())
 	}
 }
