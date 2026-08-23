@@ -49,6 +49,23 @@
   DB.QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
   Dependency.ID string
   Dependency.VersionConstraint string
+  Directory.CountAdmins(ctx context.Context, tenantID, exceptMembershipID string) (int, error)
+  Directory.Membership(ctx context.Context, tenantID, membershipID string) (DirectoryMembership, error)
+  Directory.People(ctx context.Context, tenantIDs []string) ([]DirectoryPerson, error)
+  Directory.SetActive(ctx context.Context, tenantID, membershipID string, active bool) (bool, error)
+  DirectoryMembership.IsAdmin bool
+  DirectoryMembership.UserID string
+  DirectoryPerson.Active bool
+  DirectoryPerson.Email string
+  DirectoryPerson.IsAdmin bool
+  DirectoryPerson.JoinedAt string
+  DirectoryPerson.MembershipID string
+  DirectoryPerson.Name string
+  DirectoryPerson.Phone string
+  DirectoryPerson.Roles []string
+  DirectoryPerson.TenantID string
+  DirectoryPerson.TenantName string
+  DirectoryPerson.UserID string
   DocumentDraft.Title string
   DocumentDraft.Type string
   DocumentFiler.Document(ctx context.Context, tenantID, documentID string) (FiledDocument, error)
@@ -260,6 +277,7 @@ func MigrationsOf(moduleID string) (fs.FS, bool)
 func NewParams(values map[string]any, locale string) Params
 func NewPlatform(db DB, permissions PermissionStore) Platform
 func Now() time.Time
+func People() (Directory, error)
 func ProvideAssistant(moduleID string, source AssistantSource)
 func Provide[T any](impl T)
 func RateLimit(perMinute float64, burst int) func(http.Handler) http.Handler
@@ -303,6 +321,9 @@ type DANAuthenticator interface
 type DANCitizen struct
 type DB interface
 type Dependency struct
+type Directory interface
+type DirectoryMembership struct
+type DirectoryPerson struct
 type DocumentDraft struct
 type DocumentFiler interface
 type DocumentSignatureRequest struct

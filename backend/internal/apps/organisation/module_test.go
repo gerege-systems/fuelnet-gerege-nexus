@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/directory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -82,6 +83,11 @@ func newFixture(t *testing.T) *fixture {
 
 	// The module's own router, with the tenant and the caller already resolved:
 	// what is under test is the module, not the middleware in front of it.
+	// The directory is provided, not queried. This module used to read the
+	// platform's memberships itself; it asks now, and a test stands the
+	// implementation up the same way a deployment does.
+	nexus.Provide[nexus.Directory](directory.New(pool))
+	t.Cleanup(func() { nexus.Provide[nexus.Directory](nil) })
 	module := organisation.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)))
 	router := chi.NewRouter()
 	module.RegisterRoutes(router, func(next http.Handler) http.Handler {

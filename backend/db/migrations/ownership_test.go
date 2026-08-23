@@ -44,7 +44,7 @@ var platformTables = map[string]string{
 	"app_dependencies": "app store", "app_installations": "app store",
 	"app_versions": "app store", "apps": "app store",
 	"audit_events": "audit", "credential_grants": "access recovery",
-	"departments": "organisation", "device_enrollment_codes": "devices",
+	"departments": "organisation", "organisation_people": "organisation", "device_enrollment_codes": "devices",
 	"device_telemetry": "devices", "devices": "devices",
 	"document_approval_steps": "documents", "document_eid_sign_sessions": "documents",
 	"document_files": "documents", "document_records": "documents",

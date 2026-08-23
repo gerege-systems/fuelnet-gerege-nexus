@@ -39,108 +39,44 @@ type Store struct{ db DB }
 
 func New(db DB) *Store { return &Store{db: db} }
 
-func (s *Store) ListPeople(ctx context.Context, tenantIDs []string) ([]organisation.Person, error) {
-	rows, err := s.db.Query(ctx,
-		`SELECT ms.id::text, u.id::text, u.name, u.email, u.phone, ms.job_title,
-		        COALESCE(ms.department_id::text, ''), COALESCE(d.name, ''),
-		        ms.active, u.is_admin, ms.created_at::text,
-		        COALESCE(ARRAY_AGG(r.code) FILTER (WHERE r.code IS NOT NULL), '{}'),
-		        ms.tenant_id::text, tn.name
-		   FROM memberships ms
-		   JOIN users u ON u.id = ms.user_id
-		   JOIN tenants tn ON tn.id = ms.tenant_id
-		   LEFT JOIN departments d ON d.id = ms.department_id
-		   LEFT JOIN membership_roles mr ON mr.membership_id = ms.id
-		   LEFT JOIN roles r ON r.id = mr.role_id
-		  WHERE ms.tenant_id = ANY($1::uuid[])
-		  GROUP BY ms.id, u.id, d.name, tn.name
-		  ORDER BY tn.name, ms.active DESC, u.name`, tenantIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	people := make([]organisation.Person, 0)
-	for rows.Next() {
-		var p organisation.Person
-		if err := rows.Scan(&p.MembershipID, &p.UserID, &p.Name, &p.Email, &p.Phone,
-			&p.JobTitle, &p.DepartmentID, &p.DepartmentName, &p.Active, &p.IsAdmin,
-			&p.JoinedAt, &p.Roles, &p.TenantID, &p.TenantName); err != nil {
-			return nil, organisation.Failed("could not read the people", err)
-		}
-		people = append(people, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, organisation.Failed("could not read the people", err)
-	}
-	return people, nil
-}
-
-func (s *Store) Membership(ctx context.Context, tenantID, membershipID string) (organisation.Membership, error) {
-	var m organisation.Membership
-	err := s.db.QueryRow(ctx,
-		`SELECT ms.user_id::text, u.is_admin
-		   FROM memberships ms JOIN users u ON u.id = ms.user_id
-		  WHERE ms.id = $1 AND ms.tenant_id = $2`,
-		membershipID, tenantID).Scan(&m.UserID, &m.IsAdmin)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return organisation.Membership{}, organisation.ErrCrossTenant
-	}
-	return m, err
-}
-
 func (s *Store) UpdatePerson(ctx context.Context, tenantID, membershipID string, edit organisation.PersonEdit) (bool, error) {
-	department, set := edit.Department()
+	set := edit.DepartmentID != nil
+	var department any
+	if set && *edit.DepartmentID != "" {
+		department = *edit.DepartmentID
+	}
+	// The app's own row now, not two columns on the platform's membership
+	// table. Upserted rather than updated: a person with no job title and no
+	// department has no row here, which is what keeps this table the size of
+	// the answers somebody actually gave.
 	tag, err := s.db.Exec(ctx,
-		`UPDATE memberships SET
-		     job_title     = COALESCE($3, job_title),
-		     department_id = CASE WHEN $4 THEN $5::uuid ELSE department_id END
-		 WHERE id = $1 AND tenant_id = $2`,
+		`INSERT INTO organisation_people (membership_id, tenant_id, job_title, department_id)
+		 VALUES ($1::uuid, $2::uuid, COALESCE($3, ''), CASE WHEN $4 THEN $5::uuid ELSE NULL END)
+		 ON CONFLICT (membership_id) DO UPDATE SET
+		     job_title     = COALESCE($3, organisation_people.job_title),
+		     department_id = CASE WHEN $4 THEN $5::uuid ELSE organisation_people.department_id END,
+		     updated_at    = NOW()`,
 		membershipID, tenantID, edit.JobTitle, set, department)
-	if isForeignKeyViolation(err) {
-		// Same composite key as everywhere else: a department belonging to
-		// another organisation is refused by the schema, not by a check here.
-		return false, organisation.ErrForeignDepartment
-	}
 	if err != nil {
-		return false, err
-	}
-	return tag.RowsAffected() > 0, nil
-}
-
-func (s *Store) CountAdmins(ctx context.Context, tenantID, exceptMembershipID string) (int, error) {
-	var remaining int
-	err := s.db.QueryRow(ctx,
-		`SELECT count(*) FROM memberships ms
-		   JOIN users u ON u.id = ms.user_id
-		  WHERE ms.tenant_id = $1 AND ms.active AND u.is_admin AND ms.id <> $2`,
-		tenantID, exceptMembershipID).Scan(&remaining)
-	return remaining, err
-}
-
-func (s *Store) SetPersonActive(ctx context.Context, tenantID, membershipID string, active bool) (bool, error) {
-	tag, err := s.db.Exec(ctx,
-		`UPDATE memberships SET active = $3,
-		        deactivated_at = CASE WHEN $3 THEN NULL ELSE NOW() END
-		 WHERE id = $1 AND tenant_id = $2`, membershipID, tenantID, active)
-	if err != nil {
-		return false, err
+		return false, organisation.Failed("could not save the person", err)
 	}
 	return tag.RowsAffected() > 0, nil
 }
 
 func (s *Store) ListDepartments(ctx context.Context, tenantIDs []string) ([]organisation.Department, error) {
 	rows, err := s.db.Query(ctx,
+		// The headcount reads organisation_people, not memberships: which
+		// department a person is in is this app's fact. The manager's *name*
+		// is the platform's and is filled in by the module from the
+		// directory — see internal/apps/organisation/people.go.
 		`SELECT d.id::text, d.code, d.name, COALESCE(d.parent_id::text, ''),
-		        COALESCE(d.manager_membership_id::text, ''), COALESCE(u.name, ''), d.active,
-		        (SELECT count(*) FROM memberships ms WHERE ms.department_id = d.id AND ms.active),
-		        d.tenant_id::text, tn.name
+		        COALESCE(d.manager_membership_id::text, ''), '', d.active,
+		        (SELECT count(*) FROM organisation_people op
+		          WHERE op.department_id = d.id AND op.tenant_id = d.tenant_id),
+		        d.tenant_id::text, ''
 		   FROM departments d
-		   JOIN tenants tn ON tn.id = d.tenant_id
-		   LEFT JOIN memberships mgr ON mgr.id = d.manager_membership_id
-		   LEFT JOIN users u ON u.id = mgr.user_id
 		  WHERE d.tenant_id = ANY($1::uuid[])
-		  ORDER BY tn.name, d.active DESC, d.name`, tenantIDs)
+		  ORDER BY d.tenant_id, d.active DESC, d.name`, tenantIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -236,8 +172,10 @@ func (s *Store) SetDepartmentArchived(ctx context.Context, tenantID, id string, 
 func (s *Store) CountChildren(ctx context.Context, tenantID, id string) (int, int, error) {
 	var people, units int
 	err := s.db.QueryRow(ctx,
-		`SELECT (SELECT count(*) FROM memberships WHERE department_id = $1 AND tenant_id = $2),
-		        (SELECT count(*) FROM departments  WHERE parent_id     = $1 AND tenant_id = $2)`,
+		// organisation_people, not memberships: the department a person is in
+		// is this app's fact now, on this app's table. See migration 00076.
+		`SELECT (SELECT count(*) FROM organisation_people WHERE department_id = $1 AND tenant_id = $2),
+		        (SELECT count(*) FROM departments         WHERE parent_id     = $1 AND tenant_id = $2)`,
 		id, tenantID).Scan(&people, &units)
 	return people, units, err
 }
@@ -266,4 +204,47 @@ func sqlState(err error) string {
 	return ""
 }
 
-var _ organisation.Repository = (*Store)(nil)
+// The Store answers the department half of the port. The people half is the
+// platform's and reaches the domain through the module — see
+// internal/apps/organisation/people.go, which is where the assertion now is.
+
+// PersonDetail is what this app knows about a membership: the two things that
+// used to be columns on the platform's own table.
+type PersonDetail struct {
+	JobTitle       string
+	DepartmentID   string
+	DepartmentName string
+}
+
+// Details is the app's half of a staff list, keyed by membership.
+//
+// The other half — who the person is, which organisation, which roles — is the
+// platform's and comes from nexus.Directory. The two are joined in the module,
+// which is the only layer allowed to know both; see ADR 0001 and
+// internal/apps/organisation/people.go.
+func (s *Store) Details(ctx context.Context, tenantIDs []string) (map[string]PersonDetail, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT op.membership_id::text, op.job_title,
+		        COALESCE(op.department_id::text, ''), COALESCE(d.name, '')
+		   FROM organisation_people op
+		   LEFT JOIN departments d ON d.id = op.department_id
+		  WHERE op.tenant_id = ANY($1::uuid[])`, tenantIDs)
+	if err != nil {
+		return nil, organisation.Failed("could not read the people", err)
+	}
+	defer rows.Close()
+
+	details := map[string]PersonDetail{}
+	for rows.Next() {
+		var id string
+		var detail PersonDetail
+		if err := rows.Scan(&id, &detail.JobTitle, &detail.DepartmentID, &detail.DepartmentName); err != nil {
+			return nil, organisation.Failed("could not read the people", err)
+		}
+		details[id] = detail
+	}
+	if err := rows.Err(); err != nil {
+		return nil, organisation.Failed("could not read the people", err)
+	}
+	return details, nil
+}

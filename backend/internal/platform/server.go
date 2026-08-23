@@ -31,6 +31,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/directory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
@@ -263,6 +264,10 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// functions. See pkg/nexus/reportengine.go for why the three-step ones are
 	// one call.
 	nexus.Provide[nexus.ReportEngine](reporting.AsEngine(reporting.NewEngine(db)))
+	// Who belongs to an organisation. The platform's most careful tables, and
+	// the ones a module was reading with its own SQL until migration 00076 and
+	// pkg/nexus/directory.go between them made that unnecessary.
+	nexus.Provide[nexus.Directory](directory.New(db))
 	// What this deployment is wired to. Read per call rather than captured as a
 	// snapshot, and assembled here because this is the only place all three
 	// clients are in scope. The shape is staterail's, not the app's: the

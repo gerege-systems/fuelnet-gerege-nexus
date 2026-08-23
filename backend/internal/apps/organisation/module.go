@@ -44,6 +44,7 @@
 package organisation
 
 import (
+	"log/slog"
 	"net/http"
 
 	org "github.com/gerege-systems/open-gerege-nexus/backend/domain/organisation"
@@ -78,8 +79,22 @@ type Module struct {
 	perms nexus.PermissionStore
 }
 
+// directoryOf is the platform's record of who belongs to an organisation.
+//
+// Asked for rather than queried. This module used to read users, memberships,
+// roles, membership_roles and tenants with its own SQL — five of the platform's
+// most careful tables, on a dependency no compiler could see. See
+// pkg/nexus/directory.go and migration 00076.
+func directoryOf() nexus.Directory {
+	people, err := nexus.People()
+	if err != nil {
+		slog.Warn("organisation: this deployment provides no directory; the staff screens will refuse", "error", err)
+	}
+	return people
+}
+
 func New(p nexus.Platform) *Module {
-	m := &Module{svc: org.NewService(postgres.New(p.DB())), perms: p.Permissions()}
+	m := &Module{svc: org.NewService(repository{Store: postgres.New(p.DB()), people: directoryOf()}), perms: p.Permissions()}
 	nexus.Register(m)
 	registerReports()
 	return m
