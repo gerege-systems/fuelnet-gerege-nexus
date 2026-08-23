@@ -13,7 +13,6 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -28,7 +27,6 @@ import (
 // TestEveryModuleInThisRepositoryIsClassified beside it is what stops one being
 // left out.
 var everyModule = map[string]nexus.Module{
-	"reports":      (*reports.Module)(nil),
 	"sso_clients":  (*sso_clients.SSOClientsModule)(nil),
 	"ai":           (*ai.Module)(nil),
 	"integrations": (*integrations.Module)(nil),
@@ -53,10 +51,6 @@ var everyModule = map[string]nexus.Module{
 // from client-gerege-nexus now, which is the proof that it can be said out
 // there.
 var defaultGrants = map[string]string{
-	"reports.view":     "suffix",
-	"reports.schedule": "suffix",
-	"reports.share":    "suffix",
-
 	"sso_clients.read":   "suffix",
 	"sso_clients.manage": "suffix",
 

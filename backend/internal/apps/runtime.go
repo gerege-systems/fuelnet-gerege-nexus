@@ -11,7 +11,6 @@ import (
 
 	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
 	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
@@ -26,10 +25,13 @@ type Runtime struct {
 	Background []BackgroundModule
 }
 
-// InstalledApps is how the platform tells the reports module which apps a
-// tenant has. Passed in rather than queried there, so there is one answer to
-// that question on this deployment and one place it is cached.
-type InstalledApps = reports.InstalledApps
+// InstalledApps is how the platform tells a module which apps a tenant has.
+//
+// The SDK's type since 2026-08-23. It was internal/apps/reports' own, aliased
+// here, which is how the capability came to be keyed on a name no distribution
+// could ask for — the reports app found that out on its way out of this
+// repository.
+type InstalledApps = nexus.InstalledApps
 
 // Bootstrap builds every module this binary carries, in the order they need.
 //
@@ -104,17 +106,12 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// Last, and after every module that registers a report: the reports app
 	// serves the registry, and a module constructed after it would have its
 	// reports missing from the first listing until something else rebuilt it.
-	// The engine and the two records it keeps, asked for rather than built: the
-	// schedule sweep is the platform's now and a second engine here would be a
-	// second reader of the same rows.
-	reports.New(p, installedApps,
-		required[nexus.ReportEngine](),
-		required[nexus.ReportSchedules](),
-		required[nexus.ReportGrants]())
-	// Nothing in this repository has housekeeping of its own any more. The
-	// reports app started the schedule sweep until 2026-08-23; the platform
-	// starts it now, so a deployment that removes the app keeps mailing the
-	// schedules it has.
+	// Reports was constructed here until 2026-08-23 and is client-gerege-nexus's
+	// now. What stayed is the engine underneath it — the SQL, the export, the
+	// sweep that mails a schedule at three in the morning, the check that lets
+	// one organisation's report read another's rows — published as
+	// nexus.ReportEngine, ReportSchedules and ReportGrants.
+
 	return Runtime{}
 }
 

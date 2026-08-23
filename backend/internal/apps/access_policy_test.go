@@ -6,7 +6,6 @@ import (
 
 	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
 	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appstaffpin "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -66,8 +65,11 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 	}
 }
 
-// The modules that deliberately declare nothing. reports is visible to every
-// member of a tenant that has it installed.
+// The modules that deliberately declare nothing.
+//
+// reports was the first entry and left for client-gerege-nexus on 2026-08-23
+// with its claim; it was visible to every member of a tenant that had it
+// installed.
 // Absent-because-considered and absent-because-forgotten look identical in a
 // table, so the difference is asserted rather than left to a comment.
 //
@@ -79,8 +81,7 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 // reaches the assistant from the chat affordance rather than from the sidebar.
 // A prefix rule would have to collapse those two into one.
 var policylessModules = map[string]nexus.Module{
-	"reports": (*reports.Module)(nil),
-	"ai":      (*appai.Module)(nil),
+	"ai": (*appai.Module)(nil),
 	// integrations is the third, and its single permission is administrative:
 	// there is nothing to read that is not also the power to change it, so a
 	// menu gate and a route prefix would both name integrations.manage and say
