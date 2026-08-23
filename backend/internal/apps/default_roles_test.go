@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
@@ -30,7 +29,6 @@ import (
 // left out.
 var everyModule = map[string]nexus.Module{
 	"documents":    (*documents.DocumentsModule)(nil),
-	"egov":         (*egov.Module)(nil),
 	"organisation": (*organisation.Module)(nil),
 	"reports":      (*reports.Module)(nil),
 	"sso_clients":  (*sso_clients.SSOClientsModule)(nil),
@@ -56,13 +54,6 @@ var defaultGrants = map[string]string{
 	"documents.read":   "suffix",
 	"documents.manage": "suffix",
 	"documents.sign":   "manager,user",
-
-	"egov.read": "suffix",
-	// Administrative by consequence rather than by grammar: a national
-	// registry lookup is a `.read` whose subject is not this organisation's
-	// own rows. AdminOnly, so no default role at all.
-	"egov.citizen.read": "admin only",
-	"egov.company.read": "admin only",
 
 	"organisation.read":   "suffix",
 	"organisation.manage": "suffix",

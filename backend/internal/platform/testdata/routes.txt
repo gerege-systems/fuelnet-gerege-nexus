@@ -248,8 +248,6 @@ TRACE /metrics
 [app] GET /api/v1/documents/{id}/signatures
 [app] GET /api/v1/documents/{id}/signing-rails
 [app] GET /api/v1/documents/{id}/steps
-[app] GET /api/v1/egov/connections
-[app] GET /api/v1/egov/history
 [app] GET /api/v1/esign/batches
 [app] GET /api/v1/esign/batches/{id}
 [app] GET /api/v1/esign/documents
@@ -288,8 +286,6 @@ TRACE /metrics
 [app] POST /api/v1/documents/{id}/sign/dan
 [app] POST /api/v1/documents/{id}/sign/eid/poll
 [app] POST /api/v1/documents/{id}/sign/eid/start
-[app] POST /api/v1/egov/citizen
-[app] POST /api/v1/egov/company
 [app] POST /api/v1/esign/batches
 [app] POST /api/v1/esign/batches/{id}/cancel
 [app] POST /api/v1/esign/batches/{id}/run
@@ -322,8 +318,6 @@ TRACE /metrics
 [app] POST /api/v1/urtuu/tasks/{id}/complete
 [app] POST /api/v1/urtuu/tasks/{id}/delegate
 [app] POST /api/v1/urtuu/tasks/{id}/return
-[app] POST /api/v1/xyp/citizen
-[app] POST /api/v1/xyp/company
 [app] PUT /api/v1/developer/apps/{clientID}
 [app] PUT /api/v1/documents/policies/{docType}
 [app] PUT /api/v1/documents/retention/{docType}

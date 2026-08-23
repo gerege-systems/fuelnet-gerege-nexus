@@ -139,43 +139,38 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 	f.server.forgetAppGate(f.tenantID)
 }
 
-// The e-Government endpoints are behind the app, and contacts does not care.
+// An app's routes are behind its installation, and another app's are not.
 //
-// Both halves are the point. The first is the move: these two URLs used to be
-// platform routes that any tenant could reach with the right permission, and a
-// tenant that has removed the app must now be refused. The second is what makes
-// the move safe to ship — contacts offers registry auto-fill and must not
-// become unusable on a deployment that has no state integration, so it is
-// deliberately not a dependent, and its own endpoints answer regardless.
-func TestTheStateRegistryIsBehindItsAppAndTheOrganisationIsNot(t *testing.T) {
+// Both halves are the point. The first is what the app gate is for: a tenant
+// that has not installed an app must be refused its endpoints, whatever
+// permission the caller holds. The second is what makes the gate safe — one
+// app being absent must not make another unusable.
+//
+// This was written about the e-Government link, whose routes had been platform
+// routes before it became an app. That module moved to client-gerege-nexus on
+// 2026-08-23, so the test asks about two apps this binary still carries. The
+// claim did not move with it.
+func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	f := newGateFixture(t)
 
 	// Nothing installed yet.
-	for _, target := range []string{"/api/v1/egov/citizen", "/api/v1/xyp/citizen"} {
-		res := f.do(t, http.MethodPost, target, `{"reg_number":"AA90010111"}`)
-		if res.Code != http.StatusForbidden {
-			t.Fatalf("%s answered %d without the app installed; expected 403: %s",
-				target, res.Code, res.Body.String())
-		}
-	}
-	if res := f.do(t, http.MethodGet, "/api/v1/egov/connections", ""); res.Code != http.StatusForbidden {
-		t.Fatalf("connections answered %d without the app installed; expected 403", res.Code)
+	if res := f.do(t, http.MethodGet, "/api/v1/documents", ""); res.Code != http.StatusForbidden {
+		t.Fatalf("documents answered %d without the app installed; expected 403: %s",
+			res.Code, res.Body.String())
 	}
 
-	// The organisation's own routes, on the other hand, are unaffected by the
-	// state integration being absent. What matters here is that the answer does
-	// not depend on egov.
+	// The organisation's own routes are unaffected by documents being absent.
 	//
-	// This used to ask for /api/v1/contacts, which was the right question when
-	// the contact register was part of the organisation app. Commerce took the
-	// register and migration 00075 took its table, so the route stopped
-	// existing — and the assertion, which only refuses a 403, went on passing
-	// against a 404. A test that cannot fail is worse than no test, so it now
-	// asks for a route the organisation app actually serves.
+	// The 404 check is not decoration. This used to ask for /api/v1/contacts,
+	// which was the right question when the contact register was part of the
+	// organisation app; commerce took the register and migration 00075 took its
+	// table, so the route stopped existing — and the assertion, which only
+	// refuses a 403, went on passing against a 404. A test that cannot fail is
+	// worse than no test.
 	f.install(t, "io.gerege.nexus.organisation")
 	res := f.do(t, http.MethodGet, "/api/v1/organisation/departments", "")
 	if res.Code == http.StatusForbidden {
-		t.Fatalf("departments was refused while the e-Government app was absent: %s", res.Body.String())
+		t.Fatalf("departments was refused while documents was absent: %s", res.Body.String())
 	}
 	if res.Code == http.StatusNotFound {
 		t.Fatalf("departments answered 404; this test asserts nothing unless the route is served")
@@ -184,9 +179,9 @@ func TestTheStateRegistryIsBehindItsAppAndTheOrganisationIsNot(t *testing.T) {
 	// And with the app installed the gate opens. A 403 here would mean the
 	// permission was refused rather than the app; the caller is a tenant
 	// administrator, who bypasses permission checks.
-	f.install(t, "io.gerege.nexus.egov")
-	res = f.do(t, http.MethodGet, "/api/v1/egov/connections", "")
+	f.install(t, "io.gerege.nexus.documents")
+	res = f.do(t, http.MethodGet, "/api/v1/documents", "")
 	if res.Code != http.StatusOK {
-		t.Fatalf("connections answered %d with the app installed: %s", res.Code, res.Body.String())
+		t.Fatalf("documents answered %d with the app installed: %s", res.Code, res.Body.String())
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
@@ -41,8 +40,6 @@ var corePolicies = map[string]struct {
 	// The two that gate themselves, and why the verb is not enough for them.
 	"documents": {(*documents.DocumentsModule)(nil), "documents.read", "",
 		"who may read a document depends on who it was shared with"},
-	"egov": {(*egov.Module)(nil), "egov.read", "",
-		"a citizen-registry lookup is a GET that must not be a read every member holds"},
 	// Өртөө gates itself for the same shape of reason as the other two, but a
 	// sharper one: accepting a task and sending a task are both POSTs and are
 	// different authorities held by different people — urtuu.process answers

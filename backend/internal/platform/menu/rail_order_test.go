@@ -72,8 +72,8 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 		"io.gerege.nexus.documents",   // order 10
 		"io.gerege.nexus.sso_clients", // order 20
 		// No order declared, so id order among themselves — which is where the
-		// list this replaced also put them, by falling through to 999.
-		"io.gerege.nexus.egov",
+		// list this replaced also put them, by falling through to 999. egov was
+		// here until it moved to client-gerege-nexus on 2026-08-23.
 		"io.gerege.nexus.reports",
 		"io.gerege.nexus.urtuu",
 	}

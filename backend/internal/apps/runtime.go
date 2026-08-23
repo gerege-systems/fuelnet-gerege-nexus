@@ -10,7 +10,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/documents"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/egov"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/organisation"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
@@ -63,10 +62,10 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// commerce-gerege-nexus, because everybody has departments and only a
 	// business has customers.
 	organisation.New(p)
-	// The state's systems, as an app rather than as two handlers in the
-	// platform's route table. The low-level clients stay where they are; this
-	// is their app-facing surface, and the thing contacts reaches through.
-	egov.New(p)
+	// The e-Government link was constructed here. It moved to
+	// client-gerege-nexus on 2026-08-23: the state's registers and the audit
+	// trail are contracts now (nexus.StateRegistry, nexus.AuditReader), so the
+	// module had nothing left that only this repository could give it.
 	// The documents app and the PDF signing rails it absorbed. The rails are
 	// built first and handed in rather than registering themselves: there is one
 	// app here now, and only one thing may answer for io.gerege.nexus.documents.
