@@ -112,6 +112,7 @@
   MenuDefinition.AppName string
   MenuDefinition.AppOrder int
   MenuDefinition.ExternalURL string
+  MenuDefinition.Group string
   MenuDefinition.ID string
   MenuDefinition.Icon string
   MenuDefinition.Label string
@@ -314,6 +315,8 @@ const ColumnText
 const DefaultRoleManager
 const DefaultRoleUser
 const DefaultTimezone
+const MenuGroupModules
+const MenuGroupSettings
 const ParamBool
 const ParamDateRange
 const ParamSelect

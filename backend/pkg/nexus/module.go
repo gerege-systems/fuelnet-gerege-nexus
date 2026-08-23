@@ -111,6 +111,14 @@ func (p PermissionDefinition) Validate() error {
 	return nil
 }
 
+// The two headers an app's screens hang under. A module names one in
+// MenuDefinition.Group; anything else, including the empty string, is treated
+// as MenuGroupModules.
+const (
+	MenuGroupModules  = "modules"
+	MenuGroupSettings = "settings"
+)
+
 // MenuDefinition defines a navigation menu item for an app module.
 type MenuDefinition struct {
 	ID       string `json:"id"`
@@ -127,6 +135,17 @@ type MenuDefinition struct {
 	ExternalURL string `json:"external_url,omitempty"`
 	Icon        string `json:"icon"`
 	Order       int    `json:"order"`
+
+	// Group is which of an app's two headers this entry hangs under: "modules"
+	// for the screens people work in, "settings" for the ones an administrator
+	// configures. Empty means modules, which is what most entries are.
+	//
+	// The platform decides the parent id — an app cannot point an entry at
+	// another app's group — and this is how a module says which of its own two
+	// it means. Before it existed, that answer lived in a table inside the
+	// platform keyed by app id, which no module outside this repository could
+	// add to; internal/platform/menu/blueprints.go was that table.
+	Group string `json:"-"`
 
 	// AppOrder and AppChrome describe the *app* this entry belongs to rather
 	// than the entry itself, and the platform fills them in from the app's

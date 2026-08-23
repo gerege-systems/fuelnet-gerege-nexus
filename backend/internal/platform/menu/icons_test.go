@@ -35,14 +35,11 @@ func TestEveryMenuIconIsDrawnByTheFrontend(t *testing.T) {
 		t.Fatal("read no icons out of the lucide export; the check is not measuring anything")
 	}
 
-	// Two sources, because menus come from two places: the blueprint of screens
-	// still to be built, and the menus each module registers itself.
+	// One source since 2026-08-23: every menu entry is declared by the module
+	// that owns it. There was a second — a blueprint of screens still to be
+	// built, kept in this package — and reading Go source for `Icon: "..."` is
+	// what covers both shapes without knowing either.
 	named := map[string]string{}
-	for appID, bp := range blueprints {
-		for _, item := range append(append([]futureMenu{}, bp.Modules...), bp.Settings...) {
-			named[item.Icon] = appID + "/" + item.ID
-		}
-	}
 	appsDir := filepath.Join(root, "backend", "internal", "apps")
 	err := filepath.WalkDir(appsDir, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") {
@@ -98,4 +95,30 @@ func lucideIcons(t *testing.T, root string) map[string]bool {
 		t.Fatalf("scan the lucide icon list: %v", err)
 	}
 	return names
+}
+
+// repoRoot is the directory holding both halves of the repository.
+//
+// It lived in blueprints_test.go until that file went with the blueprint table
+// on 2026-08-23; this is the only test left in this package that reaches across
+// the two halves, so it lives here now.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("cwd: %v", err)
+	}
+	// Walk up until the directory holding both halves of the repository.
+	for range 8 {
+		if _, err := os.Stat(filepath.Join(dir, "frontend", "app")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	t.Skip("frontend tree not found next to the backend module; skipping the icon check")
+	return ""
 }
