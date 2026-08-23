@@ -36,44 +36,10 @@ var blueprints = map[string]blueprint{
 	// holds sku, name, price and active, so categories, price lists, units,
 	// attributes and tax profiles would each be a menu entry over no data.
 
-	// One app, two things kept in it: records that move through an approval
-	// chain, and PDFs that arrive already written and need a signature on them.
-	// The PDF half was its own blueprint under slug `esign` until the two apps
-	// became one; its entries are here unchanged apart from where they point.
-	//
-	// The order is the reading order of the work: what is waiting, what is
-	// signed, what a document is started from, what a batch of them is run as.
-	"io.gerege.nexus.documents": {Slug: "documents",
-		Modules: []futureMenu{
-			{ID: "approvals", EN: "Approval queue", Icon: "list-checks", Labels: map[string]string{
-				"mn": "Батлах дараалал", "ar": "قائمة الموافقات", "zh": "审批队列", "fr": "File d'approbation", "ru": "Очередь согласования", "es": "Cola de aprobación"}},
-			{ID: "pdf", EN: "PDF signing", Icon: "pen-tool", Labels: map[string]string{
-				"mn": "PDF гарын үсэг", "ar": "توقيع PDF", "zh": "PDF 签名", "fr": "Signature PDF", "ru": "Подпись PDF", "es": "Firma de PDF"}},
-			{ID: "logs", EN: "Signature logs", Icon: "scroll-text", Labels: map[string]string{
-				"mn": "Гарын үсгийн лог", "ar": "سجلات التوقيع", "zh": "签名日志", "fr": "Journaux de signature", "ru": "Журналы подписей", "es": "Registros de firma"}},
-			{ID: "templates", EN: "Document templates", Icon: "files", Labels: map[string]string{
-				"mn": "Баримтын загвар", "ar": "قوالب المستندات", "zh": "文档模板", "fr": "Modèles de documents", "ru": "Шаблоны документов", "es": "Plantillas de documentos"}},
-			{ID: "batch", EN: "Batch signing", Icon: "layers", Labels: map[string]string{
-				"mn": "Багц баталгаажуулалт", "ar": "التوقيع المجمع", "zh": "批量签名", "fr": "Signature par lot", "ru": "Пакетное подписание", "es": "Firma por lotes"}},
-		},
-		Settings: []futureMenu{
-			{ID: "workflows", EN: "Document workflows", Icon: "workflow", Labels: map[string]string{
-				"mn": "Баримтын урсгал", "ar": "سير عمل المستندات", "zh": "文档流程", "fr": "Flux de documents", "ru": "Процессы документов", "es": "Flujos de documentos"}},
-			// Two screens said "Signature policies" when these were two apps,
-			// and under one menu that is a coin toss rather than a choice. This
-			// one is which channel a document *type* may be signed through;
-			// `rails` below is which of the two PDF machines is switched on.
-			{ID: "signatures", EN: "Signature policies", Icon: "pen-tool", Labels: map[string]string{
-				"mn": "Гарын үсгийн бодлого", "ar": "سياسات التوقيع", "zh": "签名策略", "fr": "Politiques de signature", "ru": "Политики подписи", "es": "Políticas de firma"}},
-			{ID: "rails", EN: "PDF signing rails", Icon: "shield-check", Labels: map[string]string{
-				"mn": "PDF гарын үсгийн суваг", "ar": "مسارات توقيع PDF", "zh": "PDF 签署通道", "fr": "Canaux de signature PDF", "ru": "Каналы подписания PDF", "es": "Canales de firma de PDF"}},
-			{ID: "placement", EN: "Stamp placement", Icon: "move", Labels: map[string]string{
-				"mn": "Тамганы байрлал", "ar": "موضع الختم", "zh": "印章位置", "fr": "Position du cachet", "ru": "Расположение печати", "es": "Posición del sello"}},
-			{ID: "hsm", EN: "HSM connection", Icon: "server-cog", Labels: map[string]string{
-				"mn": "HSM холболт", "ar": "اتصال HSM", "zh": "HSM 连接", "fr": "Connexion HSM", "ru": "Подключение HSM", "es": "Conexión HSM"}},
-			{ID: "retention", EN: "Retention rules", Icon: "archive", Labels: map[string]string{
-				"mn": "Хадгалалтын дүрэм", "ar": "قواعد الاحتفاظ", "zh": "保留规则", "fr": "Règles de conservation", "ru": "Правила хранения", "es": "Reglas de retención"}},
-		}},
+	// documents had a blueprint here until 2026-08-23, ten entries over two
+	// groups. The app left for client-gerege-nexus and its module declares
+	// them there; a blueprint for an id no module in this binary claims is
+	// unreachable — menu.go only looks one up for a registered module.
 
 	"io.gerege.nexus.sso_clients": {Slug: "sso-clients",
 		Modules: []futureMenu{
