@@ -148,10 +148,11 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 //
 // This was written about the e-Government link, whose routes had been platform
 // routes before it became an app. That module moved to client-gerege-nexus on
-// 2026-08-23; documents, the organisation and Өртөө's task board followed it
-// the same day. The claim has now outlived four of its subjects, which is the
-// argument for keeping it: what is being asserted is the gate, not any app in
-// particular. It asks about the assistant and the reports app today.
+// 2026-08-23; documents, the organisation, Өртөө's task board and the reports
+// app followed it the same day. The claim has now outlived five of its
+// subjects, which is the argument for keeping it: what is being asserted is the
+// gate, not any app in particular. It asks about the assistant and the SSO
+// client register today.
 func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	f := newGateFixture(t)
 
@@ -169,13 +170,13 @@ func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	// table, so the route stopped existing — and the assertion, which only
 	// refuses a 403, went on passing against a 404. A test that cannot fail is
 	// worse than no test.
-	f.install(t, "io.gerege.nexus.reports")
-	res := f.do(t, http.MethodGet, "/api/v1/reports/", "")
+	f.install(t, "io.gerege.nexus.sso_clients")
+	res := f.do(t, http.MethodGet, "/api/v1/sso-clients/apps/", "")
 	if res.Code == http.StatusForbidden {
-		t.Fatalf("reports was refused while the assistant was absent: %s", res.Body.String())
+		t.Fatalf("sso-clients was refused while the assistant was absent: %s", res.Body.String())
 	}
 	if res.Code == http.StatusNotFound {
-		t.Fatalf("reports answered 404; this test asserts nothing unless the route is served")
+		t.Fatalf("sso-clients answered 404; this test asserts nothing unless the route is served")
 	}
 
 	// And with the app installed the gate opens. A 403 here would mean the

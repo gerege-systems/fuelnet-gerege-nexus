@@ -12,7 +12,6 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3,
   Box,
   Boxes,
   Code2,
@@ -33,7 +32,6 @@ import {
 } from "lucide-react";
 
 export const ICONS: Record<string, LucideIcon> = {
-  "bar-chart-3": BarChart3,
   "box": Box,
   "boxes": Boxes,
   "code-2": Code2,
