@@ -136,13 +136,7 @@ func (s *Server) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	credential, err := nexus.Capability[nexus.StaffCredential]()
-	if err != nil {
-		httpx.Error(w, http.StatusNotFound, "no app on this deployment authenticates staff on a device")
-		return
-	}
-
-	identity, err := credential.Verify(r.Context(), device.TenantID, req.PIN)
+	identity, err := s.staffPIN.Verify(r.Context(), device.TenantID, req.PIN)
 	switch {
 	case errors.Is(err, nexus.ErrStaffCredentialRejected):
 		// One answer for a wrong secret, a locked credential and an

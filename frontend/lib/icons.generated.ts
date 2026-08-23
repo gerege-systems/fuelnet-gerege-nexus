@@ -14,7 +14,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Box,
   Boxes,
-  BrainCircuit,
   Code2,
   FileText,
   Grid,
@@ -35,7 +34,6 @@ import {
 export const ICONS: Record<string, LucideIcon> = {
   "box": Box,
   "boxes": Boxes,
-  "brain-circuit": BrainCircuit,
   "code-2": Code2,
   "file-text": FileText,
   "grid": Grid,

@@ -1,4 +1,4 @@
-package integrations
+package integration
 
 import (
 	"encoding/json"
@@ -8,8 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 )
 
 // Every error from the integration manager used to come back as a 400 carrying
@@ -29,28 +27,28 @@ func TestIntegrationErrorsAreAnsweredByWhatTheyAre(t *testing.T) {
 	}{
 		{
 			name:        "another tenant's connector",
-			err:         integration.ErrNotFound,
+			err:         ErrNotFound,
 			wantStatus:  http.StatusNotFound,
 			wantMessage: "integration not found",
 		},
 		{
 			name:       "a name already in use",
-			err:        integration.ErrDuplicateName,
+			err:        ErrDuplicateName,
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name:       "no key to seal credentials with",
-			err:        integration.ErrNoEncryptionKey,
+			err:        ErrNoEncryptionKey,
 			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "a provider this deployment never configured",
-			err:        fmt.Errorf("%w: provider dropbox needs X and Y", integration.ErrProviderUnavailable),
+			err:        fmt.Errorf("%w: provider dropbox needs X and Y", ErrProviderUnavailable),
 			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:        "something the administrator typed",
-			err:         &integration.InvalidError{Message: "a connector needs a name"},
+			err:         &InvalidError{Message: "a connector needs a name"},
 			wantStatus:  http.StatusBadRequest,
 			wantMessage: "a connector needs a name",
 		},

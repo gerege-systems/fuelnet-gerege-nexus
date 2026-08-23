@@ -14,7 +14,7 @@ import AICopilot from "@/components/AICopilot";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
 import { MenuIcon } from "@/lib/icons";
-import { LayoutGrid, Settings, Menu as HamburgerIcon, Palette, Building2, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { LayoutGrid, Settings, Menu as HamburgerIcon, Palette, Building2, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Sparkles, Link2 } from "lucide-react";
 
 // app_order and app_chrome describe the app rather than the entry: where its
 // tile sits in the rail, and whether it has a tile at all. Both come from the
@@ -274,12 +274,8 @@ export default function Layout({children}:{children:React.ReactNode}){
         somebody to hold two answers for where the same page is. */}
     <NavLink href="/settings/apps" active={pathname==="/settings/apps"} icon={<Settings className="w-5 h-5"/>} label={t("web.menu.installed_apps")}/>
     <NavLink href="/settings/appearance" active={pathname==="/settings/appearance"} icon={<Palette className="w-5 h-5"/>} label={t("web.menu.appearance")}/>
-    {/* The connectors and the assistant were written out here until
-        2026-08-23, when both became apps. A link the shell owns is a link every
-        deployment shows whether or not the app is installed — and an
-        organisation that had never installed the assistant was still being
-        offered its settings screen. They arrive with their app now, in the
-        group it asked for, and leave with it. */}
+    {user?.is_admin&&<NavLink href="/settings/ai" active={pathname==="/settings/ai"} icon={<Sparkles className="w-5 h-5"/>} label={t("ai.view.settings_title")}/>}
+    {user?.is_admin&&<NavLink href="/settings/integrations" active={pathname==="/settings/integrations"} icon={<Link2 className="w-5 h-5"/>} label={t("integrations.view.title")}/>}
     {chromeEntries("settings").map(item=>
       <NavLink key={item.id} href={item.path!} active={item.path===pathname}
         icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>)}

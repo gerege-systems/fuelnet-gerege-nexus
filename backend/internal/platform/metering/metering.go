@@ -30,14 +30,12 @@ package metering
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -232,25 +230,4 @@ func MonthToDate(ctx context.Context, db *pgxpool.Pool, tenantID, metric string)
 		return 0, fmt.Errorf("metering: read the month's %s: %w", metric, err)
 	}
 	return total, nil
-}
-
-// Latest is the most recent value of a metric that is a state rather than a
-// count — storage, which is measured rather than accumulated.
-//
-// An organisation with no rows yet is zero rather than an error: nothing has
-// been counted for them, which is what a new organisation looks like on the
-// morning before the first collection.
-func Latest(ctx context.Context, db *pgxpool.Pool, tenantID, metric string) (int64, error) {
-	var value int64
-	err := db.QueryRow(ctx,
-		`SELECT COALESCE(value, 0) FROM usage_events
-		  WHERE tenant_id = $1::uuid AND metric = $2
-		  ORDER BY day DESC LIMIT 1`, tenantID, metric).Scan(&value)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, fmt.Errorf("metering: read the latest %s: %w", metric, err)
-	}
-	return value, nil
 }

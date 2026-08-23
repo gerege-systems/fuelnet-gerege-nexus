@@ -23,6 +23,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
@@ -50,6 +51,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -103,8 +105,11 @@ type Server struct {
 	// a replacement for it — see google_login_handlers.go for why the two are
 	// separate despite sharing every line of protocol.
 	googleLogin    *ssoclient.Client
-	geregeSvc      *gerege.GeregeService
-	integrationMgr *integration.Manager
+	geregeSvc          *gerege.GeregeService
+	integrationMgr     *integration.Manager
+	integrationHandler *integration.Handler
+	aiSvc              *ai.Service
+	staffPIN           *staffpin.Service
 	// urtuuLink is the Өртөө channel: the links to other installations and the
 	// queues in both directions. A platform service rather than part of the
 	// Өртөө app, because the channel is infrastructure any module may reach for
@@ -444,9 +449,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		ssoProvider:    ssoProvider,
 		ssoClient:      federatedSignIn,
 		googleLogin:    googleLogin,
-		geregeSvc:      geregeSvc,
-		integrationMgr: integrationMgr,
-		urtuuLink:      urtuuLink,
+		geregeSvc:          geregeSvc,
+		integrationMgr:     integrationMgr,
+		integrationHandler: integration.NewHandler(integrationMgr),
+		aiSvc:              ai.NewService(db),
+		staffPIN:           staffpin.NewService(db),
+		urtuuLink:          urtuuLink,
 		permissions:    permissions,
 		appGate:        memo.New[bool](appGateTTL),
 		suspended:      memo.New[bool](suspendedTTL),
@@ -1073,15 +1081,7 @@ func (s *Server) setupRoutes() {
 		api.With(s.deviceMiddleware).Post("/devices/telemetry", s.handleDeviceTelemetry)
 
 		// The OAuth redirect a connected provider sends the browser back to.
-		// Unauthenticated on purpose — see handleIntegrationOAuthCallback: the
-		// single-use state row is what carries the authority here, because a
-		// cross-site redirect from Google cannot be relied on to present a
-		// session cookie at all.
-		// The connector OAuth callback was here until 2026-08-23 — an
-		// unauthenticated route, because the provider sends the
-		// administrator's browser back with no session of ours. It is
-		// internal/apps/integrations' now, registered by that module outside
-		// its own gate for the same reason.
+		api.Get("/integrations/oauth/callback", s.integrationHandler.HandleOAuthCallback)
 
 		// Where the verification service returns somebody who has just proved
 		// an address. Unauthenticated on purpose: they have not signed in, and
@@ -1129,10 +1129,7 @@ func (s *Server) setupRoutes() {
 			pr.Get("/menus", s.handleMenus)
 			pr.With(s.requireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
 			pr.With(s.requireAdmin).Get("/admin/devices", s.handleListDevices)
-			// Setting a member's staff PIN was here until 2026-08-23. It is
-			// internal/apps/staffpin's route now — the credential is a
-			// product's, the sign-in it feeds is the platform's, and the two
-			// halves are split along that line rather than along this file.
+			pr.With(s.requireAdmin).Put("/admin/devices/staff-pin", s.staffPIN.HandleSetPIN)
 			pr.With(s.requireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
 			pr.Post("/push-tokens", s.handleRegisterPushToken)
 
@@ -1172,18 +1169,36 @@ func (s *Server) setupRoutes() {
 			// of people's addresses and what they were asked to prove.
 			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
 
-			// AI Copilot & Forecasting
-			// The assistant's ten routes were here until 2026-08-23. They are
-			// internal/apps/ai's now — mounted by the module, behind the app
-			// gate, so a deployment that does not want an assistant can remove
-			// one instead of serving it. What stayed is underneath: the shared
-			// rate limiter and the monthly allowance, published as
-			// nexus.RateLimiter and nexus.Quota.
+			// AI Copilot, Speech, Translation & Forecasting
+			pr.Route("/ai", func(air chi.Router) {
+				air.With(nexus.RequirePermission(s.permissions, "ai.read"), nexus.RateLimit(20, 10), nexus.QuotaGate("ai")).Post("/copilot", s.aiSvc.HandleAICopilot)
+				air.With(nexus.RequirePermission(s.permissions, "ai.read"), nexus.RateLimit(20, 10), nexus.QuotaGate("ai")).Post("/chat", s.aiSvc.HandleAIChat)
+				air.With(nexus.RequirePermission(s.permissions, "ai.read"), nexus.RateLimit(20, 10), nexus.QuotaGate("ai")).Post("/stt", s.aiSvc.HandleAISTT)
+				air.With(nexus.RequirePermission(s.permissions, "ai.read"), nexus.RateLimit(20, 10), nexus.QuotaGate("ai")).Post("/tts", s.aiSvc.HandleAITTS)
+				air.With(nexus.RequirePermission(s.permissions, "ai.read"), nexus.RateLimit(20, 10), nexus.QuotaGate("ai")).Post("/translate", s.aiSvc.HandleAITranslate)
+				air.With(nexus.RequirePermission(s.permissions, "ai.read"), nexus.QuotaGate("ai")).Get("/stock-forecast", s.aiSvc.HandleAIForecast)
+			})
 
-			// The connector administration — eight admin-only routes — was
-			// here until 2026-08-23. Administering a rail is an app; the rail
-			// itself stayed, because the signing rails file documents through
-			// it and nexus.MeetingBooker is its adapter.
+			pr.Route("/admin/ai", func(aair chi.Router) {
+				aair.Use(s.requireAdmin)
+				aair.Get("/prompts", s.aiSvc.HandleAIListPrompts)
+				aair.Put("/prompts/{key}", s.aiSvc.HandleAIUpdatePrompt)
+				aair.Get("/knowledge", s.aiSvc.HandleAIListKnowledge)
+				aair.Post("/knowledge", s.aiSvc.HandleAICreateKnowledge)
+			})
+
+			// Integrations
+			pr.Route("/integrations", func(ir chi.Router) {
+				ir.Use(s.requireAdmin)
+				ir.Get("/", s.integrationHandler.HandleList)
+				ir.Post("/", s.integrationHandler.HandleRegister)
+				ir.Get("/providers", s.integrationHandler.HandleProviders)
+				ir.Get("/deliveries", s.integrationHandler.HandleDeliveries)
+				ir.Put("/{id}", s.integrationHandler.HandleUpdate)
+				ir.Delete("/{id}", s.integrationHandler.HandleDelete)
+				ir.Post("/{id}/connect", s.integrationHandler.HandleConnect)
+				ir.Post("/{id}/disconnect", s.integrationHandler.HandleDisconnect)
+			})
 
 			// Store — reads are open to any tenant member, mutations are
 			// tenant-administrator only. Previously every authenticated user

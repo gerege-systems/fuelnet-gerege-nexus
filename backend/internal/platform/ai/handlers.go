@@ -21,9 +21,23 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (m *Module) handleAICopilot(w http.ResponseWriter, r *http.Request) {
+// Service provides the platform's AI capabilities.
+type Service struct {
+	db      nexus.DB
+	copilot *CopilotService
+}
+
+// NewService builds the AI service.
+func NewService(db nexus.DB) *Service {
+	return &Service{
+		db:      db,
+		copilot: NewCopilotService(db),
+	}
+}
+
+func (s *Service) HandleAICopilot(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("copilot")
-	m.recordAIUse(r, "copilot")
+	s.recordAIUse(r, "copilot")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -37,7 +51,7 @@ func (m *Module) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.copilot.Query(r.Context(), CopilotRequest{
+	res, err := s.copilot.Query(r.Context(), CopilotRequest{
 		Prompt:   req.Prompt,
 		TenantID: tenantID,
 	})
@@ -50,9 +64,9 @@ func (m *Module) handleAICopilot(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-func (m *Module) handleAIChat(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAIChat(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("chat")
-	m.recordAIUse(r, "chat")
+	s.recordAIUse(r, "chat")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -63,7 +77,7 @@ func (m *Module) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.TenantID = tenantID
-	res, err := m.copilot.Query(r.Context(), req)
+	res, err := s.copilot.Query(r.Context(), req)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
@@ -71,9 +85,9 @@ func (m *Module) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, res)
 }
 
-func (m *Module) handleAISTT(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAISTT(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("stt")
-	m.recordAIUse(r, "stt")
+	s.recordAIUse(r, "stt")
 	var req struct {
 		Audio Audio `json:"audio"`
 	}
@@ -81,7 +95,7 @@ func (m *Module) handleAISTT(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "invalid audio request")
 		return
 	}
-	text, err := m.copilot.Transcribe(r.Context(), req.Audio)
+	text, err := s.copilot.Transcribe(r.Context(), req.Audio)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
@@ -89,9 +103,9 @@ func (m *Module) handleAISTT(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"text": text})
 }
 
-func (m *Module) handleAITTS(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAITTS(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("tts")
-	m.recordAIUse(r, "tts")
+	s.recordAIUse(r, "tts")
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -99,7 +113,7 @@ func (m *Module) handleAITTS(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "text is required")
 		return
 	}
-	audio, err := m.copilot.Speak(r.Context(), req.Text)
+	audio, err := s.copilot.Speak(r.Context(), req.Text)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
@@ -107,9 +121,9 @@ func (m *Module) handleAITTS(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, audio)
 }
 
-func (m *Module) handleAITranslate(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAITranslate(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("translate")
-	m.recordAIUse(r, "translate")
+	s.recordAIUse(r, "translate")
 	var req struct {
 		Text   string `json:"text"`
 		Audio  *Audio `json:"audio"`
@@ -122,32 +136,32 @@ func (m *Module) handleAITranslate(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Text == "" && req.Audio != nil {
 		var err error
-		req.Text, err = m.copilot.Transcribe(r.Context(), *req.Audio)
+		req.Text, err = s.copilot.Transcribe(r.Context(), *req.Audio)
 		if err != nil {
 			httpx.Error(w, aiStatus(err), err.Error())
 			return
 		}
 	}
-	translated, err := m.copilot.Translate(r.Context(), req.Text, req.Target)
+	translated, err := s.copilot.Translate(r.Context(), req.Text, req.Target)
 	if err != nil {
 		httpx.Error(w, aiStatus(err), err.Error())
 		return
 	}
 	result := map[string]any{"source_text": req.Text, "translated": translated}
 	if req.Speak {
-		if sound, e := m.copilot.Speak(r.Context(), translated); e == nil {
+		if sound, e := s.copilot.Speak(r.Context(), translated); e == nil {
 			result["audio"] = sound
 		}
 	}
 	httpx.JSON(w, http.StatusOK, result)
 }
 
-func (m *Module) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	rows, err := m.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
+	rows, err := s.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load AI prompts")
 		return
@@ -169,7 +183,8 @@ func (m *Module) handleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, 200, items)
 }
-func (m *Module) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
+
+func (s *Service) HandleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -187,19 +202,20 @@ func (m *Module) handleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "content is required")
 		return
 	}
-	_, err := m.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
+	_, err := s.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save AI prompt")
 		return
 	}
 	httpx.JSON(w, 200, map[string]string{"status": "saved"})
 }
-func (m *Module) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
+
+func (s *Service) HandleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
 	}
-	rows, err := m.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
+	rows, err := s.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load knowledge")
 		return
@@ -221,7 +237,8 @@ func (m *Module) handleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, 200, items)
 }
-func (m *Module) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request) {
+
+func (s *Service) HandleAICreateKnowledge(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -236,7 +253,7 @@ func (m *Module) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var id string
-	err := m.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
+	err := s.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save knowledge")
 		return
@@ -246,20 +263,9 @@ func (m *Module) handleAICreateKnowledge(w http.ResponseWriter, r *http.Request)
 
 func aiStatus(error) int { return http.StatusBadGateway }
 
-// handleAIForecast asks whichever app lends a stock forecast for one.
-//
-// The platform used to compute it: a query over products and stock_levels, both
-// of which are commerce's tables and are in business-gerege-nexus. On a
-// deployment without commerce it returned an empty list, which reads as "you
-// have nothing to reorder" rather than as "this deployment cannot tell you".
-//
-// The route stays mounted either way. A route table that changes shape with the
-// environment is a route table nobody can reason about — the same principle the
-// health and readiness endpoints follow — so the endpoint answers 404 when
-// nothing provides the tool rather than disappearing from the router.
-func (m *Module) handleAIForecast(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleAIForecast(w http.ResponseWriter, r *http.Request) {
 	observability.RecordAIRequest("forecast")
-	m.recordAIUse(r, "forecast")
+	s.recordAIUse(r, "forecast")
 	tenantID, ok := tenant.Require(w, r)
 	if !ok {
 		return
@@ -281,23 +287,9 @@ func (m *Module) handleAIForecast(w http.ResponseWriter, r *http.Request) {
 	httpx.Error(w, http.StatusNotFound, "no app on this deployment produces a stock forecast")
 }
 
-// stockForecastTool is the name an app declares to answer /ai/stock-forecast.
-// A convention rather than a contract type: the endpoint predates the assistant
-// registry and keeps its URL, and one name is a smaller thing to agree on than
-// a second capability that would carry one function.
 const stockForecastTool = "stock_forecast"
 
-// recordAIUse writes the act into the organisation's audit trail.
-//
-// The Prometheus counter beside it answers "how much AI is this deployment
-// using"; this answers "how much is *this organisation* using", which the
-// metric deliberately cannot — no tenant labels, ever (§Үе шат 1). CP-5's
-// metering counts these rows, and the monthly AI quota is enforced against
-// that count, so this one line is what makes an AI limit meanable.
-//
-// Best effort, like every audit write: an organisation's copilot must not stop
-// working because a row could not be inserted.
-func (m *Module) recordAIUse(r *http.Request, kind string) {
+func (s *Service) recordAIUse(r *http.Request, kind string) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
 		return

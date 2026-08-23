@@ -91,7 +91,7 @@ const cases = [
   ["a build asset", `${ORIGIN}/_next/static/chunks/a.js`, {}, true],
   ["an app icon", `${ORIGIN}/icons/app-192.png`, {}, true],
   ["the brand mark", `${ORIGIN}/brand.webp`, {}, true],
-  ["a page navigation", `${ORIGIN}/documents`, { mode: "navigate" }, true],
+  ["a page navigation", `${ORIGIN}/apps`, { mode: "navigate" }, true],
 ];
 
 let wrong = 0;

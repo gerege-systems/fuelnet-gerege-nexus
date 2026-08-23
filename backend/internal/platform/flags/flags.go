@@ -29,7 +29,6 @@ import (
 	"context"
 	"hash/fnv"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
@@ -267,21 +266,6 @@ func (s *Store) Snapshot(now time.Time) (total int, expired []string) {
 // with a name anybody can work out, and no code has to be changed to make a
 // new module killable.
 func ModuleKillSwitch(appID string) string { return "module." + appID + ".disabled" }
-
-// ParseRollout reads a percentage from the console, clamped to 0…100 so a
-// mistyped number cannot mean something surprising.
-func ParseRollout(raw string) int {
-	number, err := strconv.Atoi(raw)
-	switch {
-	case err != nil:
-		return 100
-	case number < 0:
-		return 0
-	case number > 100:
-		return 100
-	}
-	return number
-}
 
 // InvalidatePrefix makes this satisfy the cache bus's interface, so a change on
 // one replica reaches the others.

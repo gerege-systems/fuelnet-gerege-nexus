@@ -11,57 +11,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-// Every module in this binary, as nil pointers, for the same reason
-// corePolicies uses them: Permissions() returns a literal and constructing six
-// modules would drag in a database to ask each of them a constant.
-//
-// A wider list than corePolicies, which names only the modules that gate
-// themselves. Every module grants permissions, so every module is here — and
-// TestEveryModuleInThisRepositoryIsClassified beside it is what stops one being
-// left out.
 var everyModule = map[string]nexus.Module{
-	"sso_clients":  (*sso_clients.SSOClientsModule)(nil),
-	"ai":           (*ai.Module)(nil),
-	"integrations": (*integrations.Module)(nil),
-	"staffpin":     (*staffpin.Module)(nil),
+	"sso_clients": (*sso_clients.SSOClientsModule)(nil),
 }
 
-// Who every permission in this binary reaches when an app is installed.
-//
-// Written down twice on purpose, the same arrangement and for the same reason
-// as corePolicies above: a permission reaching more people than intended does
-// not look like a bug from the outside. The app installs, the pages open, and
-// nothing turns red on its own. So the module answers, and this claims the
-// answer, and the two have to agree.
-//
-// "suffix" means the module declares nothing and the deprecated grammar rule
-// decides — `.read` to managers and users, `.manage` to managers. That is all
-// of this table today, which is the honest picture: the mechanism landed, and
-// converting each module to say what it means is separate work with a security
-// review attached. What has changed is that saying it is now possible, from
-// outside this repository as well as inside — documents was the one module that
-// stated a grant (`documents.sign` to managers and users), and it states it
-// from client-gerege-nexus now, which is the proof that it can be said out
-// there.
 var defaultGrants = map[string]string{
 	"sso_clients.read":   "suffix",
 	"sso_clients.manage": "suffix",
-
-	// The assistant and the connectors say who they reach rather than leaving it
-	// to the suffix: asking the assistant spends the organisation's allowance,
-	// writing its prompt decides what it is for everybody, and a connector's
-	// target URL makes this server call an address somebody typed.
-	"ai.read":             "manager,user",
-	"ai.manage":           "manager",
-	"integrations.manage": "admin only",
-	"staff_pin.manage":    "admin only",
 }
 
 // Өртөө's three permissions were here until 2026-08-23. They are
