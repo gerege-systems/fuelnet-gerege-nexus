@@ -410,14 +410,10 @@ func (m *Module) handleAssign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Membership rather than existence: a user id from another organisation
-	// would otherwise be assignable, and the row-level policy does not cover
-	// users — people belong to several organisations by design.
-	var member bool
-	if err := m.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
-		SELECT EXISTS (SELECT 1 FROM memberships
-		                WHERE tenant_id = $1 AND user_id = $2 AND active)`,
-		tenantID, request.UserID).Scan(&member); err != nil || !member {
+	// Asked of the directory rather than of the memberships table. See
+	// people.go for what that check is and why it refuses when it cannot be
+	// made.
+	if !m.isMember(r.Context(), tenantID, request.UserID) {
 		nexus.Error(w, http.StatusBadRequest, "that person is not a member of this organisation")
 		return
 	}

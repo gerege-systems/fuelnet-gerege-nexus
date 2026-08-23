@@ -103,14 +103,13 @@ const taskColumns = `
 	coalesce(t.origin_peer_id::text, ''), coalesce(op.name, ''), t.origin_task_id,
 	coalesce(t.target_peer_id::text, ''), coalesce(tp.name, ''),
 	coalesce(t.parent_task_id::text, ''), t.origin_chain, t.status, t.deadline,
-	coalesce(t.assigned_user_id::text, ''), coalesce(u.name, ''),
+	coalesce(t.assigned_user_id::text, ''), '',
 	t.note, t.evidence, t.created_at, t.updated_at`
 
 const taskFrom = `
 	FROM urtuu_tasks t
 	LEFT JOIN urtuu_peers op ON op.id = t.origin_peer_id
-	LEFT JOIN urtuu_peers tp ON tp.id = t.target_peer_id
-	LEFT JOIN users u ON u.id = t.assigned_user_id`
+	LEFT JOIN urtuu_peers tp ON tp.id = t.target_peer_id`
 
 func scanTask(rows pgx.Rows, now time.Time) (Task, error) {
 	var task Task
@@ -195,7 +194,36 @@ func (m *Module) listTasks(ctx context.Context, tenantID string, filter taskFilt
 		}
 		tasks = append(tasks, task)
 	}
-	return tasks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	m.nameAssignees(ctx, tenantID, tasks)
+	return tasks, nil
+}
+
+// nameAssignees turns the assigned user ids on a page of tasks into names.
+//
+// The query stopped joining `users`: that is the platform's table, and a module
+// reading it is a dependency no compiler sees. One directory read per page
+// rather than one join per row — a board of five hundred tasks was five hundred
+// joins for an answer that repeats.
+func (m *Module) nameAssignees(ctx context.Context, tenantID string, tasks []Task) {
+	assigned := false
+	for i := range tasks {
+		if tasks[i].AssignedUserID != "" {
+			assigned = true
+			break
+		}
+	}
+	if !assigned {
+		return
+	}
+	people := m.directory(ctx, tenantID)
+	for i := range tasks {
+		if tasks[i].AssignedUserID != "" {
+			tasks[i].AssignedName = people[tasks[i].AssignedUserID].Name
+		}
+	}
 }
 
 func (m *Module) getTask(ctx context.Context, tenantID, id string) (Task, error) {
@@ -208,15 +236,21 @@ func (m *Module) getTask(ctx context.Context, tenantID, id string) (Task, error)
 	if !rows.Next() {
 		return Task{}, pgx.ErrNoRows
 	}
-	return scanTask(rows, time.Now())
+	task, err := scanTask(rows, time.Now())
+	if err != nil {
+		return Task{}, err
+	}
+	// nameAssignees fills the slice in place, so the copy is what to return.
+	named := []Task{task}
+	m.nameAssignees(ctx, tenantID, named)
+	return named[0], nil
 }
 
 func (m *Module) taskEvents(ctx context.Context, tenantID, id string) ([]TaskEvent, error) {
 	rows, err := m.db.Query(nexus.WithTenantID(ctx, tenantID), `
-		SELECT e.from_status, e.to_status, coalesce(u.name, ''), coalesce(p.name, ''),
+		SELECT e.from_status, e.to_status, coalesce(e.actor_user_id::text, ''), coalesce(p.name, ''),
 		       e.note, e.created_at
 		  FROM urtuu_task_events e
-		  LEFT JOIN users u ON u.id = e.actor_user_id
 		  LEFT JOIN urtuu_peers p ON p.id = e.actor_peer_id
 		 WHERE e.task_id = $1
 		 ORDER BY e.created_at`, id)
@@ -234,7 +268,22 @@ func (m *Module) taskEvents(ctx context.Context, tenantID, id string) ([]TaskEve
 		}
 		events = append(events, event)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// ActorName holds a user id at this point, not a name: the query stopped
+	// joining `users`, which is the platform's table. One directory read turns
+	// every id on the page into a name — an event with no actor is a peer's
+	// act and keeps the empty string it already has.
+	people := m.directory(ctx, tenantID)
+	for i := range events {
+		if events[i].ActorName == "" {
+			continue
+		}
+		events[i].ActorName = people[events[i].ActorName].Name
+	}
+	return events, nil
 }
 
 // ---------------------------------------------------------------- moving one
