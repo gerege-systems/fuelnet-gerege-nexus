@@ -14,10 +14,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	appurtuu "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
 )
 
@@ -43,12 +40,10 @@ type InstalledApps = reports.InstalledApps
 //
 // A missing capability is a platform bug rather than a distribution's mistake:
 // nothing outside this repository calls Bootstrap, and server.go provides all
-// eight immediately before it. So it is reported and the zero value is used,
+// of them immediately before it. So it is reported and the zero value is used,
 // which leaves one module degraded instead of refusing to start a deployment
 // over a dependency most of it does not touch.
 func Bootstrap(p nexus.Platform) Runtime {
-	integrations := required[*integration.Manager]()
-	eidMN := required[*eidmongolia.Service]()
 	sso := required[*ssoprovider.SSOProvider]()
 	link := required[nexus.Link]()
 	signer := required[nexus.Signer]()
@@ -66,14 +61,12 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// client-gerege-nexus on 2026-08-23: the state's registers and the audit
 	// trail are contracts now (nexus.StateRegistry, nexus.AuditReader), so the
 	// module had nothing left that only this repository could give it.
-	// The documents app and the PDF signing rails it absorbed. The rails are
-	// built first and handed in rather than registering themselves: there is one
-	// app here now, and only one thing may answer for io.gerege.nexus.documents.
-	esignModule := esign.New(p, gerege.NewEsignService(), eidMN, integrations)
-	// Published rather than handed to documents. The rail is the platform's —
-	// ADR 0002 is about why there is exactly one — and where its routes appear
-	// is the app's; a parameter made the app unable to be built anywhere else.
-	nexus.Provide[nexus.SigningRails](esignModule)
+	// The PDF signing rails. Constructed in server.go now, not here: a module
+	// that signs a PDF asks for nexus.SigningRails in its constructor, and a
+	// distribution's modules are built before this function is called. Asked
+	// for rather than rebuilt — a second Rails would be a second housekeeping
+	// loop over the same tables.
+	esignModule := required[*esign.Rails]()
 	// The signing rail, as the SDK publishes it. A document that carries a file
 	// is signed over that file's digest through this; one that carries nothing
 	// is approved on the sign-in rail as before. See ADR 0003.
