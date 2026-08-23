@@ -31,7 +31,7 @@ func (s *Server) handleEIDStart(w http.ResponseWriter, r *http.Request) {
 		CallbackURL string `json:"callbackUrl"`
 	}
 	if r.Body != nil {
-		_ = decodeLimitedJSON(r, &req, 8<<10)
+		_ = httpx.DecodeLimited(r, &req, 8<<10)
 	}
 	callback, err := validEIDCallback(req.CallbackURL)
 	if err != nil {
@@ -51,7 +51,7 @@ func (s *Server) handleEIDStartByNationalID(w http.ResponseWriter, r *http.Reque
 		NationalID  string `json:"national_id"`
 		CallbackURL string `json:"callbackUrl"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -91,7 +91,7 @@ func (s *Server) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionID string `json:"session_id"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil || strings.TrimSpace(req.SessionID) == "" {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil || strings.TrimSpace(req.SessionID) == "" {
 		httpx.Error(w, http.StatusBadRequest, "session_id is required")
 		return
 	}

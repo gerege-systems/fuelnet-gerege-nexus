@@ -1,0 +1,30 @@
+{
+  "id": "io.gerege.nexus.integrations",
+  "name": "Integrations",
+  "version": "1.0.0",
+  "platform": ">=1.0.0",
+  "publisher": "gerege",
+  "authors": [
+    {
+      "name": "Gerege Systems Development Team"
+    }
+  ],
+  "maintainers": [
+    {
+      "name": "Gerege Systems Development Team"
+    }
+  ],
+  "repository": "https://github.com/gerege-systems/open-gerege-nexus",
+  "homepage": "https://nexus.gerege.mn",
+  "license": "Apache-2.0",
+  "chrome": true,
+  "dependencies": [],
+  "permissions": [
+    {
+      "code": "integrations.manage",
+      "name": "Manage Integrations",
+      "description": "Register the accounts and endpoints this organisation connects to, and read what has been sent to them"
+    }
+  ],
+  "menus": []
+}

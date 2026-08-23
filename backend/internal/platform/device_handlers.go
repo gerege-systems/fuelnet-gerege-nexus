@@ -87,7 +87,7 @@ func (s *Server) handleEnrollDevice(w http.ResponseWriter, r *http.Request) {
 		AppVersion string `json:"app_version"`
 		OSVersion  string `json:"os_version"`
 	}
-	if decodeLimitedJSON(r, &req, 16<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 16<<10) != nil {
 		httpx.Error(w, 400, "invalid enrollment request")
 		return
 	}
@@ -207,7 +207,7 @@ func (s *Server) handleUpdateDeviceStatus(w http.ResponseWriter, r *http.Request
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil {
 		httpx.Error(w, 400, "invalid device status")
 		return
 	}

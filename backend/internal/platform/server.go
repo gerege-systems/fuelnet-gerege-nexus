@@ -1046,7 +1046,11 @@ func (s *Server) setupRoutes() {
 		// single-use state row is what carries the authority here, because a
 		// cross-site redirect from Google cannot be relied on to present a
 		// session cookie at all.
-		api.Get("/integrations/oauth/callback", s.handleIntegrationOAuthCallback)
+		// The connector OAuth callback was here until 2026-08-23 — an
+		// unauthenticated route, because the provider sends the
+		// administrator's browser back with no session of ours. It is
+		// internal/apps/integrations' now, registered by that module outside
+		// its own gate for the same reason.
 
 		// Where the verification service returns somebody who has just proved
 		// an address. Unauthenticated on purpose: they have not signed in, and
@@ -1142,20 +1146,10 @@ func (s *Server) setupRoutes() {
 			// rate limiter and the monthly allowance, published as
 			// nexus.RateLimiter and nexus.Quota.
 
-			// External Integrations Manager (admin-only: a connector target URL
-			// makes the server issue arbitrary outbound requests, and an OAuth
-			// grant hands the platform an account outside it)
-			pr.Route("/integrations", func(ir chi.Router) {
-				ir.Use(s.requireAdmin)
-				ir.Get("/", s.handleListIntegrations)
-				ir.Post("/", s.handleRegisterIntegration)
-				ir.Get("/providers", s.handleIntegrationProviders)
-				ir.Get("/deliveries", s.handleIntegrationDeliveries)
-				ir.Put("/{id}", s.handleUpdateIntegration)
-				ir.Delete("/{id}", s.handleDeleteIntegration)
-				ir.Post("/{id}/connect", s.handleConnectIntegration)
-				ir.Post("/{id}/disconnect", s.handleDisconnectIntegration)
-			})
+			// The connector administration — eight admin-only routes — was
+			// here until 2026-08-23. Administering a rail is an app; the rail
+			// itself stayed, because the signing rails file documents through
+			// it and nexus.MeetingBooker is its adapter.
 
 			// Store — reads are open to any tenant member, mutations are
 			// tenant-administrator only. Previously every authenticated user

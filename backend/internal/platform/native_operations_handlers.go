@@ -25,7 +25,7 @@ func (s *Server) handleSetStaffPIN(w http.ResponseWriter, r *http.Request) {
 		MembershipID string `json:"membership_id"`
 		PIN          string `json:"pin"`
 	}
-	if decodeLimitedJSON(r, &req, 8<<10) != nil || !validStaffPIN.MatchString(req.PIN) {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil || !validStaffPIN.MatchString(req.PIN) {
 		httpx.Error(w, 400, "PIN must contain 4-12 digits")
 		return
 	}
@@ -52,7 +52,7 @@ func (s *Server) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		PIN string `json:"pin"`
 	}
-	if decodeLimitedJSON(r, &req, 4<<10) != nil || !validStaffPIN.MatchString(req.PIN) {
+	if httpx.DecodeLimited(r, &req, 4<<10) != nil || !validStaffPIN.MatchString(req.PIN) {
 		httpx.Error(w, 401, "invalid PIN")
 		return
 	}
@@ -98,7 +98,7 @@ func (s *Server) handleDeviceTelemetry(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Events []telemetryEvent `json:"events"`
 	}
-	if decodeLimitedJSON(r, &req, 256<<10) != nil || len(req.Events) == 0 || len(req.Events) > 100 {
+	if httpx.DecodeLimited(r, &req, 256<<10) != nil || len(req.Events) == 0 || len(req.Events) > 100 {
 		httpx.Error(w, 400, "invalid telemetry batch")
 		return
 	}
@@ -154,7 +154,7 @@ func (s *Server) handleRegisterPushToken(w http.ResponseWriter, r *http.Request)
 		Provider string `json:"provider"`
 		AppID    string `json:"app_id"`
 	}
-	if decodeLimitedJSON(r, &req, 16<<10) != nil || len(req.Token) < 16 {
+	if httpx.DecodeLimited(r, &req, 16<<10) != nil || len(req.Token) < 16 {
 		httpx.Error(w, 400, "invalid push token")
 		return
 	}

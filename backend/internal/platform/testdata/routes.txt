@@ -4,7 +4,6 @@ CONNECT /metrics
 DELETE /api/v1/admin/access/roles/{id}
 DELETE /api/v1/core/me/preferences
 DELETE /api/v1/core/organisation
-DELETE /api/v1/integrations/{id}
 DELETE /cp/api/announcements/{id}
 DELETE /cp/api/flags/{key}
 DELETE /cp/api/session
@@ -32,10 +31,6 @@ GET /api/v1/core/me/preferences
 GET /api/v1/core/organisation
 GET /api/v1/devices/me
 GET /api/v1/installed-apps
-GET /api/v1/integrations/
-GET /api/v1/integrations/deliveries
-GET /api/v1/integrations/oauth/callback
-GET /api/v1/integrations/providers
 GET /api/v1/menus
 GET /api/v1/oauth2/client-info
 GET /api/v1/oauth2/consent
@@ -106,9 +101,6 @@ POST /api/v1/devices/enroll
 POST /api/v1/devices/staff/pin
 POST /api/v1/devices/telemetry
 POST /api/v1/devices/token/rotate
-POST /api/v1/integrations/
-POST /api/v1/integrations/{id}/connect
-POST /api/v1/integrations/{id}/disconnect
 POST /api/v1/oauth2/consent
 POST /api/v1/profile/identities/unlink
 POST /api/v1/push-tokens
@@ -158,7 +150,6 @@ PUT /api/v1/admin/devices/staff-pin
 PUT /api/v1/admin/devices/status
 PUT /api/v1/core/me/preferences
 PUT /api/v1/core/organisation
-PUT /api/v1/integrations/{id}
 PUT /api/v1/profile/preferences
 PUT /api/v1/tenant/profile
 PUT /api/v1/urtuu/codes/{id}
@@ -176,6 +167,7 @@ TRACE /metrics
 [app] DELETE /api/v1/developer/apps/{clientID}
 [app] DELETE /api/v1/developer/apps/{clientID}/consents/{userID}
 [app] DELETE /api/v1/developer/apps/{clientID}/tokens
+[app] DELETE /api/v1/integrations/{id}
 [app] DELETE /api/v1/reports/schedules/{id}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/consents/{userID}
@@ -189,6 +181,10 @@ TRACE /metrics
 [app] GET /api/v1/developer/endpoints
 [app] GET /api/v1/developer/scopes
 [app] GET /api/v1/developer/signing-keys
+[app] GET /api/v1/integrations/
+[app] GET /api/v1/integrations/deliveries
+[app] GET /api/v1/integrations/oauth/callback
+[app] GET /api/v1/integrations/providers
 [app] GET /api/v1/reports/
 [app] GET /api/v1/reports/grants
 [app] GET /api/v1/reports/grants/history
@@ -211,6 +207,9 @@ TRACE /metrics
 [app] POST /api/v1/ai/tts
 [app] POST /api/v1/developer/apps/
 [app] POST /api/v1/developer/apps/{clientID}/rotate-secret
+[app] POST /api/v1/integrations/
+[app] POST /api/v1/integrations/{id}/connect
+[app] POST /api/v1/integrations/{id}/disconnect
 [app] POST /api/v1/reports/grants
 [app] POST /api/v1/reports/grants/{id}/accept
 [app] POST /api/v1/reports/grants/{id}/revoke
@@ -229,5 +228,6 @@ TRACE /metrics
 [app] POST /api/v1/urtuu/tasks/{id}/return
 [app] PUT /api/v1/admin/ai/prompts/{key}
 [app] PUT /api/v1/developer/apps/{clientID}
+[app] PUT /api/v1/integrations/{id}
 [app] PUT /api/v1/reports/schedules/{id}
 [app] PUT /api/v1/sso-clients/apps/{clientID}

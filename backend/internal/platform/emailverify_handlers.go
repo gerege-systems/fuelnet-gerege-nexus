@@ -84,7 +84,7 @@ func (s *Server) handleVerifySend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req verifySendRequest
-	if decodeLimitedJSON(r, &req, 8<<10) != nil {
+	if httpx.DecodeLimited(r, &req, 8<<10) != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid verification request")
 		return
 	}

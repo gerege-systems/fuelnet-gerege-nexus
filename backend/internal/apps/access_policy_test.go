@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	appai "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/ai"
+	appintegrations "github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/integrations"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/urtuu"
@@ -81,6 +82,11 @@ func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {
 var policylessModules = map[string]nexus.Module{
 	"reports": (*reports.Module)(nil),
 	"ai":      (*appai.Module)(nil),
+	// integrations is the third, and its single permission is administrative:
+	// there is nothing to read that is not also the power to change it, so a
+	// menu gate and a route prefix would both name integrations.manage and say
+	// nothing the routes do not already say for themselves.
+	"integrations": (*appintegrations.Module)(nil),
 }
 
 // Directories under internal/apps that hold no module at all.
