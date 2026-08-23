@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.13.0] - 2026-08-23
 
 ### Added — `nexus.InstalledApps`: аль апп суусныг distribution ч асууж чадна
 
