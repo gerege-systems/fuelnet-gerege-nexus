@@ -44,45 +44,54 @@ func TestADistributionsModuleIsBuiltAfterTheCapabilitiesExist(t *testing.T) {
 	t.Cleanup(pool.Close)
 	t.Setenv("APP_CATALOG_URL", "")
 
-	// Everything a module carried by another repository reaches for today. Each
-	// is checked inside the callback, because that is the moment in question:
+	// Emptied first, or this test cannot fail.
+	//
+	// nexus's registry is package-level and nothing resets it between tests, so
+	// by the time this one runs an earlier NewServer in the same binary —
+	// app_gate_test.go's, sorted first — has already provided every one of
+	// these. Asking inside the callback would then answer from that server
+	// however this one is ordered: the whole package passed with the loop back
+	// at the top of NewServer, while the same test alone failed on ten
+	// capabilities. Withdrawing makes the answer this NewServer's.
+	//
+	// Not restored: NewServer provides all of them again a few lines below, and
+	// from the server this test built rather than the one an earlier test
+	// abandoned to a closed pool.
+	withdrawn[nexus.StateRegistry]()
+	withdrawn[nexus.AuditReader]()
+	withdrawn[nexus.Directory]()
+	withdrawn[nexus.ReportEngine]()
+	withdrawn[nexus.EIDSigner]()
+	withdrawn[nexus.DANAuthenticator]()
+	withdrawn[nexus.Signer]()
+	withdrawn[nexus.RateLimiter]()
+	withdrawn[nexus.MeetingBooker]()
+	withdrawn[nexus.Link]()
+	withdrawn[nexus.SigningRails]()
+
+	// Everything a module carried by another repository reaches for today,
+	// asserted inside the callback because that is the moment in question:
 	// asking again afterwards would pass however NewServer is ordered.
-	var missing []string
-	check := func(name string, err error) {
-		if err != nil {
-			missing = append(missing, name+": "+err.Error())
-		}
-	}
+	//
+	// nexus.StateRails is checked but not withdrawn above: it is a func type,
+	// and Provide only deletes a capability when the value boxes to a nil
+	// interface, which a nil func does not. Withdrawing it would store a nil
+	// func for the next caller to invoke.
 	var called bool
-	register := func(p nexus.Platform) {
+	register := func(nexus.Platform) {
 		called = true
-		if p == nil {
-			t.Error("a distribution's module was handed a nil platform")
-		}
-		_, err := nexus.StateRegistryOf()
-		check("nexus.StateRegistry", err)
-		_, err = nexus.AuditHistory()
-		check("nexus.AuditReader", err)
-		_, err = nexus.People()
-		check("nexus.Directory", err)
-		_, err = nexus.Reports()
-		check("nexus.ReportEngine", err)
-		_, err = nexus.EID()
-		check("nexus.EIDSigner", err)
-		_, err = nexus.DAN()
-		check("nexus.DANAuthenticator", err)
-		_, err = nexus.Capability[nexus.Signer]()
-		check("nexus.Signer", err)
-		_, err = nexus.Capability[nexus.StateRails]()
-		check("nexus.StateRails", err)
-		_, err = nexus.Capability[nexus.RateLimiter]()
-		check("nexus.RateLimiter", err)
-		_, err = nexus.Capability[nexus.MeetingBooker]()
-		check("nexus.MeetingBooker", err)
-		_, err = nexus.Capability[nexus.Link]()
-		check("nexus.Link", err)
-		_, err = nexus.SigningRailsOf()
-		check("nexus.SigningRails", err)
+		provided[nexus.StateRegistry](t)
+		provided[nexus.AuditReader](t)
+		provided[nexus.Directory](t)
+		provided[nexus.ReportEngine](t)
+		provided[nexus.EIDSigner](t)
+		provided[nexus.DANAuthenticator](t)
+		provided[nexus.Signer](t)
+		provided[nexus.StateRails](t)
+		provided[nexus.RateLimiter](t)
+		provided[nexus.MeetingBooker](t)
+		provided[nexus.Link](t)
+		provided[nexus.SigningRails](t)
 	}
 
 	if _, err := NewServer(pool, filepath.FromSlash("../../../catalog/apps.json"),
@@ -92,7 +101,12 @@ func TestADistributionsModuleIsBuiltAfterTheCapabilitiesExist(t *testing.T) {
 	if !called {
 		t.Fatal("the ExtraModules callback was never called")
 	}
-	for _, name := range missing {
-		t.Errorf("a distribution's module was built before the platform provided %s", name)
-	}
+}
+
+// withdrawn removes a capability, so that a later Capability call answers about
+// what has been provided since rather than about what some other test left in
+// the registry. Interface types only — see the note at the call site.
+func withdrawn[T any]() {
+	var none T
+	nexus.Provide(none)
 }

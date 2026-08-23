@@ -63,7 +63,7 @@ func TestTheServerProvidesEverythingBootstrapAsksFor(t *testing.T) {
 func provided[T any](t *testing.T) {
 	t.Helper()
 	if _, err := nexus.Capability[T](); err != nil {
-		t.Errorf("%v — server.go has to Provide it before apps.Bootstrap", err)
+		t.Errorf("%v — server.go has to Provide it before any module is built", err)
 	}
 }
 

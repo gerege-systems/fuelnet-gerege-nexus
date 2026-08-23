@@ -15,6 +15,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed — Цахим засаг, баримт бичиг, байгууллага цөмөөс гарав
+
+Гурван апп — `io.gerege.nexus.egov`, `io.gerege.nexus.documents`,
+`io.gerege.nexus.organisation` — нэг өдөрт
+[client-gerege-nexus](https://github.com/gerege-systems/client-gerege-nexus)
+руу нүүлээ. Цөмд үлдсэн нь тэдний ашигладаг рельсүүд: `internal/platform/esign`
+(PDF гарын үсэг), `gerege` (ХУР-ын клиент), `eid`, `dan`, directory. Гарах
+боломжтой болсон нь өмнөх PR-ууд: `nexus.StateRegistry`/`AuditReader` (#184),
+`SigningRails`/`EIDSigner`/`DANAuthenticator` (#185), `ReportEngine` (#186),
+`Directory` (#187).
+
+Схем нь аппуудтайгаа хамт явав — `nexus.Migrations` (Үе 3) — ба `00077` нь
+цөмөөс арван нэгэн хүснэгтийг устгав: `document_*` ес, `departments`,
+`organisation_people`.
+
+**Суулгацад юу өөрчлөгдөх вэ:**
+
+- **`/api/v1/core/departments` ба `/api/v1/core/people`-ийн redirect устав.**
+  Тэдний очих газар энэ бинарид байхгүй болсон, харин redirect нь 308 —
+  метод ба биеийг хадгалдаг тул `PUT` нь Location-ыг дагаад 404 руу орж
+  бичилтээ алддаг, дээрээс нь үхсэн хаягийг үүрд кэшлэ гэж хэлдэг байв.
+  Аппыг үүрсэн distribution хосыг нь өөрийн маршрутын хажууд дахин бүртгэж
+  болно. `/api/v1/core/organisation` ба `/me/preferences` нь платформын
+  маршрут руу заасаар байна.
+- **Анхдагч апп нь distribution-ийн шийдвэр болов** —
+  `platform.Options.DefaultApps`. `appinstaller.DefaultApps` нь энэ репогийн
+  аппуудыг нэрлэсэн литерал байсан бөгөөд сүүлчийнх нь гармагц утгагүй болсон:
+  суулгац тенант бүрт өгөх ёстой апптай, түүнийгээ хэлэх аргагүй болно.
+  Одоо хоосон, хоосон нь энгийн хариулт — өөрийн апп байхгүй платформ юу ч
+  суулгахгүй. Хоосон байхад каталогийн хуучралтын шалгалт (`verifyCatalogVersions`)
+  бас унтарна гэдгийг анзаараарай.
+- **Demo seed-ийн аппууд** `documents`/`egov` биш, `reports`/`urtuu` болов.
+  Хуучин slug-ууд юуг ч нэрлэхээ больсон тул хоёр demo тенант хоосон
+  sidebar-тай үлдэх байв.
+
+### Changed — Distribution-ийн модуль чадамжуудын дараа баригддаг болов
+
+`platform.Options.ExtraModules`-ийн callback нь `NewServer` бүх чадамжаа
+`Provide` хийсний **дараа** дуудагдана — тэр дотор `nexus.SigningRails`,
+`Link`, `Directory`, `ReportEngine`, `StateRegistry`, `AuditReader`,
+`EIDSigner`, `DANAuthenticator`, `Signer`, `RateLimiter`, `MeetingBooker`.
+Distribution-ийн модуль конструктор дотроо тэдгээрийг гуйж чадна гэсэн үг.
+
+PDF-ийн рельс одоо ганц түлхүүртэй — экспортолсон `nexus.SigningRails`.
+Хажууд нь `*esign.Rails`-ыг нийтэлж байсан нь `internal/`-ийн төрлөөр
+арын үйлчилгээний давталтыг түлхүүрлэдэг байсан: distribution нэрлэж ч,
+солиж ч чадахгүй, санамсаргүй устгасан `Provide` нь цэвэр эхэлж таван
+минутын дараа nil дээр panic хийдэг байв.
+
 ### Added — Чадвар нэмэх нь SDK-гийн засвар байхаа болив
 
 `nexus.Provide[T](impl)` ба `nexus.Capability[T]()`. Чадвар нь өөрийнхөө

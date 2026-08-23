@@ -81,15 +81,16 @@ var demoTenants = []struct {
 	// real reason nobody will notice either.
 	apps []string
 }{
-	// "contacts" left both lists when it was absorbed into the directory, which
-	// is a default app — every tenant has it without anybody naming it here.
-	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"documents", "egov"}},
-	// This one asked for "esign" until the PDF app was absorbed into documents
-	// and that slug stopped naming anything — the same failure the note above
-	// describes, arriving from the other direction. The two tenants keep
-	// different sets: without egov, this one's sidebar is still visibly not the
-	// first one's.
-	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"documents"}},
+	// "documents" and "egov" were here until 2026-08-23, when both left for
+	// client-gerege-nexus and their slugs stopped naming anything this binary
+	// carries — the same failure the note above describes, for the third time.
+	// There is no default app to fall back on any more either, so a seed that
+	// names nothing real leaves both tenants with an empty sidebar rather than
+	// merely a shorter one.
+	{demoTenantID, "demo", "Demo Corporation", demoRoleID, []string{"reports", "urtuu"}},
+	// The two tenants keep different sets: without Өртөө, this one's sidebar is
+	// still visibly not the first one's.
+	{secondTenantID, "demo-trade", "Demo Trade LLC", secondRoleID, []string{"reports"}},
 }
 
 // seedingEnabled reports whether the documented demo account should be
