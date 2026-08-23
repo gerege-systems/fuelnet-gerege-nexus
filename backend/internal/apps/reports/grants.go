@@ -14,12 +14,10 @@ package reports
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -28,7 +26,7 @@ const maxGrantBody = 8 << 10
 
 // handleListGrants returns every grant this organisation is a party to.
 //
-// Read through the engine's own lister: the grants table is also what the
+// Read through the platform's contract: the grants table is also what the
 // consolidated run reads, and a second reader here would be a second shape for
 // the same row.
 func (m *Module) handleListGrants(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +35,7 @@ func (m *Module) handleListGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	grants, err := reporting.ListGrants(r.Context(), m.db, tenantID)
+	grants, err := m.grants.List(r.Context(), tenantID)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not read the sharing agreements")
 		return
@@ -123,25 +121,13 @@ func (m *Module) handleRunConsolidated(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	locale := localeOf(r)
 
-	params, err := reporting.Bind(report, raw, locale)
+	run, err := m.engine.RunConsolidated(r.Context(), tenantID, report.Key, raw, localeOf(r), actorOf(r))
 	if err != nil {
 		nexus.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	result, err := m.engine.RunConsolidated(r.Context(), tenantID, report, params, actorOf(r))
-	if err != nil {
-		nexus.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	nexus.JSON(w, http.StatusOK, map[string]any{
-		"key":    report.Key(),
-		"title":  reporting.LocalizedTitle(report.Titles(), locale, report.Key()),
-		"result": result,
-	})
+	nexus.JSON(w, http.StatusOK, run)
 }
 
 // handleAccessHistory is the owner's answer to "who has read our data".
@@ -155,41 +141,16 @@ func (m *Module) handleAccessHistory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-
-	rows, err := m.db.Query(nexus.WithTenantID(r.Context(), tenantID), `
-		SELECT a.created_at, a.resource, a.details, coalesce(t.name, '—')
-		  FROM audit_events a
-		  LEFT JOIN tenants t
-		    ON t.id = (a.details->>'grantee_tenant_id')::uuid
-		 WHERE a.tenant_id = $1 AND a.action = 'reports.data_shared'
-		 ORDER BY a.created_at DESC
-		 LIMIT 200`, tenantID)
+	// Read through the platform's contract, which reads the audit trail: the
+	// act — somebody else reading this organisation's rows — is written there
+	// by the consolidated run on both sides, and a second record of the same
+	// fact would be a second thing to keep true. This app had the SQL for it
+	// until 2026-08-23, over the platform's own audit_events and tenants.
+	history, err := m.grants.History(r.Context(), tenantID)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not read the access history")
 		return
 	}
-	defer rows.Close()
-
-	type entry struct {
-		At        time.Time      `json:"at"`
-		ReportKey string         `json:"report_key"`
-		By        string         `json:"by"`
-		Details   map[string]any `json:"details"`
-	}
-	history := make([]entry, 0, 32)
-	for rows.Next() {
-		var item entry
-		if err := rows.Scan(&item.At, &item.ReportKey, &item.Details, &item.By); err != nil {
-			nexus.Error(w, http.StatusInternalServerError, "could not read the access history")
-			return
-		}
-		history = append(history, item)
-	}
-	if err := rows.Err(); err != nil {
-		nexus.Error(w, http.StatusInternalServerError, "could not read the access history")
-		return
-	}
-
 	nexus.JSON(w, http.StatusOK, map[string]any{"history": history})
 }
 

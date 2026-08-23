@@ -35,6 +35,16 @@ type ReportEngine interface {
 	// Describe is one report, or false. Titles and scopes, no rows.
 	Describe(key string) (ReportDescription, bool)
 
+	// Form is what a screen needs to ask for a report: the parameters it takes,
+	// with any dropdown already filled from this organisation's own rows, and
+	// the columns it will answer with.
+	//
+	// Filled here rather than by the caller because a dropdown is SQL a report
+	// declares — OptionsQuery — and running a report's SQL is the engine's to
+	// do. What comes back never carries it: it is a statement this platform
+	// runs, and a browser has no use for it.
+	Form(ctx context.Context, tenantID, key, locale string) (*ReportForm, error)
+
 	// Run binds the parameters and produces the rows, in one call.
 	//
 	// The three steps are not offered separately on purpose: binding is what
@@ -60,6 +70,27 @@ type ReportEngine interface {
 	// morning to nobody.
 	ValidateSchedule(key string, params map[string]string, locale, cron, format string) error
 
+	// RunConsolidated runs a report over every organisation that has agreed to
+	// share it with this one, and its own rows beside them.
+	//
+	// A different act from Run and a separate method for that reason: it names
+	// no counterparty because the agreements decide which rows are in reach,
+	// it is audited on both sides, and a report that was not written to be
+	// shared refuses it. Folding it into Run would make the safe operation and
+	// the dangerous one the same call.
+	RunConsolidated(ctx context.Context, tenantID, key string, params map[string]string, locale, actorUserID string) (*ReportRun, error)
+
+	// ValidateCron and NormalizeFormat are the two halves of a schedule that
+	// are not about any particular report: whether the expression parses, and
+	// what this engine will store for a format somebody typed in whatever case
+	// they typed it.
+	//
+	// Separate from ValidateSchedule because a screen validates a field as it
+	// is filled in, and asking about a whole schedule to check one field would
+	// mean inventing the rest of it.
+	ValidateCron(expression string) error
+	NormalizeFormat(raw string) (string, error)
+
 	// Deliverable reports whether a scheduled report can actually be sent.
 	// False on a deployment with no mail configured, which a screen should say
 	// before somebody schedules something that will never arrive.
@@ -76,6 +107,15 @@ type ReportDescription struct {
 	// not written to be shared, and no grant may name it — see
 	// ReportScopeFull and ReportScopeCounterparty.
 	Scopes []string `json:"scopes,omitempty"`
+}
+
+// ReportForm is a report's parameters and columns, ready to render.
+type ReportForm struct {
+	Key     string            `json:"key"`
+	App     string            `json:"app"`
+	Titles  map[string]string `json:"titles"`
+	Params  []ParamSpec       `json:"params"`
+	Columns []ColumnSpec      `json:"columns"`
 }
 
 // ReportRun is a report's answer, with the title already resolved for the
@@ -100,28 +140,16 @@ type ReportExport struct {
 // Reports returns the engine this deployment provides.
 func Reports() (ReportEngine, error) { return Capability[ReportEngine]() }
 
-// What this contract does not carry yet, and why it is written down here
-// rather than discovered later.
+// What this contract carries now, and what it deliberately does not.
 //
-// internal/apps/reports still reaches into the engine's package for three
-// things these six methods do not cover. Each is a decision rather than an
-// oversight:
+// Three things were named here as missing on 2026-08-23, each with the reason
+// it had not been written. Two are above: RunConsolidated is its own method,
+// for the reason it always should have been, and the records the screens list
+// — schedules and grants — are two contracts of their own in
+// pkg/nexus/reportrecords.go rather than bolted onto this one.
 //
-//   - RunConsolidated. One organisation running a report over another's rows,
-//     under a grant. It is a different act from Run — it names a counterparty,
-//     it is audited on both sides, and a report that was not written to be
-//     shared must refuse it. Folding it into Run would make the safe operation
-//     and the dangerous one the same call.
-//
-//   - Listing schedules and grants. Both read platform tables and return
-//     records of thirteen and fifteen fields, which is the shape MeetingConnector
-//     is a warning about. They belong with the directory contract the
-//     organisation app needs, not bolted onto the engine.
-//
-//   - The scheduler. The sweep that mails a report at three in the morning is
-//     the engine's housekeeping, not a screen's, and it runs today because the
-//     app happens to start it. Moving it to the platform is the right change
-//     and is not this one.
-//
-// Until those land, the reports app keeps its import of
-// internal/platform/reporting and stays in this repository.
+// The third is not a contract at all. The sweep that mails a report at three in
+// the morning ran because the app happened to start it, which made a screen
+// responsible for a deployment's housekeeping; the platform starts it now, and
+// a deployment with no reports app installed still delivers the schedules it
+// has. That was the right change and it needed no SDK surface.

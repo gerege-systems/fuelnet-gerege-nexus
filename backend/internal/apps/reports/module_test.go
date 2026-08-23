@@ -150,7 +150,13 @@ func newFixture(t *testing.T) *fixture {
 	installed := func(context.Context, string) (map[string]bool, error) {
 		return map[string]bool{installedApp: true}, nil
 	}
-	f.module = reports.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)), installed)
+	// The engine and its two record contracts, from the platform's own
+	// adapters. They are what the app is built on now: it holds no database
+	// handle and no engine of its own, so a test that did not supply them would
+	// be testing a module with nothing behind it.
+	engine := reporting.AsEngine(reporting.NewEngine(pool))
+	f.module = reports.New(nexus.NewPlatform(pool, rbac.NewSQLPermissionStore(pool)), installed,
+		engine, reporting.AsSchedules(pool), reporting.AsGrants(pool))
 	return f
 }
 

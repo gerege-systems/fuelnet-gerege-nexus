@@ -16,7 +16,6 @@ import (
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -29,7 +28,7 @@ func (m *Module) handleListSchedules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schedules, err := reporting.ListSchedules(r.Context(), m.db, tenantID)
+	schedules, err := m.schedules.List(r.Context(), tenantID)
 	if err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not read the schedules")
 		return
@@ -39,7 +38,7 @@ func (m *Module) handleListSchedules(w http.ResponseWriter, r *http.Request) {
 		// Whether anything can actually be sent. Without it the screen would
 		// let somebody create a schedule, show it as active, and never say why
 		// nothing arrives.
-		"delivery_configured": reporting.NewSMTPDeliverer() != nil,
+		"delivery_configured": m.engine.Deliverable(),
 	})
 }
 

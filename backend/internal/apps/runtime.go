@@ -104,8 +104,18 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// Last, and after every module that registers a report: the reports app
 	// serves the registry, and a module constructed after it would have its
 	// reports missing from the first listing until something else rebuilt it.
-	reportsModule := reports.New(p, installedApps)
-	return Runtime{Background: []BackgroundModule{reportsModule}}
+	// The engine and the two records it keeps, asked for rather than built: the
+	// schedule sweep is the platform's now and a second engine here would be a
+	// second reader of the same rows.
+	reports.New(p, installedApps,
+		required[nexus.ReportEngine](),
+		required[nexus.ReportSchedules](),
+		required[nexus.ReportGrants]())
+	// Nothing in this repository has housekeeping of its own any more. The
+	// reports app started the schedule sweep until 2026-08-23; the platform
+	// starts it now, so a deployment that removes the app keeps mailing the
+	// schedules it has.
+	return Runtime{}
 }
 
 // required fetches a capability the platform is expected to have provided.
