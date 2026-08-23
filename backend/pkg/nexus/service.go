@@ -478,3 +478,29 @@ func RecordSigned(rail string, ok bool) {
 		counter.Signed(rail, ok)
 	}
 }
+
+// ---------------------------------------------------------- installed apps
+
+// InstalledApps answers which apps an organisation has.
+//
+// The gate every module that lists something across apps needs: a report
+// belonging to an app nobody installed is not listed and cannot be run, and the
+// answer to "which apps" has to be the platform's one answer rather than a
+// second, differently-stale copy.
+//
+// Published as an exported type on 2026-08-23 because it had been published as
+// an internal one — internal/apps.InstalledApps — which a distribution cannot
+// name and therefore cannot ask for. That is the same mistake the PDF signing
+// rails made and it surfaced the same way: an app that had left this repository
+// could not fetch the capability the platform was providing.
+type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, error)
+
+// AppsOf returns which apps an organisation has, from whatever the platform
+// provides.
+func AppsOf(ctx context.Context, tenantID string) (map[string]bool, error) {
+	installed, err := Capability[InstalledApps]()
+	if err != nil {
+		return nil, err
+	}
+	return installed(ctx, tenantID)
+}

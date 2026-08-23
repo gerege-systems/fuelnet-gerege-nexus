@@ -17,7 +17,6 @@
 package reports
 
 import (
-	"context"
 	"net/http"
 
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/reports"
@@ -46,7 +45,10 @@ const (
 // decides which reports exist for them. Supplied by the platform rather than
 // queried here, because the platform already caches that answer and this module
 // must not become a second, differently-stale source of it.
-type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, error)
+//
+// An alias for the SDK's since 2026-08-23: the capability is keyed on the type,
+// and a named type of this app's own would be a second key nothing provides.
+type InstalledApps = nexus.InstalledApps
 
 // Module is the reports app: the catalogue entry, the routes, the engine it
 // serves and the rules it applies before it does.

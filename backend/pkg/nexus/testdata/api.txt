@@ -339,6 +339,7 @@ func (Params) UUID(key string) string
 func (PermissionDefinition) Validate() error
 func (SignatureState) Settled() bool
 func AllowedTenants(ctx context.Context) []string
+func AppsOf(ctx context.Context, tenantID string) (map[string]bool, error)
 func AssistantToolset() []AssistantTool
 func Audit(ctx context.Context, tenantID, userID, action, resource string, details map[string]any)
 func AuditHistory() (AuditReader, error)
@@ -415,6 +416,7 @@ type DocumentFiler interface
 type DocumentSignatureRequest struct
 type EIDSigner interface
 type FiledDocument struct
+type InstalledApps func(ctx context.Context, tenantID string) (map[string]bool, error)
 type Link interface
 type LinkMessage struct
 type LinkReader func(ctx context.Context, message LinkMessage) error
