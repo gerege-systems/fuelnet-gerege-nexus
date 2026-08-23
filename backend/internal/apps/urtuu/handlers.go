@@ -621,35 +621,27 @@ type LinkHealth struct {
 	LastError   string     `json:"last_error,omitempty"`
 }
 
-// linkHealth reads the channel's own tables directly.
+// linkHealth asks the channel how its links are doing.
 //
-// The transport owns them and the app reads them, which is the same
-// arrangement the code lookup uses: the two packages are one product split by
-// layer, sharing one schema and one tenant binding, and an accessor between
-// them would be a second description of five columns.
+// It read urtuu_peers and urtuu_deliveries directly until 2026-08-23, with a
+// note beside it arguing that the app and the transport "are one product split
+// by layer, sharing one schema and one tenant binding". They are — while they
+// share a repository. nexus.PeerDirectory carries the same five columns as a
+// contract, which is what lets this app leave.
 func (m *Module) linkHealth(ctx context.Context, tenantID string) ([]LinkHealth, error) {
-	rows, err := m.db.Query(ctx, `
-		SELECT p.id::text, p.name, p.role, p.status, p.last_seen_at, p.last_error,
-		       (SELECT count(*) FROM urtuu_deliveries d
-		         WHERE d.peer_id = p.id AND d.delivered_at IS NULL)
-		  FROM urtuu_peers p
-		 WHERE p.tenant_id = $1 AND p.revoked_at IS NULL
-		 ORDER BY p.name`, tenantID)
+	peers, err := m.peers.Peers(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	links := make([]LinkHealth, 0, 16)
-	for rows.Next() {
-		var link LinkHealth
-		if err := rows.Scan(&link.ID, &link.Name, &link.Role, &link.Status,
-			&link.LastSeenAt, &link.LastError, &link.Undelivered); err != nil {
-			return nil, err
-		}
-		links = append(links, link)
+	links := make([]LinkHealth, 0, len(peers))
+	for _, peer := range peers {
+		links = append(links, LinkHealth{
+			ID: peer.ID, Name: peer.Name, Role: peer.Role, Status: peer.Status,
+			LastSeenAt: peer.LastSeenAt, LastError: peer.LastError,
+			Undelivered: peer.Undelivered,
+		})
 	}
-	return links, rows.Err()
+	return links, nil
 }
 
 // TreeProgress is one delegated task and how far its branches have got.

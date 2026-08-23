@@ -138,6 +138,22 @@
   ParamSpec.OptionsQuery string
   ParamSpec.Required bool
   ParamSpec.Titles map[string]string
+  Peer.ID string
+  Peer.LastError string
+  Peer.LastSeenAt *time.Time
+  Peer.Name string
+  Peer.Role string
+  Peer.Status string
+  Peer.Undelivered int
+  PeerDirectory.CodeOpenOn(ctx context.Context, tenantID, peerID, code string) (bool, error)
+  PeerDirectory.DeliveryLoad(ctx context.Context, tenantID string, from, to time.Time) ([]PeerLoad, error)
+  PeerDirectory.Peers(ctx context.Context, tenantID string) ([]Peer, error)
+  PeerDirectory.RequestCode(ctx context.Context, tenantID, code string) (RequestCode, bool, error)
+  PeerLoad.Delivered int64
+  PeerLoad.Envelopes int64
+  PeerLoad.PeerID string
+  PeerLoad.Pending int64
+  PeerLoad.Retries int64
   PermissionDefinition.AdminOnly bool
   PermissionDefinition.Code string
   PermissionDefinition.DefaultRoles []string
@@ -172,6 +188,12 @@
   ReportRun.Key string
   ReportRun.Result Result
   ReportRun.Title string
+  RequestCode.Active bool
+  RequestCode.Code string
+  RequestCode.Line string
+  RequestCode.Names map[string]string
+  RequestCode.SLA *int64
+  RequestCode.Source string
   Result.Columns []ColumnSpec
   Result.Notes []Note
   Result.Rows []map[string]any
@@ -283,6 +305,7 @@ func MigrationsOf(moduleID string) (fs.FS, bool)
 func NewParams(values map[string]any, locale string) Params
 func NewPlatform(db DB, permissions PermissionStore) Platform
 func Now() time.Time
+func Peers(ctx context.Context, tenantID string) ([]Peer, error)
 func People() (Directory, error)
 func ProvideAssistant(moduleID string, source AssistantSource)
 func Provide[T any](impl T)
@@ -349,6 +372,9 @@ type ParamKind string
 type ParamOption struct
 type ParamSpec struct
 type Params struct
+type Peer struct
+type PeerDirectory interface
+type PeerLoad struct
 type PermissionDefinition struct
 type PermissionStore interface
 type Platform interface
@@ -361,6 +387,7 @@ type ReportEngine interface
 type ReportExport struct
 type ReportRun struct
 type ReportSink func(Report)
+type RequestCode struct
 type Result struct
 type Rows interface
 type SignatureCeremony struct

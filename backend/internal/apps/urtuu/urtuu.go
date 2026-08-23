@@ -42,6 +42,12 @@ type Module struct {
 	db    nexus.DB
 	perms nexus.PermissionStore
 	link  nexus.Link
+	// peers is the reading half of the same channel: who is on the other end of
+	// a link, what a code means, what went over it. Handed in rather than
+	// fetched from the registry for the reason link is — a dependency a
+	// constructor names is one the compiler checks, and one fetched inside a
+	// method is a nil five minutes after a clean boot.
+	peers nexus.PeerDirectory
 }
 
 // New builds the module and registers what it reads.
@@ -57,12 +63,12 @@ type Module struct {
 // meant to be able to leave for a distribution of its own, and a distribution
 // cannot import internal/. Five methods is all it ever used, which is what made
 // the capability worth publishing — see nexus.Link.
-func New(p nexus.Platform, link nexus.Link) *Module {
-	m := &Module{db: p.DB(), perms: p.Permissions(), link: link}
+func New(p nexus.Platform, link nexus.Link, peers nexus.PeerDirectory) *Module {
+	m := &Module{db: p.DB(), perms: p.Permissions(), link: link, peers: peers}
 	nexus.Register(m)
 	link.Deliver(contract.KindTaskAssigned, m.receiveAssignment)
 	link.Deliver(contract.KindTaskUpdate, m.receiveUpdate)
-	registerReports()
+	registerReports(peers)
 	return m
 }
 
