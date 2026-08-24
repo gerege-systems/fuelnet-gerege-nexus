@@ -526,9 +526,18 @@ jobs:
               exit 1
             fi
 
-            LIVE=$(sudo grep -rl "server_name $CONTROL_PLANE_HOST" /etc/nginx/sites-available /etc/nginx/conf.d 2>/dev/null | head -1)
+            # Only mutate a configuration nginx actually loads. Searching
+            # sites-available can select a stale HTTP-only or backup file while
+            # the active TLS vhost in sites-enabled keeps serving old routes.
+            LIVE=""
+            while IFS= read -r CANDIDATE; do
+              if sudo grep -qE '^[[:space:]]*listen[[:space:]]+443([[:space:];]|$)' "$CANDIDATE"; then
+                LIVE=$(sudo readlink -f "$CANDIDATE")
+                break
+              fi
+            done < <(sudo grep -Rl "server_name $CONTROL_PLANE_HOST" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null)
             if [ -z "$LIVE" ]; then
-              echo "::error::Could not find the $CONTROL_PLANE_HOST vhost."
+              echo "::error::Could not find the active TLS vhost for $CONTROL_PLANE_HOST."
               exit 1
             fi
 
@@ -580,6 +589,19 @@ jobs:
               exit 1
             fi
             sudo systemctl reload nginx
+
+            ROOT_HEADERS=$(curl -sS -D - -o /dev/null --max-time 20 \
+              --resolve "$CONTROL_PLANE_HOST:443:127.0.0.1" "https://$CONTROL_PLANE_HOST/")
+            ROOT_STATUS=$(printf '%s\n' "$ROOT_HEADERS" | awk 'NR == 1 { print $2 }')
+            ROOT_LOCATION=$(printf '%s\n' "$ROOT_HEADERS" | \
+              awk 'tolower($1) == "location:" { gsub("\r", "", $2); print $2; exit }')
+            if [ "$ROOT_STATUS" = 308 ] && \
+               { [ "$ROOT_LOCATION" = "/cp" ] || [ "$ROOT_LOCATION" = "https://$CONTROL_PLANE_HOST/cp" ]; }; then
+              echo "control-plane root returns its permanent /cp redirect"
+            else
+              echo "::error::control-plane root returned status=$ROOT_STATUS location=$ROOT_LOCATION"
+              exit 1
+            fi
 
             STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
               -H "Host: $CONTROL_PLANE_HOST" http://127.0.0.1:8082/api/platform/v1/health)
