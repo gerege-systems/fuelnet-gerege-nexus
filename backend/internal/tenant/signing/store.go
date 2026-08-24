@@ -64,13 +64,13 @@ func (s *store) listDocuments(ctx context.Context, tenantID, status, search stri
 	clause := strings.Join(where, " AND ")
 
 	var total int
-	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM esign_documents WHERE `+clause, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM tenant.esign_documents WHERE `+clause, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	args = append(args, limit, offset)
 	rows, err := s.db.Query(ctx, `SELECT `+documentColumns+`
-		FROM esign_documents WHERE `+clause+`
+		FROM tenant.esign_documents WHERE `+clause+`
 		ORDER BY created_at DESC
 		LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *store) listDocuments(ctx context.Context, tenantID, status, search stri
 
 func (s *store) getDocument(ctx context.Context, tenantID, id string) (*Document, error) {
 	doc, err := scanDocument(s.db.QueryRow(ctx,
-		`SELECT `+documentColumns+` FROM esign_documents
+		`SELECT `+documentColumns+` FROM tenant.esign_documents
 		 WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, id, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, notFound("document not found")
@@ -116,7 +116,7 @@ func (s *store) createDocument(ctx context.Context, tenantID, uploadedBy, title,
 		uploader = &uploadedBy
 	}
 	return scanDocument(s.db.QueryRow(ctx,
-		`INSERT INTO esign_documents
+		`INSERT INTO tenant.esign_documents
 		     (tenant_id, title, file_name, page_count, original_pdf, checksum, byte_size, uploaded_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING `+documentColumns,
@@ -134,7 +134,7 @@ func (s *store) documentPDF(ctx context.Context, tenantID, id, variant string) (
 	// The column name is chosen from a closed set above and never interpolated
 	// from caller input.
 	err := s.db.QueryRow(ctx,
-		`SELECT `+column+`, file_name FROM esign_documents
+		`SELECT `+column+`, file_name FROM tenant.esign_documents
 		 WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, id, tenantID).Scan(&pdf, &fileName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", notFound("document not found")
@@ -154,7 +154,7 @@ func (s *store) documentForSigning(ctx context.Context, tenantID, id string) ([]
 	var pdf []byte
 	var status, title string
 	err := s.db.QueryRow(ctx,
-		`SELECT original_pdf, status, title FROM esign_documents
+		`SELECT original_pdf, status, title FROM tenant.esign_documents
 		 WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, id, tenantID).Scan(&pdf, &status, &title)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", "", notFound("document not found")
@@ -181,7 +181,7 @@ func (s *store) markSigned(ctx context.Context, tenantID, id string, in signedDo
 
 func (s *store) writeSigned(ctx context.Context, tenantID, id string, in signedDocument) error {
 	_, err := s.db.Exec(ctx,
-		`UPDATE esign_documents SET
+		`UPDATE tenant.esign_documents SET
 		     status = 'SIGNED', provider = $1, signed_pdf = $2, signature_image = COALESCE($3, signature_image),
 		     signer_name = $4, signer_reg_no = $5, signer_phone = $6, signer_etsi = $7,
 		     on_behalf_of_etsi = $8, on_behalf_of_name = $9, certificate_level = $10, signed_at = $11
@@ -210,7 +210,7 @@ type signedDocument struct {
 // and a tenant clearing their list must not destroy it.
 func (s *store) softDeleteDocument(ctx context.Context, tenantID, id string) error {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE esign_documents SET deleted_at = NOW()
+		`UPDATE tenant.esign_documents SET deleted_at = NOW()
 		 WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, id, tenantID)
 	if err != nil {
 		return err
@@ -259,7 +259,7 @@ type newSession struct {
 
 func (s *store) createSession(ctx context.Context, in newSession) (*SignSession, error) {
 	return scanSession(s.db.QueryRow(ctx,
-		`INSERT INTO esign_sign_sessions
+		`INSERT INTO tenant.esign_sign_sessions
 		     (id, tenant_id, document_id, provider, eid_session_id, state, file_name,
 		      document_hash, verification_code, signer_user_id, signer_etsi, signer_name,
 		      on_behalf_of_etsi, on_behalf_of_name, expires_at)
@@ -274,7 +274,7 @@ func (s *store) createSession(ctx context.Context, in newSession) (*SignSession,
 
 func (s *store) getSession(ctx context.Context, tenantID, id string) (*SignSession, error) {
 	session, err := scanSession(s.db.QueryRow(ctx,
-		`SELECT `+sessionColumns+` FROM esign_sign_sessions WHERE id = $1 AND tenant_id = $2`, id, tenantID))
+		`SELECT `+sessionColumns+` FROM tenant.esign_sign_sessions WHERE id = $1 AND tenant_id = $2`, id, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, notFound("signing session not found")
 	}
@@ -295,7 +295,7 @@ type sessionCompletion struct {
 // whether it was the one that won.
 func (s *store) completeSession(ctx context.Context, tenantID, id string, in sessionCompletion) (bool, error) {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE esign_sign_sessions SET
+		`UPDATE tenant.esign_sign_sessions SET
 		     state = 'completed', signed_pdf = $1, certificate_level = $2,
 		     signature_algorithm = $3, on_behalf_of_etsi = COALESCE($4, on_behalf_of_etsi),
 		     on_behalf_of_name = COALESCE($5, on_behalf_of_name), completed_at = NOW()
@@ -310,7 +310,7 @@ func (s *store) completeSession(ctx context.Context, tenantID, id string, in ses
 
 func (s *store) failSession(ctx context.Context, tenantID, id, state, reason string) error {
 	_, err := s.db.Exec(ctx,
-		`UPDATE esign_sign_sessions SET state = $1, failure_reason = $2, completed_at = NOW()
+		`UPDATE tenant.esign_sign_sessions SET state = $1, failure_reason = $2, completed_at = NOW()
 		 WHERE id = $3 AND tenant_id = $4 AND state = 'pending'`,
 		state, nullable(reason), id, tenantID)
 	return err
@@ -320,7 +320,7 @@ func (s *store) sessionSignedPDF(ctx context.Context, tenantID, id string) ([]by
 	var pdf []byte
 	var fileName, state string
 	err := s.db.QueryRow(ctx,
-		`SELECT signed_pdf, file_name, state FROM esign_sign_sessions
+		`SELECT signed_pdf, file_name, state FROM tenant.esign_sign_sessions
 		 WHERE id = $1 AND tenant_id = $2`, id, tenantID).Scan(&pdf, &fileName, &state)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", notFound("signing session not found")
@@ -339,7 +339,7 @@ func (s *store) sessionSignedPDF(ctx context.Context, tenantID, id string) ([]by
 // never cuts off a citizen who is still being pushed a notification.
 func (s *store) expireStaleSessions(ctx context.Context) (int64, error) {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE esign_sign_sessions
+		`UPDATE tenant.esign_sign_sessions
 		    SET state = 'expired', failure_reason = 'abandoned', completed_at = NOW()
 		  WHERE state = 'pending' AND expires_at < NOW()`)
 	if err != nil {
@@ -372,7 +372,7 @@ type logEntry struct {
 // upstream by the caller.
 func (s *store) recordLog(ctx context.Context, in logEntry) error {
 	_, err := s.db.Exec(ctx,
-		`INSERT INTO esign_signature_logs
+		`INSERT INTO tenant.esign_signature_logs
 		     (tenant_id, document_id, document_title, session_id, provider, action, outcome,
 		      reg_no, phone_no, first_name, last_name, actor_user_id, detail)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
@@ -419,7 +419,7 @@ func (s *store) listLogs(ctx context.Context, tenantID string, q LogQuery) ([]Si
 	clause := strings.Join(where, " AND ")
 
 	var total int
-	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM esign_signature_logs WHERE `+clause, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM tenant.esign_signature_logs WHERE `+clause, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -429,7 +429,7 @@ func (s *store) listLogs(ctx context.Context, tenantID string, q LogQuery) ([]Si
 		        COALESCE(session_id, ''), provider, action, outcome, COALESCE(reg_no, ''),
 		        COALESCE(phone_no, ''), COALESCE(first_name, ''), COALESCE(last_name, ''),
 		        COALESCE(detail, ''), created_at
-		   FROM esign_signature_logs WHERE `+clause+`
+		   FROM tenant.esign_signature_logs WHERE `+clause+`
 		  ORDER BY created_at DESC
 		  LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 	if err != nil {
@@ -459,7 +459,7 @@ func (s *store) loadSettings(ctx context.Context, tenantID string) (Placement, P
 	var placementRaw, policyRaw []byte
 	var updatedAt *time.Time
 	err := s.db.QueryRow(ctx,
-		`SELECT placement, policy, updated_at FROM esign_settings WHERE tenant_id = $1`,
+		`SELECT placement, policy, updated_at FROM tenant.esign_settings WHERE tenant_id = $1`,
 		tenantID).Scan(&placementRaw, &policyRaw, &updatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DefaultPlacement(), DefaultPolicy(), nil, nil
@@ -488,7 +488,7 @@ func (s *store) saveSettings(ctx context.Context, tenantID, updatedBy, column st
 	}
 	// column comes from a closed set at the call sites, never from a request.
 	_, err = s.db.Exec(ctx,
-		`INSERT INTO esign_settings (tenant_id, `+column+`, updated_by, updated_at)
+		`INSERT INTO tenant.esign_settings (tenant_id, `+column+`, updated_by, updated_at)
 		 VALUES ($1, $2, $3, NOW())
 		 ON CONFLICT (tenant_id) DO UPDATE
 		    SET `+column+` = EXCLUDED.`+column+`, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
@@ -498,7 +498,7 @@ func (s *store) saveSettings(ctx context.Context, tenantID, updatedBy, column st
 
 func (s *store) loadProbe(ctx context.Context, tenantID string) (*Probe, error) {
 	var raw []byte
-	err := s.db.QueryRow(ctx, `SELECT hsm FROM esign_settings WHERE tenant_id = $1`, tenantID).Scan(&raw)
+	err := s.db.QueryRow(ctx, `SELECT hsm FROM tenant.esign_settings WHERE tenant_id = $1`, tenantID).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) || len(raw) == 0 {
 		return nil, nil
 	}
@@ -527,7 +527,7 @@ func (s *store) createBatch(ctx context.Context, tenantID, createdBy, name, prov
 	var batchID string
 	var createdAt time.Time
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO esign_batches (tenant_id, name, provider, created_by)
+		`INSERT INTO tenant.esign_batches (tenant_id, name, provider, created_by)
 		 VALUES ($1, $2, $3, $4) RETURNING id::text, created_at`,
 		tenantID, name, provider, nullable(createdBy)).Scan(&batchID, &createdAt); err != nil {
 		return nil, err
@@ -537,8 +537,8 @@ func (s *store) createBatch(ctx context.Context, tenantID, createdBy, name, prov
 		// The subquery re-asserts tenant ownership, so a caller cannot pull a
 		// document from another tenant into their batch by guessing an id.
 		tag, err := tx.Exec(ctx,
-			`INSERT INTO esign_batch_items (batch_id, document_id, position)
-			 SELECT $1, id, $2 FROM esign_documents
+			`INSERT INTO tenant.esign_batch_items (batch_id, document_id, position)
+			 SELECT $1, id, $2 FROM tenant.esign_documents
 			  WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL AND status <> 'SIGNED'`,
 			batchID, i, docID, tenantID)
 		if err != nil {
@@ -558,7 +558,7 @@ func (s *store) createBatch(ctx context.Context, tenantID, createdBy, name, prov
 
 func (s *store) listBatches(ctx context.Context, tenantID string, limit, offset int) ([]Batch, int, error) {
 	var total int
-	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM esign_batches WHERE tenant_id = $1`, tenantID).Scan(&total); err != nil {
+	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM tenant.esign_batches WHERE tenant_id = $1`, tenantID).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -567,8 +567,8 @@ func (s *store) listBatches(ctx context.Context, tenantID string, limit, offset 
 		        COUNT(i.id),
 		        COUNT(*) FILTER (WHERE i.status = 'SIGNED'),
 		        COUNT(*) FILTER (WHERE i.status = 'FAILED')
-		   FROM esign_batches b
-		   LEFT JOIN esign_batch_items i ON i.batch_id = b.id
+		   FROM tenant.esign_batches b
+		   LEFT JOIN tenant.esign_batch_items i ON i.batch_id = b.id
 		  WHERE b.tenant_id = $1
 		  GROUP BY b.id
 		  ORDER BY b.created_at DESC
@@ -594,7 +594,7 @@ func (s *store) getBatch(ctx context.Context, tenantID, id string) (*Batch, erro
 	var b Batch
 	err := s.db.QueryRow(ctx,
 		`SELECT id::text, name, provider, status, created_at, started_at, finished_at
-		   FROM esign_batches WHERE id = $1 AND tenant_id = $2`, id, tenantID).
+		   FROM tenant.esign_batches WHERE id = $1 AND tenant_id = $2`, id, tenantID).
 		Scan(&b.ID, &b.Name, &b.Provider, &b.Status, &b.CreatedAt, &b.StartedAt, &b.FinishedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, notFound("batch not found")
@@ -606,8 +606,8 @@ func (s *store) getBatch(ctx context.Context, tenantID, id string) (*Batch, erro
 	rows, err := s.db.Query(ctx,
 		`SELECT i.id::text, i.document_id::text, d.title, d.file_name, i.position, i.status,
 		        COALESCE(i.session_id, ''), COALESCE(i.error, ''), i.signed_at
-		   FROM esign_batch_items i
-		   JOIN esign_documents d ON d.id = i.document_id
+		   FROM tenant.esign_batch_items i
+		   JOIN tenant.esign_documents d ON d.id = i.document_id
 		  WHERE i.batch_id = $1
 		  ORDER BY i.position`, id)
 	if err != nil {
@@ -643,7 +643,7 @@ func (s *store) setBatchStatus(ctx context.Context, tenantID, id, status string)
 		timeColumn = ", finished_at = NOW()"
 	}
 	tag, err := s.db.Exec(ctx,
-		`UPDATE esign_batches SET status = $1`+timeColumn+`
+		`UPDATE tenant.esign_batches SET status = $1`+timeColumn+`
 		  WHERE id = $2 AND tenant_id = $3`, status, id, tenantID)
 	if err != nil {
 		return err
@@ -661,7 +661,7 @@ func (s *store) setBatchItem(ctx context.Context, itemID, status, sessionID, err
 		signedAt = &now
 	}
 	_, err := s.db.Exec(ctx,
-		`UPDATE esign_batch_items
+		`UPDATE tenant.esign_batch_items
 		    SET status = $1, session_id = COALESCE($2, session_id), error = $3, signed_at = $4
 		  WHERE id = $5`,
 		status, nullable(sessionID), nullable(errMessage), signedAt, itemID)
@@ -684,7 +684,7 @@ func (s *store) eidIdentityFor(ctx context.Context, userID string) (*eidIdentity
 	err := s.db.QueryRow(ctx,
 		`SELECT COALESCE(civil_id, ''), COALESCE(reg_number, ''), person_etsi,
 		        COALESCE(document_number, ''), COALESCE(given_name, ''), COALESCE(surname, '')
-		   FROM user_eid_identities WHERE user_id = $1`, userID).
+		   FROM platform.user_eid_identities WHERE user_id = $1`, userID).
 		Scan(&id.CivilID, &id.RegNumber, &id.PersonEtsi, &id.DocumentNumber, &id.GivenName, &id.Surname)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

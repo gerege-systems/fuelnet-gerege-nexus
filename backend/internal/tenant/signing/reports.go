@@ -87,7 +87,7 @@ func (signaturesByRail) Run(ctx context.Context, q nexus.Querier, p nexus.Params
 		SELECT date_trunc('month', signed_at)::date AS month,
 		       coalesce(provider, 'UNKNOWN')        AS rail,
 		       count(*)                             AS signed
-		  FROM esign_documents
+		  FROM tenant.esign_documents
 		 WHERE tenant_id = $1
 		   AND status = 'SIGNED'
 		   AND deleted_at IS NULL
@@ -181,7 +181,7 @@ func (signersActivity) Run(ctx context.Context, q nexus.Querier, p nexus.Params)
 		SELECT coalesce(nullif(signer_name, ''), '—') AS signer,
 		       count(*)                               AS signed,
 		       max(signed_at)::date                   AS last_signed
-		  FROM esign_documents
+		  FROM tenant.esign_documents
 		 WHERE tenant_id = $1
 		   AND status = 'SIGNED'
 		   AND deleted_at IS NULL
