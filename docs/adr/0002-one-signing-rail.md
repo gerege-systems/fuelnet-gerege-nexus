@@ -1,11 +1,15 @@
 # 0002 — Нэг гарын үсгийн зам: `eidmongolia`
 
 - **Огноо:** 2026-08-18
-- **Байдал:** Хүлээн авсан. 1-р үе шат хэрэгжсэн; 2-р үе шат
+- **Байдал:** Хүлээн авсан, хэрэгжсэн; 2-р үе шат
   **дахин бичигдэв** — доорх «Хоёр дахь олдвор»-ыг үз.
 - **Холбоотой:** [0001 — Домэйн эхэнд](0001-domain-first.md);
-  `internal/platform/eid`, `internal/platform/eidmongolia`,
-  `internal/platform/esign`, `internal/apps/documents/eidsign.go`
+  `internal/tenant/identity/eid`, `internal/tenant/identity/eidmongolia`,
+  `internal/tenant/signing`, `pkg/nexus/identity_rails.go`
+
+> Доорх `internal/platform/*` ба `internal/apps/documents/*` замууд нь шийдвэр
+> гарах үеийн нэр. Хоёр урсгалын refactor-ын дараа identity/signing rail tenant
+> plane-д, documents module `client-gerege-nexus` distribution-д байрлана.
 
 ## Юу олдсон бэ
 

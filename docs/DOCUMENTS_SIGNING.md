@@ -4,6 +4,10 @@
 eID батламжаар** гарын үсэг зуруулдаг. Энэ бичиг нь тэр урсгалын ойлгомжгүй
 хэсгүүдийг — яагаад тийм болсныг — тайлбарлана.
 
+2026-08-23-аас documents module, domain, migration нь `client-gerege-nexus`
+distribution-д байрлана. Энэ цөмд `internal/tenant/signing` rail болон
+`pkg/nexus`-ийн `Signer`, `SigningRails`, `DocumentFiler` contract үлдсэн.
+
 ---
 
 ## 1. Гарын үсэг гэж юу вэ
@@ -435,11 +439,11 @@ tile нь тэгэхэд л зөв байна (шинээс эрэмбэлбэл
 ## 6. Тест
 
 ```bash
-# Нэгж тестүүд — DB шаардахгүй
-go test ./internal/apps/documents/
+# client-gerege-nexus distribution доторх нэгж тестүүд — DB шаардахгүй
+go test ./modules/documents/...
 
-# Бүрэн тестүүд — migration хийсэн хаяж болох DB шаардана
-DOCUMENTS_TEST_DATABASE_URL=postgres://... go test ./internal/apps/documents/
+# Бүрэн тестүүд — distribution migration хийсэн хаяж болох DB шаардана
+DOCUMENTS_TEST_DATABASE_URL=postgres://... go test ./modules/documents/...
 ```
 
 Integration тестүүд нь SQL дотор амьдардаг зүйлсийг барина: төлөвийн хамгаалалт,

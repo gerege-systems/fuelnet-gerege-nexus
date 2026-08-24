@@ -1,7 +1,7 @@
 # Architecture Specification
 
-System architecture, layering and technical decisions behind the
-**Gerege Nexus**.
+The current code structure, two-plane boundary, and data ownership model of
+**Gerege Nexus**. Updated 2026-08-24.
 
 <p>
   <a href="ARCHITECTURE_SPECIFICATION.md"><img src="assets/icons/flag-mn.png" width="18" height="18" alt=""> Монгол</a>
@@ -9,129 +9,157 @@ System architecture, layering and technical decisions behind the
   <img src="assets/icons/flag-en.png" width="18" height="18" alt=""> <b>English</b>
 </p>
 
-[Back to the documentation hub](README.md)
+[Documentation hub](README.md) · [Control plane](CONTROL_PLANE.md) ·
+[ADR-0005](adr/0005-two-planes-one-origin-each.md)
 
 ---
 
-## 1. System overview
+## 1. One process, two planes
 
-**Gerege Nexus** is a high-performance **modular monolith platform** that
-connects services, operations, systems, and data across public and private
-organizations, wired directly into Mongolia's national digital infrastructure.
+Gerege Nexus is a **modular monolith** built with Go, Next.js, and PostgreSQL.
+One `cmd/api` binary, image, and deployment serve two independent request
+planes:
 
-### 1.1 High-performance modular monolith
+| | Tenant plane | Platform plane |
+| --- | --- | --- |
+| Responsibility | A user's work inside one organisation | Operating the entire deployment |
+| Origin | `nexus.gerege.mn` | `cp.nexus.gerege.mn` |
+| API | `/api/v1/*` | `/api/platform/v1/*` |
+| Session cookie | `session_token` | `cp_session` |
+| Account | `platform.users` + `tenant.memberships` | `platform.operator_accounts` |
+| Database role | `gerege_nexus_tenant` | `gerege_nexus_operator` |
+| Go package | `internal/tenant/*` | `internal/platform/*` |
 
-- **Zero-latency execution** — business modules (`contacts`, `products`,
-  `inventory`, `billing`, `documents`, `sso_clients`) implement the Go
-  `Module` contract and compile into a single binary.
-- **Tenant app store** — whether a module is active for a tenant is decided
-  dynamically from PostgreSQL (`app_installations`).
-- **DAG dependency resolution** — a directed acyclic graph plus semver
-  constraints resolve module dependencies without cycles.
-- **Catalog sync** — `catalog/apps.json` is the single source of truth and the
-  `apps` table is reconciled from it on every boot.
+An operator account is not a user account. A person may be signed into both
+planes, but each has a distinct identity, cookie, privilege set, and audit
+trail. When an operator needs a tenant's view, they use the reason-bound,
+30-minute impersonation flow.
 
-### 1.2 Cloud-native resilience (inspired by go-zero)
-
-- **Adaptive circuit breaker** (`resilience/breaker.go`) — Google SRE sliding
-  window error-rate rejection.
-- **Adaptive load shedding** (`resilience/loadshedder.go`) — returns
-  `503 Service Unavailable` once in-flight concurrency is exceeded.
-- **Singleflight coalescing** (`resilience/singleflight.go`) — collapses
-  duplicate queries and absorbs cache stampedes.
-- **Exponential backoff retry** (`resilience/retry.go`) — retries transient
-  failures.
-
-### 1.3 State data exchange and identity
-
-- **XYP state exchange** — citizen civil registration (`WS100101`) and legal
-  entity data (`WS100201`). The client stays in the platform; the surface a
-  person uses is the `egov` app (`/egov`) — lookups, rail status and history.
-- **DAN and E-ID** ([`eidmongolia.mn`](https://eidmongolia.mn),
-  [`developer.gerege.mn`](https://developer.gerege.mn)) — PKI digital signature,
-  mobile OTP, bank SSO and biometric face verification.
-- **OAuth2 / OIDC provider** (`/.well-known/openid-configuration`) — the
-  platform's own authorisation server.
-
-> Mock mode is a development convenience only; it is disabled automatically when
-> `ENVIRONMENT=production`.
-
----
-
-## 2. Architecture diagram
-
-```
-+-----------------------------------------------------------------------------------+
-|                              Gerege Nexus                             |
-+-----------------------------------------------------------------------------------+
-                                          |
-                +-------------------------+-------------------------+
-                |                                                   |
-      +-------------------+                               +-------------------+
-      | Next.js 16 Client |                               |  Go 1.26 Backend  |
-      |   (App Router)    |                               |   (Chi Router)    |
-      +-------------------+                               +-------------------+
-                |                                                   |
-        +-------+-------+                                   +-------+-------+
-        |               |                                   |               |
-+---------------+ +---------------+                 +---------------+ +---------------+
-| AI Copilot UI | | E-ID / DAN    |                 | Cloud-Native  | | State Exchange|
-|  Drawer Panel | | SSO Provider  |                 | Resilience    | | (xyp.gerege)  |
-+---------------+ +---------------+                 +---------------+ +---------------+
-                                                            |
-                                                    +---------------+
-                                                    | Shared-Schema |
-                                                    |  PostgreSQL   |
-                                                    +---------------+
+```text
+tenant origin ─┐                         ┌─ internal/tenant/* ─ tenant schema
+               ├─ pkg/platform/server.go ┤
+control origin ┘   shared middleware     └─ internal/platform/* ─ platform schema
+                          │
+                    internal/kernel/*
+                          │
+                      PostgreSQL
 ```
 
----
+`backend/pkg/platform/server.go` is the composition root. It constructs shared
+stores, middleware, and the router, then mounts both route tables. The planes do
+not import one another; `internal/planes_test.go` enforces that rule over the Go
+import graph.
 
-## 3. Request pipeline
+## 2. Code boundaries
 
-1. **Shared middleware** — logging, panic recovery, load shedding, Prometheus
-   metrics, security headers, CORS.
-2. **Authentication** — the session token is read from the cookie or the
-   `Authorization: Bearer` header and resolved against the `sessions` table.
-   Only the SHA-256 digest of the token is stored.
-3. **Tenant context** — `tenant_id` is placed in the Go context and scopes every
-   query.
-4. **App gate** — each module route checks `app_installations`; an uninstalled
-   or disabled app returns `403 Forbidden`.
-5. **Module handler** — business logic and database transactions.
-
----
-
-## 4. Core data model
-
-| Table | Purpose |
+| Location | Responsibility |
 | --- | --- |
-| `tenants`, `users`, `memberships` | Multi-tenancy and user membership |
-| `roles`, `permissions`, `role_permissions`, `membership_roles` | RBAC model |
-| `sessions` | Server-side session tokens (SHA-256 digests) |
-| `apps`, `app_versions`, `app_installations`, `installation_events` | App store and installation history |
-| `contacts`, `products`, `warehouses`, `stock_levels`, `stock_movements` | Core business data |
-| `billing_invoices`, `document_records` | Invoices and digital documents |
-| `oauth2_clients` | OAuth2 client applications |
+| `backend/internal/kernel` | Plane-neutral cache, config, security, telemetry, settings, flags, and other primitives |
+| `backend/internal/tenant` | Authentication, access, directory, devices, identity, integrations, profile, SSO, and app installation for one tenant |
+| `backend/internal/platform` | Operator sessions, tenants, approvals, settings, flags, audit, support, metering, backup, catalog, and observability |
+| `backend/internal/apps` | Adapters for business modules supplied by a distribution |
+| `backend/pkg/platform` | Public host package that assembles both planes into one HTTP process |
+| `backend/pkg/nexus` | Stable SDK contract for external modules and distributions |
 
-All schema changes go through goose migrations in `backend/db/migrations/`.
-Runtime DDL is not allowed.
+A plane's root package only composes its subpackages. Handlers, stores, and
+business logic belong in a domain subpackage. The current
+`internal/tenant/service.go` remains a future decomposition task; it does not
+relax the import or schema boundary.
 
----
+## 3. Request paths
 
-## 5. Architectural decisions
+### 3.1 Shared layer
 
-| Decision | Rationale |
+Both planes share request IDs, tracing, structured logging, panic recovery,
+load shedding, metrics, security headers, CORS, and CSRF middleware in
+`pkg/platform/server.go`. `/health`, `/ready`, and `/metrics` are process-level
+endpoints owned by neither plane.
+
+### 3.2 Tenant request
+
+1. Resolve the user from `session_token` or an allowed bearer token.
+2. Place the active tenant in the request context.
+3. Run database work as `gerege_nexus_tenant` through `dbguard`.
+4. Let PostgreSQL RLS and `tenant_id` constrain rows to that organisation.
+5. For module routes, check `tenant.app_installations` and the kill switch.
+
+### 3.3 Platform request
+
+1. `HostGate` admits only the `CONTROL_PLANE_HOST` origin.
+2. Resolve `cp_session`; password plus TOTP, short idle timeout, and step-up
+   apply.
+3. Run every query as `gerege_nexus_operator`.
+4. Commit each write with its `platform.operator_audit` row in the same
+   transaction. A write without audit cannot report success.
+
+In production, nginx's CIDR allowlist runs before HostGate. Origin, session,
+database role, and audit are independent layers.
+
+## 4. Database ownership
+
+Migration `00079_two_schemas.sql` split tables into `platform` and `tenant`;
+`00080_search_path_has_no_public.sql` removed `public` from runtime search
+paths.
+
+| Schema | Owned data |
 | --- | --- |
-| Modular monolith over microservices | In-process calls avoid network latency; module boundaries are enforced by Go interfaces |
-| No ORM (`pgx` plus hand-written SQL) | Keeps queries explicit and tunable, avoids hidden N+1 |
-| Shared-schema multi-tenancy | Isolation via `tenant_id` without duplicating schemas |
-| Catalog file as source of truth | Adding an app needs no manual SQL; the `apps` table syncs automatically |
-| Opaque session tokens | Avoids the revocation problem of stateless JWTs |
+| `platform` | Tenants, users, apps, operator accounts/sessions/audit, approvals, settings, flags, announcements, quotas, usage, backup metadata |
+| `tenant` | Memberships, roles, sessions, app installations, profile, directory, device, integration, SSO, and tenant audit data |
+| `public` | Goose migration ledgers and deliberately retained `SECURITY DEFINER` functions |
 
----
+The current migration inventory contains 26 platform and 40 tenant tables.
+Counts are not the contract: `backend/db/migrations/ownership_test.go` declares
+ownership by name, and `schema_split_test.go` compares that declaration with a
+real database.
 
-## 6. Maintainers
+The tenant role needs `USAGE` on the platform schema to resolve five explicit
+boundary tables: announcements, feature flag overrides, operator
+impersonations, tenant quotas, and usage events. The effective boundary is
+therefore the **table-level grant**, not schema usage. A database integration
+test proves that a newly created platform table is closed to the tenant role by
+default.
 
-- **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems))
-- **Gemini AI**, **Claude AI**
+All DDL enters through goose migrations in `backend/db/migrations/`. Runtime
+DDL is forbidden. Distribution modules provide their own migrations through
+the `pkg/nexus` contract.
+
+## 5. Modules and catalog
+
+Core does not own a business app's tables or handlers. A distribution supplies
+module code, a manifest, and migrations, then registers them through the Nexus
+SDK contract. The platform fetches the catalog and reconciles metadata in
+`platform.apps`; tenant installation, version, and state live in
+`tenant.app_installations`.
+
+The AI stock forecast endpoint does not depend on a built-in inventory table.
+It delegates to an enabled distribution's `stock_forecast` capability and
+returns `404` when no provider exists.
+
+## 6. Multi-replica behaviour and resilience
+
+- `kernel/resilience/loadshedder.go` bounds concurrent requests.
+- `kernel/cache.Bus` distributes invalidations over Redis pub/sub when Redis is
+  configured and remains locally functional when it is not.
+- `kernel/memo` provides a short-TTL, prefix-invalidated process-local cache
+  for authorisation and installation decisions.
+- `kernel/async` runs named goroutines with panic recovery and stack logging.
+- Settings and feature flags use periodic refresh in addition to event-driven
+  invalidation.
+
+## 7. Automated architecture guards
+
+| Invariant | Enforcement |
+| --- | --- |
+| No direct imports between planes | `backend/internal/planes_test.go` |
+| Every table lands in its declared schema | `backend/db/migrations/ownership_test.go`, `schema_split_test.go` |
+| SQL qualifies owned tables by schema | `backend/db/migrations/qualification_test.go` |
+| Tenant role reads only five platform boundary tables | `schema_split_test.go` |
+| New platform tables are closed by default | `TestNewPlatformTableIsClosedToTenantRole` |
+| The HTTP surface does not drift silently | `backend/pkg/platform/testdata/routes.txt` |
+| Origin and `/cp` host routing remain separated | `frontend/proxy.test.ts`, `frontend/scripts/host-boundary-smoke.mjs` |
+
+For rationale, see the [two-plane proposal](TWO_PLANES_PROPOSAL.md),
+[implementation review](TWO_PLANES_REVIEW.md), and
+[ADR-0005](adr/0005-two-planes-one-origin-each.md). Proposal, prompt, and plan
+documents are historical design records; this document and executable code are
+the current sources of truth.

@@ -1,6 +1,11 @@
 # Claude Code — Хоёр урсгалыг татах (хэрэгжүүлэлтийн prompt-ууд)
 
-[`TWO_PLANES_PROPOSAL.md`](TWO_PLANES_PROPOSAL.md)-ыг хэрэгжүүлэх prompt-ууд.
+> **Архив — бүх заавал хийх үе шат хэрэгжсэн.** Эдгээр prompt нь refactor-ыг
+> дахин ажиллуулах заавар биш, шийдвэр ба PR дарааллын түүхэн бүртгэл. Одоогийн
+> бүтцийг [ARCHITECTURE_SPECIFICATION.md](ARCHITECTURE_SPECIFICATION.md),
+> үр дүнг [TWO_PLANES_REVIEW.md](TWO_PLANES_REVIEW.md)-аас харна уу.
+
+[`TWO_PLANES_PROPOSAL.md`](TWO_PLANES_PROPOSAL.md)-ыг хэрэгжүүлэхэд ашигласан prompt-ууд.
 Үе шат бүр **нэг Claude Code session, нэг branch, нэг PR**. Дараалал нь заавал:
 Үе B нь A-гийн ангилалаас, C нь B-гийн тестээс, D нь C-гийн package модноос
 хамаарна.

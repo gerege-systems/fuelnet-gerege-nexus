@@ -64,27 +64,27 @@
 
 ### 1. 高性能模块化单体架构
 
-- **编译期 Go 应用模块** —— `contacts`、`products`、`inventory`、`billing`、
-  `documents`、`sso_clients` 编译进同一个二进制，进程内直接调用。
+- **编译期 Go 应用模块** —— 核心仅携带 `sso_clients`。产品 distribution
+  通过公开 `pkg/nexus` contract 将模块注册到最终二进制，并在进程内调用。
 - **租户级应用商店** —— 应用权限、菜单与 RBAC 由 PostgreSQL
   （`app_installations`）动态驱动。
 - **依赖解析引擎** —— 基于有向无环图（DAG）的递归解析，支持环检测与 semver
   约束校验。
-- **目录同步** —— `catalog/apps.json` 是唯一事实来源，`apps` 表在每次启动时据此
-  同步。
+- **目录同步** —— production 从 `APP_CATALOG_URL` 获取签名目录；开发/离线
+  模式回退到 `catalog/apps.json`，并将 metadata 同步到 `platform.apps`。
 
-### 2. 云原生韧性引擎
+### 2. 云原生韧性与多副本
 
 | 模块 | 用途 |
 | --- | --- |
-| `resilience/breaker.go` | Google SRE 风格的自适应熔断器 |
-| `resilience/loadshedder.go` | 过载时返回 `503` 与 `Retry-After` |
-| `resilience/singleflight.go` | 合并重复的并发请求 |
-| `resilience/retry.go` | 指数退避重试 |
+| `internal/kernel/resilience/loadshedder.go` | 过载时返回 `503` 与 `Retry-After` |
+| `internal/kernel/cache/bus.go` | 基于 Redis 的跨副本失效通知，并支持本地回退 |
+| `internal/kernel/memo/memo.go` | 用于授权决策的短 TTL、按前缀失效的本地缓存 |
+| `internal/kernel/async/async.go` | 带 panic 恢复与堆栈日志的命名 goroutine |
 
 ### 3. 国家数字基础设施集成
 
-- **XYP 国家信息交换系统**（`platform/gerege/xyp.go`）：公民户籍登记
+- **XYP 国家信息交换系统**（`internal/tenant/identity/gerege/xyp.go`）：公民户籍登记
   （`WS100101`）与法人主体核验（`WS100201`）。
 - **国家 E-ID 与 DAN**（[`developer.gerege.mn`](https://developer.gerege.mn)、
   [`eidmongolia.mn`](https://eidmongolia.mn)）—— PKI 数字签名、手机 OTP、
@@ -92,7 +92,7 @@
 - **内置 OAuth2 / OIDC 提供方**
   （`/.well-known/openid-configuration`），为第三方系统签发 client credentials
   令牌。
-- **电子邮件验证**（`platform/emailverify`）——统一的地址验证流程，平台内所有应用
+- **电子邮件验证**（`internal/tenant/emailverify`）——统一的地址验证流程，平台内所有应用
   模块在进程内直接调用。邮件由托管服务（`enigma.mn`）发送，因此平台不保存任何
   邮箱凭据、也不拥有发件地址；用户回到平台时记录验证，且该回访仅可使用一次。可在
   “设置 → 电子邮件验证”中查看。
@@ -102,13 +102,16 @@
 
 ### 4. AI 助手与业务分析
 
-- **AI 助手**（`platform/ai/copilot.go`）—— 连接租户实时数据的意图分类对话。
-- **库存需求预测**（`platform/ai/inventory_forecaster.go`）—— 基于历史出入库
-  给出安全库存与再订货点建议。
+- **AI 助手**（`internal/tenant/ai/copilot.go`）—— 连接租户实时数据的意图分类对话。
+- **库存预测端点**（`internal/tenant/ai/handlers.go`）——委托给已启用
+  distribution 的 `stock_forecast` capability；没有提供方时返回 `404`。
 
 ---
 
 ## 业务应用
+
+以下大多数应用是 distribution module：它们通过 `pkg/nexus` 携带自己的代码与
+migration，不存放在核心仓库中。
 
 | # | 应用 | ID | 路由 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -133,9 +136,13 @@ backend/
   cmd/migrate/        Goose 迁移执行器
   db/migrations/      SQL 迁移脚本
   internal/
-    module.go         Go Module 契约
-    apps/             业务模块
-    platform/         平台核心服务
+    kernel/           两个平面共享的技术原语
+    tenant/           单个组织范围内的工作
+    platform/         整个 deployment 的运维
+    apps/             本 distribution 携带的模块
+  pkg/
+    nexus/            外部模块的公共 SDK 与 contract
+    platform/         两个平面的 composition root
 frontend/             Next.js 16（App Router）Web 客户端
 catalog/              应用商店目录与 manifest
 deploy/               生产 Dockerfile 与 Nginx 配置
