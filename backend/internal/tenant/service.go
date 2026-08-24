@@ -47,6 +47,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/appinstall"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/devices"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/devices/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/directory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
@@ -105,6 +106,9 @@ type Service struct {
 	integrationHandler *integration.Handler
 	aiSvc              *ai.Service
 	staffPIN           *staffpin.Service
+	// devices is the terminals an organisation enrols, and the sign-in a till
+	// offers whoever is standing at it.
+	devices *devices.Handlers
 	// urtuuLink is the Өртөө channel: the links to other installations and the
 	// queues in both directions. A platform service rather than part of the
 	// Өртөө app, because the channel is infrastructure any module may reach for
@@ -470,6 +474,9 @@ func New(deps Deps) (*Service, error) {
 		// half, at the provider that signed the person in.
 		EndSession: endSessionURL(federatedSignIn),
 	})
+
+	// After the sign-in package, which a till asks for a session.
+	s.devices = devices.New(db, s.staffPIN, s.authn)
 
 	// And now the closure above has something to call.
 	server = s
@@ -981,16 +988,16 @@ func (s *Service) Routes(r chi.Router) {
 		api.Get("/auth/sso/callback", s.handleSSOCallback)
 		// Device enrollment is the bootstrap: the one-time code is its authority,
 		// so the device cannot already be behind session/device middleware.
-		api.Post("/devices/enroll", s.handleEnrollDevice)
-		api.With(s.deviceMiddleware).Get("/devices/me", s.handleDeviceMe)
-		api.With(s.deviceMiddleware).Post("/devices/token/rotate", s.handleRotateDeviceToken)
-		api.With(s.deviceMiddleware, security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/devices/staff/pin", s.handleDeviceStaffPIN)
+		api.Post("/devices/enroll", s.devices.HandleEnrollDevice)
+		api.With(s.devices.Middleware).Get("/devices/me", s.devices.HandleDeviceMe)
+		api.With(s.devices.Middleware).Post("/devices/token/rotate", s.devices.HandleRotateDeviceToken)
+		api.With(s.devices.Middleware, security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/devices/staff/pin", s.devices.HandleDeviceStaffPIN)
 		// The till shift endpoints were here. Point of sale went to
 		// pos-gerege-nexus and they did not follow — three routes over
 		// pos_shifts, a table belonging to a module this binary does not have.
 		// Found by db/migrations/ownership_test.go rather than by anybody
 		// noticing; removed with the rest of the departed apps' remains.
-		api.With(s.deviceMiddleware).Post("/devices/telemetry", s.handleDeviceTelemetry)
+		api.With(s.devices.Middleware).Post("/devices/telemetry", s.devices.HandleDeviceTelemetry)
 
 		// The OAuth redirect a connected provider sends the browser back to.
 		api.Get("/integrations/oauth/callback", s.integrationHandler.HandleOAuthCallback)
@@ -1039,11 +1046,11 @@ func (s *Service) Routes(r chi.Router) {
 			pr.Post("/auth/tenants/active", s.authn.HandleSetActiveTenants)
 			pr.Post("/auth/switch-tenant", s.authn.HandleSwitchTenant)
 			pr.Get("/menus", s.handleMenus)
-			pr.With(s.authn.RequireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
-			pr.With(s.authn.RequireAdmin).Get("/admin/devices", s.handleListDevices)
+			pr.With(s.authn.RequireAdmin).Post("/admin/devices/enrollment-codes", s.devices.HandleCreateEnrollmentCode)
+			pr.With(s.authn.RequireAdmin).Get("/admin/devices", s.devices.HandleListDevices)
 			pr.With(s.authn.RequireAdmin).Put("/admin/devices/staff-pin", s.staffPIN.HandleSetPIN)
-			pr.With(s.authn.RequireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
-			pr.Post("/push-tokens", s.handleRegisterPushToken)
+			pr.With(s.authn.RequireAdmin).Put("/admin/devices/status", s.devices.HandleUpdateDeviceStatus)
+			pr.Post("/push-tokens", s.devices.HandleRegisterPushToken)
 
 			// Consent screen. The browser endpoint at /oauth2/auth redirects
 			// here; these two describe the pending grant and record the

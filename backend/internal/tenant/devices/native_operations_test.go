@@ -1,4 +1,4 @@
-package tenant
+package devices
 
 import (
 	"encoding/base64"

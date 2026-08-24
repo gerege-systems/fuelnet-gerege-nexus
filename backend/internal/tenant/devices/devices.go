@@ -1,4 +1,4 @@
-package tenant
+package devices
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func validDeviceKind(platform, formFactor string) bool {
 	return platforms[platform] && factors[formFactor]
 }
 
-func (s *Service) handleCreateEnrollmentCode(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleCreateEnrollmentCode(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
@@ -68,7 +68,7 @@ func (s *Service) handleCreateEnrollmentCode(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	expires := time.Now().Add(enrollmentTTL)
-	_, err = s.db.Exec(r.Context(), `INSERT INTO device_enrollment_codes(tenant_id,code_hash,created_by,expires_at) VALUES($1,$2,$3,$4)`, claims.TenantID, secretHash(code), claims.UserID, expires)
+	_, err = h.db.Exec(r.Context(), `INSERT INTO device_enrollment_codes(tenant_id,code_hash,created_by,expires_at) VALUES($1,$2,$3,$4)`, claims.TenantID, secretHash(code), claims.UserID, expires)
 	if err != nil {
 		httpx.Error(w, 500, "failed to persist enrollment code")
 		return
@@ -77,7 +77,7 @@ func (s *Service) handleCreateEnrollmentCode(w http.ResponseWriter, r *http.Requ
 	httpx.JSON(w, http.StatusCreated, map[string]any{"code": code, "expires_at": expires})
 }
 
-func (s *Service) handleEnrollDevice(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleEnrollDevice(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code       string `json:"code"`
 		Name       string `json:"name"`
@@ -101,7 +101,7 @@ func (s *Service) handleEnrollDevice(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, "failed to create device token")
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, 503, "enrollment unavailable")
 		return
@@ -146,7 +146,7 @@ func deviceTokenFromRequest(r *http.Request) string {
 	return ""
 }
 
-func (s *Service) deviceMiddleware(next http.Handler) http.Handler {
+func (h *Handlers) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := deviceTokenFromRequest(r)
 		if token == "" {
@@ -154,7 +154,7 @@ func (s *Service) deviceMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		var claims deviceClaims
-		err := s.db.QueryRow(r.Context(), `SELECT id::text,tenant_id::text,name,platform,form_factor FROM authenticate_device($1)`, secretHash(token)).Scan(&claims.ID, &claims.TenantID, &claims.Name, &claims.Platform, &claims.FormFactor)
+		err := h.db.QueryRow(r.Context(), `SELECT id::text,tenant_id::text,name,platform,form_factor FROM authenticate_device($1)`, secretHash(token)).Scan(&claims.ID, &claims.TenantID, &claims.Name, &claims.Platform, &claims.FormFactor)
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Error(w, 401, "invalid device token")
 			return
@@ -169,7 +169,7 @@ func (s *Service) deviceMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Service) handleDeviceMe(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleDeviceMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(deviceContextKey{}).(deviceClaims)
 	if !ok {
 		httpx.Error(w, 401, "unauthorized device")
@@ -178,7 +178,7 @@ func (s *Service) handleDeviceMe(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, map[string]any{"id": claims.ID, "tenant_id": claims.TenantID, "name": claims.Name, "platform": claims.Platform, "form_factor": claims.FormFactor, "status": "ACTIVE"})
 }
 
-func (s *Service) handleRotateDeviceToken(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleRotateDeviceToken(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(deviceContextKey{}).(deviceClaims)
 	if !ok {
 		httpx.Error(w, 401, "unauthorized device")
@@ -189,7 +189,7 @@ func (s *Service) handleRotateDeviceToken(w http.ResponseWriter, r *http.Request
 		httpx.Error(w, 500, "failed to rotate device token")
 		return
 	}
-	result, err := s.db.Exec(r.Context(), `UPDATE devices SET token_hash=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='ACTIVE'`, claims.ID, claims.TenantID, secretHash(token))
+	result, err := h.db.Exec(r.Context(), `UPDATE devices SET token_hash=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='ACTIVE'`, claims.ID, claims.TenantID, secretHash(token))
 	if err != nil || result.RowsAffected() != 1 {
 		httpx.Error(w, 503, "device token rotation failed")
 		return
@@ -198,7 +198,7 @@ func (s *Service) handleRotateDeviceToken(w http.ResponseWriter, r *http.Request
 	httpx.JSON(w, 200, map[string]string{"device_token": token})
 }
 
-func (s *Service) handleUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
@@ -216,7 +216,7 @@ func (s *Service) handleUpdateDeviceStatus(w http.ResponseWriter, r *http.Reques
 		httpx.Error(w, 400, "invalid device status")
 		return
 	}
-	result, err := s.db.Exec(r.Context(), `UPDATE devices SET status=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, req.ID, tenantID, req.Status)
+	result, err := h.db.Exec(r.Context(), `UPDATE devices SET status=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, req.ID, tenantID, req.Status)
 	if err != nil || result.RowsAffected() != 1 {
 		httpx.Error(w, 404, "device not found")
 		return
@@ -224,12 +224,12 @@ func (s *Service) handleUpdateDeviceStatus(w http.ResponseWriter, r *http.Reques
 	httpx.JSON(w, 200, map[string]string{"status": req.Status})
 }
 
-func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT id::text,name,platform,form_factor,site,status,app_version,os_version,last_seen_at,enrolled_at FROM devices WHERE tenant_id=$1 ORDER BY name`, tenantID)
+	rows, err := h.db.Query(r.Context(), `SELECT id::text,name,platform,form_factor,site,status,app_version,os_version,last_seen_at,enrolled_at FROM devices WHERE tenant_id=$1 ORDER BY name`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load devices")
 		return
