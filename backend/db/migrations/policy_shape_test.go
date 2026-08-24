@@ -14,6 +14,45 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Tables whose tenant_isolation policy is deliberately the narrow form, and
+// why each one is.
+//
+// It sits outside the test because the first five entries are also the
+// boundary between the two planes, and ownership_test.go checks its own list
+// of them against this one. Two lists of the same five names drift.
+var narrowPolicies = map[string]string{
+	// Read-only views for the console and the tenant's own quota screen.
+	// One organisation's figures, shown to that organisation; widening them
+	// would show an operator's impersonation record to a sibling tenant.
+	"announcements":           "console, FOR SELECT",
+	"feature_flag_overrides":  "console, FOR SELECT",
+	"operator_impersonations": "console, FOR SELECT",
+	"tenant_quotas":           "console, FOR SELECT",
+	"usage_events":            "console, FOR SELECT",
+
+	// Device-scoped. A terminal is enrolled into one organisation and reads
+	// as that organisation; there is no "this person also belongs to" for a
+	// till or a kiosk.
+	"device_enrollment_codes": "device scope",
+	"device_telemetry":        "device scope",
+	"devices":                 "device scope",
+	"push_tokens":             "device scope",
+	"staff_pin_credentials":   "device scope",
+
+	// TODO: unreviewed. These four took the narrow form by copying, not by
+	// deciding, and each needs its own answer before it is widened — an
+	// audit trail and a signed file are not obviously things a sibling
+	// organisation should read just because one person belongs to both.
+	"audit_events": "unreviewed",
+	// document_files was here — a signed file is not obviously something a
+	// sibling organisation should read — and it went to
+	// client-gerege-nexus with the documents app. Its policy is declared in
+	// that repository's own migration, in the same narrow form and for the
+	// same unreviewed reason.
+	"report_grants":    "unreviewed",
+	"report_schedules": "unreviewed",
+}
+
 // Two tenant-isolation policies with different shapes, written down.
 //
 // 00037 widened the read half of the rule: a session belonging to several
@@ -25,7 +64,7 @@ import (
 //
 // The narrow form errs closed, so nothing has leaked; what it does is hide
 // rows from somebody entitled to see them, on some tables and not others,
-// with nothing saying which. The remaining sixteen are listed below with a
+// with nothing saying which. The remaining sixteen are listed above with a
 // reason each, so the question "why is this one different" has an answer that
 // is not "whoever wrote it copied the wrong file".
 //
@@ -41,40 +80,6 @@ func TestTenantPoliciesHaveTheShapeOnRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-
-	// Tables whose tenant_isolation policy is deliberately the narrow form.
-	narrow := map[string]string{
-		// Read-only views for the console and the tenant's own quota screen.
-		// One organisation's figures, shown to that organisation; widening them
-		// would show an operator's impersonation record to a sibling tenant.
-		"announcements":           "console, FOR SELECT",
-		"feature_flag_overrides":  "console, FOR SELECT",
-		"operator_impersonations": "console, FOR SELECT",
-		"tenant_quotas":           "console, FOR SELECT",
-		"usage_events":            "console, FOR SELECT",
-
-		// Device-scoped. A terminal is enrolled into one organisation and reads
-		// as that organisation; there is no "this person also belongs to" for a
-		// till or a kiosk.
-		"device_enrollment_codes": "device scope",
-		"device_telemetry":        "device scope",
-		"devices":                 "device scope",
-		"push_tokens":             "device scope",
-		"staff_pin_credentials":   "device scope",
-
-		// TODO: unreviewed. These four took the narrow form by copying, not by
-		// deciding, and each needs its own answer before it is widened — an
-		// audit trail and a signed file are not obviously things a sibling
-		// organisation should read just because one person belongs to both.
-		"audit_events": "unreviewed",
-		// document_files was here — a signed file is not obviously something a
-		// sibling organisation should read — and it went to
-		// client-gerege-nexus with the documents app. Its policy is declared in
-		// that repository's own migration, in the same narrow form and for the
-		// same unreviewed reason.
-		"report_grants":    "unreviewed",
-		"report_schedules": "unreviewed",
-	}
 
 	// Only the platform's own tables, which is why this test lives beside the
 	// list of them. CI runs every package against one database, so a table
@@ -100,7 +105,7 @@ func TestTenantPoliciesHaveTheShapeOnRecord(t *testing.T) {
 			continue
 		}
 		seen[table] = true
-		reason, listed := narrow[table]
+		reason, listed := narrowPolicies[table]
 		switch {
 		case wide && listed:
 			t.Errorf("%s reads across organisations but is listed as narrow (%q); remove the entry", table, reason)
@@ -122,7 +127,7 @@ with the reason it is different.`, table, table)
 		t.Fatal(err)
 	}
 
-	for table := range narrow {
+	for table := range narrowPolicies {
 		if !seen[table] {
 			t.Errorf("the narrow list names %q, which has no tenant_isolation policy", table)
 		}
