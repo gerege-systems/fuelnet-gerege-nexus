@@ -190,7 +190,7 @@ func TestLoginPathSearchesBothPlanes(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SHOW search_path`).Scan(&path); err != nil {
 		t.Fatal(err)
 	}
-	if path != "tenant, platform, public" {
-		t.Errorf("login role search_path = %q, want tenant, platform, public", path)
+	if path != "tenant, platform" {
+		t.Errorf("login role search_path = %q, want tenant, platform", path)
 	}
 }
