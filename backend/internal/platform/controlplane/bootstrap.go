@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -80,7 +81,7 @@ func CreateOperator(ctx context.Context, db *pgxpool.Pool, params NewOperator) (
 		return Operator{}, Enrolment{}, fmt.Errorf("the password must be at least %d characters", MinPasswordLength)
 	}
 
-	hash, err := auth.HashPassword(params.Password)
+	hash, err := security.HashPassword(params.Password)
 	if err != nil {
 		return Operator{}, Enrolment{}, fmt.Errorf("hash the password: %w", err)
 	}

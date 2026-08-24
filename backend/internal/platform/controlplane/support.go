@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -368,7 +369,7 @@ func unusablePassword() (string, error) {
 	if _, err := rand.Read(buf); err != nil {
 		return "", fmt.Errorf("generate a placeholder password: %w", err)
 	}
-	hash, err := auth.HashPassword(hex.EncodeToString(buf))
+	hash, err := security.HashPassword(hex.EncodeToString(buf))
 	if err != nil {
 		return "", fmt.Errorf("hash the placeholder password: %w", err)
 	}

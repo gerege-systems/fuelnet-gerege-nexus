@@ -10,13 +10,13 @@ package telemetry
 
 import (
 	"context"
-	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"

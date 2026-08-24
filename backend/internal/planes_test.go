@@ -52,41 +52,24 @@ const modulePrefix = "github.com/gerege-systems/open-gerege-nexus/backend"
 // feel like making a decision rather than fixing a test.
 var crossPlaneExceptions = map[string]map[string]string{}
 
-// Where each of internal/platform's 81 packages and files is going.
+// Where each file still sitting in a plane's root package is going.
 //
-// This is the §2.3 tree read backwards — destination per thing that exists
-// now, rather than contents per directory that does not — because that is the
-// form Үе C has to work in and the form a reviewer can disagree with one line
-// of. It is also why it is a map and not prose: a file added to
-// internal/platform while the move is in progress lands in neither list, and
-// TestEveryPlatformThingHasAPlannedHome says so on the run after it appears.
-// A move that quietly gains files is how the last one ended up with 46 in the
-// root directory.
+// internal/platform's 81 packages and files have been dealt with: what is left
+// there is one service.go, which is the plane composing its own subpackages
+// rather than a place to put a handler. The tenant plane is one step behind —
+// its 43 handler files arrived together and are being taken apart by domain —
+// so the same list now describes that, and the same test refuses a file with
+// nowhere to go.
 //
-// The values are destinations, not planes; the plane is the first segment.
+// It is a map and not prose because a file added to a plane's root while the
+// split is in progress lands in no list, and TestEveryRootFileHasAPlannedHome
+// says so on the run after it appears. A move that quietly gains files is how
+// the last root directory ended up with 46 of them.
+//
+// The values are destinations. The plane is the first segment; the ones with no
+// slash are the composition root itself.
 var plannedTenantPackages = map[string]string{
 	// ------------------------------------------------------------ packages
-	"ai":           "tenant/ai",
-	"appinstaller": "tenant/appinstall",
-	"audit":        "tenant/audit", // audit_events; operator_audit is the platform's, in controlplane
-	"auth":         "tenant/auth",
-	"dan":          "tenant/identity",
-	"directory":    "tenant/directory",
-	"eid":          "tenant/identity",
-	"eidmongolia":  "tenant/identity",
-	"emailverify":  "tenant/emailverify",
-	"esign":        "tenant/signing",
-	"gerege":       "tenant/identity", // §1.8's fifth citizen-verification package
-	"integration":  "tenant/integration",
-	"memo":         "tenant/memo",
-	"menu":         "tenant/menu",
-	"quota":        "tenant/quota",
-	"rbac":         "tenant/access",
-	"reporting":    "tenant/reporting",
-	"ssoclient":    "tenant/ssoclient",
-	"ssoprovider":  "tenant/ssoprovider",
-	"staffpin":     "tenant/devices",
-	"urtuu":        "tenant/urtuu",
 
 	// --------------------------------------------- files in the root package
 	"access_control.go":      "tenant/access",
@@ -100,8 +83,24 @@ var plannedTenantPackages = map[string]string{
 	// "The tenant-facing half of two things the control plane starts", says
 	// its own header. It reads credential_grants, which is a platform table
 	// and not one of the five a tenant may read — see the PR.
-	"access_recovery.go":                 "tenant/access",
-	"app_gate_test.go":                   "tenant/appinstall",
+	"access_recovery.go": "tenant/access",
+	"app_gate_test.go":   "tenant/appinstall",
+	// The tenant's own store screens, not the platform's catalogue: every one
+	// of these handlers reads claims.TenantID and installs for that
+	// organisation. The catalogue they read is the deployment's and is parsed
+	// in kernel/appcatalog.
+	"catalog_handlers.go":      "tenant/appinstall",
+	"catalog_history.go":       "tenant/appinstall",
+	"catalog_history_test.go":  "tenant/appinstall",
+	"catalog_overview.go":      "tenant/appinstall",
+	"catalog_runnable_test.go": "tenant/appinstall",
+	"catalog_versions_test.go": "tenant/appinstall",
+	// Suspension and the user quota are read on the request path, not written
+	// by the console: "a cached read on the request path, like the app gate
+	// beside it", says the file. The console's half of an organisation's
+	// lifecycle is in platform/controlplane.
+	"suspension_test.go":                 "tenant/access",
+	"tenant_lifecycle.go":                "tenant/access + tenant/quota",
 	"auth_handlers.go":                   "tenant/auth",
 	"capabilities_test.go":               "tenant/appinstall",
 	"device_handlers.go":                 "tenant/devices",
@@ -133,54 +132,28 @@ var plannedTenantPackages = map[string]string{
 	"tenant_profile_test.go":             "tenant/profile",
 }
 
-var plannedPlatformPackages = map[string]string{
-	// ------------------------------------------------------------ packages
-	"appcatalog": "platform/catalog",
-	// 20 files and 5867 lines that Үе C splits by domain: operator, tenants,
-	// approvals, settings, flags, catalog, metering, backup, announce,
-	// support, observability, audit. It is one entry here because it moves as
-	// one decision, not because it lands in one place.
-	"controlplane": "platform/* (split by domain)",
-	"flags":        "platform/flags",
-	"metering":     "platform/metering",
-	"settings":     "platform/settings",
-
-	// --------------------------------------------- files in the root package
-	"catalog_handlers.go":      "platform/catalog",
-	"catalog_history.go":       "platform/catalog",
-	"catalog_history_test.go":  "platform/catalog",
-	"catalog_overview.go":      "platform/catalog",
-	"catalog_runnable_test.go": "platform/catalog",
-	"catalog_versions_test.go": "platform/catalog",
-	"suspension_test.go":       "platform/tenants",
-	"tenant_lifecycle.go":      "platform/tenants",
-}
+// Nothing. internal/platform's root holds one file — service.go, the plane
+// composing its own subpackages — and it is named in plannedSplitOrRemoved
+// below, once, for both planes: each has exactly one and they are the same
+// decision.
+var plannedPlatformPackages = map[string]string{}
 
 // The floor. These own no table and answer to neither plane, which is what
 // makes them safe for both to import — and why the third rule below matters
 // more than it looks: internal/kernel/security already imports
 // internal/tenant/auth, and auth is the tenant plane's.
-var plannedKernelPackages = map[string]string{
-	"async":      "kernel/async",
-	"cache":      "kernel/cache",
-	"config":     "kernel/config",
-	"dbguard":    "kernel/dbguard",
-	"httpx":      "kernel/httpx",
-	"resilience": "kernel/resilience",
-	"security":   "kernel/security",
-}
+var plannedKernelPackages = map[string]string{}
 
-// The things that do not move whole.
+// service.go, which did not move whole.
 //
-// Four of the five are the seam itself, and naming them is the point: a plan
-// that lists only the clean moves is a plan that discovers these on the day it
-// runs out of time for them.
+// server.go was the seam: it built both planes, mounted both route tables and
+// owned the router. It is three files now — internal/tenant/service.go,
+// internal/platform/service.go and pkg/platform/server.go — and the last of
+// those is where the two planes become one process. The route tests and the
+// golden route table went with it, because the surface they describe is the
+// assembled one.
 var plannedSplitOrRemoved = map[string]string{
-	"observability":         "kernel/telemetry (collection) + platform/observability (the operator's view) — §2.3 note 3",
-	"tenant":                "deleted; its 29 callers use pkg/nexus directly — §2.3 note 1, and the only real name collision in the move",
-	"server.go":             "tenant.Service + platform.Service, each with its own Routes — Үе C step 4",
-	"route_policy_test.go":  "both planes: which routes a stranger may reach is a question about the whole table",
-	"routes_golden_test.go": "both planes: the golden file is every route there is",
+	"service.go": "already three files: internal/tenant, internal/platform and pkg/platform, which is the only one that names both planes",
 }
 
 func TestTenantDoesNotImportPlatform(t *testing.T) {
@@ -234,13 +207,14 @@ func TestKernelImportsNeitherPlane(t *testing.T) {
 // that. A file added to internal/platform while the move is under way is a
 // file nobody decided about, and the failure names it on the first run after
 // it appears rather than on the day the directory is supposed to be empty.
-func TestEveryPlatformThingHasAPlannedHome(t *testing.T) {
-	root := filepath.Join("platform")
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		// internal/platform is gone, which is the end state, not a failure.
-		t.Log("internal/platform no longer exists; the move is done")
-		return
+func TestEveryRootFileHasAPlannedHome(t *testing.T) {
+	var entries []os.DirEntry
+	for _, plane := range []string{"tenant", "platform"} {
+		found, err := os.ReadDir(plane)
+		if err != nil {
+			t.Fatalf("read internal/%s: %v", plane, err)
+		}
+		entries = append(entries, found...)
 	}
 
 	planned := map[string]string{}
@@ -263,8 +237,8 @@ func TestEveryPlatformThingHasAPlannedHome(t *testing.T) {
 		if name == "testdata" {
 			continue
 		}
-		if !entry.IsDir() && !strings.HasSuffix(name, ".go") {
-			continue
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") {
+			continue // a subpackage is where a file is going, not a thing to place
 		}
 		present[name] = true
 		if _, ok := planned[name]; !ok {
@@ -279,13 +253,12 @@ func TestEveryPlatformThingHasAPlannedHome(t *testing.T) {
 
 	sort.Strings(unplanned)
 	if len(unplanned) > 0 {
-		t.Errorf(`internal/platform holds %d thing(s) with no planned home:
+		t.Errorf(`a plane's root package holds %d file(s) with no planned home:
 
 	%s
 
-Every package and file here is going to the tenant plane, the platform plane or
-kernel, and which one is a decision somebody makes rather than a thing that
-falls out of the move. Add it to the list it belongs in — or to
+A plane's root package composes its subpackages; it is not where a handler
+lives. Say which subpackage this one belongs in — or add it to
 plannedSplitOrRemoved, if the honest answer is that it does not go anywhere
 whole.`, len(unplanned), strings.Join(unplanned, "\n\t"))
 	}
@@ -295,7 +268,7 @@ whole.`, len(unplanned), strings.Join(unplanned, "\n\t"))
 	// not there stops being a work order.
 	sort.Strings(gone)
 	if len(gone) > 0 {
-		t.Logf("moved out of internal/platform already: %s", strings.Join(gone, ", "))
+		t.Logf("already in a subpackage: %s", strings.Join(gone, ", "))
 	}
 }
 

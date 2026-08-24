@@ -50,7 +50,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
-	core "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
@@ -240,9 +240,9 @@ func Run(opts Options) error {
 	// Before the server is built: NewServer checks the catalogue against this
 	// list and refuses to start when an id has no module behind it, which is
 	// the check that catches a stale catalogue.
-	core.SetDefaultApps(opts.DefaultApps)
+	tenant.SetDefaultApps(opts.DefaultApps)
 
-	srv, err := core.NewServer(db, catalogPath, bus, core.ExtraModules(opts.Modules))
+	srv, err := newServer(db, catalogPath, bus, tenant.ExtraModules(opts.Modules))
 	if err != nil {
 		return fmt.Errorf("failed to initialize platform server: %w", err)
 	}
@@ -255,7 +255,7 @@ func Run(opts Options) error {
 	// those tenants, and an installation row references the apps table, which
 	// NewServer is what fills from the catalogue file.
 	if databaseReachable {
-		seedInitialData(ctx, db, srv)
+		seedInitialData(ctx, db, srv.tenant)
 	}
 
 	// Background jobs run until this context is cancelled during shutdown, so

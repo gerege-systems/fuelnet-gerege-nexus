@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -31,7 +32,7 @@ const (
 // exist, so that "no such operator" takes the same time as "wrong password".
 // Without it the response time answers a question the response body will not.
 var dummyPasswordHash = func() string {
-	hash, err := auth.HashPassword("control-plane-missing-account-placeholder")
+	hash, err := security.HashPassword("control-plane-missing-account-placeholder")
 	if err != nil {
 		panic(err)
 	}
@@ -81,24 +82,24 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if !found {
 		// The comparison is run and discarded. See dummyPasswordHash.
-		auth.CheckPasswordHash(req.Password, dummyPasswordHash)
+		security.CheckPasswordHash(req.Password, dummyPasswordHash)
 		s.denyLogin(ctx, w, "unknown", acct, false)
 		return
 	}
 	if acct.disabled {
-		auth.CheckPasswordHash(req.Password, dummyPasswordHash)
+		security.CheckPasswordHash(req.Password, dummyPasswordHash)
 		s.denyLogin(ctx, w, "disabled", acct, true)
 		return
 	}
 	if acct.locked {
-		auth.CheckPasswordHash(req.Password, dummyPasswordHash)
+		security.CheckPasswordHash(req.Password, dummyPasswordHash)
 		// No failure is counted here: a live lockout that every further attempt
 		// extended would let somebody who knows an operator's address keep that
 		// operator locked out for as long as they cared to keep typing.
 		s.denyLogin(ctx, w, "locked", acct, true)
 		return
 	}
-	if !auth.CheckPasswordHash(req.Password, acct.passwordHash) {
+	if !security.CheckPasswordHash(req.Password, acct.passwordHash) {
 		s.failLogin(ctx, w, "bad_password", acct)
 		return
 	}

@@ -3,8 +3,9 @@ package auth
 import (
 	"context"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // ErrUnauthorized is returned when a context carries no caller.
@@ -19,15 +20,13 @@ var ErrUnauthorized = nexus.ErrUnauthenticated
 // module reads — two identically shaped types would not have been.
 type UserClaims = nexus.UserClaims
 
-func HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	return string(bytes), err
-}
-
-func CheckPasswordHash(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
-}
+// HashPassword and CheckPasswordHash are kernel/security's: the console hashes
+// an operator's password with the same cost, and one of those two answers being
+// different from the other is not a thing to discover later.
+var (
+	HashPassword      = security.HashPassword
+	CheckPasswordHash = security.CheckPasswordHash
+)
 
 // WithUserContext injects the caller's claims into a context.
 func WithUserContext(ctx context.Context, claims UserClaims) context.Context {

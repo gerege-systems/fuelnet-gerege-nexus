@@ -2,9 +2,10 @@ package flags
 
 import (
 	"context"
-	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"testing"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 // storeWith builds a store around flags held in memory, so the evaluation

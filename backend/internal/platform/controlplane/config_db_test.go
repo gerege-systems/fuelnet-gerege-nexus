@@ -3,12 +3,12 @@ package controlplane
 import (
 	"context"
 	"fmt"
-	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"testing"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

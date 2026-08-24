@@ -8,7 +8,6 @@ package integration
 
 import (
 	"errors"
-	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -19,6 +18,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
 

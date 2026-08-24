@@ -10,12 +10,12 @@ package telemetry
 
 import (
 	"context"
-	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.opentelemetry.io/otel/trace"

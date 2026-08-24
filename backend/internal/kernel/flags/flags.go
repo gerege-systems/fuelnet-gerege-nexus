@@ -27,13 +27,13 @@ package flags
 
 import (
 	"context"
-	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"hash/fnv"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

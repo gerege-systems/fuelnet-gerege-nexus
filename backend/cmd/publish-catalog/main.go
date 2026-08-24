@@ -12,12 +12,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appcatalog"
 )
