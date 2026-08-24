@@ -270,7 +270,7 @@ func TestRevokingALinkRemovesTheCodesItAnnounced(t *testing.T) {
 	}
 
 	if _, err := pool.Exec(nexus.WithTenantID(context.Background(), child.tenantID),
-		`DELETE FROM urtuu_peers WHERE id = $1`, childPeerID); err != nil {
+		`DELETE FROM tenant.urtuu_peers WHERE id = $1`, childPeerID); err != nil {
 		t.Fatalf("remove link: %v", err)
 	}
 	if _, ok := child.codes(t)["local.count"]; ok {

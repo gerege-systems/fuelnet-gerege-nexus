@@ -20,7 +20,7 @@ import (
 //
 // The three questions a module about exchanged work has to ask — who is on the
 // other end, what does this code mean, has it been announced on that link —
-// answered here rather than by a module reading urtuu_peers, urtuu_request_codes
+// answered here rather than by a module reading urtuu_peers, tenant.urtuu_request_codes
 // and urtuu_peer_codes itself. The task board did exactly that until
 // 2026-08-23; see the contract's own comment and ADR 0004.
 func AsPeerDirectory(s *Service) nexus.PeerDirectory { return peerDirectory{s} }
@@ -61,7 +61,7 @@ func (p peerDirectory) RequestCode(ctx context.Context, tenantID, code string) (
 	var found nexus.RequestCode
 	err := p.s.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
 		SELECT code, names, EXTRACT(EPOCH FROM default_sla)::bigint, line, active, source
-		  FROM urtuu_request_codes WHERE tenant_id = $1 AND code = $2`,
+		  FROM tenant.urtuu_request_codes WHERE tenant_id = $1 AND code = $2`,
 		tenantID, code).Scan(&found.Code, &found.Names, &found.SLA, &found.Line,
 		&found.Active, &found.Source)
 	switch {
@@ -88,7 +88,7 @@ func (p peerDirectory) DeliveryLoad(ctx context.Context, tenantID string, from, 
 		       count(*) FILTER (WHERE d.delivered_at IS NOT NULL),
 		       count(*) FILTER (WHERE d.delivered_at IS NULL),
 		       coalesce(sum(greatest(d.attempts - 1, 0)), 0)
-		  FROM urtuu_deliveries d
+		  FROM tenant.urtuu_deliveries d
 		 WHERE d.tenant_id = $1 AND d.created_at >= $2 AND d.created_at <= $3
 		 GROUP BY 1
 		 ORDER BY 2 DESC
@@ -112,7 +112,7 @@ func (p peerDirectory) DeliveryLoad(ctx context.Context, tenantID string, from, 
 func (p peerDirectory) CodeOpenOn(ctx context.Context, tenantID, peerID, code string) (bool, error) {
 	var open bool
 	err := p.s.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
-		SELECT EXISTS (SELECT 1 FROM urtuu_peer_codes
+		SELECT EXISTS (SELECT 1 FROM tenant.urtuu_peer_codes
 		                WHERE tenant_id = $1 AND peer_id = $2 AND code = $3)`,
 		tenantID, peerID, code).Scan(&open)
 	return open, err

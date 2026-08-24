@@ -76,10 +76,10 @@ func (s *Service) listCodes(ctx context.Context, tenantID string) ([]Code, error
 		       coalesce(c.source_peer_id::text, ''), coalesce(p.name, ''),
 		       c.ring_process_ref, c.version, c.active, c.updated_at,
 		       coalesce((SELECT array_agg(pc.peer_id::text)
-		                   FROM urtuu_peer_codes pc
+		                   FROM tenant.urtuu_peer_codes pc
 		                  WHERE pc.tenant_id = c.tenant_id AND pc.code = c.code), '{}')
-		  FROM urtuu_request_codes c
-		  LEFT JOIN urtuu_peers p ON p.id = c.source_peer_id
+		  FROM tenant.urtuu_request_codes c
+		  LEFT JOIN tenant.urtuu_peers p ON p.id = c.source_peer_id
 		 WHERE c.tenant_id = $1
 		 ORDER BY c.code`, tenantID)
 	if err != nil {
@@ -177,7 +177,7 @@ func (s *Service) handleCreateCode(w http.ResponseWriter, r *http.Request) {
 
 	var id string
 	err := s.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
-		INSERT INTO urtuu_request_codes
+		INSERT INTO tenant.urtuu_request_codes
 		    (tenant_id, code, names, schema, default_sla, line, source, created_by)
 		VALUES ($1, $2, $3, $4,
 		        CASE WHEN $5::bigint IS NULL THEN NULL ELSE make_interval(secs => $5::bigint) END,
@@ -223,7 +223,7 @@ func (s *Service) handleUpdateCode(w http.ResponseWriter, r *http.Request) {
 	ctx := nexus.WithTenantID(r.Context(), tenantID)
 	var source, code string
 	if err := s.db.QueryRow(ctx,
-		`SELECT source, code FROM urtuu_request_codes WHERE id = $1`, id).Scan(&source, &code); err != nil {
+		`SELECT source, code FROM tenant.urtuu_request_codes WHERE id = $1`, id).Scan(&source, &code); err != nil {
 		nexus.Error(w, http.StatusNotFound, "no such code")
 		return
 	}
@@ -235,14 +235,14 @@ func (s *Service) handleUpdateCode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := s.db.Exec(ctx,
-			`UPDATE urtuu_request_codes SET active = $2, updated_at = NOW() WHERE id = $1`,
+			`UPDATE tenant.urtuu_request_codes SET active = $2, updated_at = NOW() WHERE id = $1`,
 			id, *request.Active); err != nil {
 			nexus.Error(w, http.StatusInternalServerError, "could not update the code")
 			return
 		}
 	} else {
 		if _, err := s.db.Exec(ctx, `
-			UPDATE urtuu_request_codes
+			UPDATE tenant.urtuu_request_codes
 			   SET names = coalesce($2, names),
 			       schema = coalesce($3, schema),
 			       default_sla = CASE WHEN $4::bigint IS NULL THEN default_sla
@@ -294,13 +294,13 @@ func (s *Service) handleSetPeerCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `DELETE FROM urtuu_peer_codes WHERE peer_id = $1`, peerID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM tenant.urtuu_peer_codes WHERE peer_id = $1`, peerID); err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not update the link's vocabulary")
 		return
 	}
 	for _, code := range request.Codes {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO urtuu_peer_codes (tenant_id, peer_id, code, opened_by)
+			INSERT INTO tenant.urtuu_peer_codes (tenant_id, peer_id, code, opened_by)
 			VALUES ($1, $2, $3, NULLIF($4, '')::uuid)
 			ON CONFLICT DO NOTHING`,
 			tenantID, peerID, strings.TrimSpace(code), actorOf(r)); err != nil {
@@ -351,7 +351,7 @@ func upsertCode(ctx context.Context, tx pgx.Tx, tenantID, source, peerID string,
 		line = contract.LineAssignment
 	}
 	_, err := tx.Exec(ctx, `
-		INSERT INTO urtuu_request_codes
+		INSERT INTO tenant.urtuu_request_codes
 		    (tenant_id, code, names, schema, default_sla, line, source, source_peer_id,
 		     ring_process_ref, version)
 		VALUES ($1, $2, $3, $4,

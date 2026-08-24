@@ -168,7 +168,7 @@ func (s *Service) sweepOnce(ctx context.Context) {
 	// pointing at it is one somebody is still waiting for, and the foreign key
 	// says so.
 	if tag, err := s.db.Exec(sweepCtx,
-		`DELETE FROM urtuu_deliveries WHERE delivered_at IS NOT NULL AND delivered_at < $1`,
+		`DELETE FROM tenant.urtuu_deliveries WHERE delivered_at IS NOT NULL AND delivered_at < $1`,
 		time.Now().Add(-deliveredRetention)); err != nil {
 		slog.Warn("urtuu: could not prune settled deliveries", "error", err)
 	} else if tag.RowsAffected() > 0 {
@@ -176,9 +176,9 @@ func (s *Service) sweepOnce(ctx context.Context) {
 	}
 
 	if tag, err := s.db.Exec(sweepCtx, `
-		DELETE FROM urtuu_outbox o
+		DELETE FROM tenant.urtuu_outbox o
 		 WHERE o.queued_at < $1
-		   AND NOT EXISTS (SELECT 1 FROM urtuu_deliveries d WHERE d.outbox_id = o.id)`,
+		   AND NOT EXISTS (SELECT 1 FROM tenant.urtuu_deliveries d WHERE d.outbox_id = o.id)`,
 		time.Now().Add(-deliveredRetention)); err != nil {
 		slog.Warn("urtuu: could not prune the outbox", "error", err)
 	} else if tag.RowsAffected() > 0 {
@@ -186,7 +186,7 @@ func (s *Service) sweepOnce(ctx context.Context) {
 	}
 
 	if tag, err := s.db.Exec(sweepCtx,
-		`DELETE FROM urtuu_inbox WHERE received_at < $1`,
+		`DELETE FROM tenant.urtuu_inbox WHERE received_at < $1`,
 		time.Now().Add(-inboxRetention)); err != nil {
 		slog.Warn("urtuu: could not prune the inbox", "error", err)
 	} else if tag.RowsAffected() > 0 {
@@ -198,7 +198,7 @@ func (s *Service) sweepOnce(ctx context.Context) {
 	// The row stays — it is a record that somebody was invited — but the code
 	// stops being one.
 	if _, err := s.db.Exec(sweepCtx, `
-		UPDATE urtuu_peers
+		UPDATE tenant.urtuu_peers
 		   SET invite_code_hash = NULL, updated_at = NOW()
 		 WHERE invite_code_hash IS NOT NULL AND invite_expires_at < NOW()`); err != nil {
 		slog.Warn("urtuu: could not expire invitations", "error", err)
@@ -209,7 +209,7 @@ func (s *Service) sweepOnce(ctx context.Context) {
 	// something is stuck.
 	var stuck int
 	if err := s.db.QueryRow(sweepCtx, `
-		SELECT count(*) FROM urtuu_deliveries
+		SELECT count(*) FROM tenant.urtuu_deliveries
 		 WHERE delivered_at IS NULL AND created_at < $1`,
 		time.Now().Add(-urtuu.MaxAge)).Scan(&stuck); err == nil && stuck > 0 {
 		slog.Warn("urtuu: envelopes have been undelivered for longer than they may be accepted",

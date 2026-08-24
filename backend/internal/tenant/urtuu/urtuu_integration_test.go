@@ -102,12 +102,12 @@ func newInstallation(t *testing.T, pool *pgxpool.Pool, name string, seed byte) *
 	tenantID := uuid.NewString()
 	slug := strings.ToLower(name) + "-" + tenantID[:8]
 	if _, err := pool.Exec(context.Background(),
-		`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
+		`INSERT INTO platform.tenants (id, name, slug) VALUES ($1, $2, $3)`,
 		tenantID, "Өртөө test "+name, slug); err != nil {
 		t.Fatalf("create tenant: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1`, tenantID)
 	})
 
 	return &installation{svc: service, server: server, tenantID: tenantID}
@@ -185,7 +185,7 @@ func (i *installation) peerStatus(t *testing.T, peerID string) string {
 	t.Helper()
 	var status string
 	err := i.svc.db.QueryRow(nexus.WithTenantID(context.Background(), i.tenantID),
-		`SELECT status FROM urtuu_peers WHERE id = $1`, peerID).Scan(&status)
+		`SELECT status FROM tenant.urtuu_peers WHERE id = $1`, peerID).Scan(&status)
 	if err != nil {
 		t.Fatalf("read link: %v", err)
 	}
@@ -196,7 +196,7 @@ func (i *installation) inboxCount(t *testing.T) int {
 	t.Helper()
 	var count int
 	if err := i.svc.db.QueryRow(nexus.WithTenantID(context.Background(), i.tenantID),
-		`SELECT count(*) FROM urtuu_inbox`).Scan(&count); err != nil {
+		`SELECT count(*) FROM tenant.urtuu_inbox`).Scan(&count); err != nil {
 		t.Fatalf("count inbox: %v", err)
 	}
 	return count
@@ -206,7 +206,7 @@ func (i *installation) undelivered(t *testing.T) int {
 	t.Helper()
 	var count int
 	if err := i.svc.db.QueryRow(nexus.WithTenantID(context.Background(), i.tenantID),
-		`SELECT count(*) FROM urtuu_deliveries WHERE delivered_at IS NULL`).Scan(&count); err != nil {
+		`SELECT count(*) FROM tenant.urtuu_deliveries WHERE delivered_at IS NULL`).Scan(&count); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
 	return count
@@ -255,7 +255,7 @@ func TestAnInvitationEstablishesALinkBothSidesAgreeOn(t *testing.T) {
 	// signature checkable later.
 	var storedKey string
 	if err := pool.QueryRow(nexus.WithTenantID(context.Background(), parent.tenantID),
-		`SELECT peer_public_key FROM urtuu_peers WHERE id = $1`, parentPeerID).Scan(&storedKey); err != nil {
+		`SELECT peer_public_key FROM tenant.urtuu_peers WHERE id = $1`, parentPeerID).Scan(&storedKey); err != nil {
 		t.Fatalf("read key: %v", err)
 	}
 	if storedKey != child.svc.PublicKey() {
@@ -363,7 +363,7 @@ func TestWorkTravelsDownAndAnAnswerComesBack(t *testing.T) {
 
 	var storedID string
 	if err := pool.QueryRow(nexus.WithTenantID(context.Background(), child.tenantID),
-		`SELECT message_id FROM urtuu_inbox LIMIT 1`).Scan(&storedID); err != nil {
+		`SELECT message_id FROM tenant.urtuu_inbox LIMIT 1`).Scan(&storedID); err != nil {
 		t.Fatalf("read inbox: %v", err)
 	}
 	if storedID != messageID {
@@ -405,7 +405,7 @@ func TestAnEditedEnvelopeIsRefusedEvenOverAGoodLink(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 	if _, err := pool.Exec(nexus.WithTenantID(context.Background(), parent.tenantID),
-		`UPDATE urtuu_outbox SET payload = $1`, `{"code":"D-999"}`); err != nil {
+		`UPDATE tenant.urtuu_outbox SET payload = $1`, `{"code":"D-999"}`); err != nil {
 		t.Fatalf("tamper: %v", err)
 	}
 
@@ -451,7 +451,7 @@ func TestARevokedLinkStopsAnswering(t *testing.T) {
 	// the connection.
 	var revokedAt *time.Time
 	if err := pool.QueryRow(nexus.WithTenantID(context.Background(), parent.tenantID),
-		`SELECT revoked_at FROM urtuu_peers WHERE id = $1`, parentPeerID).Scan(&revokedAt); err != nil {
+		`SELECT revoked_at FROM tenant.urtuu_peers WHERE id = $1`, parentPeerID).Scan(&revokedAt); err != nil {
 		t.Fatalf("the revoked link was deleted rather than closed: %v", err)
 	}
 	if revokedAt == nil {

@@ -116,7 +116,7 @@ func (s *Service) handleInvite(w http.ResponseWriter, r *http.Request) {
 
 	var id string
 	err = s.db.QueryRow(nexus.WithTenantID(r.Context(), tenantID), `
-		INSERT INTO urtuu_peers
+		INSERT INTO tenant.urtuu_peers
 		    (tenant_id, name, role, status, invite_code_hash, invite_expires_at, installation_id, created_by)
 		VALUES ($1, $2, 'parent', 'pending', $3, NOW() + $4::interval, $5, NULLIF($6, '')::uuid)
 		RETURNING id`,
@@ -184,7 +184,7 @@ func (s *Service) handleJoin(w http.ResponseWriter, r *http.Request) {
 	ctx := nexus.WithTenantID(r.Context(), tenantID)
 	var id string
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO urtuu_peers
+		INSERT INTO tenant.urtuu_peers
 		    (tenant_id, name, role, base_url, peer_public_key, status, installation_id, created_by)
 		VALUES ($1, $2, 'child', $3, $4, 'pending', $5, NULLIF($6, '')::uuid)
 		RETURNING id`,
@@ -200,7 +200,7 @@ func (s *Service) handleJoin(w http.ResponseWriter, r *http.Request) {
 		// administrator who mistyped a code needs to see what happened, and the
 		// row is the only place that can say so.
 		_, _ = s.db.Exec(ctx,
-			`UPDATE urtuu_peers SET last_error = $2, updated_at = NOW() WHERE id = $1`, id, err.Error())
+			`UPDATE tenant.urtuu_peers SET last_error = $2, updated_at = NOW() WHERE id = $1`, id, err.Error())
 		nexus.Error(w, http.StatusBadGateway, "the parent did not accept the invitation: "+err.Error())
 		return
 	}
@@ -209,7 +209,7 @@ func (s *Service) handleJoin(w http.ResponseWriter, r *http.Request) {
 	// stays pending until its administrator confirms, so nothing is exchanged
 	// yet — pull and push answer 403 until then.
 	if _, err := s.db.Exec(ctx,
-		`UPDATE urtuu_peers SET status = 'active', last_error = '', updated_at = NOW() WHERE id = $1`,
+		`UPDATE tenant.urtuu_peers SET status = 'active', last_error = '', updated_at = NOW() WHERE id = $1`,
 		id); err != nil {
 		nexus.Error(w, http.StatusInternalServerError, "could not activate the link")
 		return
@@ -250,7 +250,7 @@ func (s *Service) HandleRedeem(w http.ResponseWriter, r *http.Request) {
 	ctx := nexus.WithoutTenant(r.Context())
 	var id, tenantID string
 	err := s.db.QueryRow(ctx, `
-		UPDATE urtuu_peers
+		UPDATE tenant.urtuu_peers
 		   SET peer_public_key = $2,
 		       token_hash = $3,
 		       name = CASE WHEN name = '' THEN $4 ELSE name END,
@@ -296,7 +296,7 @@ func (s *Service) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tag, err := s.db.Exec(nexus.WithTenantID(r.Context(), tenantID), `
-		UPDATE urtuu_peers SET status = 'active', updated_at = NOW()
+		UPDATE tenant.urtuu_peers SET status = 'active', updated_at = NOW()
 		 WHERE id = $1 AND status = 'pending' AND revoked_at IS NULL
 		   -- Only a link somebody has actually redeemed: confirming one that
 		   -- still has an outstanding invitation would activate a peer whose
@@ -324,7 +324,7 @@ func (s *Service) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tag, err := s.db.Exec(nexus.WithTenantID(r.Context(), tenantID), `
-		UPDATE urtuu_peers
+		UPDATE tenant.urtuu_peers
 		   SET status = 'revoked', revoked_at = NOW(),
 		       -- The credential goes with the link. Revoked is checked on every
 		       -- exchange anyway; clearing the hash means a token that leaked

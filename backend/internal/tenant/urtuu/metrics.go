@@ -79,7 +79,7 @@ const (
 func (s *Service) refreshPeerGauge(ctx context.Context) {
 	rows, err := s.db.Query(nexus.WithoutTenant(ctx), `
 		SELECT role, max(EXTRACT(EPOCH FROM (NOW() - coalesce(last_seen_at, created_at))))
-		  FROM urtuu_peers
+		  FROM tenant.urtuu_peers
 		 WHERE status = 'active' AND revoked_at IS NULL AND installation_id = $1
 		 GROUP BY role`, s.installationID)
 	if err != nil {

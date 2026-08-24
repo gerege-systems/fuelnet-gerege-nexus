@@ -72,8 +72,8 @@ func (s *Service) ProcessInbox(ctx context.Context) {
 	rows, err := s.db.Query(nexus.WithoutTenant(ctx), `
 		SELECT i.id::text, i.tenant_id::text, i.peer_id::text, coalesce(p.name, ''),
 		       i.message_id, i.kind, i.created_at, i.payload
-		  FROM urtuu_inbox i
-		  JOIN urtuu_peers p ON p.id = i.peer_id
+		  FROM tenant.urtuu_inbox i
+		  JOIN tenant.urtuu_peers p ON p.id = i.peer_id
 		 WHERE i.processed_at IS NULL AND p.installation_id = $1
 		 ORDER BY i.received_at
 		 LIMIT $2`, s.installationID, inboxBatch)
@@ -119,7 +119,7 @@ func (s *Service) ProcessInbox(ctx context.Context) {
 			continue
 		}
 		if _, err := s.db.Exec(nexus.WithTenantID(ctx, item.message.TenantID),
-			`UPDATE urtuu_inbox SET processed_at = NOW() WHERE id = $1`, item.id); err != nil {
+			`UPDATE tenant.urtuu_inbox SET processed_at = NOW() WHERE id = $1`, item.id); err != nil {
 			// The reader has already acted. Failing to record that costs a
 			// second call, which is why every reader has to be safe to repeat.
 			slog.Warn("urtuu: an envelope was processed but not marked",
@@ -146,8 +146,8 @@ func (s *Service) announceCodes(ctx context.Context, tenantID, peerID string) er
 		SELECT c.code, c.names, c.schema, c.line,
 		       coalesce(EXTRACT(EPOCH FROM c.default_sla)::bigint, 0),
 		       c.ring_process_ref, c.version
-		  FROM urtuu_peer_codes pc
-		  JOIN urtuu_request_codes c
+		  FROM tenant.urtuu_peer_codes pc
+		  JOIN tenant.urtuu_request_codes c
 		    ON c.tenant_id = pc.tenant_id AND c.code = pc.code
 		 WHERE pc.peer_id = $1 AND c.active
 		 ORDER BY c.code`, peerID)
@@ -210,7 +210,7 @@ func (s *Service) receiveCodeSync(ctx context.Context, message nexus.LinkMessage
 		kept = append(kept, code.Code)
 	}
 	if _, err := tx.Exec(ctx,
-		`DELETE FROM urtuu_request_codes WHERE source_peer_id = $1 AND NOT (code = ANY($2))`,
+		`DELETE FROM tenant.urtuu_request_codes WHERE source_peer_id = $1 AND NOT (code = ANY($2))`,
 		message.PeerID, kept); err != nil {
 		return err
 	}
