@@ -82,11 +82,11 @@ var plannedTenantPackages = map[string]string{
 	"gate_e2e_test.go":      "tenant (asserts a module's routes are behind the gate, through the assembled router)",
 }
 
-// Nothing. internal/platform's root holds one file — service.go, the plane
-// composing its own subpackages — and it is named in plannedSplitOrRemoved
-// below, once, for both planes: each has exactly one and they are the same
-// decision.
-var plannedPlatformPackages = map[string]string{}
+// The root's test builds the whole platform route composition, so it belongs
+// beside service.go rather than in one screen's subpackage.
+var plannedPlatformPackages = map[string]string{
+	"service_test.go": "platform (asserts the versioned route and its guarded compatibility address)",
+}
 
 // The floor. These own no table and answer to neither plane, which is what
 // makes them safe for both to import — and why the third rule below matters
