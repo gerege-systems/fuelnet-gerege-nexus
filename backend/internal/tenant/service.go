@@ -57,6 +57,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/gerege"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/integration"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/profile"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/signing"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoclient"
@@ -110,6 +111,11 @@ type Service struct {
 	// identity is who somebody is, as told by somebody else: the national eID,
 	// ДАН, Google and whichever provider this deployment federates with.
 	identity *identity.Handlers
+	// access is who may do what inside one organisation, and the two links the
+	// console hands out when somebody cannot get in at all.
+	access *access.Handlers
+	// profile is what a person and an organisation say about themselves.
+	profile *profile.Handlers
 	// devices is the terminals an organisation enrols, and the sign-in a till
 	// offers whoever is standing at it.
 	devices *devices.Handlers
@@ -159,11 +165,6 @@ const appGateCacheName = "appgate"
 // every other replica.
 func (s *Service) forgetAppGate(tenantID string) {
 	s.bus.Invalidate(appGateCacheName, memo.Key(tenantID, ""))
-}
-
-// forgetGrants drops one tenant's cached permissions everywhere.
-func (s *Service) forgetGrants(tenantID string) {
-	s.bus.Invalidate(access.GrantCacheName, access.TenantPrefix(tenantID))
 }
 
 // ExtraModules registers modules this binary carries beyond the platform's own.
@@ -485,6 +486,9 @@ func New(deps Deps) (*Service, error) {
 		DB: db, Sessions: s.sessions, EID: eidSvc, DAN: danSvc,
 		Google: googleLogin, SSO: federatedSignIn, Authn: s.authn,
 	})
+	// After identity, whose list of ways in the person's screen shows.
+	s.profile = profile.New(db, s.sessions, s.identity)
+	s.access = access.New(db, bus, s.authn)
 
 	// And now the closure above has something to call.
 	server = s
@@ -617,7 +621,7 @@ func (s *Service) StartBackgroundJobs(ctx context.Context) {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
-			s.endImpersonations(ctx)
+			s.access.EndImpersonations(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -909,9 +913,9 @@ func (s *Service) Routes(r chi.Router) {
 		// can be guessed.
 		api.Group(func(recovery chi.Router) {
 			recovery.Use(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin))
-			recovery.Get("/auth/credential", s.handleCredentialCheck)
-			recovery.Post("/auth/credential/redeem", s.handleCredentialRedeem)
-			recovery.Post("/auth/impersonation/redeem", s.handleImpersonationRedeem)
+			recovery.Get("/auth/credential", s.access.HandleCredentialCheck)
+			recovery.Post("/auth/credential/redeem", s.access.HandleCredentialRedeem)
+			recovery.Post("/auth/impersonation/redeem", s.access.HandleImpersonationRedeem)
 			// Redeeming an Өртөө invitation. Session-less for the same reason
 			// the three above are — the caller is another installation, not a
 			// person — and on the sign-in budget for the same reason too: a
@@ -1024,7 +1028,7 @@ func (s *Service) Routes(r chi.Router) {
 			// A person's own record: which identities are linked to this
 			// account and what each provider said. Inside the authenticated
 			// group and answering only for the caller — see profile_handlers.go.
-			pr.Get("/profile", s.handleProfile)
+			pr.Get("/profile", s.profile.HandleProfile)
 			pr.Post("/profile/identities/unlink", s.identity.HandleUnlinkIdentity)
 			// What the signed-in person prefers, wherever they are. No
 			// permission: these are the caller's own settings, and a person who
@@ -1032,8 +1036,8 @@ func (s *Service) Routes(r chi.Router) {
 			// protected from. It used to be an endpoint of the organisation
 			// app, which made a person's language something their employer
 			// could uninstall.
-			pr.Get("/profile/preferences", s.handleGetPreferences)
-			pr.Put("/profile/preferences", s.handleUpdatePreferences)
+			pr.Get("/profile/preferences", s.profile.HandleGetPreferences)
+			pr.Put("/profile/preferences", s.profile.HandleUpdatePreferences)
 
 			// The organisation's own legal identity. A platform route rather
 			// than an app one: the control plane, the XYP rail and the SSO
@@ -1041,8 +1045,8 @@ func (s *Service) Routes(r chi.Router) {
 			// which apps this tenant installed. Reading is open to any member —
 			// the name is on the sidebar already; writing is administrative,
 			// because these fields print on documents.
-			pr.Get("/tenant/profile", s.handleGetTenantProfile)
-			pr.With(s.authn.RequireAdmin).Put("/tenant/profile", s.handleUpdateTenantProfile)
+			pr.Get("/tenant/profile", s.profile.HandleGetTenantProfile)
+			pr.With(s.authn.RequireAdmin).Put("/tenant/profile", s.profile.HandleUpdateTenantProfile)
 			// Ending the session in front of you needs no proof beyond the
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.
@@ -1071,12 +1075,12 @@ func (s *Service) Routes(r chi.Router) {
 			// authorization configuration can otherwise be used to self-elevate.
 			pr.Route("/admin/access", func(ac chi.Router) {
 				ac.Use(s.authn.RequireAdmin)
-				ac.Get("/overview", s.handleAccessOverview)
-				ac.Post("/roles", s.handleCreateRole)
-				ac.Put("/roles/{id}", s.handleUpdateRole)
-				ac.Delete("/roles/{id}", s.handleDeleteRole)
-				ac.Put("/roles/{id}/permissions", s.handleSetRolePermissions)
-				ac.Put("/memberships/{id}/roles", s.handleSetMembershipRoles)
+				ac.Get("/overview", s.access.HandleAccessOverview)
+				ac.Post("/roles", s.access.HandleCreateRole)
+				ac.Put("/roles/{id}", s.access.HandleUpdateRole)
+				ac.Delete("/roles/{id}", s.access.HandleDeleteRole)
+				ac.Put("/roles/{id}/permissions", s.access.HandleSetRolePermissions)
+				ac.Put("/memberships/{id}/roles", s.access.HandleSetMembershipRoles)
 			})
 
 			// Settings → Өртөө: the links this organisation has to other

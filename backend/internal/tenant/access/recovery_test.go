@@ -10,7 +10,7 @@
  * about suspension, and they travel with access_recovery.go.
  */
 
-package tenant
+package access
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func recoveryServer(t *testing.T) (*Service, *pgxpool.Pool) {
+func recoveryServer(t *testing.T) (*Handlers, *pgxpool.Pool) {
 	t.Helper()
 	dsn := os.Getenv("AUTH_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -40,15 +40,12 @@ func recoveryServer(t *testing.T) (*Service, *pgxpool.Pool) {
 	}
 	t.Cleanup(pool.Close)
 	sessions := auth.NewSessionStore(pool, time.Hour)
-	suspended := memo.New[bool](auth.SuspendedTTL)
-	return &Service{
-		db:        pool,
-		sessions:  sessions,
-		suspended: suspended,
-		// Redeeming either link makes a session, and making one asks whether
-		// the organisation is closed first.
-		authn: auth.New(auth.Deps{DB: pool, Sessions: sessions, Suspended: suspended}),
-	}, pool
+	// Redeeming either link makes a session, and making one asks whether the
+	// organisation is closed first.
+	authn := auth.New(auth.Deps{
+		DB: pool, Sessions: sessions, Suspended: memo.New[bool](auth.SuspendedTTL),
+	})
+	return New(pool, nil, authn), pool
 }
 
 // tenantWithMember creates an organisation, somebody in it, and a live session.
@@ -111,7 +108,7 @@ func TestACredentialLinkWorksOnceAndEndsTheSessions(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/credential/redeem",
 			strings.NewReader(string(body)))
 		recorder := httptest.NewRecorder()
-		server.handleCredentialRedeem(recorder, request)
+		server.HandleCredentialRedeem(recorder, request)
 		return recorder
 	}
 
@@ -120,7 +117,7 @@ func TestACredentialLinkWorksOnceAndEndsTheSessions(t *testing.T) {
 	}
 	// The session the account already had is gone: a password given to
 	// somebody who was locked out is usually a password somebody else knew.
-	if _, err := server.sessions.Resolve(ctx, token); err == nil {
+	if _, err := server.authn.Sessions().Resolve(ctx, token); err == nil {
 		t.Fatal("a session survived the password being set")
 	}
 	// And the link is spent.
@@ -166,7 +163,7 @@ func TestAnImpersonationHandoverProducesAMarkedSession(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/impersonation/redeem",
 			strings.NewReader(string(body)))
 		recorder := httptest.NewRecorder()
-		server.handleImpersonationRedeem(recorder, request)
+		server.HandleImpersonationRedeem(recorder, request)
 		return recorder
 	}
 
@@ -185,7 +182,7 @@ func TestAnImpersonationHandoverProducesAMarkedSession(t *testing.T) {
 		t.Fatal("no session cookie was set")
 	}
 
-	claims, err := server.sessions.Resolve(ctx, sessionToken)
+	claims, err := server.authn.Sessions().Resolve(ctx, sessionToken)
 	if err != nil {
 		t.Fatalf("the borrowed session does not resolve: %v", err)
 	}

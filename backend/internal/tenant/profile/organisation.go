@@ -22,7 +22,7 @@
  * and the people in them (see internal/apps/organisation).
  */
 
-package tenant
+package profile
 
 import (
 	"encoding/json"
@@ -79,17 +79,17 @@ const tenantProfileColumns = `SELECT t.id::text, t.slug, t.name,
 	LEFT JOIN tenants parent ON parent.id = p.parent_tenant_id
 	WHERE t.id = $1`
 
-// handleGetTenantProfile answers for any member of the organisation. It used to
+// HandleGetTenantProfile answers for any member of the organisation. It used to
 // require the organisation app's read permission, which every role held anyway
 // — and the name it returns is already on the sidebar of every screen.
-func (s *Service) handleGetTenantProfile(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleGetTenantProfile(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	var o TenantProfile
-	err := s.db.QueryRow(r.Context(), tenantProfileColumns, tenantID).Scan(
+	err := h.db.QueryRow(r.Context(), tenantProfileColumns, tenantID).Scan(
 		&o.TenantID, &o.Slug, &o.Name, &o.LegalName, &o.RegistrationNumber, &o.TaxNumber,
 		&o.CountryCode, &o.Province, &o.District, &o.Khoroo, &o.AddressLine, &o.PostalCode,
 		&o.Phone, &o.Email, &o.Website, &o.LogoURL, &o.Timezone, &o.Locale, &o.Currency,
@@ -104,14 +104,14 @@ func (s *Service) handleGetTenantProfile(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, o)
 }
 
-// handleUpdateTenantProfile is mounted behind requireAdmin.
+// HandleUpdateTenantProfile is mounted behind requireAdmin.
 //
 // It was behind the organisation app's manage permission, which the manager role
 // also held. Tightening it to the tenant administrator is deliberate: the fields
 // here are the organisation's legal identity, they print on documents and they
 // are what the XYP rail checks a registration number against, and this is now a
 // platform setting rather than a screen inside an app somebody chose to install.
-func (s *Service) handleUpdateTenantProfile(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleUpdateTenantProfile(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
@@ -152,14 +152,14 @@ func (s *Service) handleUpdateTenantProfile(w http.ResponseWriter, r *http.Reque
 	// transaction that has already changed the profile.
 	var parent *string
 	if body.ParentTenantID != nil {
-		resolved, ok := s.resolveParentTenant(w, r, tenantID, strings.TrimSpace(*body.ParentTenantID))
+		resolved, ok := h.resolveParentTenant(w, r, tenantID, strings.TrimSpace(*body.ParentTenantID))
 		if !ok {
 			return
 		}
 		parent = resolved
 	}
 
-	tx, err := s.db.Begin(r.Context())
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 		return
@@ -222,7 +222,7 @@ func (s *Service) handleUpdateTenantProfile(w http.ResponseWriter, r *http.Reque
 		httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 		return
 	}
-	s.handleGetTenantProfile(w, r)
+	h.HandleGetTenantProfile(w, r)
 }
 
 // resolveParentTenant decides whether this organisation may be recorded as a
@@ -242,7 +242,7 @@ func (s *Service) handleUpdateTenantProfile(w http.ResponseWriter, r *http.Reque
 //	  print on documents. Membership of the parent is the smallest honest
 //	  proof of a relationship this platform can check, and it is the same
 //	  proof the tenant switcher already trusts.
-func (s *Service) resolveParentTenant(w http.ResponseWriter, r *http.Request, tenantID, parentID string) (*string, bool) {
+func (h *Handlers) resolveParentTenant(w http.ResponseWriter, r *http.Request, tenantID, parentID string) (*string, bool) {
 	if parentID == "" {
 		return nil, true // "no parent" is a value, not an omission
 	}
@@ -263,7 +263,7 @@ func (s *Service) resolveParentTenant(w http.ResponseWriter, r *http.Request, te
 	ctx := nexus.WithoutTenant(r.Context())
 
 	var member bool
-	if err := s.db.QueryRow(ctx,
+	if err := h.db.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM memberships
 		                 WHERE tenant_id = $1::uuid AND user_id = $2 AND active)`,
 		parentID, claims.UserID).Scan(&member); err != nil {
@@ -291,7 +291,7 @@ func (s *Service) resolveParentTenant(w http.ResponseWriter, r *http.Request, te
 			return nil, false
 		}
 		var next string
-		if err := s.db.QueryRow(ctx,
+		if err := h.db.QueryRow(ctx,
 			`SELECT COALESCE(parent_tenant_id::text, '') FROM tenant_profiles WHERE tenant_id = $1::uuid`,
 			cursor).Scan(&next); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -322,7 +322,7 @@ type Preferences struct {
 	OrganisationTimezone string `json:"organisation_timezone"`
 }
 
-func (s *Service) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
@@ -334,7 +334,7 @@ func (s *Service) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var p Preferences
-	if err := s.db.QueryRow(r.Context(),
+	if err := h.db.QueryRow(r.Context(),
 		`SELECT u.name, u.email, u.phone, u.locale, u.timezone, tp.locale, tp.timezone
 		   FROM users u, tenant_profiles tp
 		  WHERE u.id = $1 AND tp.tenant_id = $2`, claims.UserID, tenantID).
@@ -347,7 +347,7 @@ func (s *Service) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, p)
 }
 
-func (s *Service) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	claims, err := auth.UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
@@ -371,7 +371,7 @@ func (s *Service) handleUpdatePreferences(w http.ResponseWriter, r *http.Request
 	// The email is deliberately not editable here. It is the login and the
 	// address a verification link goes to, so changing it is a proof-of-address
 	// flow rather than a text field — see emailverify.
-	if _, err := s.db.Exec(r.Context(),
+	if _, err := h.db.Exec(r.Context(),
 		`UPDATE users SET
 		     name     = COALESCE($2, name),
 		     phone    = COALESCE($3, phone),
@@ -383,5 +383,5 @@ func (s *Service) handleUpdatePreferences(w http.ResponseWriter, r *http.Request
 		httpx.Error(w, http.StatusInternalServerError, "could not save your preferences")
 		return
 	}
-	s.handleGetPreferences(w, r)
+	h.HandleGetPreferences(w, r)
 }

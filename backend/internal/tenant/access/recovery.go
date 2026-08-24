@@ -8,7 +8,7 @@
  * somebody who works there.
  */
 
-package tenant
+package access
 
 import (
 	"context"
@@ -54,17 +54,17 @@ func hashRecoveryToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// handleCredentialCheck says whether a link is still worth filling in a form
+// HandleCredentialCheck says whether a link is still worth filling in a form
 // for.
 //
 // It answers the same shape for an unknown token as for an expired one, so the
 // endpoint cannot be used to tell which tokens exist. What it does reveal, for
 // a valid token, is the address it belongs to — which is the address of the
 // person holding the link, in their own mail.
-func (s *Service) handleCredentialCheck(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleCredentialCheck(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	var email, purpose string
-	err := s.db.QueryRow(r.Context(),
+	err := h.db.QueryRow(r.Context(),
 		`SELECT u.email, g.purpose
 		   FROM credential_grants g
 		   JOIN users u ON u.id = g.user_id
@@ -82,8 +82,8 @@ func (s *Service) handleCredentialCheck(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// handleCredentialRedeem sets a password and spends the link.
-func (s *Service) handleCredentialRedeem(w http.ResponseWriter, r *http.Request) {
+// HandleCredentialRedeem sets a password and spends the link.
+func (h *Handlers) HandleCredentialRedeem(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRecoveryBody)
 	var req struct {
 		Token    string `json:"token"`
@@ -106,7 +106,7 @@ func (s *Service) handleCredentialRedeem(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	tx, err := s.db.Begin(r.Context())
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "that could not be saved")
 		return
@@ -159,14 +159,14 @@ func (s *Service) handleCredentialRedeem(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
-// handleImpersonationRedeem exchanges the console's handover for a session.
+// HandleImpersonationRedeem exchanges the console's handover for a session.
 //
 // This is where an operator becomes, for thirty minutes, somebody who works at
 // the organisation. Everything about the session says so: it carries
 // impersonated_by, which /me reports, which the shell turns into a banner
 // nobody can dismiss, and which every audit row written from it is marked
 // with.
-func (s *Service) handleImpersonationRedeem(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleImpersonationRedeem(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRecoveryBody)
 	var req struct {
 		Token string `json:"token"`
@@ -176,7 +176,7 @@ func (s *Service) handleImpersonationRedeem(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tx, err := s.db.Begin(r.Context())
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "that could not be started")
 		return
@@ -206,7 +206,7 @@ func (s *Service) handleImpersonationRedeem(w http.ResponseWriter, r *http.Reque
 	// suspended in the minute between the operator asking and following the
 	// link, and a suspension that impersonation could step around would not be
 	// a suspension.
-	if suspended, _ := s.authn.TenantSuspended(r.Context(), tenantID); suspended {
+	if suspended, _ := h.authn.TenantSuspended(r.Context(), tenantID); suspended {
 		httpx.Error(w, http.StatusForbidden, auth.ErrTenantSuspended.Error())
 		return
 	}
@@ -272,14 +272,14 @@ func newImpersonationSession(r *http.Request, tx pgx.Tx, userID, tenantID, opera
 	return token, nil
 }
 
-// endImpersonations closes the impersonation rows whose sessions have run out,
+// EndImpersonations closes the impersonation rows whose sessions have run out,
 // so that the console and the organisation both show a visit as finished
 // rather than open for ever.
-func (s *Service) endImpersonations(ctx context.Context) {
+func (h *Handlers) EndImpersonations(ctx context.Context) {
 	sweepCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	if _, err := s.db.Exec(sweepCtx,
+	if _, err := h.db.Exec(sweepCtx,
 		`UPDATE operator_impersonations SET ended_at = NOW()
 		  WHERE ended_at IS NULL AND ends_at <= NOW()`); err != nil {
 		slog.Warn("could not close the finished impersonations", "error", err)

@@ -1,4 +1,4 @@
-package tenant
+package access
 
 import (
 	"context"
@@ -44,14 +44,14 @@ type accessMember struct {
 	Roles        []string `json:"roles"`
 }
 
-func (s *Service) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAccessOverview(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
 	roles := make([]accessRole, 0)
-	rows, err := s.db.Query(r.Context(), `
+	rows, err := h.db.Query(r.Context(), `
 		SELECT r.id::text,r.code,r.name,r.description,r.active,r.is_system,
 		       COALESCE(array_agg(p.code ORDER BY p.code) FILTER (WHERE p.code IS NOT NULL),'{}')
 		FROM roles r
@@ -82,7 +82,7 @@ func (s *Service) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	permissions := make([]accessPermission, 0)
-	rows, err = s.db.Query(r.Context(), `SELECT code,name,description,split_part(code,'.',1) FROM permissions ORDER BY split_part(code,'.',1),code`)
+	rows, err = h.db.Query(r.Context(), `SELECT code,name,description,split_part(code,'.',1) FROM permissions ORDER BY split_part(code,'.',1),code`)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load permissions")
 		return
@@ -103,7 +103,7 @@ func (s *Service) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	members := make([]accessMember, 0)
-	rows, err = s.db.Query(r.Context(), `
+	rows, err = h.db.Query(r.Context(), `
 		SELECT m.id::text,u.id::text,u.name,u.email,
 		       EXISTS (SELECT 1 FROM membership_roles amr JOIN roles ar ON ar.id=amr.role_id
 		               WHERE amr.membership_id=m.id AND ar.tenant_id=m.tenant_id AND ar.code='admin' AND ar.active),
@@ -134,7 +134,7 @@ func (s *Service) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"roles": roles, "permissions": permissions, "members": members})
 }
 
-func (s *Service) handleCreateRole(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleCreateRole(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	var req struct {
@@ -154,16 +154,16 @@ func (s *Service) handleCreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := uuid.NewString()
-	_, err := s.db.Exec(r.Context(), `INSERT INTO roles(id,tenant_id,code,name,description) VALUES($1,$2,$3,$4,$5)`, id, tenantID, req.Code, req.Name, req.Description)
+	_, err := h.db.Exec(r.Context(), `INSERT INTO roles(id,tenant_id,code,name,description) VALUES($1,$2,$3,$4,$5)`, id, tenantID, req.Code, req.Name, req.Description)
 	if err != nil {
 		httpx.Error(w, 409, "role code already exists")
 		return
 	}
-	s.recordAccessChange(r, claims.UserID, "role.create", "role", id, nil, req)
+	h.recordAccessChange(r, claims.UserID, "role.create", "role", id, nil, req)
 	httpx.JSON(w, 201, map[string]string{"id": id})
 }
 
-func (s *Service) handleUpdateRole(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleUpdateRole(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
@@ -179,7 +179,7 @@ func (s *Service) handleUpdateRole(w http.ResponseWriter, r *http.Request) {
 	var system bool
 	var beforeName, beforeDesc string
 	var beforeActive bool
-	if s.db.QueryRow(r.Context(), `SELECT is_system,name,description,active FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &beforeName, &beforeDesc, &beforeActive) != nil {
+	if h.db.QueryRow(r.Context(), `SELECT is_system,name,description,active FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &beforeName, &beforeDesc, &beforeActive) != nil {
 		httpx.Error(w, 404, "role not found")
 		return
 	}
@@ -187,22 +187,22 @@ func (s *Service) handleUpdateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 409, "system roles cannot be disabled")
 		return
 	}
-	_, err := s.db.Exec(r.Context(), `UPDATE roles SET name=$1,description=$2,active=$3 WHERE id=$4 AND tenant_id=$5`, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), req.Active, id, tenantID)
+	_, err := h.db.Exec(r.Context(), `UPDATE roles SET name=$1,description=$2,active=$3 WHERE id=$4 AND tenant_id=$5`, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), req.Active, id, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to update role")
 		return
 	}
-	s.recordAccessChange(r, claims.UserID, "role.update", "role", id, map[string]any{"name": beforeName, "description": beforeDesc, "active": beforeActive}, req)
+	h.recordAccessChange(r, claims.UserID, "role.update", "role", id, map[string]any{"name": beforeName, "description": beforeDesc, "active": beforeActive}, req)
 	httpx.JSON(w, 200, map[string]string{"status": "updated"})
 }
 
-func (s *Service) handleDeleteRole(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleDeleteRole(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	var system bool
 	var code string
-	if s.db.QueryRow(r.Context(), `SELECT is_system,code FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &code) != nil {
+	if h.db.QueryRow(r.Context(), `SELECT is_system,code FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &code) != nil {
 		httpx.Error(w, 404, "role not found")
 		return
 	}
@@ -210,15 +210,15 @@ func (s *Service) handleDeleteRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 409, "system roles cannot be deleted")
 		return
 	}
-	if _, err := s.db.Exec(r.Context(), `DELETE FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID); err != nil {
+	if _, err := h.db.Exec(r.Context(), `DELETE FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID); err != nil {
 		httpx.Error(w, 500, "failed to delete role")
 		return
 	}
-	s.recordAccessChange(r, claims.UserID, "role.delete", "role", id, map[string]string{"code": code}, nil)
+	h.recordAccessChange(r, claims.UserID, "role.delete", "role", id, map[string]string{"code": code}, nil)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func (s *Service) handleSetRolePermissions(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleSetRolePermissions(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
@@ -230,7 +230,7 @@ func (s *Service) handleSetRolePermissions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var code string
-	if s.db.QueryRow(r.Context(), `SELECT code FROM roles WHERE id=$1 AND tenant_id=$2 AND active`, id, tenantID).Scan(&code) != nil {
+	if h.db.QueryRow(r.Context(), `SELECT code FROM roles WHERE id=$1 AND tenant_id=$2 AND active`, id, tenantID).Scan(&code) != nil {
 		httpx.Error(w, 404, "active role not found")
 		return
 	}
@@ -247,7 +247,7 @@ func (s *Service) handleSetRolePermissions(w http.ResponseWriter, r *http.Reques
 			clean = append(clean, p)
 		}
 	}
-	tx, err := s.db.Begin(r.Context())
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, 500, "failed to start permission update")
 		return
@@ -276,11 +276,11 @@ func (s *Service) handleSetRolePermissions(w http.ResponseWriter, r *http.Reques
 		httpx.Error(w, 500, "failed to save permissions")
 		return
 	}
-	s.recordAccessChange(r, claims.UserID, "role.permissions", "role", id, before, clean)
+	h.recordAccessChange(r, claims.UserID, "role.permissions", "role", id, before, clean)
 	httpx.JSON(w, 200, map[string]string{"status": "updated"})
 }
 
-func (s *Service) handleSetMembershipRoles(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleSetMembershipRoles(w http.ResponseWriter, r *http.Request) {
 	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
@@ -291,7 +291,7 @@ func (s *Service) handleSetMembershipRoles(w http.ResponseWriter, r *http.Reques
 		httpx.Error(w, 400, "invalid role assignment payload")
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
+	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		httpx.Error(w, 500, "failed to start role assignment")
 		return
@@ -348,7 +348,7 @@ func (s *Service) handleSetMembershipRoles(w http.ResponseWriter, r *http.Reques
 		httpx.Error(w, 500, "failed to assign roles")
 		return
 	}
-	s.recordAccessChange(r, claims.UserID, "membership.roles", "membership", id, before, clean)
+	h.recordAccessChange(r, claims.UserID, "membership.roles", "membership", id, before, clean)
 	httpx.JSON(w, 200, map[string]string{"status": "updated"})
 }
 
@@ -390,11 +390,11 @@ func collectStrings(ctx context.Context, q querier, sql string, args ...any) ([]
 // every one of them already has to call this — a new mutation that forgets to
 // invalidate would be a role edit that takes half a minute to bite, and the
 // administrator would be looking at a screen that says it already has.
-func (s *Service) recordAccessChange(r *http.Request, actor, action, resource, resourceID string, before, after any) {
+func (h *Handlers) recordAccessChange(r *http.Request, actor, action, resource, resourceID string, before, after any) {
 	tenantID, _ := nexus.TenantID(r.Context())
-	s.forgetGrants(tenantID)
+	h.forgetGrants(tenantID)
 	beforeJSON, _ := json.Marshal(before)
 	afterJSON, _ := json.Marshal(after)
-	_, _ = s.db.Exec(r.Context(), `INSERT INTO access_change_events(tenant_id,actor_user_id,action,resource_type,resource_id,before_state,after_state) VALUES($1,$2,$3,$4,$5,$6,$7)`, tenantID, actor, action, resource, resourceID, beforeJSON, afterJSON)
+	_, _ = h.db.Exec(r.Context(), `INSERT INTO access_change_events(tenant_id,actor_user_id,action,resource_type,resource_id,before_state,after_state) VALUES($1,$2,$3,$4,$5,$6,$7)`, tenantID, actor, action, resource, resourceID, beforeJSON, afterJSON)
 	audit.Record(r.Context(), tenantID, actor, "access."+action, resource, map[string]any{"resource_id": resourceID})
 }

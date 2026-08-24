@@ -72,8 +72,6 @@ var plannedTenantPackages = map[string]string{
 	// ------------------------------------------------------------ packages
 
 	// --------------------------------------------- files in the root package
-	"access_control.go":      "tenant/access",
-	"access_control_test.go": "tenant/access",
 	// The platform decides whether strangers may sign up and whether the
 	// deployment is read-only; this applies the answer on a tenant's request,
 	// through the settings store rather than a query. That is §2.9's rule
@@ -83,10 +81,9 @@ var plannedTenantPackages = map[string]string{
 	// "The tenant-facing half of two things the control plane starts", says
 	// its own header. It reads credential_grants, which is a platform table
 	// and not one of the five a tenant may read — see the PR.
-	"access_recovery.go": "tenant/access",
-	"app_gate_test.go":   "tenant/appinstall",
-	"appgate.go":         "tenant/appinstall",
-	"recovery_test.go":   "tenant/access",
+	"app_gate_test.go": "tenant/appinstall",
+	"appgate_test.go":  "tenant/appinstall",
+	"appgate.go":       "tenant/appinstall",
 	// The tenant's own store screens, not the platform's catalogue: every one
 	// of these handlers reads claims.TenantID and installs for that
 	// organisation. The catalogue they read is the deployment's and is parsed
@@ -101,23 +98,20 @@ var plannedTenantPackages = map[string]string{
 	// by the console: "a cached read on the request path, like the app gate
 	// beside it", says the file. The console's half of an organisation's
 	// lifecycle is in platform/controlplane.
-	"suspension_test.go":         "tenant/access",
-	"tenant_lifecycle.go":        "tenant/access + tenant/quota",
-	"auth_handlers.go":           "tenant/auth",
-	"capabilities_test.go":       "tenant/appinstall",
-	"eid_linking_test.go":        "tenant/identity",
-	"emailverify_handlers.go":    "tenant/emailverify",
-	"external_app_test.go":       "tenant/appinstall",
-	"external_apps.go":           "tenant/appinstall",
-	"extra_modules_test.go":      "tenant/appinstall",
-	"login_lockout_test.go":      "tenant/auth",
-	"middleware.go":              "tenant/auth", // appGateMiddleware follows external_apps.go
-	"module_platform.go":         "tenant/appinstall",
-	"profile_handlers.go":        "tenant/profile",
-	"signing.go":                 "tenant/signing",
-	"signing_test.go":            "tenant/signing",
-	"tenant_profile_handlers.go": "tenant/profile",
-	"tenant_profile_test.go":     "tenant/profile",
+	"suspension_test.go":      "tenant/access",
+	"tenant_lifecycle.go":     "tenant/access + tenant/quota",
+	"auth_handlers.go":        "tenant/auth",
+	"capabilities_test.go":    "tenant/appinstall",
+	"eid_linking_test.go":     "tenant/identity",
+	"emailverify_handlers.go": "tenant/emailverify",
+	"external_app_test.go":    "tenant/appinstall",
+	"external_apps.go":        "tenant/appinstall",
+	"extra_modules_test.go":   "tenant/appinstall",
+	"login_lockout_test.go":   "tenant/auth",
+	"middleware.go":           "tenant/auth", // appGateMiddleware follows external_apps.go
+	"module_platform.go":      "tenant/appinstall",
+	"signing.go":              "tenant/signing",
+	"signing_test.go":         "tenant/signing",
 }
 
 // Nothing. internal/platform's root holds one file — service.go, the plane

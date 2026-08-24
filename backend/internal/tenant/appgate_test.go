@@ -1,3 +1,14 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
+ * Distributed under the Apache 2.0 License.
+ *
+ * Which permission a module's route needs, and what happens when it names none.
+ *
+ * These were beside the role tests while both were in one package. What they
+ * are about is the gate a module's routes sit behind.
+ */
+
 package tenant
 
 import (
@@ -5,21 +16,6 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
-
-func TestRoleCodeValidation(t *testing.T) {
-	valid := []string{"admin", "sales_manager", "inventory.read"}
-	invalid := []string{"A", "Admin", " has-space", "x/owner", "-admin"}
-	for _, v := range valid {
-		if !roleCodePattern.MatchString(v) {
-			t.Errorf("expected %q valid", v)
-		}
-	}
-	for _, v := range invalid {
-		if roleCodePattern.MatchString(v) {
-			t.Errorf("expected %q invalid", v)
-		}
-	}
-}
 
 // gatedModule and selfGatedModule stand in for the two answers a real module
 // can give. They are fakes rather than the real contacts and gov_services

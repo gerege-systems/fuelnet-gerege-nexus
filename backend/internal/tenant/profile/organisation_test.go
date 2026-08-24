@@ -13,7 +13,7 @@
  *	AUTH_TEST_DATABASE_URL=postgres://... go test ./internal/platform/...
  */
 
-package tenant
+package profile
 
 import (
 	"context"
@@ -84,7 +84,7 @@ func newProfileFixture(t *testing.T) *profileFixture {
 	// resolved: what is under test is the handler, not the middleware in front
 	// of it. No app is installed for this tenant and none is registered — which
 	// is exactly the state these routes have to keep working in.
-	srv := &Service{db: pool}
+	srv := New(pool, nil, nil)
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,10 +93,10 @@ func newProfileFixture(t *testing.T) *profileFixture {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})
-	router.Get("/api/v1/tenant/profile", srv.handleGetTenantProfile)
-	router.Put("/api/v1/tenant/profile", srv.handleUpdateTenantProfile)
-	router.Get("/api/v1/profile/preferences", srv.handleGetPreferences)
-	router.Put("/api/v1/profile/preferences", srv.handleUpdatePreferences)
+	router.Get("/api/v1/tenant/profile", srv.HandleGetTenantProfile)
+	router.Put("/api/v1/tenant/profile", srv.HandleUpdateTenantProfile)
+	router.Get("/api/v1/profile/preferences", srv.HandleGetPreferences)
+	router.Put("/api/v1/profile/preferences", srv.HandleUpdatePreferences)
 	f.router = router
 	return f
 }
