@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoclient"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

@@ -6,7 +6,7 @@
  * Package ssoclients is what an organisation may register as a system that
  * signs people in through this platform.
  *
- * Not the OAuth2 provider — that is internal/platform/ssoprovider, and it stays
+ * Not the OAuth2 provider — that is internal/tenant/ssoprovider, and it stays
  * there: issuing a code, exchanging a token, publishing a JWKS and holding the
  * clients are one authorization server the whole deployment shares. What is
  * here is the half that is this app's: what a registration has to look like

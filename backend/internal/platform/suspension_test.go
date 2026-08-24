@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/memo"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

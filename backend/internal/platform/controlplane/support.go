@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
 	"github.com/jackc/pgx/v5"
 )
 

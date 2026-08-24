@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoclient"
 )
 
 // A Server needs a database for almost everything, but not for the question

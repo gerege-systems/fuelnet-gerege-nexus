@@ -20,10 +20,10 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/dan"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
 )
 
 func (s *Server) handleEIDStart(w http.ResponseWriter, r *http.Request) {

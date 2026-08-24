@@ -9,7 +9,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/menu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 

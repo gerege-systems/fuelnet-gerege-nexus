@@ -33,7 +33,7 @@ const modulePrefix = "github.com/gerege-systems/open-gerege-nexus/backend"
 // — and was only still under internal/apps because nobody had moved the
 // directory. The exception was not describing a permitted coupling between two
 // apps; it was describing a platform package in the wrong place. So the package
-// moved to internal/platform/esign and the entry went with it.
+// moved to internal/tenant/signing and the entry went with it.
 //
 // The map stays, because the next argument of that kind should have to be
 // written down. A new entry here is a decision, and adding one should feel like

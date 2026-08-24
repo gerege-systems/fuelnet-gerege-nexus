@@ -7,7 +7,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/appinstall"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -82,9 +82,9 @@ func TestAnAppWithNoCompiledModuleIsAccepted(t *testing.T) {
 func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 	// The list is a distribution's now. This test is about the check, so it
 	// declares one and puts it back.
-	previous := appinstaller.DefaultApps
-	appinstaller.DefaultApps = []string{"io.gerege.nexus.organisation"}
-	t.Cleanup(func() { appinstaller.DefaultApps = previous })
+	previous := appinstall.DefaultApps
+	appinstall.DefaultApps = []string{"io.gerege.nexus.organisation"}
+	t.Cleanup(func() { appinstall.DefaultApps = previous })
 
 	err := verifyCatalogVersions([]catalog.CatalogApp{{
 		ID: "mn.example.hrms", Slug: "hrms", Version: "2026.8.0",
@@ -93,7 +93,7 @@ func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a catalogue without the default app to be refused")
 	}
-	if !strings.Contains(err.Error(), appinstaller.DefaultApps[0]) {
+	if !strings.Contains(err.Error(), appinstall.DefaultApps[0]) {
 		t.Fatalf("the refusal should name the app it is missing; got %v", err)
 	}
 }
@@ -116,8 +116,8 @@ func TestACatalogWithoutThePlatformsOwnAppIsRefused(t *testing.T) {
 // when the whole package ran and some other test had registered the module.
 // A number kept in step by hand is a number that goes out of step quietly.
 func withDefaultApp(apps ...catalog.CatalogApp) []catalog.CatalogApp {
-	full := make([]catalog.CatalogApp, 0, len(appinstaller.DefaultApps)+len(apps))
-	for _, id := range appinstaller.DefaultApps {
+	full := make([]catalog.CatalogApp, 0, len(appinstall.DefaultApps)+len(apps))
+	for _, id := range appinstall.DefaultApps {
 		slug := id[strings.LastIndex(id, ".")+1:]
 		version := "1.0.0"
 		if mod, ok := nexus.Get(id); ok {

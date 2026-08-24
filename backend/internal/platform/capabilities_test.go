@@ -9,10 +9,10 @@ package platform
 import (
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/integration"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoprovider"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 

@@ -51,9 +51,9 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	core "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -93,7 +93,7 @@ type Options struct {
 	// DefaultApps are installed for every organisation without anybody asking.
 	//
 	// A distribution's decision, not the platform's. The list used to be a
-	// package variable in internal/platform/appinstaller naming this
+	// package variable in internal/tenant/appinstall naming this
 	// repository's own apps; when the first of them moved out
 	// (client-gerege-nexus, 2026-08-23) the behaviour moved with it and had
 	// nowhere to be declared — a deployment could carry an app that every
@@ -192,7 +192,7 @@ func Run(opts Options) error {
 	// and gone with the container.
 	audit.UseDatabase(db)
 	// And the same recorder for anything written against the public SDK. An
-	// app module cannot import internal/platform/audit, so it calls
+	// app module cannot import internal/tenant/audit, so it calls
 	// nexus.Audit; without this line those events would be logged and dropped
 	// while the platform's own reached the table, which is the worst of the
 	// three possible states because the trail would look complete.

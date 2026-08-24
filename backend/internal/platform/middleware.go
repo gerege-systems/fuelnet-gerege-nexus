@@ -14,10 +14,10 @@ import (
 	"net/http"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -126,7 +126,7 @@ func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler
 			// matching Odoo's ir.model.access behaviour. Government workflow has
 			// its own action- and unit-aware permission checks.
 			if permission := appRequestPermission(appID, r.Method, r.URL.Path); permission != "" {
-				rbac.RequirePermission(s.permissions, permission)(next).ServeHTTP(w, r)
+				access.RequirePermission(s.permissions, permission)(next).ServeHTTP(w, r)
 				return
 			}
 			next.ServeHTTP(w, r)

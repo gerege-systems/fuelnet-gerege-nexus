@@ -26,7 +26,7 @@ import (
 	"net/http"
 
 	domain "github.com/gerege-systems/open-gerege-nexus/backend/domain/ssoclients"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoprovider"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -95,7 +95,7 @@ func (m *SSOClientsModule) Permissions() []nexus.PermissionDefinition {
 
 // Menus is the one screen that exists and the five that are planned.
 //
-// The five were a blueprint inside the platform — internal/platform/menu/
+// The five were a blueprint inside the platform — internal/tenant/menu/
 // blueprints.go, a table keyed by app id that no module outside this repository
 // could add itself to. They are declared here now, in the group each belongs
 // to, which is what deleting that table needed. Their paths follow the same

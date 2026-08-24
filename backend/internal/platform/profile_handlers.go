@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 )
 
 // linkedIdentity is one way the person can prove who they are.

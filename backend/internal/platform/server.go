@@ -30,29 +30,29 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/resilience"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/directory"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/staffpin"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/urtuu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ai"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/appinstall"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/devices/staffpin"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/directory"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/dan"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/gerege"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/integration"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/signing"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoclient"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/urtuu"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -78,7 +78,7 @@ var PlatformVersion = "1.1.0"
 
 type Server struct {
 	db        *pgxpool.Pool
-	installer *appinstaller.AppInstaller
+	installer *appinstall.AppInstaller
 	// catalogSource is where the catalogue came from and where a refresh goes.
 	// In file mode it is the bundled file and nothing else; with a registry
 	// configured it is that registry, its disk cache and the file behind them.
@@ -115,7 +115,7 @@ type Server struct {
 	// Өртөө app, because the channel is infrastructure any module may reach for
 	// and the task board is a product a tenant chooses to install.
 	urtuuLink   *urtuu.Service
-	permissions *rbac.SQLPermissionStore
+	permissions *access.SQLPermissionStore
 	appGate     *memo.Cache[bool]
 	// settings and featureFlags are the two things the console can change
 	// without a deployment. Both are memory with a timer behind them; both are
@@ -172,7 +172,7 @@ func (s *Server) forgetAppGate(tenantID string) {
 
 // forgetGrants drops one tenant's cached permissions everywhere.
 func (s *Server) forgetGrants(tenantID string) {
-	s.bus.Invalidate(rbac.GrantCacheName, rbac.TenantPrefix(tenantID))
+	s.bus.Invalidate(access.GrantCacheName, access.TenantPrefix(tenantID))
 }
 
 // NewServer builds the platform. bus may be a local-only one; nothing here
@@ -216,7 +216,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// the e-Government screen reports is what the platform actually holds.
 	geregeSvc, eidSvc, danSvc := gerege.NewGeregeService(), eid.NewEIDService(), dan.NewDANService()
 
-	permissions := rbac.NewSQLPermissionStore(db)
+	permissions := access.NewSQLPermissionStore(db)
 	// The Өртөө channel, built before the modules because the Өртөө app is
 	// handed it: the app registers the readers for the task envelopes, and a
 	// reader registered after the exchange loop had started would have let a
@@ -304,12 +304,12 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// asks for that in its constructor — so the rails have to exist before any
 	// module does, distribution's or this repository's. Their housekeeping is
 	// appended to the runtime below, where this value is still in scope.
-	esignRails := esign.New(modulePlatform, gerege.NewEsignService(), eidMN, integrationMgr)
+	esignRails := signing.New(modulePlatform, gerege.NewEsignService(), eidMN, integrationMgr)
 	// Published rather than handed to documents. The rail is the platform's —
 	// ADR 0002 is about why there is exactly one — and where its routes appear
 	// is the app's; a parameter made the app unable to be built anywhere else.
 	//
-	// One key, and the exported one. Publishing the concrete *esign.Rails
+	// One key, and the exported one. Publishing the concrete *signing.Rails
 	// beside it bought nothing: the only reader was apps.Bootstrap, thirty
 	// lines down the same function, and it keyed a background loop on a type
 	// from internal/ that no distribution can name or replace — so a Provide
@@ -401,7 +401,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 			"apps", len(catalog), "sync_interval", catalogSource.SyncInterval().String())
 	}
 
-	installer := appinstaller.NewAppInstaller(db, catalog, PlatformVersion)
+	installer := appinstall.NewAppInstaller(db, catalog, PlatformVersion)
 
 	// Keep the apps table in step with the catalog file. A missing row makes
 	// installation fail on the app_installations foreign key, so this is a
@@ -495,7 +495,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 
 	// The bus has to know the caches before a message can arrive for one, and a
 	// message can arrive as soon as the subscriber connects.
-	s.bus.Register(rbac.GrantCacheName, rbac.GrantCache())
+	s.bus.Register(access.GrantCacheName, access.GrantCache())
 	s.bus.Register(appGateCacheName, s.appGate)
 	s.bus.Register(suspendedCacheName, s.suspended)
 	s.bus.Register(settingsCacheName, s.settings)
@@ -605,7 +605,7 @@ func verifyCatalogVersions(catalog []catalog.CatalogApp) error {
 	// This is a staleness check, not a claim that the app is mandatory: a
 	// tenant may remove it, and that removal is a row in app_installations
 	// rather than an absence from the catalogue.
-	for _, appID := range appinstaller.DefaultApps {
+	for _, appID := range appinstall.DefaultApps {
 		if !present[appID] {
 			return fmt.Errorf("catalog does not carry the platform's own app %s", appID)
 		}
@@ -989,7 +989,7 @@ func (s *Server) setupRoutes() {
 			// the three above are — the caller is another installation, not a
 			// person — and on the sign-in budget for the same reason too: a
 			// single-use code that can be guessed quickly is a code that can be
-			// guessed. See internal/platform/urtuu/peers.go.
+			// guessed. See internal/tenant/urtuu/peers.go.
 			recovery.Post("/urtuu/peers/redeem", s.urtuuLink.HandleRedeem)
 		})
 
@@ -1318,4 +1318,4 @@ func withQuery(path string, r *http.Request) string {
 // touched again, but a header shared with something that appends later would be
 // read by that timer with no synchronisation at all, and the list decides what
 // gets installed into every tenant.
-func SetDefaultApps(appIDs []string) { appinstaller.DefaultApps = slices.Clone(appIDs) }
+func SetDefaultApps(appIDs []string) { appinstall.DefaultApps = slices.Clone(appIDs) }

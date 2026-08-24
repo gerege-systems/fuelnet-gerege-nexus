@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 )
 
 // resolveCatalogPath locates catalog/apps.json.

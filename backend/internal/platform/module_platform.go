@@ -15,7 +15,7 @@
 package platform
 
 import (
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,14 +33,14 @@ type modulePlatform struct {
 }
 
 func newModulePlatform(db *pgxpool.Pool) modulePlatform {
-	return modulePlatform{db: db, perms: rbac.NewSQLPermissionStore(db)}
+	return modulePlatform{db: db, perms: access.NewSQLPermissionStore(db)}
 }
 
 func (p modulePlatform) DB() nexus.DB { return p.db }
 
 // Permissions is one shared store rather than one per module.
 //
-// Each module used to build its own with rbac.NewSQLPermissionStore, which was
+// Each module used to build its own with access.NewSQLPermissionStore, which was
 // both a leak — the constructor is internal, so no external module could do the
 // same — and a waste: the store caches grants per tenant and invalidates across
 // replicas, and fourteen of them meant fourteen caches of the same rows and

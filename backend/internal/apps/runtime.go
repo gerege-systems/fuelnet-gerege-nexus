@@ -10,7 +10,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoprovider"
 )
 
 type BackgroundModule interface {

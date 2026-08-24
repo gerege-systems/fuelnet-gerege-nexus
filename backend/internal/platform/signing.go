@@ -11,7 +11,7 @@ package platform
 import (
 	"context"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 

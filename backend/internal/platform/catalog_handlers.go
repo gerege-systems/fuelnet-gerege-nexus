@@ -23,9 +23,9 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/menu"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/appinstall"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/menu"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -265,7 +265,7 @@ func (s *Server) handleListInstalledApps(w http.ResponseWriter, r *http.Request)
 		// HeldFor lists what a waiting version asks for that the installed one
 		// did not, and HeldReason says why it is waiting at all. Either being
 		// set means an administrator has a decision to make rather than a
-		// button to press — see appinstaller.AutoUpdate.
+		// button to press — see appinstall.AutoUpdate.
 		HeldFor    []string `json:"held_for,omitempty"`
 		HeldReason string   `json:"held_reason,omitempty"`
 	}
@@ -339,7 +339,7 @@ func (s *Server) handleInstallApp(w http.ResponseWriter, r *http.Request) {
 		// — to anyone who could press Install. Only the caller's own mistake is
 		// reported as such; the rest goes to the log, where an operator can act
 		// on it.
-		if errors.Is(err, appinstaller.ErrAppNotFound) {
+		if errors.Is(err, appinstall.ErrAppNotFound) {
 			httpx.Error(w, http.StatusNotFound, "app not found")
 			return
 		}
@@ -377,13 +377,13 @@ func (s *Server) handleUpgradeApp(w http.ResponseWriter, r *http.Request) {
 
 	from, to, err := s.installer.UpgradeApp(r.Context(), claims.TenantID, slug, claims.UserID)
 	switch {
-	case errors.Is(err, appinstaller.ErrAppNotFound):
+	case errors.Is(err, appinstall.ErrAppNotFound):
 		httpx.Error(w, http.StatusNotFound, "app not found")
 		return
-	case errors.Is(err, appinstaller.ErrNotInstalled):
+	case errors.Is(err, appinstall.ErrNotInstalled):
 		httpx.Error(w, http.StatusNotFound, "this app is not installed for your organisation")
 		return
-	case errors.Is(err, appinstaller.ErrAlreadyCurrent):
+	case errors.Is(err, appinstall.ErrAlreadyCurrent):
 		httpx.JSON(w, http.StatusConflict, map[string]string{
 			"error":             "this app is already on the latest version",
 			"installed_version": from,
@@ -480,10 +480,10 @@ func (s *Server) handleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch err := s.installer.SetAutoUpdate(r.Context(), claims.TenantID, slug, body.Enabled); {
-	case errors.Is(err, appinstaller.ErrAppNotFound):
+	case errors.Is(err, appinstall.ErrAppNotFound):
 		httpx.Error(w, http.StatusNotFound, "app not found")
 		return
-	case errors.Is(err, appinstaller.ErrNotInstalled):
+	case errors.Is(err, appinstall.ErrNotInstalled):
 		httpx.Error(w, http.StatusNotFound, "this app is not installed for your organisation")
 		return
 	case err != nil:
@@ -548,7 +548,7 @@ func (s *Server) handleDisableApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.installer.DisableApp(r.Context(), claims.TenantID, slug, claims.UserID); err != nil {
-		if errors.Is(err, appinstaller.ErrAppNotFound) {
+		if errors.Is(err, appinstall.ErrAppNotFound) {
 			httpx.Error(w, http.StatusNotFound, "app not found")
 			return
 		}

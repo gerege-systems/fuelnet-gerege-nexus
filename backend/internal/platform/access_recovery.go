@@ -22,8 +22,8 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/jackc/pgx/v5"
 )
 

@@ -159,7 +159,7 @@ var plannedPlatformPackages = map[string]string{
 // The floor. These own no table and answer to neither plane, which is what
 // makes them safe for both to import — and why the third rule below matters
 // more than it looks: internal/kernel/security already imports
-// internal/platform/auth, and auth is the tenant plane's.
+// internal/tenant/auth, and auth is the tenant plane's.
 var plannedKernelPackages = map[string]string{
 	"async":      "kernel/async",
 	"cache":      "kernel/cache",
@@ -202,7 +202,7 @@ func TestPlatformDoesNotImportTenant(t *testing.T) {
 // The kernel is a floor, not a third plane.
 //
 // It is the rule with something already against it: internal/kernel/security
-// imports internal/platform/auth today, and auth is the tenant plane's. That
+// imports internal/tenant/auth today, and auth is the tenant plane's. That
 // import is what this test exists to make visible before the directories are
 // named — after the move it would be a kernel package that quietly belongs to
 // one plane, and everything built on it would inherit the choice.

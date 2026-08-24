@@ -31,8 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
 )
 
 // bindFixture is the link fixture without the person: nobody is signed in when
