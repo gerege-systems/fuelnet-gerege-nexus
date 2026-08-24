@@ -51,7 +51,7 @@ func TestAnInvitationStillWorksWhileThePlatformIsPrivate(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM platform_settings WHERE key = $1`, settings.AccessMode)
+			`DELETE FROM platform.platform_settings WHERE key = $1`, settings.AccessMode)
 	})
 	if got := settings.Get(settings.AccessMode); got != settings.AccessPrivate {
 		t.Fatalf("the platform is %q", got)
@@ -69,18 +69,18 @@ func TestAnInvitationStillWorksWhileThePlatformIsPrivate(t *testing.T) {
 		t.Fatalf("a private platform refused an invited organisation: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, created.ID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE email = $1`, email)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1::uuid`, created.ID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE email = $1`, email)
 	})
 
 	// The account exists and is an administrator of the new organisation.
 	var admin bool
 	if err := pool.QueryRow(ctx,
 		`SELECT EXISTS (
-		    SELECT 1 FROM users u
-		      JOIN memberships m ON m.user_id = u.id AND m.tenant_id = $2::uuid
-		      JOIN membership_roles mr ON mr.membership_id = m.id
-		      JOIN roles r ON r.id = mr.role_id AND r.code = 'admin'
+		    SELECT 1 FROM platform.users u
+		      JOIN tenant.memberships m ON m.user_id = u.id AND m.tenant_id = $2::uuid
+		      JOIN tenant.membership_roles mr ON mr.membership_id = m.id
+		      JOIN tenant.roles r ON r.id = mr.role_id AND r.code = 'admin'
 		     WHERE u.email = $1)`, email, created.ID).Scan(&admin); err != nil {
 		t.Fatalf("look for the administrator: %v", err)
 	}

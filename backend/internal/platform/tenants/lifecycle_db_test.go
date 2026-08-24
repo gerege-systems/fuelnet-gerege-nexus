@@ -25,7 +25,7 @@ func TestSuspendEndsTheSessionsAndResumeRestores(t *testing.T) {
 
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, expires_at)
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, expires_at)
 		 VALUES (repeat('a', 64), $1::uuid, $2::uuid, NOW() + INTERVAL '1 hour')`,
 		userID, tenantID); err != nil {
 		t.Fatalf("give the person a session: %v", err)
@@ -38,7 +38,7 @@ func TestSuspendEndsTheSessionsAndResumeRestores(t *testing.T) {
 	var suspended bool
 	var reason string
 	if err := pool.QueryRow(ctx,
-		`SELECT suspended_at IS NOT NULL, suspension_reason FROM tenants WHERE id = $1::uuid`,
+		`SELECT suspended_at IS NOT NULL, suspension_reason FROM platform.tenants WHERE id = $1::uuid`,
 		tenantID).Scan(&suspended, &reason); err != nil {
 		t.Fatalf("read the organisation: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSuspendEndsTheSessionsAndResumeRestores(t *testing.T) {
 	// would have expired.
 	var live int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM sessions
+		`SELECT count(*) FROM tenant.sessions
 		  WHERE tenant_id = $1::uuid AND revoked_at IS NULL AND expires_at > NOW()`,
 		tenantID).Scan(&live); err != nil {
 		t.Fatalf("count the sessions: %v", err)
@@ -63,7 +63,7 @@ func TestSuspendEndsTheSessionsAndResumeRestores(t *testing.T) {
 		t.Fatalf("resume: %v", err)
 	}
 	if err := pool.QueryRow(ctx,
-		`SELECT suspended_at IS NOT NULL FROM tenants WHERE id = $1::uuid`, tenantID).
+		`SELECT suspended_at IS NOT NULL FROM platform.tenants WHERE id = $1::uuid`, tenantID).
 		Scan(&suspended); err != nil {
 		t.Fatalf("read the organisation: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestTheSweepDeletesWhenTheGracePeriodHasEnded(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx,
-		`UPDATE tenants SET deletion_scheduled_at = NOW() - INTERVAL '1 minute' WHERE id = $1::uuid`,
+		`UPDATE platform.tenants SET deletion_scheduled_at = NOW() - INTERVAL '1 minute' WHERE id = $1::uuid`,
 		tenantID); err != nil {
 		t.Fatalf("backdate the deletion: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestTheSweepDeletesWhenTheGracePeriodHasEnded(t *testing.T) {
 	service.SweepDeletions(ctx)
 
 	var alive bool
-	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tenants WHERE id = $1::uuid)`, tenantID).
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM platform.tenants WHERE id = $1::uuid)`, tenantID).
 		Scan(&alive); err != nil {
 		t.Fatalf("look for the organisation: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestImpersonationRecordsBothSides(t *testing.T) {
 	// answerable by them rather than by us.
 	var theirs int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM audit_events
+		`SELECT count(*) FROM tenant.audit_events
 		  WHERE tenant_id = $1::uuid AND action = 'security.impersonation.requested'`,
 		tenantID).Scan(&theirs); err != nil {
 		t.Fatalf("read the organisation's trail: %v", err)

@@ -92,8 +92,8 @@ func (c *Console) BeginImpersonation(ctx context.Context, sess Session, tenantID
 
 	var email string
 	err = c.db.QueryRow(Scoped(ctx),
-		`SELECT u.email FROM users u
-		   JOIN memberships m ON m.user_id = u.id AND m.tenant_id = $2::uuid
+		`SELECT u.email FROM platform.users u
+		   JOIN tenant.memberships m ON m.user_id = u.id AND m.tenant_id = $2::uuid
 		  WHERE u.id = $1::uuid`, userID, tenantID).Scan(&email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotAMember
@@ -122,7 +122,7 @@ func (c *Console) BeginImpersonation(ctx context.Context, sess Session, tenantID
 		},
 	}, func(ctx context.Context, tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO operator_impersonations
+			`INSERT INTO platform.operator_impersonations
 			     (operator_id, operator_email, tenant_id, user_id, reason,
 			      handover_hash, handover_expires_at, ends_at)
 			 VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6, NOW() + $7::interval, NOW() + $8::interval)`,
@@ -136,7 +136,7 @@ func (c *Console) BeginImpersonation(ctx context.Context, sess Session, tenantID
 		// already read, beside their own people's actions, without anybody
 		// having to be told to look somewhere new.
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO audit_events (tenant_id, user_id, action, resource, details)
+			`INSERT INTO tenant.audit_events (tenant_id, user_id, action, resource, details)
 			 VALUES ($1::uuid, $2, 'security.impersonation.requested', $3, $4)`,
 			tenantID, "operator:"+sess.ID, email,
 			map[string]any{
@@ -160,8 +160,8 @@ func (c *Console) ListImpersonations(ctx context.Context, tenantID string) ([]Im
 	rows, err := c.db.Query(Scoped(ctx),
 		`SELECT i.id::text, i.operator_email, i.tenant_id::text, i.user_id::text,
 		        COALESCE(u.email, ''), i.reason, i.redeemed_at, i.ends_at, i.created_at
-		   FROM operator_impersonations i
-		   LEFT JOIN users u ON u.id = i.user_id
+		   FROM platform.operator_impersonations i
+		   LEFT JOIN platform.users u ON u.id = i.user_id
 		  WHERE i.tenant_id = $1::uuid
 		  ORDER BY i.created_at DESC
 		  LIMIT 50`, tenantID)

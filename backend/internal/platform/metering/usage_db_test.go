@@ -31,13 +31,13 @@ func TestUsageIsCountedFromTheDatabase(t *testing.T) {
 	// Two acts and one AI call today, and a session that was used today.
 	for _, action := range []string{"contacts.create", "ai.chat"} {
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO audit_events (tenant_id, user_id, action, resource)
+			`INSERT INTO tenant.audit_events (tenant_id, user_id, action, resource)
 			 VALUES ($1::uuid, $2, $3, 'test')`, tenantID, userID, action); err != nil {
 			t.Fatalf("write an audit row: %v", err)
 		}
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, expires_at, last_seen_at)
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, expires_at, last_seen_at)
 		 VALUES (repeat('b', 64), $1::uuid, $2::uuid, NOW() + INTERVAL '1 hour', NOW())`,
 		userID, tenantID); err != nil {
 		t.Fatalf("write a session: %v", err)
@@ -99,7 +99,7 @@ func TestTheMetricsThatAreNotSumsAreNotSummed(t *testing.T) {
 			usagemetric.StorageMB:   values[1],
 		} {
 			if _, err := pool.Exec(ctx,
-				`INSERT INTO usage_events (tenant_id, day, metric, value)
+				`INSERT INTO platform.usage_events (tenant_id, day, metric, value)
 				 VALUES ($1::uuid, $2::date, $3, $4)
 				 ON CONFLICT (tenant_id, day, metric) DO UPDATE SET value = EXCLUDED.value`,
 				tenantID, day, metric, value); err != nil {
@@ -136,17 +136,17 @@ func TestTheConsoleCannotWriteUsage(t *testing.T) {
 
 	var count int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM usage_events WHERE tenant_id = $1::uuid`, tenantID).Scan(&count); err != nil {
+		`SELECT count(*) FROM platform.usage_events WHERE tenant_id = $1::uuid`, tenantID).Scan(&count); err != nil {
 		t.Fatalf("the operator role cannot read the usage: %v", err)
 	}
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO usage_events (tenant_id, day, metric, value)
+		`INSERT INTO platform.usage_events (tenant_id, day, metric, value)
 		 VALUES ($1::uuid, CURRENT_DATE, 'actions', 999999)`, tenantID); err == nil {
 		t.Fatal("the operator role wrote a usage row")
 	}
 	if _, err := pool.Exec(ctx,
-		`UPDATE usage_events SET value = 0 WHERE tenant_id = $1::uuid`, tenantID); err == nil {
+		`UPDATE platform.usage_events SET value = 0 WHERE tenant_id = $1::uuid`, tenantID); err == nil {
 		t.Fatal("the operator role changed a usage row")
 	}
 }
@@ -159,7 +159,7 @@ func TestTheUsageExportIsOneRowPerDay(t *testing.T) {
 
 	for _, day := range []string{"2026-08-01", "2026-08-02"} {
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO usage_events (tenant_id, day, metric, value)
+			`INSERT INTO platform.usage_events (tenant_id, day, metric, value)
 			 VALUES ($1::uuid, $2::date, 'actions', 7)
 			 ON CONFLICT (tenant_id, day, metric) DO UPDATE SET value = EXCLUDED.value`,
 			tenantID, day); err != nil {
@@ -211,7 +211,7 @@ func TestUsageBelongsToADayOnThePlatformsClock(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO audit_events (tenant_id, user_id, action, resource)
+		`INSERT INTO tenant.audit_events (tenant_id, user_id, action, resource)
 		 VALUES ($1::uuid, $2, 'contacts.create', 'test')`, tenantID, userID); err != nil {
 		t.Fatalf("write an audit row: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestUsageBelongsToADayOnThePlatformsClock(t *testing.T) {
 	var day time.Time
 	var value int64
 	if err := pool.QueryRow(ctx,
-		`SELECT day, value FROM usage_events WHERE tenant_id = $1::uuid AND metric = $2`,
+		`SELECT day, value FROM platform.usage_events WHERE tenant_id = $1::uuid AND metric = $2`,
 		tenantID, usagemetric.Actions).Scan(&day, &value); err != nil {
 		t.Fatalf("the collection wrote nothing; it counted the caller's day rather than the platform's: %v", err)
 	}

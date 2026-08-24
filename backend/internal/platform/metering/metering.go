@@ -134,26 +134,26 @@ var queries = map[string]string{
 	// to whoever is paying for one.
 	usage.ActiveUsers: `
 		SELECT tenant_id, count(DISTINCT user_id)
-		  FROM sessions
+		  FROM tenant.sessions
 		 WHERE last_seen_at::date = $1::timestamptz::date
 		 GROUP BY tenant_id`,
 
 	usage.Actions: `
 		SELECT tenant_id, count(*)
-		  FROM audit_events
+		  FROM tenant.audit_events
 		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		 GROUP BY tenant_id`,
 
 	usage.AICalls: `
 		SELECT tenant_id, count(*)
-		  FROM audit_events
+		  FROM tenant.audit_events
 		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		   AND action LIKE 'ai.%'
 		 GROUP BY tenant_id`,
 
 	usage.ReportsSent: `
 		SELECT tenant_id, count(*)
-		  FROM audit_events
+		  FROM tenant.audit_events
 		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		   AND action LIKE 'reports.%'
 		 GROUP BY tenant_id`,
@@ -168,7 +168,7 @@ var queries = map[string]string{
 	// which matters on a table whose rows are megabytes each.
 	usage.StorageMB: `
 		SELECT tenant_id, ceil(sum(byte_size) / 1048576.0)::bigint
-		  FROM esign_documents
+		  FROM tenant.esign_documents
 		 GROUP BY tenant_id`,
 }
 
@@ -189,7 +189,7 @@ func (c *Collector) collect(ctx context.Context, metric, query string, day time.
 	// row into Go to write it straight back, which is a round trip per
 	// organisation for no reason.
 	_, err := c.db.Exec(ctx, fmt.Sprintf(`
-		INSERT INTO usage_events (tenant_id, day, metric, value, recorded_at)
+		INSERT INTO platform.usage_events (tenant_id, day, metric, value, recorded_at)
 		SELECT tenant_id, $1::timestamptz::date, $2, value, NOW() FROM (%s) AS counted(tenant_id, value)
 		ON CONFLICT (tenant_id, day, metric)
 		DO UPDATE SET value = EXCLUDED.value, recorded_at = NOW()`, query),

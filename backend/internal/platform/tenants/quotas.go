@@ -66,9 +66,9 @@ func (s *Service) GetQuota(ctx context.Context, tenantID string) (Quota, error) 
 		`SELECT COALESCE(q.max_users, -1), COALESCE(q.max_storage_mb, -1),
 		        COALESCE(q.max_ai_calls_monthly, -1),
 		        COALESCE(q.enforcement, 'soft'), COALESCE(q.updated_at, NOW()),
-		        (SELECT count(*) FROM memberships m WHERE m.tenant_id = t.id)
-		   FROM tenants t
-		   LEFT JOIN tenant_quotas q ON q.tenant_id = t.id
+		        (SELECT count(*) FROM tenant.memberships m WHERE m.tenant_id = t.id)
+		   FROM platform.tenants t
+		   LEFT JOIN platform.tenant_quotas q ON q.tenant_id = t.id
 		  WHERE t.id = $1::uuid`, tenantID).
 		Scan(orNil(&quota.MaxUsers), orNil(&quota.MaxStorageMB), orNil(&quota.MaxAICallsMonthly),
 			&quota.Enforcement, &quota.UpdatedAt, &quota.Users)
@@ -103,7 +103,7 @@ func (s *Service) SetQuota(ctx context.Context, sess operator.Session, tenantID 
 		After:      wanted,
 	}, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
-			`INSERT INTO tenant_quotas
+			`INSERT INTO platform.tenant_quotas
 			     (tenant_id, max_users, max_storage_mb, max_ai_calls_monthly, enforcement, updated_by, updated_at)
 			 VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, NOW())
 			 ON CONFLICT (tenant_id) DO UPDATE

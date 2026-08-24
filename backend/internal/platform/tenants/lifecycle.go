@@ -118,7 +118,7 @@ func (s *Service) CreateTenant(ctx context.Context, sess operator.Session, param
 		},
 	}, func(ctx context.Context, tx pgx.Tx) error {
 		var taken bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tenants WHERE slug = $1)`, slug).
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM platform.tenants WHERE slug = $1)`, slug).
 			Scan(&taken); err != nil {
 			return fmt.Errorf("check the slug: %w", err)
 		}
@@ -127,13 +127,13 @@ func (s *Service) CreateTenant(ctx context.Context, sess operator.Session, param
 		}
 
 		if err := tx.QueryRow(ctx,
-			`INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id::text`,
+			`INSERT INTO platform.tenants (slug, name) VALUES ($1, $2) RETURNING id::text`,
 			slug, name).Scan(&created.ID); err != nil {
 			return fmt.Errorf("create the organisation: %w", err)
 		}
 		if params.LegalName != "" || params.RegistrationNumber != "" {
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO tenant_profiles (tenant_id, legal_name, registration_number)
+				`INSERT INTO tenant.tenant_profiles (tenant_id, legal_name, registration_number)
 				 VALUES ($1::uuid, $2, $3)
 				 ON CONFLICT (tenant_id) DO UPDATE
 				    SET legal_name = EXCLUDED.legal_name,
@@ -197,34 +197,34 @@ func ensureAdmin(ctx context.Context, tx pgx.Tx, tenantID, email, name string) (
 	// problem with it. The conflict is a real case here: 00008's trigger
 	// creates an `admin` role the moment the organisation row lands.
 	userID, err := insertOrSelect(ctx, tx,
-		`INSERT INTO users (email, password_hash, name, is_admin)
+		`INSERT INTO platform.users (email, password_hash, name, is_admin)
 		 VALUES ($1, $2, $3, FALSE) ON CONFLICT (email) DO NOTHING
 		 RETURNING id::text`,
-		`SELECT id::text FROM users WHERE email = $1`,
+		`SELECT id::text FROM platform.users WHERE email = $1`,
 		[]any{email, unusable, name}, []any{email})
 	if err != nil {
 		return "", fmt.Errorf("create the administrator's account: %w", err)
 	}
 
 	membershipID, err := insertOrSelect(ctx, tx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)
 		 ON CONFLICT (tenant_id, user_id) DO NOTHING RETURNING id::text`,
-		`SELECT id::text FROM memberships WHERE tenant_id = $1::uuid AND user_id = $2::uuid`,
+		`SELECT id::text FROM tenant.memberships WHERE tenant_id = $1::uuid AND user_id = $2::uuid`,
 		[]any{tenantID, userID}, []any{tenantID, userID})
 	if err != nil {
 		return "", fmt.Errorf("add the administrator to the organisation: %w", err)
 	}
 
 	roleID, err := insertOrSelect(ctx, tx,
-		`INSERT INTO roles (tenant_id, code, name) VALUES ($1::uuid, 'admin', 'Tenant Admin')
+		`INSERT INTO tenant.roles (tenant_id, code, name) VALUES ($1::uuid, 'admin', 'Tenant Admin')
 		 ON CONFLICT (tenant_id, code) DO NOTHING RETURNING id::text`,
-		`SELECT id::text FROM roles WHERE tenant_id = $1::uuid AND code = 'admin'`,
+		`SELECT id::text FROM tenant.roles WHERE tenant_id = $1::uuid AND code = 'admin'`,
 		[]any{tenantID}, []any{tenantID})
 	if err != nil {
 		return "", fmt.Errorf("create the administrator role: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO membership_roles (membership_id, role_id) VALUES ($1::uuid, $2::uuid)
+		`INSERT INTO tenant.membership_roles (membership_id, role_id) VALUES ($1::uuid, $2::uuid)
 		 ON CONFLICT DO NOTHING`, membershipID, roleID); err != nil {
 		return "", fmt.Errorf("grant the administrator role: %w", err)
 	}
@@ -307,7 +307,7 @@ func (s *Service) Suspend(ctx context.Context, sess operator.Session, tenantID, 
 		After:      map[string]any{"suspended": true, "reason": reason},
 	}, func(ctx context.Context, tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx,
-			`UPDATE tenants SET suspended_at = NOW(), suspension_reason = $2 WHERE id = $1::uuid`,
+			`UPDATE platform.tenants SET suspended_at = NOW(), suspension_reason = $2 WHERE id = $1::uuid`,
 			tenantID, reason); err != nil {
 			return fmt.Errorf("suspend the organisation: %w", err)
 		}
@@ -315,7 +315,7 @@ func (s *Service) Suspend(ctx context.Context, sess operator.Session, tenantID, 
 		// would only stop the next sign-in, and everybody already signed in
 		// would keep working until their session expired hours later.
 		if _, err := tx.Exec(ctx,
-			`UPDATE sessions SET revoked_at = NOW()
+			`UPDATE tenant.sessions SET revoked_at = NOW()
 			  WHERE tenant_id = $1::uuid AND revoked_at IS NULL AND expires_at > NOW()`,
 			tenantID); err != nil {
 			return fmt.Errorf("end the organisation's sessions: %w", err)
@@ -343,7 +343,7 @@ func (s *Service) Resume(ctx context.Context, sess operator.Session, tenantID, r
 		After:      map[string]any{"suspended": false},
 	}, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
-			`UPDATE tenants SET suspended_at = NULL, suspension_reason = '' WHERE id = $1::uuid`,
+			`UPDATE platform.tenants SET suspended_at = NULL, suspension_reason = '' WHERE id = $1::uuid`,
 			tenantID)
 		return err
 	})
@@ -368,7 +368,7 @@ func (s *Service) CancelDeletion(ctx context.Context, sess operator.Session, ten
 		Before:     before,
 	}, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
-			`UPDATE tenants SET deletion_scheduled_at = NULL WHERE id = $1::uuid`, tenantID)
+			`UPDATE platform.tenants SET deletion_scheduled_at = NULL WHERE id = $1::uuid`, tenantID)
 		return err
 	})
 }
@@ -405,7 +405,7 @@ func (s *Service) SweepDeletions(ctx context.Context) {
 	defer cancel()
 
 	rows, err := s.db.Query(sweepCtx,
-		`SELECT id::text, slug FROM tenants
+		`SELECT id::text, slug FROM platform.tenants
 		  WHERE deletion_scheduled_at IS NOT NULL AND deletion_scheduled_at <= NOW()`)
 	if err != nil {
 		slog.Warn("control plane: could not look for organisations to delete", "error", err)
@@ -433,7 +433,7 @@ func (s *Service) SweepDeletions(ctx context.Context) {
 		// SELECT above: a cancellation that landed in between must win, and it
 		// would not if this deleted by id alone.
 		tag, err := s.db.Exec(sweepCtx,
-			`DELETE FROM tenants
+			`DELETE FROM platform.tenants
 			  WHERE id = $1::uuid AND deletion_scheduled_at IS NOT NULL
 			    AND deletion_scheduled_at <= NOW()`, row.id)
 		if err != nil {
@@ -461,7 +461,7 @@ func (s *Service) SweepDeletions(ctx context.Context) {
 func (s *Service) TenantsAwaitingDeletion(ctx context.Context) ([]operator.TenantState, error) {
 	rows, err := s.db.Query(operator.Scoped(ctx),
 		`SELECT id::text, slug, name, suspended_at, suspension_reason, deletion_scheduled_at
-		   FROM tenants WHERE deletion_scheduled_at IS NOT NULL
+		   FROM platform.tenants WHERE deletion_scheduled_at IS NOT NULL
 		  ORDER BY deletion_scheduled_at`)
 	if err != nil {
 		return nil, fmt.Errorf("control plane: list the organisations awaiting deletion: %w", err)

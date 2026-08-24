@@ -103,7 +103,7 @@ func Account(t *testing.T, pool *pgxpool.Pool, role operator.Role) (operator.Ope
 	}
 	t.Cleanup(func() {
 		// The account goes; its audit rows stay, and cannot be removed.
-		_, _ = pool.Exec(context.Background(), `DELETE FROM operator_accounts WHERE id = $1::uuid`, account.ID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.operator_accounts WHERE id = $1::uuid`, account.ID)
 	})
 
 	// Confirmed with the previous step's code, which the skew window accepts.
@@ -133,7 +133,7 @@ func AuditCount(t *testing.T, pool *pgxpool.Pool, operatorID, action string) int
 	t.Helper()
 	var count int
 	if err := pool.QueryRow(context.Background(),
-		`SELECT count(*) FROM operator_audit WHERE operator_id = $1::uuid AND action = $2`,
+		`SELECT count(*) FROM platform.operator_audit WHERE operator_id = $1::uuid AND action = $2`,
 		operatorID, action).Scan(&count); err != nil {
 		t.Fatalf("count the audit rows: %v", err)
 	}
@@ -157,12 +157,12 @@ func Tenant(t *testing.T, pool *pgxpool.Pool) (id, slug string) {
 	t.Helper()
 	slug = fmt.Sprintf("cp-test-%d", time.Now().UnixNano())
 	if err := pool.QueryRow(context.Background(),
-		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).
+		`INSERT INTO platform.tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).
 		Scan(&id); err != nil {
 		t.Fatalf("create a test organisation: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, id)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1::uuid`, id)
 	})
 	return id, slug
 }
@@ -174,17 +174,17 @@ func Person(t *testing.T, pool *pgxpool.Pool, tenantID string) (userID, email st
 	email = fmt.Sprintf("person-%d@controlplane.test", time.Now().UnixNano())
 	ctx := context.Background()
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, name) VALUES ($1, 'x', 'Test Person')
+		`INSERT INTO platform.users (email, password_hash, name) VALUES ($1, 'x', 'Test Person')
 		 RETURNING id::text`, email).Scan(&userID); err != nil {
 		t.Fatalf("create a test person: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`,
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`,
 		tenantID, userID); err != nil {
 		t.Fatalf("add the person to the organisation: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1::uuid`, userID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id = $1::uuid`, userID)
 	})
 	return userID, email
 }
