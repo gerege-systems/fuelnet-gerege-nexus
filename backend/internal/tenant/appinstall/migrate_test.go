@@ -84,7 +84,7 @@ DROP TABLE brought_its_own;
 	// The platform's own history is untouched, which is the point of the
 	// separate table rather than a happy accident of it.
 	var platformVersions int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM goose_db_version`).Scan(&platformVersions); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM public.goose_db_version`).Scan(&platformVersions); err != nil {
 		t.Fatalf("read the platform's migration history: %v", err)
 	}
 	if platformVersions == 0 {

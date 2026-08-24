@@ -223,7 +223,7 @@ func TestPlatformMigrationsOwnNoAppTable(t *testing.T) {
 	%s
 
 An app's table belongs in the app's own migrations — a module registers them
-with nexus.Migrations and they run under goose_db_version_<slug>. A table
+with nexus.Migrations and they run under public.goose_db_version_<slug>. A table
 created here is a table every deployment carries whether or not it has the app,
 and it can never leave with the app: 28 of the 108 tables here are already in
 that position.

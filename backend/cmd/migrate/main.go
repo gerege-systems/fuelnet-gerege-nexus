@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -53,17 +54,23 @@ func main() {
 	// row per applied version in one table, so a distribution's 00001 and the
 	// platform's 00001 would be the same row. Each history needs its own table.
 	//
-	// Defaults are what they have always been, so a deployment that sets
-	// neither behaves exactly as before.
+	// Histories are deployment bookkeeping, not tenant data, so an unqualified
+	// name is anchored in public. Migration 00080 removes public from the
+	// application's search_path; leaving goose to search would either hide the
+	// platform history or create a second history in tenant.
 	//
 	//	MIGRATIONS_DIR=db/appstore MIGRATIONS_TABLE=goose_db_version_appstore migrate up
 	migrationsDir := os.Getenv("MIGRATIONS_DIR")
 	if migrationsDir == "" {
 		migrationsDir = "db/migrations"
 	}
-	if table := os.Getenv("MIGRATIONS_TABLE"); table != "" {
-		goose.SetTableName(table)
+	table := strings.TrimSpace(os.Getenv("MIGRATIONS_TABLE"))
+	if table == "" {
+		table = "public.goose_db_version"
+	} else if !strings.Contains(table, ".") {
+		table = "public." + table
 	}
+	goose.SetTableName(table)
 
 	fmt.Printf("Running goose migration command %q on %s...\n", command, migrationsDir)
 	if err := goose.RunContext(context.Background(), command, db, migrationsDir); err != nil {

@@ -259,7 +259,7 @@ func (s *Service) Version(ctx context.Context) VersionInfo {
 	// deployment whose image is newer than its schema is a real and quiet
 	// failure mode.
 	if err := s.db.QueryRow(operator.Scoped(ctx),
-		`SELECT version_id, tstamp FROM goose_db_version
+		`SELECT version_id, tstamp FROM public.goose_db_version
 		  WHERE is_applied ORDER BY id DESC LIMIT 1`).
 		Scan(&info.Migration, &info.AppliedAt); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		slog.Warn("control plane: could not read the migration version", "error", err)

@@ -108,7 +108,7 @@ func (h *Handlers) HandleEnrollDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	var codeID, tenantID string
-	err = tx.QueryRow(r.Context(), `SELECT id::text,tenant_id::text FROM resolve_device_enrollment($1)`, secretHash(req.Code)).Scan(&codeID, &tenantID)
+	err = tx.QueryRow(r.Context(), `SELECT id::text,tenant_id::text FROM public.resolve_device_enrollment($1)`, secretHash(req.Code)).Scan(&codeID, &tenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Error(w, 401, "enrollment code is invalid or expired")
 		return
@@ -154,7 +154,7 @@ func (h *Handlers) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		var claims deviceClaims
-		err := h.db.QueryRow(r.Context(), `SELECT id::text,tenant_id::text,name,platform,form_factor FROM authenticate_device($1)`, secretHash(token)).Scan(&claims.ID, &claims.TenantID, &claims.Name, &claims.Platform, &claims.FormFactor)
+		err := h.db.QueryRow(r.Context(), `SELECT id::text,tenant_id::text,name,platform,form_factor FROM public.authenticate_device($1)`, secretHash(token)).Scan(&claims.ID, &claims.TenantID, &claims.Name, &claims.Platform, &claims.FormFactor)
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.Error(w, 401, "invalid device token")
 			return
