@@ -14,6 +14,8 @@ COPY . .
 # deployment. Set it only where the API is genuinely on another origin.
 ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_CONTROL_PLANE_API_URL=
+ENV NEXT_PUBLIC_CONTROL_PLANE_API_URL=$NEXT_PUBLIC_CONTROL_PLANE_API_URL
 
 # Browser error reporting. It has to be a build argument rather than a runtime
 # variable because NEXT_PUBLIC_* is substituted into the bundle here — an image
