@@ -1,4 +1,4 @@
-package tenant
+package identity
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 // A Server needs a database for almost everything, but not for the question
 // these cover: whether this deployment authenticates people itself, which is
 // decided by configuration alone.
-func federatedServer(t *testing.T, mutate ...func(*ssoclient.Config)) *Service {
+func federatedServer(t *testing.T, mutate ...func(*ssoclient.Config)) *Handlers {
 	t.Helper()
 	cfg := ssoclient.Config{
 		Issuer:      "https://nexus.gerege.mn",
@@ -22,17 +22,17 @@ func federatedServer(t *testing.T, mutate ...func(*ssoclient.Config)) *Service {
 	for _, m := range mutate {
 		m(&cfg)
 	}
-	return &Service{ssoClient: ssoclient.New(cfg)}
+	return New(Deps{SSO: ssoclient.New(cfg)})
 }
 
 func TestLocalLoginIsClosedOnAFederatedDeployment(t *testing.T) {
 	server := federatedServer(t)
-	if server.localLoginAllowed() {
+	if server.LocalLoginAllowed() {
 		t.Fatal("local sign-in is still open; a federated deployment would have two front doors")
 	}
 
 	reached := false
-	handler := server.requireLocalLogin(func(w http.ResponseWriter, r *http.Request) { reached = true })
+	handler := server.RequireLocalLogin(func(w http.ResponseWriter, r *http.Request) { reached = true })
 
 	rec := httptest.NewRecorder()
 	handler(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil))
@@ -66,12 +66,12 @@ func TestLocalLoginIsClosedOnAFederatedDeployment(t *testing.T) {
 // documented way back in, and this is it.
 func TestLocalLoginStaysOpenWhenTheOperatorKeepsIt(t *testing.T) {
 	server := federatedServer(t, func(c *ssoclient.Config) { c.LocalLogin = true })
-	if !server.localLoginAllowed() {
+	if !server.LocalLoginAllowed() {
 		t.Fatal("SSO_CLIENT_LOCAL_LOGIN did not keep the local paths open")
 	}
 
 	reached := false
-	handler := server.requireLocalLogin(func(w http.ResponseWriter, r *http.Request) { reached = true })
+	handler := server.RequireLocalLogin(func(w http.ResponseWriter, r *http.Request) { reached = true })
 	handler(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil))
 	if !reached {
 		t.Error("the password handler was refused despite the local login escape hatch")
@@ -81,16 +81,16 @@ func TestLocalLoginStaysOpenWhenTheOperatorKeepsIt(t *testing.T) {
 // Every deployment that has not named a provider must be untouched by all of
 // this: its own sign-in paths answer exactly as before.
 func TestLocalLoginIsUntouchedWithoutAProvider(t *testing.T) {
-	server := &Service{}
-	if server.ssoClientEnabled() {
+	server := New(Deps{})
+	if server.SsoClientEnabled() {
 		t.Fatal("client mode is on without configuration")
 	}
-	if !server.localLoginAllowed() {
+	if !server.LocalLoginAllowed() {
 		t.Fatal("local sign-in was closed on a deployment that federates nothing")
 	}
 
 	rec := httptest.NewRecorder()
-	server.handleSSOConfig(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
+	server.HandleSSOConfig(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
 
 	var body struct {
 		Enabled    bool `json:"enabled"`
@@ -108,7 +108,7 @@ func TestSSOConfigDescribesTheProviderToTheLoginScreen(t *testing.T) {
 	server := federatedServer(t, func(c *ssoclient.Config) { c.ProviderName = "Гэрэгэ Нексус" })
 
 	rec := httptest.NewRecorder()
-	server.handleSSOConfig(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
+	server.HandleSSOConfig(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
 
 	var body struct {
 		Enabled      bool   `json:"enabled"`
@@ -128,10 +128,10 @@ func TestSSOConfigDescribesTheProviderToTheLoginScreen(t *testing.T) {
 // on, so they have to answer truthfully when it is off rather than begin a flow
 // against a provider that was never configured.
 func TestSSOEndpointsAreInertWithoutAProvider(t *testing.T) {
-	server := &Service{}
+	server := New(Deps{})
 	for name, handler := range map[string]http.HandlerFunc{
-		"start":    server.handleSSOStart,
-		"callback": server.handleSSOCallback,
+		"start":    server.HandleSSOStart,
+		"callback": server.HandleSSOCallback,
 	} {
 		rec := httptest.NewRecorder()
 		handler(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/"+name, nil))

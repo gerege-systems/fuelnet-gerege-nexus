@@ -16,7 +16,7 @@
  * front doors and one of them is unmanaged.
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -49,55 +49,55 @@ import (
 // screen still gets it: `next` is honoured, and this is only the fallback.
 const defaultLandingPath = "/profile"
 
-// ssoClientEnabled reports whether this deployment signs people in elsewhere.
-func (s *Service) ssoClientEnabled() bool {
-	return s.ssoClient != nil && s.ssoClient.Config().Enabled()
+// SsoClientEnabled reports whether this deployment signs people in elsewhere.
+func (h *Handlers) SsoClientEnabled() bool {
+	return h.ssoClient != nil && h.ssoClient.Config().Enabled()
 }
 
-// localLoginAllowed reports whether this deployment's own sign-in paths answer.
+// LocalLoginAllowed reports whether this deployment's own sign-in paths answer.
 //
 // They always do unless a provider has been named, and even then an operator
 // can keep them with SSO_CLIENT_LOCAL_LOGIN — the way back in when the provider
 // is the thing that is broken.
-func (s *Service) localLoginAllowed() bool {
-	return !s.ssoClientEnabled() || s.ssoClient.Config().LocalLogin
+func (h *Handlers) LocalLoginAllowed() bool {
+	return !h.SsoClientEnabled() || h.ssoClient.Config().LocalLogin
 }
 
-// requireLocalLogin wraps the sign-in handlers this deployment may have given
+// RequireLocalLogin wraps the sign-in handlers this deployment may have given
 // away. It answers rather than 404s: a native client or a stale browser tab
 // posting a password to a federated deployment needs to be told where sign-in
 // actually happens, not that the endpoint has vanished.
-func (s *Service) requireLocalLogin(next http.HandlerFunc) http.HandlerFunc {
+func (h *Handlers) RequireLocalLogin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.localLoginAllowed() {
+		if h.LocalLoginAllowed() {
 			next(w, r)
 			return
 		}
 		httpx.JSON(w, http.StatusForbidden, map[string]any{
 			"error":     "this deployment signs in through its SSO provider",
 			"code":      "sso_required",
-			"start_url": s.ssoStartURL(),
+			"start_url": h.SsoStartURL(),
 		})
 	}
 }
 
-// ssoStartURL is the address a client sends somebody to in order to sign in.
-func (s *Service) ssoStartURL() string {
+// SsoStartURL is the address a client sends somebody to in order to sign in.
+func (h *Handlers) SsoStartURL() string {
 	return config.SelfOrigin() + "/api/v1/auth/sso/start"
 }
 
-// handleSSOConfig tells a browser how this deployment signs people in.
+// HandleSSOConfig tells a browser how this deployment signs people in.
 //
 // It is unauthenticated and says nothing secret: whether sign-in is federated
 // is visible from the redirect anyway, and the login screen has to know before
 // it renders which of two completely different things it is.
-func (s *Service) handleSSOConfig(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleSSOConfig(w http.ResponseWriter, r *http.Request) {
 	answer := map[string]any{"enabled": false, "local_login": true}
-	if s.ssoClientEnabled() {
-		cfg := s.ssoClient.Config()
+	if h.SsoClientEnabled() {
+		cfg := h.ssoClient.Config()
 		answer["enabled"] = true
 		answer["provider_name"] = cfg.DisplayName()
-		answer["start_url"] = s.ssoStartURL()
+		answer["start_url"] = h.SsoStartURL()
 		// Whether the screen should still offer the password and eID forms
 		// underneath the provider's button.
 		answer["local_login"] = cfg.LocalLogin
@@ -112,27 +112,27 @@ func (s *Service) handleSSOConfig(w http.ResponseWriter, r *http.Request) {
 	answer["access_mode"] = auth.AccessMode()
 
 	answer["google"] = map[string]any{"enabled": false}
-	if s.googleLoginEnabled() && s.localLoginAllowed() {
-		answer["google"] = map[string]any{"enabled": true, "start_url": s.googleStartURL()}
+	if h.GoogleLoginEnabled() && h.LocalLoginAllowed() {
+		answer["google"] = map[string]any{"enabled": true, "start_url": h.GoogleStartURL()}
 	}
 	httpx.JSON(w, http.StatusOK, answer)
 }
 
-// handleSSOStart begins a sign-in at the provider.
+// HandleSSOStart begins a sign-in at the provider.
 //
 // It is a browser endpoint: it answers with a redirect, and the destination is
 // built from the provider's own discovery document rather than from anything in
 // the request.
-func (s *Service) handleSSOStart(w http.ResponseWriter, r *http.Request) {
-	if !s.ssoClientEnabled() {
+func (h *Handlers) HandleSSOStart(w http.ResponseWriter, r *http.Request) {
+	if !h.SsoClientEnabled() {
 		httpx.Error(w, http.StatusNotFound, "this deployment is not a client of an SSO provider")
 		return
 	}
 
-	request, err := s.ssoClient.BeginAuthorization(r.Context())
+	request, err := h.ssoClient.BeginAuthorization(r.Context())
 	if err != nil {
 		slog.Error("could not start a sign-in at the SSO provider", "error", err)
-		s.failSSO(w, r, "provider_unreachable")
+		h.failSSO(w, r, "provider_unreachable")
 		return
 	}
 
@@ -145,15 +145,15 @@ func (s *Service) handleSSOStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, request.URL, http.StatusFound)
 }
 
-// handleSSOCallback is where the provider returns the browser.
+// HandleSSOCallback is where the provider returns the browser.
 //
 // Unauthenticated by definition — the person is signing in — and the authority
 // here is the pair of the state cookie this deployment set and the code the
 // provider issued against it. Neither alone is enough: the cookie without a
 // matching state is a stale attempt, and a code without the cookie is somebody
 // replaying a callback URL.
-func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
-	if !s.ssoClientEnabled() {
+func (h *Handlers) HandleSSOCallback(w http.ResponseWriter, r *http.Request) {
+	if !h.SsoClientEnabled() {
 		httpx.Error(w, http.StatusNotFound, "this deployment is not a client of an SSO provider")
 		return
 	}
@@ -162,7 +162,7 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	flow, err := ssoclient.ReadFlow(w, r, ssoclient.FederationFlow, query.Get("state"))
 	if err != nil {
 		slog.Info("refused an SSO callback", "error", err)
-		s.failSSO(w, r, "stale_request")
+		h.failSSO(w, r, "stale_request")
 		return
 	}
 
@@ -172,40 +172,40 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	if providerError := query.Get("error"); providerError != "" {
 		slog.Info("the SSO provider refused a sign-in",
 			"error", providerError, "description", query.Get("error_description"))
-		s.failSSO(w, r, providerError)
+		h.failSSO(w, r, providerError)
 		return
 	}
 
 	code := query.Get("code")
 	if code == "" {
-		s.failSSO(w, r, "no_code")
+		h.failSSO(w, r, "no_code")
 		return
 	}
 
-	identity, err := s.ssoClient.Exchange(r.Context(), code, flow.CodeVerifier, flow.Nonce)
+	identity, err := h.ssoClient.Exchange(r.Context(), code, flow.CodeVerifier, flow.Nonce)
 	if err != nil {
 		slog.Error("could not redeem an SSO authorization code", "error", err)
-		s.failSSO(w, r, "exchange_failed")
+		h.failSSO(w, r, "exchange_failed")
 		return
 	}
 
-	userID, tenantID, err := s.resolveOrProvisionSSOUser(r.Context(), s.ssoClient.Config(), identity)
+	userID, tenantID, err := h.resolveOrProvisionSSOUser(r.Context(), h.ssoClient.Config(), identity)
 	if err != nil {
 		var refusal auth.SignInError
 		if errors.As(err, &refusal) {
 			slog.Info("refused a verified SSO identity", "reason", refusal.Error(), "subject", identity.Subject)
-			s.failSSO(w, r, "no_account")
+			h.failSSO(w, r, "no_account")
 			return
 		}
 		slog.Error("could not link a verified SSO identity to an account", "error", err)
-		s.failSSO(w, r, "provisioning_failed")
+		h.failSSO(w, r, "provisioning_failed")
 		return
 	}
 
-	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "sso")
+	token, expiresAt, err := h.authn.IssueSession(r, userID, tenantID, "sso")
 	if err != nil {
 		slog.Error("could not establish a session for an SSO sign-in", "error", err, "user_id", userID)
-		s.failSSO(w, r, "session_failed")
+		h.failSSO(w, r, "session_failed")
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -216,8 +216,8 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	telemetry.RecordLogin(telemetry.LoginSSO, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{
 		"method":   "sso",
-		"issuer":   s.ssoClient.Config().Issuer,
-		"provider": s.ssoClient.Config().DisplayName(),
+		"issuer":   h.ssoClient.Config().Issuer,
+		"provider": h.ssoClient.Config().DisplayName(),
 	})
 	http.Redirect(w, r, config.WebOrigin()+flow.Next, http.StatusFound)
 }
@@ -226,7 +226,7 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 // The reason is a short code rather than a message: it crosses an origin as a
 // query parameter, and the screen it lands on is the one that knows the
 // person's language.
-func (s *Service) failSSO(w http.ResponseWriter, r *http.Request, reason string) {
+func (h *Handlers) failSSO(w http.ResponseWriter, r *http.Request, reason string) {
 	telemetry.RecordLogin(telemetry.LoginSSO, false)
 	http.Redirect(w, r, config.WebOrigin()+"/login?sso_error="+reason, http.StatusFound)
 }
@@ -239,7 +239,7 @@ func (s *Service) failSSO(w http.ResponseWriter, r *http.Request, reason string)
 // means that whoever is given a departed colleague's address inherits their
 // account. The subject is the one claim a provider guarantees to be stable and
 // never to reassign.
-func (s *Service) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
+func (h *Handlers) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
 	issuer := cfg.Issuer
 
 	// Two questions, asked separately. Whether this provider account is known
@@ -253,12 +253,12 @@ func (s *Service) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.C
 	// listing the provider as connected. Being in no organisation is a real
 	// state: an administrator removes the last one, or an account is created
 	// ahead of the membership.
-	err = s.db.QueryRow(ctx,
+	err = h.db.QueryRow(ctx,
 		`SELECT user_id::text FROM user_sso_identities WHERE issuer = $1 AND subject = $2`,
 		issuer, identity.Subject).Scan(&userID)
 	if err == nil {
-		s.touchSSOIdentity(ctx, issuer, identity)
-		tenantID, err = s.authn.FirstTenantFor(ctx, userID)
+		h.touchSSOIdentity(ctx, issuer, identity)
+		tenantID, err = h.authn.FirstTenantFor(ctx, userID)
 		if err != nil {
 			return "", "", err
 		}
@@ -277,19 +277,19 @@ func (s *Service) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.C
 	// typing its address into their profile.
 	email := strings.ToLower(strings.TrimSpace(identity.Email))
 	if email != "" && identity.EmailVerified {
-		if err = s.db.QueryRow(ctx,
+		if err = h.db.QueryRow(ctx,
 			`SELECT u.id::text, m.tenant_id::text
 			   FROM users u JOIN memberships m ON m.user_id = u.id
 			  WHERE lower(u.email) = $1
 			  ORDER BY m.created_at, m.tenant_id LIMIT 1`, email).Scan(&userID, &tenantID); err == nil {
-			s.linkSSOIdentity(ctx, userID, issuer, identity)
+			h.linkSSOIdentity(ctx, userID, issuer, identity)
 			return userID, tenantID, nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return "", "", err
 		}
 	}
 
-	return s.provisionSSOUser(ctx, cfg, identity)
+	return h.provisionSSOUser(ctx, cfg, identity)
 }
 
 // provisionSSOUser creates the local account for a provider identity nothing
@@ -300,12 +300,12 @@ func (s *Service) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.C
 // deployments membership is a deliberate act, and a federation that silently
 // admits everyone the provider knows is a wider door than the operator asked
 // for.
-func (s *Service) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
+func (h *Handlers) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
 	issuer, slug := cfg.Issuer, cfg.TenantSlug
 	if slug == "" {
 		return "", "", auth.NewSignInError("your identity is verified but this deployment has no account for you")
 	}
-	if err = s.db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug = $1`, slug).Scan(&tenantID); err != nil {
+	if err = h.db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug = $1`, slug).Scan(&tenantID); err != nil {
 		return "", "", err
 	}
 
@@ -335,7 +335,7 @@ func (s *Service) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, id
 		return "", "", err
 	}
 
-	tx, err := s.db.Begin(ctx)
+	tx, err := h.db.Begin(ctx)
 	if err != nil {
 		return "", "", err
 	}
@@ -357,7 +357,7 @@ func (s *Service) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, id
 	// authenticates the whole of a company would otherwise walk an
 	// organisation past whatever the console set for it, one sign-in at a
 	// time, with nobody deciding to.
-	if err = s.authn.CheckUserQuota(ctx, tenantID); err != nil {
+	if err = h.authn.CheckUserQuota(ctx, tenantID); err != nil {
 		return "", "", auth.NewSignInError("this organisation has reached the number of people it may have")
 	}
 	if _, err = tx.Exec(ctx,
@@ -407,8 +407,8 @@ func claimsJSON(claims map[string]any) []byte {
 // succeeded, and failing it because a bookkeeping row could not be written
 // would trade a working session for none. The cost of a missed write is that
 // the next sign-in matches on the address again.
-func (s *Service) linkSSOIdentity(ctx context.Context, userID, issuer string, identity *ssoclient.Identity) {
-	if _, err := s.db.Exec(ctx,
+func (h *Handlers) linkSSOIdentity(ctx context.Context, userID, issuer string, identity *ssoclient.Identity) {
+	if _, err := h.db.Exec(ctx,
 		`INSERT INTO user_sso_identities (user_id, issuer, subject, email, name, claims, last_seen_at)
 		 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,NOW())
 		 ON CONFLICT (issuer, subject) DO UPDATE SET
@@ -423,8 +423,8 @@ func (s *Service) linkSSOIdentity(ctx context.Context, userID, issuer string, id
 
 // touchSSOIdentity keeps the recorded profile and the last-seen stamp current
 // for somebody who already has a link.
-func (s *Service) touchSSOIdentity(ctx context.Context, issuer string, identity *ssoclient.Identity) {
-	if _, err := s.db.Exec(ctx,
+func (h *Handlers) touchSSOIdentity(ctx context.Context, issuer string, identity *ssoclient.Identity) {
+	if _, err := h.db.Exec(ctx,
 		`UPDATE user_sso_identities
 		    SET email = COALESCE(NULLIF($3,''), email),
 		        name = COALESCE(NULLIF($4,''), name),

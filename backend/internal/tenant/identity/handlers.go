@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package tenant
+package identity
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
 )
 
-func (s *Service) handleEIDStart(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleEIDStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CallbackURL string `json:"callbackUrl"`
 	}
@@ -35,7 +35,7 @@ func (s *Service) handleEIDStart(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "invalid eID callback URL")
 		return
 	}
-	started, err := s.eidSvc.StartDeviceLink(r.Context(), callback)
+	started, err := h.eidSvc.StartDeviceLink(r.Context(), callback)
 	if err != nil {
 		httpx.Error(w, http.StatusBadGateway, "eID Mongolia session could not be started")
 		return
@@ -43,7 +43,7 @@ func (s *Service) handleEIDStart(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, started)
 }
 
-func (s *Service) handleEIDStartByNationalID(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleEIDStartByNationalID(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		NationalID  string `json:"national_id"`
 		CallbackURL string `json:"callbackUrl"`
@@ -57,7 +57,7 @@ func (s *Service) handleEIDStartByNationalID(w http.ResponseWriter, r *http.Requ
 		httpx.Error(w, http.StatusBadRequest, "invalid eID callback URL")
 		return
 	}
-	started, err := s.eidSvc.StartByNationalID(r.Context(), req.NationalID, callback)
+	started, err := h.eidSvc.StartByNationalID(r.Context(), req.NationalID, callback)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, "Регистрийн дугаар олдсонгүй эсвэл eID апп-д бүртгэлгүй байна")
 		return
@@ -84,7 +84,7 @@ func validEIDCallback(raw string) (string, error) {
 	return callback.String(), nil
 }
 
-func (s *Service) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleEIDPoll(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionID string `json:"session_id"`
 	}
@@ -92,7 +92,7 @@ func (s *Service) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "session_id is required")
 		return
 	}
-	result, err := s.eidSvc.Poll(r.Context(), req.SessionID)
+	result, err := h.eidSvc.Poll(r.Context(), req.SessionID)
 	if err != nil {
 		httpx.Error(w, http.StatusBadGateway, "eID Mongolia session check failed")
 		return
@@ -105,13 +105,13 @@ func (s *Service) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusUnauthorized, "eID identity verification failed")
 		return
 	}
-	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), result.Identity)
+	userID, tenantID, err := h.authn.ResolveOrProvisionEIDUser(r.Context(), result.Identity)
 	if err != nil {
 		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.authn.LinkEIDIdentity(r.Context(), userID, result.Identity)
-	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "eid-app")
+	h.authn.LinkEIDIdentity(r.Context(), userID, result.Identity)
+	token, expiresAt, err := h.authn.IssueSession(r, userID, tenantID, "eid-app")
 	if err != nil {
 		auth.ReportSessionFailure(w, err)
 		return
@@ -121,7 +121,7 @@ func (s *Service) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"state": result.State, "expires_at": expiresAt, "identity": result.Identity})
 }
 
-func (s *Service) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code        string         `json:"code"`
 		RedirectURI string         `json:"redirect_uri"`
@@ -137,9 +137,9 @@ func (s *Service) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	var identity *eid.EIDIdentity
 	var err error
 	if req.Code != "" {
-		identity, err = s.eidSvc.ExchangeCode(r.Context(), req.Code, req.RedirectURI)
+		identity, err = h.eidSvc.ExchangeCode(r.Context(), req.Code, req.RedirectURI)
 	} else if req.RegNumber != "" {
-		identity, err = s.eidSvc.AuthenticateWithMethod(r.Context(), req.RegNumber, req.OTPCode, req.AuthMethod)
+		identity, err = h.eidSvc.AuthenticateWithMethod(r.Context(), req.RegNumber, req.OTPCode, req.AuthMethod)
 	} else {
 		httpx.Error(w, http.StatusBadRequest, "missing authorization code or registration number")
 		return
@@ -157,14 +157,14 @@ func (s *Service) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), identity)
+	userID, tenantID, err := h.authn.ResolveOrProvisionEIDUser(r.Context(), identity)
 	if err != nil {
 		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.authn.LinkEIDIdentity(r.Context(), userID, identity)
+	h.authn.LinkEIDIdentity(r.Context(), userID, identity)
 
-	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "eid")
+	token, expiresAt, err := h.authn.IssueSession(r, userID, tenantID, "eid")
 	if err != nil {
 		auth.ReportSessionFailure(w, err)
 		return
@@ -177,7 +177,7 @@ func (s *Service) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		"civil_id":   identity.CivilID,
 	})
 
-	claims, _ := s.sessions.Resolve(r.Context(), token)
+	claims, _ := h.sessions.Resolve(r.Context(), token)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -193,7 +193,7 @@ func (s *Service) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Service) handleDANLogin(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleDANLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DANToken  string `json:"dan_token"`
 		RegNumber string `json:"reg_number"`
@@ -207,9 +207,9 @@ func (s *Service) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 	var profile *dan.DANProfile
 	var err error
 	if req.DANToken != "" {
-		profile, err = s.danSvc.VerifyDANToken(r.Context(), req.DANToken)
+		profile, err = h.danSvc.VerifyDANToken(r.Context(), req.DANToken)
 	} else if req.RegNumber != "" {
-		profile, err = s.danSvc.AuthenticateDANCitizen(r.Context(), req.RegNumber, req.OTPCode)
+		profile, err = h.danSvc.AuthenticateDANCitizen(r.Context(), req.RegNumber, req.OTPCode)
 	} else {
 		httpx.Error(w, http.StatusBadRequest, "missing dan_token or registration number")
 		return
@@ -229,14 +229,14 @@ func (s *Service) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		CivilID: profile.CivilID, RegNumber: profile.RegNumber, FirstName: profile.FirstName, LastName: profile.LastName,
 		VerifiedStatus: true,
 	}
-	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), identity)
+	userID, tenantID, err := h.authn.ResolveOrProvisionEIDUser(r.Context(), identity)
 	if err != nil {
 		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.authn.LinkEIDIdentity(r.Context(), userID, identity)
+	h.authn.LinkEIDIdentity(r.Context(), userID, identity)
 
-	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "dan")
+	token, expiresAt, err := h.authn.IssueSession(r, userID, tenantID, "dan")
 	if err != nil {
 		auth.ReportSessionFailure(w, err)
 		return
@@ -249,7 +249,7 @@ func (s *Service) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		"dan_session": profile.DANSessionID,
 	})
 
-	claims, _ := s.sessions.Resolve(r.Context(), token)
+	claims, _ := h.sessions.Resolve(r.Context(), token)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{

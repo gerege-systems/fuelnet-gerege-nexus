@@ -18,7 +18,7 @@
  * an abandoned binding leaves nothing behind but a row that expires.
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -48,7 +48,7 @@ const bindingTTL = 20 * time.Minute
 // startIdentityBinding parks a verified provider identity and returns the
 // token that names it. The token is shown once, in the redirect; only its
 // digest is stored, so the row cannot be replayed out of a database copy.
-func (s *Service) startIdentityBinding(ctx context.Context, issuer string, identity *ssoclient.Identity) (string, error) {
+func (h *Handlers) startIdentityBinding(ctx context.Context, issuer string, identity *ssoclient.Identity) (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -56,7 +56,7 @@ func (s *Service) startIdentityBinding(ctx context.Context, issuer string, ident
 	token := hex.EncodeToString(buf)
 	sum := sha256.Sum256([]byte(token))
 
-	if _, err := s.db.Exec(ctx,
+	if _, err := h.db.Exec(ctx,
 		`INSERT INTO identity_binding_sessions
 		     (token_hash, issuer, subject, email, name, claims, expires_at)
 		 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7)`,
@@ -84,7 +84,7 @@ type pendingBinding struct {
 // three it is tells a caller something they have no use for.
 var ErrNoBinding = errors.New("no sign-in is waiting to be completed")
 
-func (s *Service) loadBinding(ctx context.Context, token string) (*pendingBinding, error) {
+func (h *Handlers) loadBinding(ctx context.Context, token string) (*pendingBinding, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, ErrNoBinding
 	}
@@ -94,7 +94,7 @@ func (s *Service) loadBinding(ctx context.Context, token string) (*pendingBindin
 	var b pendingBinding
 	var email, name *string
 	var consentedAt *time.Time
-	err := s.db.QueryRow(ctx,
+	err := h.db.QueryRow(ctx,
 		`SELECT token_hash, issuer, subject, email, name, claims, consented_at
 		   FROM identity_binding_sessions
 		  WHERE token_hash = $1 AND expires_at > NOW()`, hash).
@@ -115,15 +115,15 @@ func (s *Service) loadBinding(ctx context.Context, token string) (*pendingBindin
 	return &b, nil
 }
 
-// handleBindingSession describes the pending binding to the screen that has to
+// HandleBindingSession describes the pending binding to the screen that has to
 // render it.
 //
 // Unauthenticated by definition — nobody is signed in yet — and the token in
 // the query is the whole authority. What it answers with is what the provider
 // said about the person holding that token, which is what they are about to be
 // asked to consent to sharing; it discloses nothing they did not just supply.
-func (s *Service) handleBindingSession(w http.ResponseWriter, r *http.Request) {
-	binding, err := s.loadBinding(r.Context(), r.URL.Query().Get("b"))
+func (h *Handlers) HandleBindingSession(w http.ResponseWriter, r *http.Request) {
+	binding, err := h.loadBinding(r.Context(), r.URL.Query().Get("b"))
 	if err != nil {
 		httpx.Error(w, http.StatusNotFound, "no sign-in is waiting to be completed")
 		return
@@ -133,7 +133,7 @@ func (s *Service) handleBindingSession(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(binding.Claims, &claims)
 
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"provider":  s.bindingProviderName(binding.Issuer),
+		"provider":  h.BindingProviderName(binding.Issuer),
 		"email":     binding.Email,
 		"name":      binding.Name,
 		"consented": binding.Consented,
@@ -149,23 +149,23 @@ func (s *Service) handleBindingSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Service) bindingProviderName(issuer string) string {
-	if s.googleLoginEnabled() && issuer == s.googleLogin.Config().Issuer {
-		return s.googleLogin.Config().DisplayName()
+func (h *Handlers) BindingProviderName(issuer string) string {
+	if h.GoogleLoginEnabled() && issuer == h.googleLogin.Config().Issuer {
+		return h.googleLogin.Config().DisplayName()
 	}
-	if s.ssoClientEnabled() && issuer == s.ssoClient.Config().Issuer {
-		return s.ssoClient.Config().DisplayName()
+	if h.SsoClientEnabled() && issuer == h.ssoClient.Config().Issuer {
+		return h.ssoClient.Config().DisplayName()
 	}
 	return issuer
 }
 
-// handleBindingConsent records that the person agreed to what the screen
+// HandleBindingConsent records that the person agreed to what the screen
 // showed them.
 //
 // Server-side, and required before eID can be started. A consent that lived in
 // the browser would be a claim by the caller that they had consented, which is
 // not the same thing and not worth recording.
-func (s *Service) handleBindingConsent(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleBindingConsent(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Binding string `json:"binding"`
 	}
@@ -173,12 +173,12 @@ func (s *Service) handleBindingConsent(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	binding, err := s.loadBinding(r.Context(), req.Binding)
+	binding, err := h.loadBinding(r.Context(), req.Binding)
 	if err != nil {
 		httpx.Error(w, http.StatusNotFound, "no sign-in is waiting to be completed")
 		return
 	}
-	if _, err := s.db.Exec(r.Context(),
+	if _, err := h.db.Exec(r.Context(),
 		`UPDATE identity_binding_sessions SET consented_at = NOW()
 		  WHERE token_hash = $1 AND consented_at IS NULL`, binding.TokenHash); err != nil {
 		slog.Error("could not record a binding consent", "error", err)
@@ -190,8 +190,8 @@ func (s *Service) handleBindingConsent(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"consented": true})
 }
 
-// handleBindingEIDStart begins the eID half, once consent is recorded.
-func (s *Service) handleBindingEIDStart(w http.ResponseWriter, r *http.Request) {
+// HandleBindingEIDStart begins the eID half, once consent is recorded.
+func (h *Handlers) HandleBindingEIDStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Binding    string `json:"binding"`
 		NationalID string `json:"national_id"`
@@ -200,7 +200,7 @@ func (s *Service) handleBindingEIDStart(w http.ResponseWriter, r *http.Request) 
 		httpx.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	binding, err := s.loadBinding(r.Context(), req.Binding)
+	binding, err := h.loadBinding(r.Context(), req.Binding)
 	if err != nil {
 		httpx.Error(w, http.StatusNotFound, "no sign-in is waiting to be completed")
 		return
@@ -211,7 +211,7 @@ func (s *Service) handleBindingEIDStart(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if id := strings.TrimSpace(req.NationalID); id != "" {
-		started, err := s.eidSvc.StartByNationalID(r.Context(), id, "")
+		started, err := h.eidSvc.StartByNationalID(r.Context(), id, "")
 		if err != nil {
 			httpx.Error(w, http.StatusBadRequest,
 				"Регистрийн дугаар олдсонгүй эсвэл eID апп-д бүртгэлгүй байна")
@@ -220,7 +220,7 @@ func (s *Service) handleBindingEIDStart(w http.ResponseWriter, r *http.Request) 
 		httpx.JSON(w, http.StatusOK, started)
 		return
 	}
-	started, err := s.eidSvc.StartDeviceLink(r.Context(), "")
+	started, err := h.eidSvc.StartDeviceLink(r.Context(), "")
 	if err != nil {
 		httpx.Error(w, http.StatusBadGateway, "eID Mongolia session could not be started")
 		return
@@ -228,12 +228,12 @@ func (s *Service) handleBindingEIDStart(w http.ResponseWriter, r *http.Request) 
 	httpx.JSON(w, http.StatusOK, started)
 }
 
-// handleBindingEIDPoll finishes the binding when eID answers.
+// HandleBindingEIDPoll finishes the binding when eID answers.
 //
 // This is the only place an account is created for a first Google sign-in, and
 // it happens after both halves are done: the person agreed to the sharing, and
 // eID says they are who the registration number belongs to.
-func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Binding   string `json:"binding"`
 		SessionID string `json:"session_id"`
@@ -242,7 +242,7 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "session_id is required")
 		return
 	}
-	binding, err := s.loadBinding(r.Context(), req.Binding)
+	binding, err := h.loadBinding(r.Context(), req.Binding)
 	if err != nil {
 		httpx.Error(w, http.StatusNotFound, "no sign-in is waiting to be completed")
 		return
@@ -252,7 +252,7 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.eidSvc.Poll(r.Context(), req.SessionID)
+	result, err := h.eidSvc.Poll(r.Context(), req.SessionID)
 	if err != nil {
 		httpx.Error(w, http.StatusBadGateway, "eID Mongolia session check failed")
 		return
@@ -270,17 +270,17 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 	// linked to it rather than given a second — which is the case that makes
 	// this flow worth having: somebody who signed in with eID last month and
 	// with Google today is one person, and now the platform knows it.
-	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), result.Identity)
+	userID, tenantID, err := h.authn.ResolveOrProvisionEIDUser(r.Context(), result.Identity)
 	if err != nil {
 		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.authn.LinkEIDIdentity(r.Context(), userID, result.Identity)
+	h.authn.LinkEIDIdentity(r.Context(), userID, result.Identity)
 
 	// And the provider identity that started all this, with everything it said.
 	var claims map[string]any
 	_ = json.Unmarshal(binding.Claims, &claims)
-	s.linkSSOIdentity(r.Context(), userID, binding.Issuer, &ssoclient.Identity{
+	h.linkSSOIdentity(r.Context(), userID, binding.Issuer, &ssoclient.Identity{
 		Subject: binding.Subject,
 		Email:   binding.Email,
 		Name:    binding.Name,
@@ -289,12 +289,12 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 
 	// Spent. The row held verified claims about somebody and has no further
 	// use; leaving it would be leaving a copy of their identity behind.
-	if _, err := s.db.Exec(r.Context(),
+	if _, err := h.db.Exec(r.Context(),
 		`DELETE FROM identity_binding_sessions WHERE token_hash = $1`, binding.TokenHash); err != nil {
 		slog.Warn("could not clear a spent binding", "error", err)
 	}
 
-	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "bind-eid")
+	token, expiresAt, err := h.authn.IssueSession(r, userID, tenantID, "bind-eid")
 	if err != nil {
 		auth.ReportSessionFailure(w, err)
 		return
@@ -308,11 +308,11 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// sweepExpiredBindings clears abandoned attempts. Nothing depends on a dead
+// SweepExpiredBindings clears abandoned attempts. Nothing depends on a dead
 // row being gone promptly — it cannot be redeemed once it has expired — but it
 // carries verified claims about a person, so it does not get to sit there.
-func (s *Service) sweepExpiredBindings(ctx context.Context) {
-	if _, err := s.db.Exec(ctx,
+func (h *Handlers) SweepExpiredBindings(ctx context.Context) {
+	if _, err := h.db.Exec(ctx,
 		`DELETE FROM identity_binding_sessions WHERE expires_at < NOW()`); err != nil {
 		slog.Warn("could not sweep expired identity bindings", "error", err)
 	}

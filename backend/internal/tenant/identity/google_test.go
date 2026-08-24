@@ -1,4 +1,4 @@
-package tenant
+package identity
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoclient"
 )
 
-func googleServer(t *testing.T, mutate ...func(*ssoclient.Config)) *Service {
+func googleServer(t *testing.T, mutate ...func(*ssoclient.Config)) *Handlers {
 	t.Helper()
 	cfg := ssoclient.Config{
 		EnvPrefix:   "GOOGLE_LOGIN",
@@ -21,13 +21,13 @@ func googleServer(t *testing.T, mutate ...func(*ssoclient.Config)) *Service {
 	for _, m := range mutate {
 		m(&cfg)
 	}
-	return &Service{googleLogin: ssoclient.New(cfg)}
+	return New(Deps{Google: ssoclient.New(cfg)})
 }
 
-func ssoConfigOf(t *testing.T, server *Service) map[string]any {
+func ssoConfigOf(t *testing.T, server *Handlers) map[string]any {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	server.handleSSOConfig(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
+	server.HandleSSOConfig(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
 	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -36,7 +36,7 @@ func ssoConfigOf(t *testing.T, server *Service) map[string]any {
 }
 
 func TestGoogleIsOffUntilItIsConfigured(t *testing.T) {
-	body := ssoConfigOf(t, &Service{})
+	body := ssoConfigOf(t, New(Deps{}))
 	google, _ := body["google"].(map[string]any)
 	if google == nil || google["enabled"] != false {
 		t.Fatalf("google = %v, want it reported as unavailable", body["google"])
@@ -45,8 +45,8 @@ func TestGoogleIsOffUntilItIsConfigured(t *testing.T) {
 	// And the endpoints say so rather than starting a flow against a provider
 	// that was never configured.
 	for name, handler := range map[string]http.HandlerFunc{
-		"start":    (&Service{}).handleGoogleStart,
-		"callback": (&Service{}).handleGoogleCallback,
+		"start":    New(Deps{}).HandleGoogleStart,
+		"callback": New(Deps{}).HandleGoogleCallback,
 	} {
 		rec := httptest.NewRecorder()
 		handler(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/"+name, nil))
@@ -82,7 +82,7 @@ func TestGoogleClosesWhenTheDeploymentFederates(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	server.handleGoogleStart(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/start", nil))
+	server.HandleGoogleStart(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/start", nil))
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403 with the federated sign-in address", rec.Code)
 	}

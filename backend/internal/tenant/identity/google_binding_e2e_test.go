@@ -19,7 +19,7 @@
  *	AUTH_TEST_DATABASE_URL=postgres://... go test ./internal/platform/...
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func (f *bindFixture) signInWithGoogle(t *testing.T) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "https://nexus.test.invalid/api/v1/auth/google/start", nil)
 	rec := httptest.NewRecorder()
-	f.server.handleGoogleStart(rec, req)
+	f.server.HandleGoogleStart(rec, req)
 
 	authorizeURL := rec.Header().Get("Location")
 	if !strings.HasPrefix(authorizeURL, f.google.server.URL) {
@@ -105,7 +105,7 @@ func (f *bindFixture) completeEID(t *testing.T, token string) *httptest.Response
 	consent := httptest.NewRequest(http.MethodPost, "/api/v1/auth/bind/consent",
 		strings.NewReader(`{"binding":"`+token+`"}`))
 	rec := httptest.NewRecorder()
-	f.server.handleBindingConsent(rec, consent)
+	f.server.HandleBindingConsent(rec, consent)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("consent returned %d: %s", rec.Code, rec.Body.String())
 	}
@@ -113,7 +113,7 @@ func (f *bindFixture) completeEID(t *testing.T, token string) *httptest.Response
 	start := httptest.NewRequest(http.MethodPost, "/api/v1/auth/bind/eid/start",
 		strings.NewReader(`{"binding":"`+token+`"}`))
 	rec = httptest.NewRecorder()
-	f.server.handleBindingEIDStart(rec, start)
+	f.server.HandleBindingEIDStart(rec, start)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("eID start returned %d: %s", rec.Code, rec.Body.String())
 	}
@@ -129,7 +129,7 @@ func (f *bindFixture) completeEID(t *testing.T, token string) *httptest.Response
 		poll := httptest.NewRequest(http.MethodPost, "/api/v1/auth/bind/eid/poll",
 			strings.NewReader(`{"binding":"`+token+`","session_id":"`+started.SessionID+`"}`))
 		rec = httptest.NewRecorder()
-		f.server.handleBindingEIDPoll(rec, poll)
+		f.server.HandleBindingEIDPoll(rec, poll)
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"RUNNING"`) {
 			return rec
 		}
@@ -164,7 +164,7 @@ func TestAFirstGoogleSignInIsBoundByEID(t *testing.T) {
 		t.Fatalf("Google was attached to %s, want the eID account %s", userID, f.userID)
 	}
 
-	identities := f.server.linkedIdentities(context.Background(), userID)
+	identities := f.server.LinkedIdentities(context.Background(), userID)
 	if len(identities) != 2 {
 		t.Fatalf("identities = %d, want the eID and the Google that started this: %+v", len(identities), identities)
 	}
@@ -229,7 +229,7 @@ func TestTheEIDStepRefusesUntilConsentIsGiven(t *testing.T) {
 	start := httptest.NewRequest(http.MethodPost, "/api/v1/auth/bind/eid/start",
 		strings.NewReader(`{"binding":"`+token+`"}`))
 	rec := httptest.NewRecorder()
-	f.server.handleBindingEIDStart(rec, start)
+	f.server.HandleBindingEIDStart(rec, start)
 	if rec.Code == http.StatusOK {
 		t.Error("eID was started before the person agreed to what would be shared")
 	}
@@ -255,7 +255,7 @@ func TestASignInFindsALinkedIdentityWithoutAMembership(t *testing.T) {
 	}
 
 	// The identity is still there, and the profile still shows it.
-	identities := f.server.linkedIdentities(context.Background(), f.userID)
+	identities := f.server.LinkedIdentities(context.Background(), f.userID)
 	if len(identities) != 2 {
 		t.Fatalf("the profile lost an identity along with the membership: %+v", identities)
 	}

@@ -83,11 +83,10 @@ var plannedTenantPackages = map[string]string{
 	// "The tenant-facing half of two things the control plane starts", says
 	// its own header. It reads credential_grants, which is a platform table
 	// and not one of the five a tenant may read — see the PR.
-	"access_recovery.go":     "tenant/access",
-	"app_gate_test.go":       "tenant/appinstall",
-	"appgate.go":             "tenant/appinstall",
-	"accessmode_sso_test.go": "tenant/ssoclient",
-	"recovery_test.go":       "tenant/access",
+	"access_recovery.go": "tenant/access",
+	"app_gate_test.go":   "tenant/appinstall",
+	"appgate.go":         "tenant/appinstall",
+	"recovery_test.go":   "tenant/access",
 	// The tenant's own store screens, not the platform's catalogue: every one
 	// of these handlers reads claims.TenantID and installs for that
 	// organisation. The catalogue they read is the deployment's and is parsed
@@ -107,26 +106,16 @@ var plannedTenantPackages = map[string]string{
 	"auth_handlers.go":           "tenant/auth",
 	"capabilities_test.go":       "tenant/appinstall",
 	"eid_linking_test.go":        "tenant/identity",
-	"eid_poll_limit_test.go":     "tenant/identity",
 	"emailverify_handlers.go":    "tenant/emailverify",
 	"external_app_test.go":       "tenant/appinstall",
 	"external_apps.go":           "tenant/appinstall",
 	"extra_modules_test.go":      "tenant/appinstall",
-	"google_binding_e2e_test.go": "tenant/identity",
-	"google_link_e2e_test.go":    "tenant/identity",
-	"google_login_handlers.go":   "tenant/identity",
-	"google_login_test.go":       "tenant/identity",
-	"identity_binding.go":        "tenant/identity",
-	"identity_handlers.go":       "tenant/identity",
 	"login_lockout_test.go":      "tenant/auth",
 	"middleware.go":              "tenant/auth", // appGateMiddleware follows external_apps.go
 	"module_platform.go":         "tenant/appinstall",
 	"profile_handlers.go":        "tenant/profile",
-	"profile_unlink_test.go":     "tenant/profile",
 	"signing.go":                 "tenant/signing",
 	"signing_test.go":            "tenant/signing",
-	"sso_client_handlers.go":     "tenant/ssoclient",
-	"sso_client_test.go":         "tenant/ssoclient",
 	"tenant_profile_handlers.go": "tenant/profile",
 	"tenant_profile_test.go":     "tenant/profile",
 }

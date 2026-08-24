@@ -13,7 +13,7 @@
  *	AUTH_TEST_DATABASE_URL=postgres://... go test ./internal/platform/...
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -81,11 +81,11 @@ func addEIDIdentity(t *testing.T, pool *pgxpool.Pool, userID, etsi string) {
 // One identity is not expendable, however the screen asks.
 func TestALoneIdentityIsNotRemovable(t *testing.T) {
 	pool := unlinkPool(t)
-	s := &Service{db: pool}
+	s := New(Deps{DB: pool})
 	userID := unlinkUser(t, pool)
 	addSSOIdentity(t, pool, userID, "https://accounts.google.com", "sole-"+uuid.NewString())
 
-	identities := s.linkedIdentities(context.Background(), userID)
+	identities := s.LinkedIdentities(context.Background(), userID)
 	if len(identities) != 1 {
 		t.Fatalf("expected exactly one identity, got %d", len(identities))
 	}
@@ -97,12 +97,12 @@ func TestALoneIdentityIsNotRemovable(t *testing.T) {
 // Two, and either may go — but only until one is left.
 func TestTheSecondIdentityMakesBothRemovable(t *testing.T) {
 	pool := unlinkPool(t)
-	s := &Service{db: pool}
+	s := New(Deps{DB: pool})
 	userID := unlinkUser(t, pool)
 	addSSOIdentity(t, pool, userID, "https://accounts.google.com", "pair-"+uuid.NewString())
 	addEIDIdentity(t, pool, userID, "ETSI-"+uuid.NewString())
 
-	identities := s.linkedIdentities(context.Background(), userID)
+	identities := s.LinkedIdentities(context.Background(), userID)
 	if len(identities) != 2 {
 		t.Fatalf("expected two identities, got %d", len(identities))
 	}
@@ -117,7 +117,7 @@ func TestTheSecondIdentityMakesBothRemovable(t *testing.T) {
 // then asking about the other has to flip the answer without anybody saying so.
 func TestRemovingOneOfTwoLeavesTheOtherPinned(t *testing.T) {
 	pool := unlinkPool(t)
-	s := &Service{db: pool}
+	s := New(Deps{DB: pool})
 	ctx := context.Background()
 	userID := unlinkUser(t, pool)
 	subject := "drop-" + uuid.NewString()
@@ -129,7 +129,7 @@ func TestRemovingOneOfTwoLeavesTheOtherPinned(t *testing.T) {
 		t.Fatalf("delete sso identity: %v", err)
 	}
 
-	identities := s.linkedIdentities(ctx, userID)
+	identities := s.LinkedIdentities(ctx, userID)
 	if len(identities) != 1 {
 		t.Fatalf("expected one identity after the removal, got %d", len(identities))
 	}

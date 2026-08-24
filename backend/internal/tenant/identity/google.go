@@ -18,7 +18,7 @@
  * is allowed through.
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -37,39 +37,39 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// googleLoginEnabled reports whether this deployment offers the Google button.
-func (s *Service) googleLoginEnabled() bool {
-	return s.googleLogin != nil && s.googleLogin.Config().Enabled()
+// GoogleLoginEnabled reports whether this deployment offers the Google button.
+func (h *Handlers) GoogleLoginEnabled() bool {
+	return h.googleLogin != nil && h.googleLogin.Config().Enabled()
 }
 
-// googleStartURL is where the sign-in screen sends somebody who presses it.
-func (s *Service) googleStartURL() string {
+// GoogleStartURL is where the sign-in screen sends somebody who presses it.
+func (h *Handlers) GoogleStartURL() string {
 	return config.SelfOrigin() + "/api/v1/auth/google/start"
 }
 
-// handleGoogleStart begins a sign-in at Google.
-func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
-	if !s.googleLoginEnabled() {
+// HandleGoogleStart begins a sign-in at Google.
+func (h *Handlers) HandleGoogleStart(w http.ResponseWriter, r *http.Request) {
+	if !h.GoogleLoginEnabled() {
 		httpx.Error(w, http.StatusNotFound, "Google sign-in is not configured on this deployment")
 		return
 	}
 	// Federation closing the local front door closes this too. Google here is
 	// one of *this* platform's ways of establishing who somebody is, and a
 	// deployment that has handed that question to a provider must not keep a
-	// second answer to it — see requireLocalLogin.
-	if !s.localLoginAllowed() {
+	// second answer to it — see RequireLocalLogin.
+	if !h.LocalLoginAllowed() {
 		httpx.JSON(w, http.StatusForbidden, map[string]any{
 			"error":     "this deployment signs in through its SSO provider",
 			"code":      "sso_required",
-			"start_url": s.ssoStartURL(),
+			"start_url": h.SsoStartURL(),
 		})
 		return
 	}
 
-	request, err := s.googleLogin.BeginAuthorization(r.Context())
+	request, err := h.googleLogin.BeginAuthorization(r.Context())
 	if err != nil {
 		slog.Error("could not start a sign-in at Google", "error", err)
-		s.failGoogle(w, r, "provider_unreachable")
+		h.failGoogle(w, r, "provider_unreachable")
 		return
 	}
 
@@ -82,7 +82,7 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, request.URL, http.StatusFound)
 }
 
-// handleGoogleLinkStart adds Google to the account somebody is already in.
+// HandleGoogleLinkStart adds Google to the account somebody is already in.
 //
 // The same authorisation request as signing in, with one difference in what
 // the answer means: the person's identity is not in question here, so there is
@@ -92,38 +92,38 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 // It is a navigation rather than a fetch because it ends at Google. The
 // session cookie rides along on a same-origin top-level GET, which is what
 // makes the callback able to tell whose account to attach the result to.
-func (s *Service) handleGoogleLinkStart(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleGoogleLinkStart(w http.ResponseWriter, r *http.Request) {
 	// Every refusal here is a redirect rather than a status code. This handler
 	// is reached by pressing a button, not by a fetch — the browser navigates
 	// to it — so a JSON body would replace the person's screen with a line of
 	// machine-readable text and no way back.
-	if !s.googleLoginEnabled() {
-		s.failGoogleLink(w, r, "google_not_configured")
+	if !h.GoogleLoginEnabled() {
+		h.failGoogleLink(w, r, "google_not_configured")
 		return
 	}
 	// A linked Google account is a way in, not merely a label on a profile —
 	// the sign-in path will find it tomorrow. So a deployment that has handed
 	// the question of who somebody is to its provider must not let people cut
 	// themselves a second door from inside, which is the same reason
-	// handleGoogleStart refuses.
-	if !s.localLoginAllowed() {
-		s.failGoogleLink(w, r, "sso_required")
+	// HandleGoogleStart refuses.
+	if !h.LocalLoginAllowed() {
+		h.failGoogleLink(w, r, "sso_required")
 		return
 	}
 	// Checked before the trip to Google rather than only on the way back. The
 	// callback has to verify it again — a session can end mid-flow — but
 	// sending somebody through a consent screen that cannot possibly succeed
 	// is a worse way to say "you are not signed in".
-	if _, err := s.sessions.Resolve(r.Context(), auth.TokenFromRequest(r)); err != nil {
+	if _, err := h.sessions.Resolve(r.Context(), auth.TokenFromRequest(r)); err != nil {
 		slog.Info("a Google link was started without a live session", "error", err)
-		s.failGoogleLink(w, r, "session_expired")
+		h.failGoogleLink(w, r, "session_expired")
 		return
 	}
 
-	request, err := s.googleLogin.BeginAuthorization(r.Context())
+	request, err := h.googleLogin.BeginAuthorization(r.Context())
 	if err != nil {
 		slog.Error("could not start a Google link", "error", err)
-		s.failGoogleLink(w, r, "provider_unreachable")
+		h.failGoogleLink(w, r, "provider_unreachable")
 		return
 	}
 
@@ -143,23 +143,23 @@ func (s *Service) handleGoogleLinkStart(w http.ResponseWriter, r *http.Request) 
 // in asks "whose account is this?", and the answer may be nobody's — which is
 // what sends a first-time arrival to eID. Linking already knows whose account
 // it is and only asks whether this Google account is free to attach.
-func (s *Service) linkGoogleToCurrentAccount(w http.ResponseWriter, r *http.Request, identity *ssoclient.Identity, next string) {
+func (h *Handlers) linkGoogleToCurrentAccount(w http.ResponseWriter, r *http.Request, identity *ssoclient.Identity, next string) {
 	// Resolved here rather than read from the context: the callback is a public
 	// route, because Google has to be able to reach it, so nothing upstream has
 	// established who is asking. The session cookie arrives on this navigation
 	// like any other same-origin GET, and it is the only thing that decides
 	// whose account this attaches to.
-	claims, err := s.sessions.Resolve(r.Context(), auth.TokenFromRequest(r))
+	claims, err := h.sessions.Resolve(r.Context(), auth.TokenFromRequest(r))
 	if err != nil {
 		// The session ended somewhere between the profile screen and Google's
 		// answer. Nothing is linked, and saying so is better than silently
 		// turning this into a sign-in for whoever holds the browser.
 		slog.Info("a Google link came back without a live session", "error", err)
-		s.failGoogleLink(w, r, "session_expired")
+		h.failGoogleLink(w, r, "session_expired")
 		return
 	}
 
-	issuer := s.googleLogin.Config().Issuer
+	issuer := h.googleLogin.Config().Issuer
 
 	// Refuse rather than move. The insert this would otherwise reach reassigns
 	// user_id on conflict, which is right when somebody signs in and wrong
@@ -167,28 +167,28 @@ func (s *Service) linkGoogleToCurrentAccount(w http.ResponseWriter, r *http.Requ
 	// telling them, at the request of somebody else who happens to be able to
 	// authenticate at Google as them.
 	var owner string
-	err = s.db.QueryRow(r.Context(),
+	err = h.db.QueryRow(r.Context(),
 		`SELECT user_id::text FROM user_sso_identities WHERE issuer = $1 AND subject = $2`,
 		issuer, identity.Subject).Scan(&owner)
 	switch {
 	case err == nil && owner != claims.UserID:
 		slog.Info("refused to move a Google identity between accounts",
 			"issuer", issuer, "requested_by", claims.UserID)
-		s.failGoogleLink(w, r, "already_linked_elsewhere")
+		h.failGoogleLink(w, r, "already_linked_elsewhere")
 		return
 	case err == nil:
 		// Already theirs. Re-running the flow refreshes what Google says about
 		// them, which is a reasonable thing to want and not an error.
 	}
 
-	s.linkSSOIdentity(r.Context(), claims.UserID, issuer, identity)
+	h.linkSSOIdentity(r.Context(), claims.UserID, issuer, identity)
 	slog.Info("a person linked Google to their account", "user_id", claims.UserID)
 	http.Redirect(w, r, config.WebOrigin()+next, http.StatusFound)
 }
 
-// handleGoogleCallback is where Google returns the browser.
-func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	if !s.googleLoginEnabled() || !s.localLoginAllowed() {
+// HandleGoogleCallback is where Google returns the browser.
+func (h *Handlers) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	if !h.GoogleLoginEnabled() || !h.LocalLoginAllowed() {
 		httpx.Error(w, http.StatusNotFound, "Google sign-in is not configured on this deployment")
 		return
 	}
@@ -197,24 +197,24 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	flow, err := ssoclient.ReadFlow(w, r, ssoclient.GoogleFlow, query.Get("state"))
 	if err != nil {
 		slog.Info("refused a Google callback", "error", err)
-		s.failGoogle(w, r, "stale_request")
+		h.failGoogle(w, r, "stale_request")
 		return
 	}
 	if providerError := query.Get("error"); providerError != "" {
 		slog.Info("Google refused a sign-in", "error", providerError)
-		s.failGoogle(w, r, providerError)
+		h.failGoogle(w, r, providerError)
 		return
 	}
 	code := query.Get("code")
 	if code == "" {
-		s.failGoogle(w, r, "no_code")
+		h.failGoogle(w, r, "no_code")
 		return
 	}
 
-	identity, err := s.googleLogin.Exchange(r.Context(), code, flow.CodeVerifier, flow.Nonce)
+	identity, err := h.googleLogin.Exchange(r.Context(), code, flow.CodeVerifier, flow.Nonce)
 	if err != nil {
 		slog.Error("could not redeem a Google authorization code", "error", err)
-		s.failGoogle(w, r, "exchange_failed")
+		h.failGoogle(w, r, "exchange_failed")
 		return
 	}
 
@@ -226,13 +226,13 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// account here.
 	if identity.Email == "" || !identity.EmailVerified {
 		slog.Info("refused a Google sign-in with no verified address", "subject", identity.Subject)
-		s.failGoogle(w, r, "email_unverified")
+		h.failGoogle(w, r, "email_unverified")
 		return
 	}
 	if !ssoclient.EmailInDomains(identity.Email, ssoclient.GoogleAllowedDomains()) {
 		slog.Info("refused a Google sign-in from a domain that is not allowed here",
 			"domain", domainOf(identity.Email))
-		s.failGoogle(w, r, "domain_not_allowed")
+		h.failGoogle(w, r, "domain_not_allowed")
 		return
 	}
 
@@ -241,11 +241,11 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// verified is no more usable as a label on somebody's profile than it is
 	// as a way in.
 	if flow.Link {
-		s.linkGoogleToCurrentAccount(w, r, identity, ssoclient.SafeNext(flow.Next, "/profile"))
+		h.linkGoogleToCurrentAccount(w, r, identity, ssoclient.SafeNext(flow.Next, "/profile"))
 		return
 	}
 
-	userID, tenantID, err := s.resolveGoogleUser(r.Context(), s.googleLogin.Config(), identity)
+	userID, tenantID, err := h.resolveGoogleUser(r.Context(), h.googleLogin.Config(), identity)
 	if err != nil {
 		// Checked before the refusal below, and never treated as one. This
 		// account is known and this Google identity is already theirs; what is
@@ -254,7 +254,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		// exactly the same place, which is what it used to do — every time.
 		if errors.Is(err, auth.ErrNoOrganisation) {
 			slog.Info("a linked Google account belongs to nobody's organisation", "email", identity.Email)
-			s.failGoogle(w, r, "no_organisation")
+			h.failGoogle(w, r, "no_organisation")
 			return
 		}
 		var refusal auth.SignInError
@@ -264,10 +264,10 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 			// platform's accounts are held by. So the identity is parked and
 			// they are asked to prove themselves once with eID — see
 			// identity_binding.go.
-			token, bindErr := s.startIdentityBinding(r.Context(), s.googleLogin.Config().Issuer, identity)
+			token, bindErr := h.startIdentityBinding(r.Context(), h.googleLogin.Config().Issuer, identity)
 			if bindErr != nil {
 				slog.Error("could not start an identity binding", "error", bindErr)
-				s.failGoogle(w, r, "no_account")
+				h.failGoogle(w, r, "no_account")
 				return
 			}
 			slog.Info("a first Google sign-in is waiting on eID", "email", identity.Email)
@@ -279,14 +279,14 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		slog.Error("could not link a verified Google identity to an account", "error", err)
-		s.failGoogle(w, r, "provisioning_failed")
+		h.failGoogle(w, r, "provisioning_failed")
 		return
 	}
 
-	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "google")
+	token, expiresAt, err := h.authn.IssueSession(r, userID, tenantID, "google")
 	if err != nil {
 		slog.Error("could not establish a session for a Google sign-in", "error", err, "user_id", userID)
-		s.failGoogle(w, r, "session_failed")
+		h.failGoogle(w, r, "session_failed")
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -307,7 +307,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 //
 // Every refusal on this rail comes through here, which is what makes it the one
 // place the failure counter belongs.
-func (s *Service) failGoogle(w http.ResponseWriter, r *http.Request, reason string) {
+func (h *Handlers) failGoogle(w http.ResponseWriter, r *http.Request, reason string) {
 	telemetry.RecordLogin(telemetry.LoginGoogle, false)
 	http.Redirect(w, r, config.WebOrigin()+"/login?sso_error="+reason, http.StatusFound)
 }
@@ -318,7 +318,7 @@ func (s *Service) failGoogle(w http.ResponseWriter, r *http.Request, reason stri
 // send them: they have a session, so /login bounces them straight back, and
 // the round trip looks from the outside like the button did nothing at all.
 // Sent back to the screen they pressed it on, carrying the reason.
-func (s *Service) failGoogleLink(w http.ResponseWriter, r *http.Request, reason string) {
+func (h *Handlers) failGoogleLink(w http.ResponseWriter, r *http.Request, reason string) {
 	slog.Info("a Google link attempt failed", "reason", reason)
 	http.Redirect(w, r, config.WebOrigin()+"/profile?link_error="+reason, http.StatusFound)
 }
@@ -341,15 +341,15 @@ func domainOf(email string) string {
 // If the Google identity (issuer, subject) is already bound to a user account,
 // it logs them in directly. Otherwise, it returns a auth.SignInError so the caller
 // can park the identity and require a one-time eID binding.
-func (s *Service) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
+func (h *Handlers) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
 	issuer := cfg.Issuer
 
-	err = s.db.QueryRow(ctx,
+	err = h.db.QueryRow(ctx,
 		`SELECT user_id::text FROM user_sso_identities WHERE issuer = $1 AND subject = $2`,
 		issuer, identity.Subject).Scan(&userID)
 	if err == nil {
-		s.touchSSOIdentity(ctx, issuer, identity)
-		tenantID, err = s.authn.FirstTenantFor(ctx, userID)
+		h.touchSSOIdentity(ctx, issuer, identity)
+		tenantID, err = h.authn.FirstTenantFor(ctx, userID)
 		if err != nil {
 			return "", "", err
 		}

@@ -101,19 +101,6 @@ func TestAModuleWithoutAnAccessPolicyIsNotGated(t *testing.T) {
 	}
 }
 
-func TestValidEIDCallback(t *testing.T) {
-	t.Setenv("PUBLIC_ORIGIN", "https://nexus.gerege.mn")
-	t.Setenv("ENVIRONMENT", "production")
-	if got, err := validEIDCallback("https://nexus.gerege.mn/auth/eid/callback"); err != nil || got == "" {
-		t.Fatalf("expected callback to be accepted: %q, %v", got, err)
-	}
-	for _, raw := range []string{"http://nexus.gerege.mn/auth/eid/callback", "https://evil.example/auth/eid/callback", "https://nexus.gerege.mn/login"} {
-		if _, err := validEIDCallback(raw); err == nil {
-			t.Fatalf("expected %q to be rejected", raw)
-		}
-	}
-}
-
 // The claim this file used to make about documents, esign and gov_services —
 // that none of them accepts a platform-derived permission, because each checks
 // at route registration and in its handlers — is now asserted against the real

@@ -10,7 +10,7 @@
  * configuration screen, and travel with sso_client_handlers.go.
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func ssoModeServer(t *testing.T, mode string) (*Service, *pgxpool.Pool) {
+func ssoModeServer(t *testing.T, mode string) (*Handlers, *settings.Store, *pgxpool.Pool) {
 	t.Helper()
 	dsn := os.Getenv("AUTH_TEST_DATABASE_URL")
 	if dsn == "" {
@@ -46,11 +46,9 @@ func ssoModeServer(t *testing.T, mode string) (*Service, *pgxpool.Pool) {
 	t.Cleanup(func() { settings.UseStore(nil) })
 
 	setSSOMode(t, pool, store, mode)
-	service := &Service{db: pool, settings: store}
 	// Provisioning through SSO resolves a tenant and checks the quota, both of
-	// which are the sign-in package's now.
-	service.authn = auth.New(auth.Deps{DB: pool})
-	return service, pool
+	// which are the sign-in package's.
+	return New(Deps{DB: pool, Authn: auth.New(auth.Deps{DB: pool})}), store, pool
 }
 
 // setSSOMode writes the access mode and reloads, which is what the console's
@@ -69,7 +67,7 @@ func setSSOMode(t *testing.T, pool *pgxpool.Pool, store *settings.Store, mode st
 }
 
 func TestAPrivatePlatformProvisionsNobodyThroughSSO(t *testing.T) {
-	server, pool := ssoModeServer(t, settings.AccessPrivate)
+	server, _, pool := ssoModeServer(t, settings.AccessPrivate)
 
 	slug := fmt.Sprintf("sso-jit-%d", time.Now().UnixNano())
 	var tenantID string
@@ -106,7 +104,7 @@ func TestAPrivatePlatformProvisionsNobodyThroughSSO(t *testing.T) {
 // Switching to public takes effect on the next request, with no restart — the
 // property that makes this a setting rather than an environment variable.
 func TestSwitchingToPublicOpensProvisioningWithoutARestart(t *testing.T) {
-	server, pool := ssoModeServer(t, settings.AccessPrivate)
+	server, store, pool := ssoModeServer(t, settings.AccessPrivate)
 
 	slug := fmt.Sprintf("open-%d", time.Now().UnixNano())
 	var tenantID string
@@ -131,7 +129,7 @@ func TestSwitchingToPublicOpensProvisioningWithoutARestart(t *testing.T) {
 	}
 
 	// The same process, the same objects, one row changed.
-	setSSOMode(t, pool, server.settings, settings.AccessPublic)
+	setSSOMode(t, pool, store, settings.AccessPublic)
 
 	userID, gotTenant, err := server.resolveOrProvisionSSOUser(context.Background(), config, identity)
 	if err != nil {
@@ -148,11 +146,11 @@ func TestSwitchingToPublicOpensProvisioningWithoutARestart(t *testing.T) {
 // The sign-in screen has to know, or it offers a way in that this deployment
 // will refuse.
 func TestTheSignInConfigurationReportsTheMode(t *testing.T) {
-	server, pool := ssoModeServer(t, settings.AccessPrivate)
+	server, store, pool := ssoModeServer(t, settings.AccessPrivate)
 
 	read := func() string {
 		recorder := httptest.NewRecorder()
-		server.handleSSOConfig(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
+		server.HandleSSOConfig(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/auth/sso/config", nil))
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("the configuration endpoint answered %d", recorder.Code)
 		}
@@ -168,7 +166,7 @@ func TestTheSignInConfigurationReportsTheMode(t *testing.T) {
 	if got := read(); got != settings.AccessPrivate {
 		t.Fatalf("the configuration reports %q", got)
 	}
-	setSSOMode(t, pool, server.settings, settings.AccessPublic)
+	setSSOMode(t, pool, store, settings.AccessPublic)
 	if got := read(); got != settings.AccessPublic {
 		t.Fatalf("the configuration still reports %q after the switch", got)
 	}

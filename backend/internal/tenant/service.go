@@ -51,6 +51,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/devices/staffpin"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/directory"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
@@ -106,6 +107,9 @@ type Service struct {
 	integrationHandler *integration.Handler
 	aiSvc              *ai.Service
 	staffPIN           *staffpin.Service
+	// identity is who somebody is, as told by somebody else: the national eID,
+	// ДАН, Google and whichever provider this deployment federates with.
+	identity *identity.Handlers
 	// devices is the terminals an organisation enrols, and the sign-in a till
 	// offers whoever is standing at it.
 	devices *devices.Handlers
@@ -475,8 +479,12 @@ func New(deps Deps) (*Service, error) {
 		EndSession: endSessionURL(federatedSignIn),
 	})
 
-	// After the sign-in package, which a till asks for a session.
+	// After the sign-in package: both of these ask it for a session.
 	s.devices = devices.New(db, s.staffPIN, s.authn)
+	s.identity = identity.New(identity.Deps{
+		DB: db, Sessions: s.sessions, EID: eidSvc, DAN: danSvc,
+		Google: googleLogin, SSO: federatedSignIn, Authn: s.authn,
+	})
 
 	// And now the closure above has something to call.
 	server = s
@@ -623,7 +631,7 @@ func (s *Service) StartBackgroundJobs(ctx context.Context) {
 		ticker := time.NewTicker(30 * time.Minute)
 		defer ticker.Stop()
 		for {
-			s.sweepExpiredBindings(ctx)
+			s.identity.SweepExpiredBindings(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -930,15 +938,15 @@ func (s *Service) Routes(r chi.Router) {
 		// own. On a deployment that federates, requireLocalLogin closes all of
 		// them and says where sign-in actually happens — see
 		// sso_client_handlers.go for why that is all or nothing.
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.requireLocalLogin(s.authn.HandleLogin))
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.requireLocalLogin(s.handleEIDLogin))
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.requireLocalLogin(s.handleEIDStart))
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.requireLocalLogin(s.handleEIDStartByNationalID))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.identity.RequireLocalLogin(s.authn.HandleLogin))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.identity.RequireLocalLogin(s.identity.HandleEIDLogin))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.identity.RequireLocalLogin(s.identity.HandleEIDStart))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.identity.RequireLocalLogin(s.identity.HandleEIDStartByNationalID))
 		// Not the login limiter: a citizen polls for as long as it takes them to
 		// reach their phone, and sharing that budget with sign-in attempts made
 		// a busy office throttle itself out of signing in at all.
-		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.requireLocalLogin(s.handleEIDPoll))
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.requireLocalLogin(s.handleDANLogin))
+		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.identity.RequireLocalLogin(s.identity.HandleEIDPoll))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.identity.RequireLocalLogin(s.identity.HandleDANLogin))
 		api.Post("/auth/logout", s.authn.HandleLogout)
 
 		// Signing in through the provider this deployment is a client of.
@@ -963,16 +971,16 @@ func (s *Service) Routes(r chi.Router) {
 		// phishing kit rather than a feature.
 		api.Get("/oauth2/client-info", s.ssoProvider.HandleClientInfo)
 
-		api.Get("/auth/sso/config", s.handleSSOConfig)
+		api.Get("/auth/sso/config", s.identity.HandleSSOConfig)
 		// Google, when this deployment offers it. Same shape as the federated
 		// pair above and public for the same reasons.
-		api.Get("/auth/google/start", s.handleGoogleStart)
+		api.Get("/auth/google/start", s.identity.HandleGoogleStart)
 		// Adding Google to an account that already exists. Registered beside
 		// the sign-in routes rather than in the authenticated group because it
 		// is a navigation that ends at Google, and the handler resolves the
 		// session itself — see handleGoogleLinkStart.
-		api.Get("/auth/google/link", s.handleGoogleLinkStart)
-		api.Get("/auth/google/callback", s.handleGoogleCallback)
+		api.Get("/auth/google/link", s.identity.HandleGoogleLinkStart)
+		api.Get("/auth/google/callback", s.identity.HandleGoogleCallback)
 
 		// Completing a first sign-in from an external provider by proving a
 		// national identity. Unauthenticated for the same reason the rest of
@@ -980,12 +988,12 @@ func (s *Service) Routes(r chi.Router) {
 		// the request is the authority. The eID pair is budgeted like the
 		// ordinary eID pair: starting pushes a notification at somebody's
 		// phone, polling waits for them to reach it.
-		api.Get("/auth/bind/session", s.handleBindingSession)
-		api.Post("/auth/bind/consent", s.handleBindingConsent)
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/bind/eid/start", s.handleBindingEIDStart)
-		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/bind/eid/poll", s.handleBindingEIDPoll)
-		api.Get("/auth/sso/start", s.handleSSOStart)
-		api.Get("/auth/sso/callback", s.handleSSOCallback)
+		api.Get("/auth/bind/session", s.identity.HandleBindingSession)
+		api.Post("/auth/bind/consent", s.identity.HandleBindingConsent)
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/bind/eid/start", s.identity.HandleBindingEIDStart)
+		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/bind/eid/poll", s.identity.HandleBindingEIDPoll)
+		api.Get("/auth/sso/start", s.identity.HandleSSOStart)
+		api.Get("/auth/sso/callback", s.identity.HandleSSOCallback)
 		// Device enrollment is the bootstrap: the one-time code is its authority,
 		// so the device cannot already be behind session/device middleware.
 		api.Post("/devices/enroll", s.devices.HandleEnrollDevice)
@@ -1017,7 +1025,7 @@ func (s *Service) Routes(r chi.Router) {
 			// account and what each provider said. Inside the authenticated
 			// group and answering only for the caller — see profile_handlers.go.
 			pr.Get("/profile", s.handleProfile)
-			pr.Post("/profile/identities/unlink", s.handleUnlinkIdentity)
+			pr.Post("/profile/identities/unlink", s.identity.HandleUnlinkIdentity)
 			// What the signed-in person prefers, wherever they are. No
 			// permission: these are the caller's own settings, and a person who
 			// cannot read their own language preference has nothing to be

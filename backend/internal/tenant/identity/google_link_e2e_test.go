@@ -19,7 +19,7 @@
  *	AUTH_TEST_DATABASE_URL=postgres://... go test ./internal/platform/...
  */
 
-package tenant
+package identity
 
 import (
 	"context"
@@ -165,7 +165,7 @@ func rawB64(data []byte) string { return base64.RawURLEncoding.EncodeToString(da
 // ------------------------------------------------------------------ the fixture
 
 type linkFixture struct {
-	server  *Service
+	server  *Handlers
 	pool    *pgxpool.Pool
 	google  *fakeGoogle
 	userID  string
@@ -257,7 +257,7 @@ func (f *linkFixture) press(t *testing.T, sessionToken string) (location string,
 		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: sessionToken})
 	}
 	rec := httptest.NewRecorder()
-	f.server.handleGoogleLinkStart(rec, req)
+	f.server.HandleGoogleLinkStart(rec, req)
 	return rec.Header().Get("Location"), rec.Result().Cookies()
 }
 
@@ -282,7 +282,7 @@ func (f *linkFixture) returnFromGoogle(t *testing.T, authorizeURL string, jar []
 		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: sessionToken})
 	}
 	rec := httptest.NewRecorder()
-	f.server.handleGoogleCallback(rec, req)
+	f.server.HandleGoogleCallback(rec, req)
 	return rec.Header().Get("Location")
 }
 
@@ -316,11 +316,11 @@ func TestLinkingGoogleFromTheProfileEndToEnd(t *testing.T) {
 	}
 
 	// And the row exists, under the right person, with what Google said.
-	identities := f.server.linkedIdentities(context.Background(), f.userID)
+	identities := f.server.LinkedIdentities(context.Background(), f.userID)
 	if len(identities) != 2 {
 		t.Fatalf("identities = %d, want 2 (eID and Google)", len(identities))
 	}
-	var google *linkedIdentity
+	var google *LinkedIdentity
 	for i := range identities {
 		if identities[i].Kind == "sso" {
 			google = &identities[i]
@@ -360,7 +360,7 @@ func TestLinkingTheSameGoogleTwiceIsNotAnError(t *testing.T) {
 		}
 	}
 
-	if got := len(f.server.linkedIdentities(context.Background(), f.userID)); got != 2 {
+	if got := len(f.server.LinkedIdentities(context.Background(), f.userID)); got != 2 {
 		t.Errorf("identities = %d after linking twice, want 2", got)
 	}
 }
@@ -390,7 +390,7 @@ func TestAGoogleAccountCannotBeTakenFromAnotherPerson(t *testing.T) {
 	if owner != f.userID {
 		t.Errorf("owner = %s, want the original person %s", owner, f.userID)
 	}
-	if got := len(f.server.linkedIdentities(context.Background(), otherID)); got != 1 {
+	if got := len(f.server.LinkedIdentities(context.Background(), otherID)); got != 1 {
 		t.Errorf("the other person ended up with %d identities, want only their eID", got)
 	}
 }
@@ -413,7 +413,7 @@ func TestALinkWithoutASessionLinksNothing(t *testing.T) {
 	if !strings.Contains(landing, "link_error=session_expired") {
 		t.Errorf("returning with a dead session went to %q, want a session_expired reason", landing)
 	}
-	if got := len(f.server.linkedIdentities(context.Background(), f.userID)); got != 1 {
+	if got := len(f.server.LinkedIdentities(context.Background(), f.userID)); got != 1 {
 		t.Errorf("identities = %d, want the eID alone — nothing should have been linked", got)
 	}
 }
@@ -433,9 +433,9 @@ func TestACallbackWithTheWrongStateIsRefused(t *testing.T) {
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: f.session})
 	rec := httptest.NewRecorder()
-	f.server.handleGoogleCallback(rec, req)
+	f.server.HandleGoogleCallback(rec, req)
 
-	if got := len(f.server.linkedIdentities(context.Background(), f.userID)); got != 1 {
+	if got := len(f.server.LinkedIdentities(context.Background(), f.userID)); got != 1 {
 		t.Errorf("a mismatched state linked something: identities = %d", got)
 	}
 }
@@ -453,12 +453,12 @@ func TestUnlinkingGoogleLeavesTheEIDPinned(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/profile/identities/unlink", body)
 	req = req.WithContext(auth.WithUserContext(req.Context(), auth.UserClaims{UserID: f.userID}))
 	rec := httptest.NewRecorder()
-	f.server.handleUnlinkIdentity(rec, req)
+	f.server.HandleUnlinkIdentity(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unlink returned %d: %s", rec.Code, rec.Body.String())
 	}
-	identities := f.server.linkedIdentities(context.Background(), f.userID)
+	identities := f.server.LinkedIdentities(context.Background(), f.userID)
 	if len(identities) != 1 || identities[0].Kind != "eid" {
 		t.Fatalf("after unlinking Google, identities = %+v", identities)
 	}
@@ -471,7 +471,7 @@ func TestUnlinkingGoogleLeavesTheEIDPinned(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/profile/identities/unlink", body)
 	req = req.WithContext(auth.WithUserContext(req.Context(), auth.UserClaims{UserID: f.userID}))
 	rec = httptest.NewRecorder()
-	f.server.handleUnlinkIdentity(rec, req)
+	f.server.HandleUnlinkIdentity(rec, req)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("removing the last identity returned %d, want 409", rec.Code)
 	}
@@ -482,15 +482,12 @@ func TestUnlinkingGoogleLeavesTheEIDPinned(t *testing.T) {
 // IssueSession asks whether the organisation is suspended before it will make a
 // session, and that answer is memoised. A sign-in package with no cache to ask
 // panics rather than failing — which is a fixture hole, not a finding.
-func newLinkService(pool *pgxpool.Pool, google *ssoclient.Client) *Service {
+func newLinkService(pool *pgxpool.Pool, google *ssoclient.Client) *Handlers {
 	sessions := auth.NewSessionStore(pool, auth.DefaultSessionTTL)
-	return &Service{
-		db:          pool,
-		sessions:    sessions,
-		googleLogin: google,
-		suspended:   memo.New[bool](auth.SuspendedTTL),
-		authn: auth.New(auth.Deps{
+	return New(Deps{
+		DB: pool, Sessions: sessions, Google: google,
+		Authn: auth.New(auth.Deps{
 			DB: pool, Sessions: sessions, Suspended: memo.New[bool](auth.SuspendedTTL),
 		}),
-	}
+	})
 }
