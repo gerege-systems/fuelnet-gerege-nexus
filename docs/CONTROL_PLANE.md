@@ -64,6 +64,16 @@ sudo certbot --nginx -d cp.nexus.gerege.mn
 
 DNS дээр `cp.nexus.gerege.mn` нь тухайн серверийг заасан байх ёстой.
 
+Production deploy дээр хаягуудыг GitHub Actions-ийн
+`CONTROL_PLANE_ALLOWED_CIDRS` secret-д зай, шинэ мөр эсвэл таслалаар тусгаарлан
+хадгална. Deploy нь түүгээр `cp-allowlist.conf`-ыг үүсгэж, `nginx -t` унавал
+өмнөх файлыг сэргээнэ. Secret хоосон бол сервер дээрх гараар тохируулсан
+allowlist-ыг хөндөхгүй.
+
+Тогтмол office/VPN хаягийг аль болох CIDR-аар оруул. Түр зуурын нэг IPv4
+хаяг бол `203.0.113.10/32` хэлбэртэй байна; хаяг солигдоход secret-ийг
+шинэчилж deploy-ийг дахин ажиллуулна.
+
 ### 3.2 Env
 
 `deploy/.env.prod` дотор:
