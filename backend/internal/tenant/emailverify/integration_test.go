@@ -61,14 +61,14 @@ func newFixture(t *testing.T) *fixture {
 	var tenantID string
 	slug := fmt.Sprintf("emailverify-test-%d", time.Now().UnixNano())
 	if err := pool.QueryRow(context.Background(),
-		`INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id::text`,
+		`INSERT INTO platform.tenants (slug, name) VALUES ($1, $2) RETURNING id::text`,
 		slug, "Email verification integration test").Scan(&tenantID); err != nil {
 		t.Fatalf("create tenant: %v", err)
 	}
 	t.Cleanup(func() {
-		// The schema cascades from tenants, so one delete clears this test's
+		// The schema cascades from platform.tenants, so one delete clears this test's
 		// verifications with it.
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1`, tenantID)
 	})
 
 	return &fixture{svc: NewService(pool), stub: stub, pool: pool, tenantID: tenantID}
@@ -189,7 +189,7 @@ func TestAnExpiredRequestIsRefusedAndSweptUp(t *testing.T) {
 
 	// Age it rather than waiting a day for it.
 	if _, err := f.pool.Exec(ctx,
-		`UPDATE email_verifications SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = $1`,
+		`UPDATE tenant.email_verifications SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = $1`,
 		sent.ID); err != nil {
 		t.Fatalf("age the request: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestAnExpiredRequestIsRefusedAndSweptUp(t *testing.T) {
 	f.svc.sweep(ctx)
 	var status string
 	if err := f.pool.QueryRow(ctx,
-		`SELECT status FROM email_verifications WHERE id = $1`, sent.ID).Scan(&status); err != nil {
+		`SELECT status FROM tenant.email_verifications WHERE id = $1`, sent.ID).Scan(&status); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	if status != string(StatusExpired) {
@@ -245,7 +245,7 @@ func TestARefusedRequestLeavesNoRowBehind(t *testing.T) {
 
 	var count int
 	if err := f.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM email_verifications WHERE tenant_id = $1 AND email = $2`,
+		`SELECT COUNT(*) FROM tenant.email_verifications WHERE tenant_id = $1 AND email = $2`,
 		f.tenantID, "nowhere@example.com").Scan(&count); err != nil {
 		t.Fatalf("count: %v", err)
 	}

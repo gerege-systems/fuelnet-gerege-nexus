@@ -68,7 +68,7 @@ func (m *Manager) BeginConnect(ctx context.Context, tenantID, userID, id string)
 	redirect := RedirectURI()
 
 	if _, err := m.store.db.Exec(ctx,
-		`INSERT INTO integration_oauth_states (state, tenant_id, integration_id, user_id, redirect_uri, expires_at)
+		`INSERT INTO tenant.integration_oauth_states (state, tenant_id, integration_id, user_id, redirect_uri, expires_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		state, tenantID, conn.ID, userID, redirect, time.Now().Add(oauthStateTTL)); err != nil {
 		return "", err
@@ -124,7 +124,7 @@ func (m *Manager) CompleteConnect(ctx context.Context, state, code string) (*Con
 	// after the first attempt.
 	var tenantID, integrationID, userID string
 	err := m.store.db.QueryRow(ctx,
-		`DELETE FROM integration_oauth_states
+		`DELETE FROM tenant.integration_oauth_states
 		  WHERE state = $1 AND expires_at > NOW()
 		 RETURNING tenant_id::text, integration_id::text, user_id::text`, state).
 		Scan(&tenantID, &integrationID, &userID)
@@ -406,7 +406,7 @@ func (m *Manager) accountLabel(ctx context.Context, provider Provider, accessTok
 // SweepOAuthStates deletes connect attempts nobody finished.
 func (m *Manager) SweepOAuthStates(ctx context.Context) (int64, error) {
 	tag, err := m.store.db.Exec(ctx,
-		`DELETE FROM integration_oauth_states WHERE expires_at < NOW()`)
+		`DELETE FROM tenant.integration_oauth_states WHERE expires_at < NOW()`)
 	if err != nil {
 		return 0, err
 	}

@@ -47,7 +47,7 @@ type newVerification struct {
 
 func (s *store) insertVerification(ctx context.Context, in newVerification) (*Verification, error) {
 	row := s.db.QueryRow(ctx, `
-		INSERT INTO email_verifications
+		INSERT INTO tenant.email_verifications
 			(tenant_id, source, purpose, email, token_hash, redirect_url,
 			 requested_ip, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -58,7 +58,7 @@ func (s *store) insertVerification(ctx context.Context, in newVerification) (*Ve
 }
 
 func (s *store) deleteVerification(ctx context.Context, id string) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM email_verifications WHERE id = $1`, id)
+	_, err := s.db.Exec(ctx, `DELETE FROM tenant.email_verifications WHERE id = $1`, id)
 	return err
 }
 
@@ -66,7 +66,7 @@ func (s *store) deleteVerification(ctx context.Context, id string) error {
 // is the one that actually governs the link.
 func (s *store) setExpiry(ctx context.Context, id string, expiresAt time.Time) (*Verification, error) {
 	row := s.db.QueryRow(ctx, `
-		UPDATE email_verifications SET expires_at = $2 WHERE id = $1
+		UPDATE tenant.email_verifications SET expires_at = $2 WHERE id = $1
 		RETURNING `+verificationColumns, id, expiresAt)
 	return scanVerification(row)
 }
@@ -80,7 +80,7 @@ func (s *store) setExpiry(ctx context.Context, id string, expiresAt time.Time) (
 // through a mailbox must not be replayable.
 func (s *store) claimVerification(ctx context.Context, refHash string) (*Verification, error) {
 	row := s.db.QueryRow(ctx, `
-		UPDATE email_verifications
+		UPDATE tenant.email_verifications
 		SET status = 'VERIFIED', verified_at = NOW()
 		WHERE token_hash = $1 AND status = 'PENDING' AND expires_at > NOW()
 		RETURNING `+verificationColumns, refHash)
@@ -99,7 +99,7 @@ func (s *store) countTenantSends(ctx context.Context, tenantID string, since tim
 	var oldest *time.Time
 	err := s.db.QueryRow(ctx, `
 		SELECT COUNT(*), MIN(created_at)
-		FROM email_verifications
+		FROM tenant.email_verifications
 		WHERE tenant_id = $1 AND created_at >= $2`, tenantID, since).Scan(&count, &oldest)
 	return count, oldest, err
 }
@@ -108,7 +108,7 @@ func (s *store) lastSendTo(ctx context.Context, tenantID, email string) (*time.T
 	var last *time.Time
 	err := s.db.QueryRow(ctx, `
 		SELECT MAX(created_at)
-		FROM email_verifications
+		FROM tenant.email_verifications
 		WHERE tenant_id = $1 AND email = $2`, tenantID, email).Scan(&last)
 	return last, err
 }
@@ -116,7 +116,7 @@ func (s *store) lastSendTo(ctx context.Context, tenantID, email string) (*time.T
 func (s *store) recent(ctx context.Context, tenantID string, limit int) ([]Verification, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT `+verificationColumns+`
-		FROM email_verifications
+		FROM tenant.email_verifications
 		WHERE tenant_id = $1
 		ORDER BY created_at DESC
 		LIMIT $2`, tenantID, limit)
@@ -148,7 +148,7 @@ func (s *store) stats(ctx context.Context, tenantID string) (*Stats, error) {
 			COUNT(*) FILTER (WHERE status = 'PENDING' AND expires_at > NOW()),
 			COUNT(*) FILTER (WHERE status = 'EXPIRED' OR (status = 'PENDING' AND expires_at <= NOW())),
 			COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours')
-		FROM email_verifications
+		FROM tenant.email_verifications
 		WHERE tenant_id = $1`, tenantID).
 		Scan(&st.Total, &st.Verified, &st.Pending, &st.Expired, &st.Last24h)
 	if err != nil {
@@ -159,7 +159,7 @@ func (s *store) stats(ctx context.Context, tenantID string) (*Stats, error) {
 
 func (s *store) expirePending(ctx context.Context) (int64, error) {
 	tag, err := s.db.Exec(ctx, `
-		UPDATE email_verifications
+		UPDATE tenant.email_verifications
 		SET status = 'EXPIRED'
 		WHERE status = 'PENDING' AND expires_at <= NOW()`)
 	if err != nil {
@@ -170,7 +170,7 @@ func (s *store) expirePending(ctx context.Context) (int64, error) {
 
 func (s *store) purgeOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
 	tag, err := s.db.Exec(ctx, `
-		DELETE FROM email_verifications WHERE created_at < $1`, cutoff)
+		DELETE FROM tenant.email_verifications WHERE created_at < $1`, cutoff)
 	if err != nil {
 		return 0, err
 	}

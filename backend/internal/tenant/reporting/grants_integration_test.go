@@ -138,7 +138,7 @@ func newSharingFixture(t *testing.T) sharingFixture {
 		fixture.mineB: fixture.regB,
 	} {
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO tenant_profiles (tenant_id, registration_number) VALUES ($1, $2)
+			`INSERT INTO tenant.tenant_profiles (tenant_id, registration_number) VALUES ($1, $2)
 			 ON CONFLICT (tenant_id) DO UPDATE SET registration_number = EXCLUDED.registration_number`,
 			tenantID, registration); err != nil {
 			t.Fatalf("set a registration number: %v", err)
@@ -171,7 +171,7 @@ func (f sharingFixture) grant(t *testing.T, granteeTenantID, scope, counterparty
 	t.Helper()
 	var id string
 	err := f.pool.QueryRow(context.Background(), `
-		INSERT INTO report_grants
+		INSERT INTO tenant.report_grants
 		    (grantor_tenant_id, grantee_tenant_id, report_key, scope, counterparty_ref, accepted_at)
 		VALUES ($1, $2, 'test.trips', $3, $4, NOW())
 		RETURNING id`,
@@ -180,7 +180,7 @@ func (f sharingFixture) grant(t *testing.T, granteeTenantID, scope, counterparty
 		t.Fatalf("create a grant: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = f.pool.Exec(context.Background(), `DELETE FROM report_grants WHERE id = $1`, id)
+		_, _ = f.pool.Exec(context.Background(), `DELETE FROM tenant.report_grants WHERE id = $1`, id)
 	})
 	return id
 }
@@ -225,7 +225,7 @@ func TestRevokingAGrantClosesItAtOnce(t *testing.T) {
 	}
 
 	if _, err := fixture.pool.Exec(context.Background(),
-		`UPDATE report_grants SET revoked_at = NOW() WHERE id = $1`, id); err != nil {
+		`UPDATE tenant.report_grants SET revoked_at = NOW() WHERE id = $1`, id); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
@@ -298,7 +298,7 @@ func assertAudited(t *testing.T, pool *pgxpool.Pool, tenantID, action string) {
 	t.Helper()
 	var count int
 	err := pool.QueryRow(context.Background(),
-		`SELECT count(*) FROM audit_events
+		`SELECT count(*) FROM tenant.audit_events
 		  WHERE tenant_id = $1 AND action = $2 AND created_at > NOW() - interval '1 minute'`,
 		tenantID, action).Scan(&count)
 	if err != nil {
@@ -309,7 +309,7 @@ func assertAudited(t *testing.T, pool *pgxpool.Pool, tenantID, action string) {
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM audit_events WHERE tenant_id = $1 AND action = $2`, tenantID, action)
+			`DELETE FROM tenant.audit_events WHERE tenant_id = $1 AND action = $2`, tenantID, action)
 	})
 }
 
@@ -334,7 +334,7 @@ func TestAnExpiredGrantStopsWorking(t *testing.T) {
 
 	id := fixture.grant(t, fixture.mineA, reporting.ScopeCounterparty, fixture.regA)
 	if _, err := fixture.pool.Exec(context.Background(),
-		`UPDATE report_grants SET valid_until = $2 WHERE id = $1`,
+		`UPDATE tenant.report_grants SET valid_until = $2 WHERE id = $1`,
 		id, time.Now().Add(-time.Hour)); err != nil {
 		t.Fatalf("expire the grant: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestAnUnacceptedRequestGrantsNothing(t *testing.T) {
 
 	var id string
 	err := fixture.pool.QueryRow(context.Background(), `
-		INSERT INTO report_grants
+		INSERT INTO tenant.report_grants
 		    (grantor_tenant_id, grantee_tenant_id, report_key, scope, counterparty_ref)
 		VALUES ($1, $2, 'test.trips', 'counterparty', $3)
 		RETURNING id`, fixture.transport, fixture.mineA, fixture.regA).Scan(&id)
@@ -366,7 +366,7 @@ func TestAnUnacceptedRequestGrantsNothing(t *testing.T) {
 		t.Fatalf("create the request: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = fixture.pool.Exec(context.Background(), `DELETE FROM report_grants WHERE id = $1`, id)
+		_, _ = fixture.pool.Exec(context.Background(), `DELETE FROM tenant.report_grants WHERE id = $1`, id)
 	})
 
 	report := tripFixture{}

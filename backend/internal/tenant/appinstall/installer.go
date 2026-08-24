@@ -219,7 +219,7 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 	// is skipped and the permission still exists for the role editor to hand out.
 	var adminRoleID string
 	if err := tx.QueryRow(ctx,
-		`SELECT id FROM roles WHERE tenant_id = $1 AND code = 'admin'`, tenantID).Scan(&adminRoleID); err != nil {
+		`SELECT id FROM tenant.roles WHERE tenant_id = $1 AND code = 'admin'`, tenantID).Scan(&adminRoleID); err != nil {
 		adminRoleID = ""
 	}
 
@@ -232,7 +232,7 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 		// version it was on is read before it is overwritten.
 		var existingID, previousVersion string
 		err := tx.QueryRow(ctx,
-			`SELECT id, installed_version FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+			`SELECT id, installed_version FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 			tenantID, app.ID).Scan(&existingID, &previousVersion)
 
 		now := time.Now()
@@ -243,7 +243,7 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 			// Not installed yet — insert installation
 			installID = uuid.New().String()
 			_, err = tx.Exec(ctx,
-				`INSERT INTO app_installations (id, tenant_id, app_id, installed_version, status, enabled, installed_at, updated_at)
+				`INSERT INTO tenant.app_installations (id, tenant_id, app_id, installed_version, status, enabled, installed_at, updated_at)
 				 VALUES ($1, $2, $3, $4, 'installed', TRUE, $5, $6)`,
 				installID, tenantID, app.ID, app.Version, now, now)
 			if err != nil {
@@ -257,7 +257,7 @@ func (ai *AppInstaller) installOrUpgrade(ctx context.Context, tenantID, appSlug,
 			// and nothing could tell an out-of-date installation from a current
 			// one.
 			_, err = tx.Exec(ctx,
-				`UPDATE app_installations SET status = 'installed', enabled = TRUE,
+				`UPDATE tenant.app_installations SET status = 'installed', enabled = TRUE,
 				     installed_version = $1, updated_at = $2
 				 WHERE id = $3`, app.Version, now, installID)
 			if err != nil {
@@ -327,7 +327,7 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 
 		permID := uuid.New().String()
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO permissions (id, code, name, description)
+			`INSERT INTO platform.permissions (id, code, name, description)
 			 VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING`,
 			permID, perm.Code, perm.Name, perm.Description); err != nil {
 			return fmt.Errorf("register permission %s for %s: %w", perm.Code, app.ID, err)
@@ -336,8 +336,8 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 		// Grant to tenant admin role
 		if adminRoleID != "" {
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO role_permissions (role_id, permission_id)
-				 SELECT $1, p.id FROM permissions p WHERE p.code = $2
+				`INSERT INTO tenant.role_permissions (role_id, permission_id)
+				 SELECT $1, p.id FROM platform.permissions p WHERE p.code = $2
 				 ON CONFLICT DO NOTHING`, adminRoleID, perm.Code); err != nil {
 				return fmt.Errorf("grant %s to the admin role: %w", perm.Code, err)
 			}
@@ -352,8 +352,8 @@ func (ai *AppInstaller) grantAppPermissions(ctx context.Context, tx pgx.Tx, tena
 		}
 
 		for _, roleCode := range defaultRolesFor(perm) {
-			if _, err := tx.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_id)
-				SELECT r.id,p.id FROM roles r JOIN permissions p ON p.code=$3
+			if _, err := tx.Exec(ctx, `INSERT INTO tenant.role_permissions(role_id,permission_id)
+				SELECT r.id,p.id FROM tenant.roles r JOIN platform.permissions p ON p.code=$3
 				WHERE r.tenant_id=$1 AND r.code=$2 AND r.active ON CONFLICT DO NOTHING`,
 				tenantID, roleCode, perm.Code); err != nil {
 				return fmt.Errorf("grant %s to the %s role: %w", perm.Code, roleCode, err)
@@ -396,7 +396,7 @@ func recordInstallationEvent(ctx context.Context, tx pgx.Tx, installID, eventTyp
 		return fmt.Errorf("encode %s event details: %w", eventType, err)
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO installation_events (id, installation_id, event_type, details, created_at)
+		`INSERT INTO tenant.installation_events (id, installation_id, event_type, details, created_at)
 		 VALUES ($1, $2, $3, $4, $5)`,
 		uuid.New().String(), installID, eventType, encoded, at); err != nil {
 		return fmt.Errorf("record %s event: %w", eventType, err)
@@ -422,7 +422,7 @@ func (ai *AppInstaller) UpgradeApp(ctx context.Context, tenantID, appSlug, userI
 	var installed, pinned string
 	err = ai.db.QueryRow(ctx,
 		`SELECT installed_version, COALESCE(pinned_version, '')
-		   FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		   FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, targetApp.ID).Scan(&installed, &pinned)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", fmt.Errorf("%w: %s", ErrNotInstalled, appSlug)
@@ -445,7 +445,7 @@ func (ai *AppInstaller) UpgradeApp(ctx context.Context, tenantID, appSlug, userI
 	// which is the opposite of what pinning was asked for.
 	if pinned != "" {
 		if _, err := ai.db.Exec(ctx,
-			`UPDATE app_installations SET pinned_version = $1, updated_at = $2
+			`UPDATE tenant.app_installations SET pinned_version = $1, updated_at = $2
 			   WHERE tenant_id = $3 AND app_id = $4`,
 			targetApp.Version, time.Now(), tenantID, targetApp.ID); err != nil {
 			return installed, targetApp.Version, fmt.Errorf("move the version pin of %s: %w", targetApp.ID, err)
@@ -469,7 +469,7 @@ func (ai *AppInstaller) DisableApp(ctx context.Context, tenantID, appSlug, userI
 
 	now := time.Now()
 	res, err := ai.db.Exec(ctx,
-		`UPDATE app_installations SET enabled = FALSE, status = 'disabled', updated_at = $1
+		`UPDATE tenant.app_installations SET enabled = FALSE, status = 'disabled', updated_at = $1
 		 WHERE tenant_id = $2 AND app_id = $3`,
 		now, tenantID, targetApp.ID)
 	if err != nil || res.RowsAffected() == 0 {
@@ -491,7 +491,7 @@ func (ai *AppInstaller) EnableApp(ctx context.Context, tenantID, appSlug, userID
 
 	now := time.Now()
 	res, err := ai.db.Exec(ctx,
-		`UPDATE app_installations SET enabled = TRUE, status = 'installed', updated_at = $1
+		`UPDATE tenant.app_installations SET enabled = TRUE, status = 'installed', updated_at = $1
 		 WHERE tenant_id = $2 AND app_id = $3`,
 		now, tenantID, targetApp.ID)
 	if err != nil || res.RowsAffected() == 0 {
@@ -525,7 +525,7 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 	var failed []string
 	for _, app := range ai.GetCatalog() {
 		_, err := ai.db.Exec(ctx,
-			`INSERT INTO apps (id, slug, name, description, icon_url, category, visibility)
+			`INSERT INTO platform.apps (id, slug, name, description, icon_url, category, visibility)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7)
 			 ON CONFLICT (id) DO UPDATE SET
 			     slug        = EXCLUDED.slug,
@@ -561,7 +561,7 @@ func (ai *AppInstaller) SyncCatalog(ctx context.Context) error {
 			platformConstraint = ">=0.1.0"
 		}
 		_, err = ai.db.Exec(ctx,
-			`INSERT INTO app_versions (app_id, version, platform_constraint, manifest)
+			`INSERT INTO platform.app_versions (app_id, version, platform_constraint, manifest)
 			 VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (app_id, version) DO NOTHING`,
 			app.ID, app.Version, platformConstraint, manifest)
@@ -597,7 +597,7 @@ type Installation struct {
 func (ai *AppInstaller) GetInstallationsForTenant(ctx context.Context, tenantID string) (map[string]Installation, error) {
 	rows, err := ai.db.Query(ctx,
 		`SELECT app_id, installed_version, enabled, auto_update, COALESCE(pinned_version, '')
-		   FROM app_installations WHERE tenant_id = $1`, tenantID)
+		   FROM tenant.app_installations WHERE tenant_id = $1`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -637,8 +637,8 @@ func (ai *AppInstaller) EnsureDefaultApps(ctx context.Context) error {
 		}
 
 		rows, err := ai.db.Query(ctx,
-			`SELECT t.id::text FROM tenants t
-			  WHERE NOT EXISTS (SELECT 1 FROM app_installations ai
+			`SELECT t.id::text FROM platform.tenants t
+			  WHERE NOT EXISTS (SELECT 1 FROM tenant.app_installations ai
 			                     WHERE ai.tenant_id = t.id AND ai.app_id = $1)`, appID)
 		if err != nil {
 			return err
@@ -672,7 +672,7 @@ func (ai *AppInstaller) EnsureDefaultApps(ctx context.Context) error {
 
 func (ai *AppInstaller) GetEnabledAppIDsForTenant(ctx context.Context, tenantID string) ([]string, error) {
 	rows, err := ai.db.Query(ctx,
-		`SELECT app_id FROM app_installations WHERE tenant_id = $1 AND enabled = TRUE`, tenantID)
+		`SELECT app_id FROM tenant.app_installations WHERE tenant_id = $1 AND enabled = TRUE`, tenantID)
 	if err != nil {
 		return nil, err
 	}

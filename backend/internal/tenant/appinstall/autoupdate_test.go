@@ -57,17 +57,19 @@ func fixture(t *testing.T, installed catalog.CatalogApp) (*pgxpool.Pool, string)
 
 	var tenantID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (slug, name) VALUES ('au-' || substr(gen_random_uuid()::text, 1, 8), 'Auto update')
+		`INSERT INTO platform.tenants (slug, name) VALUES ('au-' || substr(gen_random_uuid()::text, 1, 8), 'Auto update')
 		 RETURNING id::text`).Scan(&tenantID); err != nil {
 		t.Fatalf("tenant: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID) })
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM apps WHERE id = $1`, installed.ID) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1`, tenantID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.apps WHERE id = $1`, installed.ID)
+	})
 
 	// The installed version, in the catalogue table and the version history —
 	// which is what a later version is compared against.
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO apps (id, slug, name, visibility) VALUES ($1, $2, $3, 'public')
+		`INSERT INTO platform.apps (id, slug, name, visibility) VALUES ($1, $2, $3, 'public')
 		 ON CONFLICT (id) DO NOTHING`, installed.ID, installed.Slug, installed.Name); err != nil {
 		t.Fatalf("app: %v", err)
 	}
@@ -76,12 +78,12 @@ func fixture(t *testing.T, installed catalog.CatalogApp) (*pgxpool.Pool, string)
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO app_versions (app_id, version, manifest) VALUES ($1, $2, $3)
+		`INSERT INTO platform.app_versions (app_id, version, manifest) VALUES ($1, $2, $3)
 		 ON CONFLICT (app_id, version) DO NOTHING`, installed.ID, installed.Version, manifest); err != nil {
 		t.Fatalf("version: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO app_installations (tenant_id, app_id, installed_version, status, enabled)
+		`INSERT INTO tenant.app_installations (tenant_id, app_id, installed_version, status, enabled)
 		 VALUES ($1, $2, $3, 'installed', TRUE)`, tenantID, installed.ID, installed.Version); err != nil {
 		t.Fatalf("installation: %v", err)
 	}
@@ -91,7 +93,7 @@ func fixture(t *testing.T, installed catalog.CatalogApp) (*pgxpool.Pool, string)
 func installationState(t *testing.T, pool *pgxpool.Pool, tenantID, appID string) (version, pinned string) {
 	t.Helper()
 	if err := pool.QueryRow(context.Background(),
-		`SELECT installed_version, COALESCE(pinned_version, '') FROM app_installations
+		`SELECT installed_version, COALESCE(pinned_version, '') FROM tenant.app_installations
 		  WHERE tenant_id = $1 AND app_id = $2`, tenantID, appID).Scan(&version, &pinned); err != nil {
 		t.Fatalf("read installation: %v", err)
 	}
@@ -182,7 +184,7 @@ func TestAnInstallationWithAutoUpdateOffIsLeftAlone(t *testing.T) {
 	pool, tenantID := fixture(t, installed)
 
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE app_installations SET auto_update = FALSE WHERE tenant_id = $1`, tenantID); err != nil {
+		`UPDATE tenant.app_installations SET auto_update = FALSE WHERE tenant_id = $1`, tenantID); err != nil {
 		t.Fatal(err)
 	}
 

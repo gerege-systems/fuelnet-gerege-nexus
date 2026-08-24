@@ -68,7 +68,7 @@ func (h *Handlers) HandleCreateEnrollmentCode(w http.ResponseWriter, r *http.Req
 		return
 	}
 	expires := time.Now().Add(enrollmentTTL)
-	_, err = h.db.Exec(r.Context(), `INSERT INTO device_enrollment_codes(tenant_id,code_hash,created_by,expires_at) VALUES($1,$2,$3,$4)`, claims.TenantID, secretHash(code), claims.UserID, expires)
+	_, err = h.db.Exec(r.Context(), `INSERT INTO tenant.device_enrollment_codes(tenant_id,code_hash,created_by,expires_at) VALUES($1,$2,$3,$4)`, claims.TenantID, secretHash(code), claims.UserID, expires)
 	if err != nil {
 		httpx.Error(w, 500, "failed to persist enrollment code")
 		return
@@ -122,9 +122,9 @@ func (h *Handlers) HandleEnrollDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var deviceID string
-	err = tx.QueryRow(r.Context(), `INSERT INTO devices(tenant_id,name,platform,form_factor,site,token_hash,app_version,os_version,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()) RETURNING id::text`, tenantID, req.Name, req.Platform, req.FormFactor, strings.TrimSpace(req.Site), secretHash(token), strings.TrimSpace(req.AppVersion), strings.TrimSpace(req.OSVersion)).Scan(&deviceID)
+	err = tx.QueryRow(r.Context(), `INSERT INTO tenant.devices(tenant_id,name,platform,form_factor,site,token_hash,app_version,os_version,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()) RETURNING id::text`, tenantID, req.Name, req.Platform, req.FormFactor, strings.TrimSpace(req.Site), secretHash(token), strings.TrimSpace(req.AppVersion), strings.TrimSpace(req.OSVersion)).Scan(&deviceID)
 	if err == nil {
-		_, err = tx.Exec(r.Context(), `UPDATE device_enrollment_codes SET used_at=NOW() WHERE id=$1 AND used_at IS NULL`, codeID)
+		_, err = tx.Exec(r.Context(), `UPDATE tenant.device_enrollment_codes SET used_at=NOW() WHERE id=$1 AND used_at IS NULL`, codeID)
 	}
 	if err != nil || tx.Commit(r.Context()) != nil {
 		httpx.Error(w, 503, "enrollment could not be completed")
@@ -189,7 +189,7 @@ func (h *Handlers) HandleRotateDeviceToken(w http.ResponseWriter, r *http.Reques
 		httpx.Error(w, 500, "failed to rotate device token")
 		return
 	}
-	result, err := h.db.Exec(r.Context(), `UPDATE devices SET token_hash=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='ACTIVE'`, claims.ID, claims.TenantID, secretHash(token))
+	result, err := h.db.Exec(r.Context(), `UPDATE tenant.devices SET token_hash=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='ACTIVE'`, claims.ID, claims.TenantID, secretHash(token))
 	if err != nil || result.RowsAffected() != 1 {
 		httpx.Error(w, 503, "device token rotation failed")
 		return
@@ -216,7 +216,7 @@ func (h *Handlers) HandleUpdateDeviceStatus(w http.ResponseWriter, r *http.Reque
 		httpx.Error(w, 400, "invalid device status")
 		return
 	}
-	result, err := h.db.Exec(r.Context(), `UPDATE devices SET status=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, req.ID, tenantID, req.Status)
+	result, err := h.db.Exec(r.Context(), `UPDATE tenant.devices SET status=$3,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, req.ID, tenantID, req.Status)
 	if err != nil || result.RowsAffected() != 1 {
 		httpx.Error(w, 404, "device not found")
 		return
@@ -229,7 +229,7 @@ func (h *Handlers) HandleListDevices(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := h.db.Query(r.Context(), `SELECT id::text,name,platform,form_factor,site,status,app_version,os_version,last_seen_at,enrolled_at FROM devices WHERE tenant_id=$1 ORDER BY name`, tenantID)
+	rows, err := h.db.Query(r.Context(), `SELECT id::text,name,platform,form_factor,site,status,app_version,os_version,last_seen_at,enrolled_at FROM tenant.devices WHERE tenant_id=$1 ORDER BY name`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load devices")
 		return

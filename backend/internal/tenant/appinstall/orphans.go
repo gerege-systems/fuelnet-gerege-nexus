@@ -33,7 +33,7 @@ import (
 // meant to carry them.
 func (ai *AppInstaller) ReportUncarriedApps(ctx context.Context) {
 	rows, err := ai.db.Query(ctx,
-		`SELECT DISTINCT app_id FROM app_installations WHERE status = 'installed' AND enabled`)
+		`SELECT DISTINCT app_id FROM tenant.app_installations WHERE status = 'installed' AND enabled`)
 	if err != nil {
 		slog.Warn("catalog: could not check which installed apps this binary carries", "error", err)
 		return

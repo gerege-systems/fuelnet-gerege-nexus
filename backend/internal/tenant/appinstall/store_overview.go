@@ -167,9 +167,9 @@ func (h *Handlers) HandleStoreOverview(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) heldApps(r *http.Request, tenantID string) (map[string]bool, error) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT ai.app_id
-		   FROM app_installations ai
+		   FROM tenant.app_installations ai
 		   JOIN LATERAL (
-		        SELECT e.event_type FROM installation_events e
+		        SELECT e.event_type FROM tenant.installation_events e
 		         WHERE e.installation_id = ai.id
 		         ORDER BY e.created_at DESC, e.id LIMIT 1
 		   ) latest ON TRUE

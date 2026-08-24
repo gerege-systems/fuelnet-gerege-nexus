@@ -62,8 +62,8 @@ func (s *Service) HandleSetPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.db.Exec(r.Context(),
-		`INSERT INTO staff_pin_credentials(membership_id,tenant_id,pin_hash)
-		 SELECT id,tenant_id,$3 FROM memberships WHERE id=$1 AND tenant_id=$2
+		`INSERT INTO tenant.staff_pin_credentials(membership_id,tenant_id,pin_hash)
+		 SELECT id,tenant_id,$3 FROM tenant.memberships WHERE id=$1 AND tenant_id=$2
 		 ON CONFLICT(membership_id) DO UPDATE
 		    SET pin_hash=EXCLUDED.pin_hash,active=true,failed_attempts=0,locked_until=NULL,updated_at=NOW()`,
 		req.MembershipID, claims.TenantID, hash)
@@ -84,9 +84,9 @@ func (s *Service) Verify(ctx context.Context, tenantID, secret string) (nexus.St
 
 	rows, err := s.db.Query(ctx,
 		`SELECT p.membership_id::text,p.pin_hash,m.user_id::text,u.name,u.email,p.locked_until
-		   FROM staff_pin_credentials p
-		   JOIN memberships m ON m.id = p.membership_id
-		   JOIN users u ON u.id = m.user_id
+		   FROM tenant.staff_pin_credentials p
+		   JOIN tenant.memberships m ON m.id = p.membership_id
+		   JOIN platform.users u ON u.id = m.user_id
 		  WHERE p.tenant_id = $1 AND p.active`, tenantID)
 	if err != nil {
 		return nexus.StaffIdentity{}, err

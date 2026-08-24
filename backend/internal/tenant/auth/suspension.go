@@ -194,7 +194,7 @@ func (q QuotaRail) Gate(kind string) func(http.Handler) http.Handler {
 // gate on this platform does — the seventh handler is written by somebody who
 // has not read the other six.
 //
-// The count comes from usage_events, which is rewritten a few times a day, so
+// The count comes from platform.usage_events, which is rewritten a few times a day, so
 // an organisation can cross its limit by however many calls it makes between
 // two collections. That is deliberate: the alternative is a counter written on
 // every request, and an AI limit is a commercial boundary rather than a

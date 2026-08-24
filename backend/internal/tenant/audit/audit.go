@@ -109,7 +109,7 @@ func persist(ctx context.Context, tenantID, userID, action, resource string, det
 	defer cancel()
 
 	_, err := db.Exec(writeCtx,
-		`INSERT INTO audit_events (tenant_id, user_id, action, resource, details)
+		`INSERT INTO tenant.audit_events (tenant_id, user_id, action, resource, details)
 		 VALUES (NULLIF($1, '')::uuid, NULLIF($2, ''), $3, $4, $5)`,
 		tenantID, userID, action, resource, details)
 	if err != nil {

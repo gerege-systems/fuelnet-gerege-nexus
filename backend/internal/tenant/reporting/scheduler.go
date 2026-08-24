@@ -178,7 +178,7 @@ func (s *Scheduler) claimDue(ctx context.Context, now time.Time) ([]dueSchedule,
 	rows, err := conn.Query(ctx, `
 		SELECT id, tenant_id, report_key, name, params, cron, format, recipients,
 		       coalesce(created_by::text, ''), last_run_at
-		  FROM report_schedules
+		  FROM tenant.report_schedules
 		 WHERE active`)
 	if err != nil {
 		return nil, err
@@ -233,7 +233,7 @@ func (s *Scheduler) claimDue(ctx context.Context, now time.Time) ([]dueSchedule,
 
 	if len(claimed) > 0 {
 		if _, err := conn.Exec(ctx,
-			`UPDATE report_schedules SET last_run_at = $2, updated_at = NOW() WHERE id = ANY($1)`,
+			`UPDATE tenant.report_schedules SET last_run_at = $2, updated_at = NOW() WHERE id = ANY($1)`,
 			claimed, minute); err != nil {
 			// Nothing is sent if the claim could not be written. Sending
 			// anyway would be the double-delivery this whole function exists
@@ -259,7 +259,7 @@ func (s *Scheduler) run(ctx context.Context, schedule dueSchedule) {
 	// month is exactly the thing nobody notices: the report simply stops
 	// arriving, and only the recipient knows.
 	if _, err := s.engine.DB().Exec(nexus.WithoutTenant(context.WithoutCancel(ctx)),
-		`UPDATE report_schedules SET last_status = $2, last_error = $3, updated_at = NOW() WHERE id = $1`,
+		`UPDATE tenant.report_schedules SET last_status = $2, last_error = $3, updated_at = NOW() WHERE id = $1`,
 		schedule.ID, status, truncate(failure, 500)); err != nil {
 		slog.Error("reports: could not record a scheduled run", "schedule_id", schedule.ID, "error", err)
 	}
@@ -380,7 +380,7 @@ func ListSchedules(ctx context.Context, q interface {
 }, tenantID string) ([]ScheduleRow, error) {
 
 	rows, err := q.Query(ctx,
-		`SELECT `+scheduleColumns+` FROM report_schedules
+		`SELECT `+scheduleColumns+` FROM tenant.report_schedules
 		  WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
 	if err != nil {
 		return nil, err

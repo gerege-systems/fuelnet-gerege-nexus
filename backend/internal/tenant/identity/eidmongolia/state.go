@@ -46,7 +46,7 @@ func (s *stateStore) Set(ctx context.Context, key string, value any) error {
 		return err
 	}
 	_, err = s.db.Exec(ctx,
-		`INSERT INTO eid_sign_state (key, value, expires_at)
+		`INSERT INTO platform.eid_sign_state (key, value, expires_at)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (key) DO UPDATE
 		    SET value = EXCLUDED.value, updated_at = NOW(), expires_at = EXCLUDED.expires_at`,
@@ -62,7 +62,7 @@ func (s *stateStore) Set(ctx context.Context, key string, value any) error {
 func (s *stateStore) Get(ctx context.Context, key string) (string, error) {
 	var value string
 	err := s.db.QueryRow(ctx,
-		`SELECT value FROM eid_sign_state WHERE key = $1 AND expires_at > NOW()`, key).Scan(&value)
+		`SELECT value FROM platform.eid_sign_state WHERE key = $1 AND expires_at > NOW()`, key).Scan(&value)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("eidmongolia: signing state %q not found", key)
 	}
@@ -85,7 +85,7 @@ func encodeState(value any) (string, error) {
 
 // sweepState deletes abandoned ceremonies.
 func (s *Service) sweepState(ctx context.Context) (int64, error) {
-	tag, err := s.db.Exec(ctx, `DELETE FROM eid_sign_state WHERE expires_at < NOW()`)
+	tag, err := s.db.Exec(ctx, `DELETE FROM platform.eid_sign_state WHERE expires_at < NOW()`)
 	if err != nil {
 		return 0, err
 	}

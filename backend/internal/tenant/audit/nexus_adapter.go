@@ -26,7 +26,7 @@ const maxAuditPage = 500
 //
 // Reading was the half a module never had. nexus.Audit has written to this
 // trail since the SDK existed, so an app that shows "what has this organisation
-// looked up" had to reach into audit_events with its own SQL — a dependency on
+// looked up" had to reach into tenant.audit_events with its own SQL — a dependency on
 // a platform table that no compiler sees and that survives the app moving to
 // another repository.
 //
@@ -55,7 +55,7 @@ func (r reader) RecentByPrefix(ctx context.Context, tenantID string, prefixes []
 
 	rows, err := r.db.Query(ctx,
 		`SELECT action, COALESCE(user_id, ''), details, created_at
-		   FROM audit_events
+		   FROM tenant.audit_events
 		  WHERE tenant_id = $1 AND action LIKE ANY($2)
 		  ORDER BY created_at DESC
 		  LIMIT $3`, tenantID, patterns, limit)

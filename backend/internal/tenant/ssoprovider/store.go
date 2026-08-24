@@ -150,7 +150,7 @@ func (s *Store) CreateClient(ctx context.Context, c *Client, secretHash, created
 		creator = &createdBy
 	}
 	row := s.db.QueryRow(ctx, `
-		INSERT INTO oauth2_clients
+		INSERT INTO tenant.oauth2_clients
 			(tenant_id, client_id, client_secret_hash, client_name, client_uri, logo_uri,
 			 client_type, redirect_uris, grant_types, scopes, post_logout_redirect_uris, created_by)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
@@ -165,7 +165,7 @@ func (s *Store) CreateClient(ctx context.Context, c *Client, secretHash, created
 // token endpoint has to find it before any tenant context exists.
 func (s *Store) GetClient(ctx context.Context, clientID string) (*Client, error) {
 	return scanClient(s.db.QueryRow(ctx,
-		`SELECT `+clientColumns+` FROM oauth2_clients WHERE client_id = $1`, clientID))
+		`SELECT `+clientColumns+` FROM tenant.oauth2_clients WHERE client_id = $1`, clientID))
 }
 
 // GetTenantClient resolves a client that the given tenant owns. Every developer
@@ -173,14 +173,14 @@ func (s *Store) GetClient(ctx context.Context, clientID string) (*Client, error)
 // tenant's client_id and act on it.
 func (s *Store) GetTenantClient(ctx context.Context, tenantID, clientID string) (*Client, error) {
 	return scanClient(s.db.QueryRow(ctx,
-		`SELECT `+clientColumns+` FROM oauth2_clients WHERE tenant_id = $1 AND client_id = $2`,
+		`SELECT `+clientColumns+` FROM tenant.oauth2_clients WHERE tenant_id = $1 AND client_id = $2`,
 		tenantID, clientID))
 }
 
 // ListClients returns one tenant's clients, newest first.
 func (s *Store) ListClients(ctx context.Context, tenantID string) ([]*Client, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT `+clientColumns+` FROM oauth2_clients WHERE tenant_id = $1 ORDER BY created_at DESC`,
+		`SELECT `+clientColumns+` FROM tenant.oauth2_clients WHERE tenant_id = $1 ORDER BY created_at DESC`,
 		tenantID)
 	if err != nil {
 		return nil, err
@@ -201,7 +201,7 @@ func (s *Store) ListClients(ctx context.Context, tenantID string) ([]*Client, er
 // UpdateClient applies the editable fields of a tenant's client.
 func (s *Store) UpdateClient(ctx context.Context, tenantID string, c *Client) (*Client, error) {
 	return scanClient(s.db.QueryRow(ctx, `
-		UPDATE oauth2_clients
+		UPDATE tenant.oauth2_clients
 		   SET client_name = $3, client_uri = $4, logo_uri = $5,
 		       redirect_uris = $6, grant_types = $7, scopes = $8,
 		       post_logout_redirect_uris = $9, disabled = $10, updated_at = NOW()
@@ -229,7 +229,7 @@ func list(values []string) []string {
 // RotateClientSecret replaces the stored digest and stamps the rotation.
 func (s *Store) RotateClientSecret(ctx context.Context, tenantID, clientID, secretHash string) error {
 	tag, err := s.db.Exec(ctx, `
-		UPDATE oauth2_clients
+		UPDATE tenant.oauth2_clients
 		   SET client_secret_hash = $3, secret_rotated_at = NOW(), updated_at = NOW()
 		 WHERE tenant_id = $1 AND client_id = $2 AND client_type = 'confidential'`,
 		tenantID, clientID, secretHash)
@@ -246,7 +246,7 @@ func (s *Store) RotateClientSecret(ctx context.Context, tenantID, clientID, secr
 // deleting a compromised integration cuts off everything it ever issued.
 func (s *Store) DeleteClient(ctx context.Context, tenantID, clientID string) error {
 	tag, err := s.db.Exec(ctx,
-		`DELETE FROM oauth2_clients WHERE tenant_id = $1 AND client_id = $2`, tenantID, clientID)
+		`DELETE FROM tenant.oauth2_clients WHERE tenant_id = $1 AND client_id = $2`, tenantID, clientID)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (s *Store) DeleteClient(ctx context.Context, tenantID, clientID string) err
 func (s *Store) VerifyClientSecret(ctx context.Context, clientID, secret string) (*Client, error) {
 	var stored *string
 	err := s.db.QueryRow(ctx,
-		`SELECT client_secret_hash FROM oauth2_clients WHERE client_id = $1 AND NOT disabled`,
+		`SELECT client_secret_hash FROM tenant.oauth2_clients WHERE client_id = $1 AND NOT disabled`,
 		clientID).Scan(&stored)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrInvalidClient
@@ -279,13 +279,13 @@ func (s *Store) VerifyClientSecret(ctx context.Context, clientID, secret string)
 // TouchClient records that a client just exchanged a token; the portal shows it
 // so an integrator can spot a credential nobody uses any more.
 func (s *Store) TouchClient(ctx context.Context, clientID string) {
-	_, _ = s.db.Exec(ctx, `UPDATE oauth2_clients SET last_used_at = NOW() WHERE client_id = $1`, clientID)
+	_, _ = s.db.Exec(ctx, `UPDATE tenant.oauth2_clients SET last_used_at = NOW() WHERE client_id = $1`, clientID)
 }
 
 // SaveAuthCode stores an issued authorization code by digest.
 func (s *Store) SaveAuthCode(ctx context.Context, ac *AuthCode) error {
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO oauth2_authorization_codes
+		INSERT INTO tenant.oauth2_authorization_codes
 			(code_hash, client_id, tenant_id, user_id, redirect_uri, scopes,
 			 code_challenge, code_challenge_method, nonce, expires_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
@@ -304,7 +304,7 @@ var ErrCodeReplayed = errors.New("authorization code already used")
 func (s *Store) ConsumeAuthCode(ctx context.Context, codeHash string) (*AuthCode, error) {
 	var ac AuthCode
 	err := s.db.QueryRow(ctx, `
-		UPDATE oauth2_authorization_codes
+		UPDATE tenant.oauth2_authorization_codes
 		   SET consumed_at = NOW()
 		 WHERE code_hash = $1 AND consumed_at IS NULL AND expires_at > NOW()
 		RETURNING code_hash, client_id, tenant_id, user_id, redirect_uri, scopes,
@@ -317,7 +317,7 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, codeHash string) (*AuthCode
 		// Only the last case is an attack, and it is worth distinguishing.
 		var consumed bool
 		if lookupErr := s.db.QueryRow(ctx,
-			`SELECT consumed_at IS NOT NULL FROM oauth2_authorization_codes WHERE code_hash = $1`,
+			`SELECT consumed_at IS NOT NULL FROM tenant.oauth2_authorization_codes WHERE code_hash = $1`,
 			codeHash).Scan(&consumed); lookupErr == nil && consumed {
 			return nil, ErrCodeReplayed
 		}
@@ -332,7 +332,7 @@ func (s *Store) ConsumeAuthCode(ctx context.Context, codeHash string) (*AuthCode
 // SaveToken records an issued token by digest.
 func (s *Store) SaveToken(ctx context.Context, t *Token) (*Token, error) {
 	err := s.db.QueryRow(ctx, `
-		INSERT INTO oauth2_tokens
+		INSERT INTO tenant.oauth2_tokens
 			(token_hash, token_type, client_id, tenant_id, user_id, scopes,
 			 parent_id, auth_code_hash, expires_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -351,7 +351,7 @@ func (s *Store) GetToken(ctx context.Context, token, tokenType string) (*Token, 
 	err := s.db.QueryRow(ctx, `
 		SELECT id, token_hash, token_type, client_id, tenant_id, user_id, scopes,
 		       parent_id, auth_code_hash, expires_at, revoked_at
-		  FROM oauth2_tokens
+		  FROM tenant.oauth2_tokens
 		 WHERE token_hash = $1 AND token_type = $2`,
 		hashSecret(token), tokenType).
 		Scan(&t.ID, &t.TokenHash, &t.TokenType, &t.ClientID, &t.TenantID, &t.UserID, &t.Scopes,
@@ -368,7 +368,7 @@ func (s *Store) GetToken(ctx context.Context, token, tokenType string) (*Token, 
 // RevokeToken invalidates a single token, whatever its type.
 func (s *Store) RevokeToken(ctx context.Context, token string) error {
 	_, err := s.db.Exec(ctx,
-		`UPDATE oauth2_tokens SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
+		`UPDATE tenant.oauth2_tokens SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
 		hashSecret(token))
 	return err
 }
@@ -382,11 +382,11 @@ func (s *Store) RevokeToken(ctx context.Context, token string) error {
 func (s *Store) RevokeFamily(ctx context.Context, tokenID string) error {
 	_, err := s.db.Exec(ctx, `
 		WITH RECURSIVE family AS (
-			SELECT id FROM oauth2_tokens WHERE id = $1
+			SELECT id FROM tenant.oauth2_tokens WHERE id = $1
 			UNION ALL
-			SELECT t.id FROM oauth2_tokens t JOIN family f ON t.parent_id = f.id
+			SELECT t.id FROM tenant.oauth2_tokens t JOIN family f ON t.parent_id = f.id
 		)
-		UPDATE oauth2_tokens SET revoked_at = NOW()
+		UPDATE tenant.oauth2_tokens SET revoked_at = NOW()
 		 WHERE id IN (SELECT id FROM family) AND revoked_at IS NULL`, tokenID)
 	return err
 }
@@ -395,7 +395,7 @@ func (s *Store) RevokeFamily(ctx context.Context, tokenID string) error {
 // is what a replayed code calls for.
 func (s *Store) RevokeByAuthCode(ctx context.Context, codeHash string) error {
 	_, err := s.db.Exec(ctx,
-		`UPDATE oauth2_tokens SET revoked_at = NOW() WHERE auth_code_hash = $1 AND revoked_at IS NULL`,
+		`UPDATE tenant.oauth2_tokens SET revoked_at = NOW() WHERE auth_code_hash = $1 AND revoked_at IS NULL`,
 		codeHash)
 	return err
 }
@@ -404,14 +404,14 @@ func (s *Store) RevokeByAuthCode(ctx context.Context, codeHash string) error {
 // the in-memory token map grew for the lifetime of the process.
 func (s *Store) DeleteExpired(ctx context.Context) (int64, error) {
 	codes, err := s.db.Exec(ctx,
-		`DELETE FROM oauth2_authorization_codes WHERE expires_at < NOW() - INTERVAL '1 hour'`)
+		`DELETE FROM tenant.oauth2_authorization_codes WHERE expires_at < NOW() - INTERVAL '1 hour'`)
 	if err != nil {
 		return 0, err
 	}
 	// Revoked tokens are kept for a day so that introspection can still answer
 	// "inactive" rather than "never existed" for a token just pulled.
 	tokens, err := s.db.Exec(ctx,
-		`DELETE FROM oauth2_tokens
+		`DELETE FROM tenant.oauth2_tokens
 		  WHERE expires_at < NOW() - INTERVAL '24 hours'
 		     OR (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '24 hours')`)
 	if err != nil {
@@ -424,7 +424,7 @@ func (s *Store) DeleteExpired(ctx context.Context) (int64, error) {
 func (s *Store) GetConsent(ctx context.Context, userID, clientID string) ([]string, error) {
 	var scopes []string
 	err := s.db.QueryRow(ctx,
-		`SELECT scopes FROM oauth2_consents WHERE user_id = $1 AND client_id = $2`,
+		`SELECT scopes FROM tenant.oauth2_consents WHERE user_id = $1 AND client_id = $2`,
 		userID, clientID).Scan(&scopes)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -435,7 +435,7 @@ func (s *Store) GetConsent(ctx context.Context, userID, clientID string) ([]stri
 // SaveConsent records a grant, widening it if the user approves more later.
 func (s *Store) SaveConsent(ctx context.Context, tenantID, userID, clientID string, scopes []string) error {
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO oauth2_consents (tenant_id, user_id, client_id, scopes)
+		INSERT INTO tenant.oauth2_consents (tenant_id, user_id, client_id, scopes)
 		VALUES ($1,$2,$3,$4)
 		ON CONFLICT (user_id, client_id)
 		DO UPDATE SET scopes = EXCLUDED.scopes, granted_at = NOW()`,
@@ -446,11 +446,11 @@ func (s *Store) SaveConsent(ctx context.Context, tenantID, userID, clientID stri
 // RevokeConsent withdraws a grant and every token issued under it.
 func (s *Store) RevokeConsent(ctx context.Context, userID, clientID string) error {
 	if _, err := s.db.Exec(ctx,
-		`DELETE FROM oauth2_consents WHERE user_id = $1 AND client_id = $2`, userID, clientID); err != nil {
+		`DELETE FROM tenant.oauth2_consents WHERE user_id = $1 AND client_id = $2`, userID, clientID); err != nil {
 		return err
 	}
 	_, err := s.db.Exec(ctx,
-		`UPDATE oauth2_tokens SET revoked_at = NOW()
+		`UPDATE tenant.oauth2_tokens SET revoked_at = NOW()
 		  WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL`, userID, clientID)
 	return err
 }
@@ -467,7 +467,7 @@ type signingKey struct {
 func (s *Store) ActiveSigningKey(ctx context.Context) (*signingKey, error) {
 	var kid, privatePEM string
 	err := s.db.QueryRow(ctx,
-		`SELECT kid, private_key_pem FROM oauth2_signing_keys WHERE active LIMIT 1`).
+		`SELECT kid, private_key_pem FROM platform.oauth2_signing_keys WHERE active LIMIT 1`).
 		Scan(&kid, &privatePEM)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -504,12 +504,12 @@ func (s *Store) generateSigningKey(ctx context.Context) (*signingKey, error) {
 	// together, one insert loses the race — it then reads the winner's key
 	// rather than failing, so both end up signing with the same kid.
 	_, err = s.db.Exec(ctx, `
-		INSERT INTO oauth2_signing_keys (kid, private_key_pem, public_key_pem)
+		INSERT INTO platform.oauth2_signing_keys (kid, private_key_pem, public_key_pem)
 		VALUES ($1,$2,$3)`, kid, privatePEM, publicPEM)
 	if err != nil {
 		var loadedKID, loadedPEM string
 		if lookupErr := s.db.QueryRow(ctx,
-			`SELECT kid, private_key_pem FROM oauth2_signing_keys WHERE active LIMIT 1`).
+			`SELECT kid, private_key_pem FROM platform.oauth2_signing_keys WHERE active LIMIT 1`).
 			Scan(&loadedKID, &loadedPEM); lookupErr == nil {
 			parsed, parseErr := parsePrivateKeyPEM(loadedPEM)
 			if parseErr != nil {
@@ -527,7 +527,7 @@ func (s *Store) generateSigningKey(ctx context.Context) (*signingKey, error) {
 // plus any retired key whose tokens have not all expired yet.
 func (s *Store) PublicKeys(ctx context.Context) ([]map[string]any, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT kid, public_key_pem FROM oauth2_signing_keys ORDER BY active DESC, created_at DESC`)
+		`SELECT kid, public_key_pem FROM platform.oauth2_signing_keys ORDER BY active DESC, created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -559,7 +559,7 @@ func (s *Store) PublicKeys(ctx context.Context) ([]map[string]any, error) {
 // request. Retired keys are included — an id_token minted before a rotation is
 // still a truthful hint about who is signing out.
 func (s *Store) VerificationKeys(ctx context.Context) (map[string]*rsa.PublicKey, error) {
-	rows, err := s.db.Query(ctx, `SELECT kid, public_key_pem FROM oauth2_signing_keys`)
+	rows, err := s.db.Query(ctx, `SELECT kid, public_key_pem FROM platform.oauth2_signing_keys`)
 	if err != nil {
 		return nil, err
 	}
@@ -644,9 +644,9 @@ func (s *Store) ClientActivityByTenant(ctx context.Context, tenantID string) ([]
 		SELECT c.client_id, c.client_name, c.client_type, c.disabled, c.last_used_at,
 		       count(*) FILTER (WHERE t.token_type = 'access'  AND t.revoked_at IS NULL AND t.expires_at > NOW()),
 		       count(*) FILTER (WHERE t.token_type = 'refresh' AND t.revoked_at IS NULL AND t.expires_at > NOW()),
-		       (SELECT count(*) FROM oauth2_consents oc WHERE oc.client_id = c.client_id)
-		  FROM oauth2_clients c
-		  LEFT JOIN oauth2_tokens t ON t.client_id = c.client_id
+		       (SELECT count(*) FROM tenant.oauth2_consents oc WHERE oc.client_id = c.client_id)
+		  FROM tenant.oauth2_clients c
+		  LEFT JOIN tenant.oauth2_tokens t ON t.client_id = c.client_id
 		 WHERE c.tenant_id = $1
 		 GROUP BY c.client_id, c.client_name, c.client_type, c.disabled, c.last_used_at, c.created_at
 		 ORDER BY c.created_at DESC`, tenantID)
@@ -671,9 +671,9 @@ func (s *Store) ClientActivityByTenant(ctx context.Context, tenantID string) ([]
 func (s *Store) ConsentsByTenant(ctx context.Context, tenantID string, limit int) ([]ConsentRecord, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT c.client_id, c.client_name, u.id::text, u.email, u.name, oc.scopes, oc.granted_at
-		  FROM oauth2_consents oc
-		  JOIN oauth2_clients c ON c.client_id = oc.client_id
-		  JOIN users u ON u.id = oc.user_id
+		  FROM tenant.oauth2_consents oc
+		  JOIN tenant.oauth2_clients c ON c.client_id = oc.client_id
+		  JOIN platform.users u ON u.id = oc.user_id
 		 WHERE c.tenant_id = $1
 		 ORDER BY oc.granted_at DESC
 		 LIMIT $2`, tenantID, limit)
@@ -699,8 +699,8 @@ func (s *Store) ConsentsByTenant(ctx context.Context, tenantID string, limit int
 // itself should survive.
 func (s *Store) RevokeClientTokens(ctx context.Context, tenantID, clientID string) (int64, error) {
 	tag, err := s.db.Exec(ctx, `
-		UPDATE oauth2_tokens t SET revoked_at = NOW()
-		  FROM oauth2_clients c
+		UPDATE tenant.oauth2_tokens t SET revoked_at = NOW()
+		  FROM tenant.oauth2_clients c
 		 WHERE t.client_id = c.client_id
 		   AND c.tenant_id = $1 AND c.client_id = $2
 		   AND t.revoked_at IS NULL`, tenantID, clientID)
@@ -715,9 +715,9 @@ func (s *Store) RevokeClientTokens(ctx context.Context, tenantID, clientID strin
 // someone else's client is not this tenant's call.
 func (s *Store) WithdrawConsent(ctx context.Context, tenantID, clientID, userID string) error {
 	tag, err := s.db.Exec(ctx, `
-		DELETE FROM oauth2_consents oc
+		DELETE FROM tenant.oauth2_consents oc
 		 WHERE oc.client_id = $2 AND oc.user_id = $3
-		   AND EXISTS (SELECT 1 FROM oauth2_clients c
+		   AND EXISTS (SELECT 1 FROM tenant.oauth2_clients c
 		                WHERE c.client_id = oc.client_id AND c.tenant_id = $1)`,
 		tenantID, clientID, userID)
 	if err != nil {
@@ -727,7 +727,7 @@ func (s *Store) WithdrawConsent(ctx context.Context, tenantID, clientID, userID 
 		return ErrNotFound
 	}
 	_, err = s.db.Exec(ctx, `
-		UPDATE oauth2_tokens SET revoked_at = NOW()
+		UPDATE tenant.oauth2_tokens SET revoked_at = NOW()
 		 WHERE client_id = $1 AND user_id = $2 AND revoked_at IS NULL`, clientID, userID)
 	return err
 }
@@ -747,7 +747,7 @@ type SigningKeyInfo struct {
 func (s *Store) SigningKeys(ctx context.Context) ([]SigningKeyInfo, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT kid, algorithm, active, created_at, retired_at
-		   FROM oauth2_signing_keys ORDER BY active DESC, created_at DESC`)
+		   FROM platform.oauth2_signing_keys ORDER BY active DESC, created_at DESC`)
 	if err != nil {
 		return nil, err
 	}

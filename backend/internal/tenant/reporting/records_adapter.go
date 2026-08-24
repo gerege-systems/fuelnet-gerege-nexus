@@ -67,7 +67,7 @@ func (s scheduleRecords) List(ctx context.Context, tenantID string) ([]nexus.Rep
 func (s scheduleRecords) Create(ctx context.Context, tenantID string, schedule nexus.ReportSchedule) (string, error) {
 	var id string
 	err := s.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
-		INSERT INTO report_schedules
+		INSERT INTO tenant.report_schedules
 		    (tenant_id, report_key, name, params, cron, format, recipients, active, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, '')::uuid)
 		RETURNING id`,
@@ -81,7 +81,7 @@ func (s scheduleRecords) Update(ctx context.Context, tenantID, id string, schedu
 	// would be a schedule id from one organisation editing another's row, and
 	// the row-level policy is the layer that catches it — not the only one.
 	tag, err := s.db.Exec(nexus.WithTenantID(ctx, tenantID), `
-		UPDATE report_schedules
+		UPDATE tenant.report_schedules
 		   SET report_key = $3, name = $4, params = $5, cron = $6, format = $7,
 		       recipients = $8, active = $9, updated_at = NOW()
 		 WHERE id = $1 AND tenant_id = $2`,
@@ -96,7 +96,7 @@ func (s scheduleRecords) Update(ctx context.Context, tenantID, id string, schedu
 func (s scheduleRecords) Delete(ctx context.Context, tenantID, id string) (string, error) {
 	var reportKey string
 	err := s.db.QueryRow(nexus.WithTenantID(ctx, tenantID),
-		`DELETE FROM report_schedules WHERE id = $1 AND tenant_id = $2 RETURNING report_key`,
+		`DELETE FROM tenant.report_schedules WHERE id = $1 AND tenant_id = $2 RETURNING report_key`,
 		id, tenantID).Scan(&reportKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nexus.ErrReportScheduleNotFound
@@ -139,8 +139,8 @@ func (g grantRecords) List(ctx context.Context, tenantID string) ([]nexus.Report
 func (g grantRecords) History(ctx context.Context, tenantID string) ([]nexus.ReportGrantUse, error) {
 	rows, err := g.db.Query(nexus.WithTenantID(ctx, tenantID), `
 		SELECT a.created_at, a.resource, a.details, coalesce(t.name, '—')
-		  FROM audit_events a
-		  LEFT JOIN tenants t
+		  FROM tenant.audit_events a
+		  LEFT JOIN platform.tenants t
 		    ON t.id = (a.details->>'grantee_tenant_id')::uuid
 		 WHERE a.tenant_id = $1 AND a.action = 'reports.data_shared'
 		 ORDER BY a.created_at DESC
@@ -176,7 +176,7 @@ func (g grantRecords) History(ctx context.Context, tenantID string) ([]nexus.Rep
 func (g grantRecords) Request(ctx context.Context, grant nexus.ReportGrant) (string, error) {
 	var id string
 	err := g.db.QueryRow(nexus.WithTenantID(ctx, grant.GranteeTenantID), `
-		INSERT INTO report_grants
+		INSERT INTO tenant.report_grants
 		    (grantor_tenant_id, grantee_tenant_id, report_key, scope,
 		     counterparty_ref, valid_until, created_by, note)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::uuid, $8)
@@ -199,7 +199,7 @@ func (g grantRecords) Accept(ctx context.Context, grantorTenantID, id, actorUser
 	// clause a grantee could accept their own request.
 	var reportKey string
 	err := g.db.QueryRow(nexus.WithTenantID(ctx, grantorTenantID), `
-		UPDATE report_grants
+		UPDATE tenant.report_grants
 		   SET accepted_by = NULLIF($3, '')::uuid, accepted_at = NOW(), updated_at = NOW()
 		 WHERE id = $1 AND grantor_tenant_id = $2 AND revoked_at IS NULL AND accepted_at IS NULL
 		 RETURNING report_key`, id, grantorTenantID, actorUserID).Scan(&reportKey)
@@ -212,7 +212,7 @@ func (g grantRecords) Accept(ctx context.Context, grantorTenantID, id, actorUser
 func (g grantRecords) Revoke(ctx context.Context, tenantID, id string) (string, string, error) {
 	var reportKey, side string
 	err := g.db.QueryRow(nexus.WithTenantID(ctx, tenantID), `
-		UPDATE report_grants
+		UPDATE tenant.report_grants
 		   SET revoked_at = NOW(), updated_at = NOW()
 		 WHERE id = $1
 		   AND (grantor_tenant_id = $2 OR grantee_tenant_id = $2)
@@ -236,7 +236,7 @@ func (g grantRecords) OrganisationByRegistration(ctx context.Context, registrati
 	}
 	var tenantID string
 	err := g.db.QueryRow(nexus.WithoutTenant(ctx),
-		`SELECT tenant_id FROM tenant_profiles WHERE registration_number = $1`,
+		`SELECT tenant_id FROM tenant.tenant_profiles WHERE registration_number = $1`,
 		registration).Scan(&tenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nexus.ErrOrganisationNotFound
@@ -247,7 +247,7 @@ func (g grantRecords) OrganisationByRegistration(ctx context.Context, registrati
 func (g grantRecords) RegistrationOf(ctx context.Context, tenantID string) (string, error) {
 	var registration string
 	err := g.db.QueryRow(nexus.WithTenantID(ctx, tenantID),
-		`SELECT registration_number FROM tenant_profiles WHERE tenant_id = $1`,
+		`SELECT registration_number FROM tenant.tenant_profiles WHERE tenant_id = $1`,
 		tenantID).Scan(&registration)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Not having filled in a legal profile is a state, not a fault.

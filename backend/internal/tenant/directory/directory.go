@@ -41,11 +41,11 @@ func (s store) People(ctx context.Context, tenantIDs []string) ([]nexus.Director
 		        ms.active, u.is_admin, ms.created_at::text,
 		        COALESCE(ARRAY_AGG(r.code) FILTER (WHERE r.code IS NOT NULL), '{}'),
 		        ms.tenant_id::text, tn.name
-		   FROM memberships ms
-		   JOIN users u ON u.id = ms.user_id
-		   JOIN tenants tn ON tn.id = ms.tenant_id
-		   LEFT JOIN membership_roles mr ON mr.membership_id = ms.id
-		   LEFT JOIN roles r ON r.id = mr.role_id
+		   FROM tenant.memberships ms
+		   JOIN platform.users u ON u.id = ms.user_id
+		   JOIN platform.tenants tn ON tn.id = ms.tenant_id
+		   LEFT JOIN tenant.membership_roles mr ON mr.membership_id = ms.id
+		   LEFT JOIN tenant.roles r ON r.id = mr.role_id
 		  WHERE ms.tenant_id = ANY($1::uuid[])
 		  GROUP BY ms.id, u.id, tn.name
 		  ORDER BY tn.name, ms.active DESC, u.name`, tenantIDs)
@@ -74,7 +74,7 @@ func (s store) Membership(ctx context.Context, tenantID, membershipID string) (n
 	var found nexus.DirectoryMembership
 	err := s.db.QueryRow(ctx,
 		`SELECT ms.user_id::text, u.is_admin
-		   FROM memberships ms JOIN users u ON u.id = ms.user_id
+		   FROM tenant.memberships ms JOIN platform.users u ON u.id = ms.user_id
 		  WHERE ms.id = $1 AND ms.tenant_id = $2`,
 		membershipID, tenantID).Scan(&found.UserID, &found.IsAdmin)
 	if err != nil {
@@ -86,8 +86,8 @@ func (s store) Membership(ctx context.Context, tenantID, membershipID string) (n
 func (s store) CountAdmins(ctx context.Context, tenantID, exceptMembershipID string) (int, error) {
 	var count int
 	err := s.db.QueryRow(ctx,
-		`SELECT count(*) FROM memberships ms
-		   JOIN users u ON u.id = ms.user_id
+		`SELECT count(*) FROM tenant.memberships ms
+		   JOIN platform.users u ON u.id = ms.user_id
 		  WHERE ms.tenant_id = $1 AND ms.active AND u.is_admin AND ms.id <> $2`,
 		tenantID, exceptMembershipID).Scan(&count)
 	if err != nil {
@@ -98,7 +98,7 @@ func (s store) CountAdmins(ctx context.Context, tenantID, exceptMembershipID str
 
 func (s store) SetActive(ctx context.Context, tenantID, membershipID string, active bool) (bool, error) {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE memberships SET active = $3,
+		`UPDATE tenant.memberships SET active = $3,
 		        deactivated_at = CASE WHEN $3 THEN NULL ELSE NOW() END
 		  WHERE id = $1 AND tenant_id = $2`, membershipID, tenantID, active)
 	if err != nil {

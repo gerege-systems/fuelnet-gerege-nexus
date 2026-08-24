@@ -38,7 +38,7 @@ func TestHousekeepingRemovesOnlyWhatIsFinishedWith(t *testing.T) {
 		live:      time.Now().Add(10 * time.Minute),
 	} {
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO integration_oauth_states
+			`INSERT INTO tenant.integration_oauth_states
 			     (state, tenant_id, integration_id, user_id, redirect_uri, expires_at)
 			 VALUES ($1, $2, $3, $4, '', $5)`,
 			state, tenantID, conn.ID, userID, expiry); err != nil {
@@ -50,7 +50,7 @@ func TestHousekeepingRemovesOnlyWhatIsFinishedWith(t *testing.T) {
 	m.store.recordDelivery(ctx, tenantID, conn.ID, "file", "old", "OK", "", "", "")
 	m.store.recordDelivery(ctx, tenantID, conn.ID, "file", "recent", "OK", "", "", "")
 	if _, err := pool.Exec(ctx,
-		`UPDATE integration_deliveries SET created_at = $2 WHERE tenant_id = $1 AND reference = 'old'`,
+		`UPDATE tenant.integration_deliveries SET created_at = $2 WHERE tenant_id = $1 AND reference = 'old'`,
 		tenantID, time.Now().Add(-deliveryRetention-24*time.Hour)); err != nil {
 		t.Fatalf("age the delivery: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestHousekeepingRemovesOnlyWhatIsFinishedWith(t *testing.T) {
 
 	var remaining int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM integration_oauth_states WHERE state = $1`, abandoned).
+		`SELECT count(*) FROM tenant.integration_oauth_states WHERE state = $1`, abandoned).
 		Scan(&remaining); err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestHousekeepingRemovesOnlyWhatIsFinishedWith(t *testing.T) {
 	}
 
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM integration_oauth_states WHERE state = $1`, live).Scan(&remaining); err != nil {
+		`SELECT count(*) FROM tenant.integration_oauth_states WHERE state = $1`, live).Scan(&remaining); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if remaining != 1 {

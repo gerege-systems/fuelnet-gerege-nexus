@@ -74,26 +74,28 @@ func newGateFixture(t *testing.T) *gateFixture {
 
 	f := &gateFixture{server: server, pool: pool}
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (slug, name) VALUES ('gate-' || substr(gen_random_uuid()::text, 1, 8), 'Gate test')
+		`INSERT INTO platform.tenants (slug, name) VALUES ('gate-' || substr(gen_random_uuid()::text, 1, 8), 'Gate test')
 		 RETURNING id::text`).Scan(&f.tenantID); err != nil {
 		t.Fatalf("tenant: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, f.tenantID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1`, f.tenantID)
+	})
 
 	// An administrator, so nothing below is refused for want of a permission —
 	// what is under test is the installation check, and a 403 that could be
 	// either would prove nothing.
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, name, is_admin)
+		`INSERT INTO platform.users (email, password_hash, name, is_admin)
 		 VALUES ('gate-' || substr(gen_random_uuid()::text, 1, 8) || '@example.com', 'x', 'Gate Admin', TRUE)
 		 RETURNING id::text`).Scan(&f.userID); err != nil {
 		t.Fatalf("user: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, f.userID) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id = $1`, f.userID) })
 
 	var membershipID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1, $2) RETURNING id::text`,
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1, $2) RETURNING id::text`,
 		f.tenantID, f.userID).Scan(&membershipID); err != nil {
 		t.Fatalf("membership: %v", err)
 	}
@@ -104,11 +106,11 @@ func newGateFixture(t *testing.T) *gateFixture {
 	// refusal as an app-gate refusal.
 	if _, err := pool.Exec(ctx,
 		`WITH r AS (
-		     INSERT INTO roles (tenant_id, code, name) VALUES ($1, 'admin', 'Administrator')
+		     INSERT INTO tenant.roles (tenant_id, code, name) VALUES ($1, 'admin', 'Administrator')
 		     ON CONFLICT (tenant_id, code) DO UPDATE SET active = TRUE
 		     RETURNING id
 		 )
-		 INSERT INTO membership_roles (membership_id, role_id)
+		 INSERT INTO tenant.membership_roles (membership_id, role_id)
 		 SELECT $2::uuid, r.id FROM r ON CONFLICT DO NOTHING`,
 		f.tenantID, membershipID); err != nil {
 		t.Fatalf("admin role: %v", err)
@@ -142,7 +144,7 @@ func (f *gateFixture) do(t *testing.T, method, target, body string) *httptest.Re
 func (f *gateFixture) install(t *testing.T, appID string) {
 	t.Helper()
 	if _, err := f.pool.Exec(context.Background(),
-		`INSERT INTO app_installations (tenant_id, app_id, installed_version, status, enabled)
+		`INSERT INTO tenant.app_installations (tenant_id, app_id, installed_version, status, enabled)
 		 VALUES ($1, $2, '1.0.0', 'installed', TRUE)
 		 ON CONFLICT (tenant_id, app_id) DO UPDATE SET enabled = TRUE, status = 'installed'`,
 		f.tenantID, appID); err != nil {

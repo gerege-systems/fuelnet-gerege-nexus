@@ -99,7 +99,7 @@ func (ai *AppInstaller) AutoUpdate(ctx context.Context) (AutoUpdateResult, error
 
 	rows, err := ai.db.Query(ctx,
 		`SELECT tenant_id::text, app_id, installed_version, auto_update, COALESCE(pinned_version, '')
-		   FROM app_installations`)
+		   FROM tenant.app_installations`)
 	if err != nil {
 		return result, err
 	}
@@ -185,7 +185,7 @@ func (ai *AppInstaller) AutoUpdate(ctx context.Context) (AutoUpdateResult, error
 // running that code, so there is nothing for them to approve that they have not
 // already been given by the platform's own release.
 //
-// The installed version's manifest comes from app_versions, which SyncCatalog
+// The installed version's manifest comes from platform.app_versions, which SyncCatalog
 // has been filling since the version history was added. An installation older
 // than that has no row, and this returns an error rather than a guess.
 func (ai *AppInstaller) widenedGrant(ctx context.Context, app catalog.CatalogApp, installedVersion string) ([]string, error) {
@@ -195,7 +195,7 @@ func (ai *AppInstaller) widenedGrant(ctx context.Context, app catalog.CatalogApp
 
 	var encoded []byte
 	err := ai.db.QueryRow(ctx,
-		`SELECT manifest FROM app_versions WHERE app_id = $1 AND version = $2`,
+		`SELECT manifest FROM platform.app_versions WHERE app_id = $1 AND version = $2`,
 		app.ID, installedVersion).Scan(&encoded)
 	if err != nil {
 		return nil, fmt.Errorf("read the manifest of %s %s: %w", app.ID, installedVersion, err)
@@ -254,7 +254,7 @@ func (ai *AppInstaller) holdForApproval(ctx context.Context, entry AutoUpdateEnt
 
 	var installID string
 	if err := tx.QueryRow(ctx,
-		`UPDATE app_installations SET pinned_version = installed_version, updated_at = $1
+		`UPDATE tenant.app_installations SET pinned_version = installed_version, updated_at = $1
 		  WHERE tenant_id = $2 AND app_id = $3 AND pinned_version IS NULL
 		  RETURNING id::text`,
 		time.Now(), entry.TenantID, entry.AppID).Scan(&installID); err != nil {
@@ -282,10 +282,10 @@ func (ai *AppInstaller) SetAutoUpdate(ctx context.Context, tenantID, appSlug str
 		return fmt.Errorf("%w: %s", ErrAppNotFound, appSlug)
 	}
 
-	query := `UPDATE app_installations SET auto_update = $1, updated_at = $2
+	query := `UPDATE tenant.app_installations SET auto_update = $1, updated_at = $2
 	           WHERE tenant_id = $3 AND app_id = $4`
 	if enabled {
-		query = `UPDATE app_installations SET auto_update = $1, pinned_version = NULL, updated_at = $2
+		query = `UPDATE tenant.app_installations SET auto_update = $1, pinned_version = NULL, updated_at = $2
 		          WHERE tenant_id = $3 AND app_id = $4`
 	}
 

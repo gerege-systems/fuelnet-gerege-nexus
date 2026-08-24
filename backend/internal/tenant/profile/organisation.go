@@ -74,9 +74,9 @@ const tenantProfileColumns = `SELECT t.id::text, t.slug, t.name,
 	p.province, p.district, p.khoroo, p.address_line, p.postal_code,
 	p.phone, p.email, p.website, p.logo_url, p.timezone, p.locale, p.currency,
 	COALESCE(p.parent_tenant_id::text, ''), COALESCE(parent.name, '')
-	FROM tenants t
-	JOIN tenant_profiles p ON p.tenant_id = t.id
-	LEFT JOIN tenants parent ON parent.id = p.parent_tenant_id
+	FROM platform.tenants t
+	JOIN tenant.tenant_profiles p ON p.tenant_id = t.id
+	LEFT JOIN platform.tenants parent ON parent.id = p.parent_tenant_id
 	WHERE t.id = $1`
 
 // HandleGetTenantProfile answers for any member of the organisation. It used to
@@ -172,7 +172,7 @@ func (h *Handlers) HandleUpdateTenantProfile(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		if _, err := tx.Exec(r.Context(),
-			`UPDATE tenants SET name = $1 WHERE id = $2`, strings.TrimSpace(*body.Name), tenantID); err != nil {
+			`UPDATE platform.tenants SET name = $1 WHERE id = $2`, strings.TrimSpace(*body.Name), tenantID); err != nil {
 			slog.Error("tenant: could not rename the organisation", "error", err, "tenant_id", tenantID)
 			httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
 			return
@@ -181,7 +181,7 @@ func (h *Handlers) HandleUpdateTenantProfile(w http.ResponseWriter, r *http.Requ
 
 	if body.ParentTenantID != nil {
 		if _, err := tx.Exec(r.Context(),
-			`UPDATE tenant_profiles SET parent_tenant_id = $2::uuid, updated_at = NOW()
+			`UPDATE tenant.tenant_profiles SET parent_tenant_id = $2::uuid, updated_at = NOW()
 			 WHERE tenant_id = $1`, tenantID, parent); err != nil {
 			slog.Error("tenant: could not set the parent organisation", "error", err, "tenant_id", tenantID)
 			httpx.Error(w, http.StatusInternalServerError, "could not save the organisation")
@@ -190,7 +190,7 @@ func (h *Handlers) HandleUpdateTenantProfile(w http.ResponseWriter, r *http.Requ
 	}
 
 	if _, err := tx.Exec(r.Context(),
-		`UPDATE tenant_profiles SET
+		`UPDATE tenant.tenant_profiles SET
 		     legal_name          = COALESCE($2, legal_name),
 		     registration_number = COALESCE($3, registration_number),
 		     tax_number          = COALESCE($4, tax_number),
@@ -264,7 +264,7 @@ func (h *Handlers) resolveParentTenant(w http.ResponseWriter, r *http.Request, t
 
 	var member bool
 	if err := h.db.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM memberships
+		`SELECT EXISTS (SELECT 1 FROM tenant.memberships
 		                 WHERE tenant_id = $1::uuid AND user_id = $2 AND active)`,
 		parentID, claims.UserID).Scan(&member); err != nil {
 		slog.Error("tenant: could not check the parent organisation", "error", err, "parent", parentID)
@@ -292,7 +292,7 @@ func (h *Handlers) resolveParentTenant(w http.ResponseWriter, r *http.Request, t
 		}
 		var next string
 		if err := h.db.QueryRow(ctx,
-			`SELECT COALESCE(parent_tenant_id::text, '') FROM tenant_profiles WHERE tenant_id = $1::uuid`,
+			`SELECT COALESCE(parent_tenant_id::text, '') FROM tenant.tenant_profiles WHERE tenant_id = $1::uuid`,
 			cursor).Scan(&next); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				break
@@ -336,7 +336,7 @@ func (h *Handlers) HandleGetPreferences(w http.ResponseWriter, r *http.Request) 
 	var p Preferences
 	if err := h.db.QueryRow(r.Context(),
 		`SELECT u.name, u.email, u.phone, u.locale, u.timezone, tp.locale, tp.timezone
-		   FROM users u, tenant_profiles tp
+		   FROM platform.users u, tenant.tenant_profiles tp
 		  WHERE u.id = $1 AND tp.tenant_id = $2`, claims.UserID, tenantID).
 		Scan(&p.Name, &p.Email, &p.Phone, &p.Locale, &p.Timezone,
 			&p.OrganisationLocale, &p.OrganisationTimezone); err != nil {
@@ -372,7 +372,7 @@ func (h *Handlers) HandleUpdatePreferences(w http.ResponseWriter, r *http.Reques
 	// address a verification link goes to, so changing it is a proof-of-address
 	// flow rather than a text field — see emailverify.
 	if _, err := h.db.Exec(r.Context(),
-		`UPDATE users SET
+		`UPDATE platform.users SET
 		     name     = COALESCE($2, name),
 		     phone    = COALESCE($3, phone),
 		     locale   = COALESCE($4, locale),

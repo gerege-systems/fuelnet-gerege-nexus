@@ -53,7 +53,7 @@ func TestAnExternalAppIsOfferedWithoutAModule(t *testing.T) {
 // The same rule, applied to what a tenant already has rather than to what the
 // store offers.
 //
-// The screen that lists installed apps read straight from app_installations,
+// The screen that lists installed apps read straight from tenant.app_installations,
 // so on nexus.gerege.mn it showed nine rows under a banner saying the
 // catalogue has five: State Services, Products, Inventory and Billing were all
 // listed as installed and active months after their code left for other

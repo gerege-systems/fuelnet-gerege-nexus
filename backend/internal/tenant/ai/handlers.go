@@ -160,7 +160,7 @@ func (s *Service) HandleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
+	rows, err := s.db.Query(r.Context(), `SELECT prompt_key,content,active,tenant_id IS NULL FROM tenant.ai_prompts WHERE tenant_id IS NULL OR tenant_id=$1 ORDER BY prompt_key,tenant_id NULLS FIRST`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load AI prompts")
 		return
@@ -201,7 +201,7 @@ func (s *Service) HandleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "content is required")
 		return
 	}
-	_, err := s.db.Exec(r.Context(), `INSERT INTO ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
+	_, err := s.db.Exec(r.Context(), `INSERT INTO tenant.ai_prompts(tenant_id,prompt_key,content,active) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,prompt_key) DO UPDATE SET content=EXCLUDED.content,active=EXCLUDED.active,updated_at=NOW()`, tenantID, key, req.Content, req.Active)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save AI prompt")
 		return
@@ -214,7 +214,7 @@ func (s *Service) HandleAIListKnowledge(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	rows, err := s.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
+	rows, err := s.db.Query(r.Context(), `SELECT id,title,content,source_url,updated_at FROM tenant.ai_knowledge WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load knowledge")
 		return
@@ -252,7 +252,7 @@ func (s *Service) HandleAICreateKnowledge(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var id string
-	err := s.db.QueryRow(r.Context(), `INSERT INTO ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
+	err := s.db.QueryRow(r.Context(), `INSERT INTO tenant.ai_knowledge(tenant_id,title,content,source_url) VALUES($1,$2,$3,$4) RETURNING id`, tenantID, req.Title, req.Content, req.SourceURL).Scan(&id)
 	if err != nil {
 		httpx.Error(w, 500, "failed to save knowledge")
 		return

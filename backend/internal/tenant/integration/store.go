@@ -96,7 +96,7 @@ type store struct{ db *pgxpool.Pool }
 // list returns one tenant's connectors, newest first.
 func (s *store) list(ctx context.Context, tenantID string) ([]*Connector, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT `+connectorColumns+` FROM integrations
+		`SELECT `+connectorColumns+` FROM tenant.integrations
 		  WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func (s *store) list(ctx context.Context, tenantID string) ([]*Connector, error)
 
 func (s *store) get(ctx context.Context, tenantID, id string) (*Connector, error) {
 	c, err := scanConnector(s.db.QueryRow(ctx,
-		`SELECT `+connectorColumns+` FROM integrations WHERE id = $1 AND tenant_id = $2`,
+		`SELECT `+connectorColumns+` FROM tenant.integrations WHERE id = $1 AND tenant_id = $2`,
 		id, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -150,7 +150,7 @@ func (s *store) create(ctx context.Context, tenantID string, req SaveRequest) (*
 		status = StatusActive
 	}
 	c, err := scanConnector(s.db.QueryRow(ctx,
-		`INSERT INTO integrations (tenant_id, provider, name, target_url, status, config, secret_ciphertext)
+		`INSERT INTO tenant.integrations (tenant_id, provider, name, target_url, status, config, secret_ciphertext)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING `+connectorColumns,
 		tenantID, req.Provider, req.Name, req.TargetURL, status, configJSON, sealed))
@@ -172,7 +172,7 @@ func (s *store) update(ctx context.Context, tenantID, id string, req SaveRequest
 		}
 	}
 	c, err := scanConnector(s.db.QueryRow(ctx,
-		`UPDATE integrations
+		`UPDATE tenant.integrations
 		    SET name = $3, target_url = $4, status = $5, config = $6,
 		        secret_ciphertext = COALESCE($7, secret_ciphertext),
 		        updated_at = NOW()
@@ -198,7 +198,7 @@ func namedError(err error) error {
 }
 
 func (s *store) delete(ctx context.Context, tenantID, id string) error {
-	tag, err := s.db.Exec(ctx, `DELETE FROM integrations WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	tag, err := s.db.Exec(ctx, `DELETE FROM tenant.integrations WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		return err
 	}
@@ -212,7 +212,7 @@ func (s *store) delete(ctx context.Context, tenantID, id string) error {
 func (s *store) secretFor(ctx context.Context, tenantID, id string) (string, error) {
 	var sealed []byte
 	err := s.db.QueryRow(ctx,
-		`SELECT secret_ciphertext FROM integrations WHERE id = $1 AND tenant_id = $2`,
+		`SELECT secret_ciphertext FROM tenant.integrations WHERE id = $1 AND tenant_id = $2`,
 		id, tenantID).Scan(&sealed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
@@ -235,7 +235,7 @@ type dispatchTarget struct {
 func (s *store) dispatchTargets(ctx context.Context, tenantID string) ([]dispatchTarget, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT id::text, target_url, secret_ciphertext
-		   FROM integrations
+		   FROM tenant.integrations
 		  WHERE tenant_id = $1 AND provider = 'webhook' AND status = 'ACTIVE' AND target_url <> ''`,
 		tenantID)
 	if err != nil {
@@ -274,13 +274,13 @@ func (s *store) dispatchTargets(ctx context.Context, tenantID string) ([]dispatc
 // on; only an administrator switches a connector off.
 func (s *store) noteError(ctx context.Context, tenantID, id, detail string) {
 	_, _ = s.db.Exec(ctx,
-		`UPDATE integrations SET last_error = $3, updated_at = NOW()
+		`UPDATE tenant.integrations SET last_error = $3, updated_at = NOW()
 		  WHERE id = $1 AND tenant_id = $2`, id, tenantID, detail)
 }
 
 func (s *store) noteSuccess(ctx context.Context, tenantID, id string) {
 	_, _ = s.db.Exec(ctx,
-		`UPDATE integrations SET last_ping_at = NOW(), last_error = '', updated_at = NOW()
+		`UPDATE tenant.integrations SET last_ping_at = NOW(), last_error = '', updated_at = NOW()
 		  WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 }
 
@@ -314,7 +314,7 @@ func (s *store) saveGrant(ctx context.Context, tenantID, id string, tok tokenBun
 		return err
 	}
 	tag, err := s.db.Exec(ctx,
-		`UPDATE integrations
+		`UPDATE tenant.integrations
 		    SET oauth_ciphertext = $3,
 		        account_label = COALESCE(NULLIF($4, ''), account_label),
 		        connected_at = NOW(), status = 'ACTIVE', last_error = '', updated_at = NOW()
@@ -342,7 +342,7 @@ func (s *store) refreshTokens(ctx context.Context, tenantID, id string, tok toke
 		return err
 	}
 	tag, err := s.db.Exec(ctx,
-		`UPDATE integrations SET oauth_ciphertext = $3, updated_at = NOW()
+		`UPDATE tenant.integrations SET oauth_ciphertext = $3, updated_at = NOW()
 		  WHERE id = $1 AND tenant_id = $2`,
 		id, tenantID, sealed)
 	if err != nil {
@@ -365,7 +365,7 @@ func sealTokens(tok tokenBundle) ([]byte, error) {
 func (s *store) tokens(ctx context.Context, tenantID, id string) (tokenBundle, error) {
 	var sealed []byte
 	err := s.db.QueryRow(ctx,
-		`SELECT oauth_ciphertext FROM integrations WHERE id = $1 AND tenant_id = $2`,
+		`SELECT oauth_ciphertext FROM tenant.integrations WHERE id = $1 AND tenant_id = $2`,
 		id, tenantID).Scan(&sealed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tokenBundle{}, ErrNotFound
@@ -389,7 +389,7 @@ func (s *store) tokens(ctx context.Context, tenantID, id string) (tokenBundle, e
 
 func (s *store) disconnect(ctx context.Context, tenantID, id string) error {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE integrations
+		`UPDATE tenant.integrations
 		    SET oauth_ciphertext = NULL, account_label = '', connected_at = NULL,
 		        status = 'INACTIVE', updated_at = NOW()
 		  WHERE id = $1 AND tenant_id = $2`, id, tenantID)
@@ -420,7 +420,7 @@ type Delivery struct {
 func (s *store) recordDelivery(ctx context.Context, tenantID, integrationID, kind, reference,
 	outcome, detail, externalID, externalURL string) {
 	_, _ = s.db.Exec(ctx,
-		`INSERT INTO integration_deliveries
+		`INSERT INTO tenant.integration_deliveries
 		     (tenant_id, integration_id, kind, reference, outcome, detail, external_id, external_url)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tenantID, integrationID, kind, reference, outcome, detail, externalID, externalURL)
@@ -434,7 +434,7 @@ func (s *store) recordDelivery(ctx context.Context, tenantID, integrationID, kin
 // what the log is for.
 func (s *store) deleteDeliveriesBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	tag, err := s.db.Exec(ctx,
-		`DELETE FROM integration_deliveries WHERE created_at < $1`, cutoff)
+		`DELETE FROM tenant.integration_deliveries WHERE created_at < $1`, cutoff)
 	if err != nil {
 		return 0, err
 	}
@@ -448,7 +448,7 @@ func (s *store) deliveries(ctx context.Context, tenantID string, limit int) ([]D
 	rows, err := s.db.Query(ctx,
 		`SELECT id::text, integration_id::text, kind, reference, outcome, detail,
 		        external_id, external_url, created_at
-		   FROM integration_deliveries
+		   FROM tenant.integration_deliveries
 		  WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2`, tenantID, limit)
 	if err != nil {
 		return nil, err

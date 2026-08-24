@@ -92,11 +92,11 @@ func newSweptTenant(t *testing.T) (*appinstall.AppInstaller, string) {
 
 	var tenantID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (slug, name) VALUES ('org-' || substr(gen_random_uuid()::text, 1, 8), 'Sweep')
+		`INSERT INTO platform.tenants (slug, name) VALUES ('org-' || substr(gen_random_uuid()::text, 1, 8), 'Sweep')
 		 RETURNING id::text`).Scan(&tenantID); err != nil {
 		t.Fatalf("tenant: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1`, tenantID) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id = $1`, tenantID) })
 
 	installer := appinstall.NewAppInstaller(pool, []catalog.CatalogApp{organisationCatalogApp()}, "1.0.0")
 	// In the same order as the server: the catalogue reaches the apps table
@@ -165,7 +165,7 @@ func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
 
 	var installed string
 	if err := pool.QueryRow(ctx,
-		`SELECT installed_version FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		`SELECT installed_version FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, defaultAppID).Scan(&installed); err != nil {
 		t.Fatalf("the default app was not installed for a tenant that lacked it: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestEveryTenantGetsTheDefaultAppWithoutAnybodyInstallingIt(t *testing.T) {
 	}
 	var count int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		`SELECT count(*) FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, defaultAppID).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T)
 	var enabled bool
 	var status string
 	if err := pool.QueryRow(ctx,
-		`SELECT enabled, status FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		`SELECT enabled, status FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, defaultAppID).Scan(&enabled, &status); err != nil {
 		t.Fatalf("the installation row was deleted rather than disabled: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestTheDefaultAppCanBeRemovedAndStaysRemovedWithoutLosingData(t *testing.T)
 		t.Fatalf("sweep after removal: %v", err)
 	}
 	if err := pool.QueryRow(ctx,
-		`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		`SELECT enabled FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, defaultAppID).Scan(&enabled); err != nil {
 		t.Fatal(err)
 	}

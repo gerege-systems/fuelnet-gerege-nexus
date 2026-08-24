@@ -35,7 +35,7 @@ func (h *Handlers) AppInstalled(ctx context.Context, tenantID, appID string) (bo
 
 	var enabled bool
 	err := h.db.QueryRow(ctx,
-		`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
+		`SELECT enabled FROM tenant.app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, appID).Scan(&enabled)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -57,7 +57,7 @@ func (h *Handlers) AppInstalled(ctx context.Context, tenantID, appID string) (bo
 // here would show a report for an app that had just been uninstalled.
 func (h *Handlers) InstalledAppSet(ctx context.Context, tenantID string) (map[string]bool, error) {
 	rows, err := h.db.Query(ctx,
-		`SELECT app_id FROM app_installations WHERE tenant_id = $1 AND enabled`, tenantID)
+		`SELECT app_id FROM tenant.app_installations WHERE tenant_id = $1 AND enabled`, tenantID)
 	if err != nil {
 		return nil, err
 	}

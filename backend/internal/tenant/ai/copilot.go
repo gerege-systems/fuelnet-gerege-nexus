@@ -174,7 +174,7 @@ func (s *CopilotService) systemPrompt(ctx context.Context, tenantID, lang string
 	scope := "You are {brand} AI Copilot. Use approved tools for live data. Never expose data from another tenant."
 	instructions := "Be concise, do not invent values, and reply in language code " + lang + "."
 	if s.db != nil {
-		rows, err := s.db.Query(ctx, `SELECT prompt_key, content FROM ai_prompts WHERE active AND (tenant_id IS NULL OR tenant_id=$1) ORDER BY tenant_id NULLS FIRST`, tenantID)
+		rows, err := s.db.Query(ctx, `SELECT prompt_key, content FROM tenant.ai_prompts WHERE active AND (tenant_id IS NULL OR tenant_id=$1) ORDER BY tenant_id NULLS FIRST`, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -259,7 +259,7 @@ func (s *CopilotService) searchKnowledge(ctx context.Context, tenantID string, c
 		return map[string]any{"error": "database unavailable"}
 	}
 	q := "%" + truncate(fmt.Sprint(call.Args["query"]), 200) + "%"
-	rows, err := s.db.Query(ctx, `SELECT title,content,source_url FROM ai_knowledge WHERE (tenant_id IS NULL OR tenant_id=$1) AND (title ILIKE $2 OR content ILIKE $2) ORDER BY tenant_id NULLS LAST,updated_at DESC LIMIT 5`, tenantID, q)
+	rows, err := s.db.Query(ctx, `SELECT title,content,source_url FROM tenant.ai_knowledge WHERE (tenant_id IS NULL OR tenant_id=$1) AND (title ILIKE $2 OR content ILIKE $2) ORDER BY tenant_id NULLS LAST,updated_at DESC LIMIT 5`, tenantID, q)
 	if err != nil {
 		return map[string]any{"error": "knowledge unavailable"}
 	}

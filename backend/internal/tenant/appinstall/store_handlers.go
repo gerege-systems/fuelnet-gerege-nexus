@@ -229,14 +229,14 @@ func (h *Handlers) HandleListInstalledApps(w http.ResponseWriter, r *http.Reques
 	rows, err := h.db.Query(r.Context(),
 		`SELECT ai.id, ai.app_id, a.slug, a.name, ai.installed_version, ai.status, ai.enabled,
 		        ai.installed_at, ai.auto_update, COALESCE(ai.pinned_version, ''),
-		        COALESCE((SELECT e.details ->> 'added' FROM installation_events e
+		        COALESCE((SELECT e.details ->> 'added' FROM tenant.installation_events e
 		                   WHERE e.installation_id = ai.id AND e.event_type = 'held'
 		                   ORDER BY e.created_at DESC LIMIT 1), ''),
-		        COALESCE((SELECT e.details ->> 'reason' FROM installation_events e
+		        COALESCE((SELECT e.details ->> 'reason' FROM tenant.installation_events e
 		                   WHERE e.installation_id = ai.id AND e.event_type = 'held'
 		                   ORDER BY e.created_at DESC LIMIT 1), '')
-		 FROM app_installations ai
-		 JOIN apps a ON a.id = ai.app_id
+		 FROM tenant.app_installations ai
+		 JOIN platform.apps a ON a.id = ai.app_id
 		 WHERE ai.tenant_id = $1`, tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "database error")
