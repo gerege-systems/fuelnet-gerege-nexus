@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package tenant
+package emailverify
 
 import (
 	"errors"
@@ -20,7 +20,6 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -38,23 +37,23 @@ import (
 // limit and an upstream failure will work later, a malformed address will not,
 // and a missing key is nobody's fault but the operator's.
 func emailVerifyError(w http.ResponseWriter, err error) {
-	var invalid *emailverify.InvalidError
-	var limited *emailverify.RateLimitedError
+	var invalid *InvalidError
+	var limited *RateLimitedError
 	switch {
 	case errors.As(err, &invalid):
 		httpx.Error(w, http.StatusBadRequest, invalid.Error())
 	case errors.As(err, &limited):
 		w.Header().Set("Retry-After", strconv.Itoa(int(limited.RetryAfter.Round(time.Second).Seconds())))
 		httpx.Error(w, http.StatusTooManyRequests, limited.Error())
-	case errors.Is(err, emailverify.ErrNotConfigured),
-		errors.Is(err, emailverify.ErrOriginNotHTTPS),
-		errors.Is(err, emailverify.ErrUnauthorizedKey):
+	case errors.Is(err, ErrNotConfigured),
+		errors.Is(err, ErrOriginNotHTTPS),
+		errors.Is(err, ErrUnauthorizedKey):
 		// All three are this deployment's configuration, not the request's.
 		// 503 says "not right now, and not because of what you sent".
 		httpx.Error(w, http.StatusServiceUnavailable, err.Error())
-	case errors.Is(err, emailverify.ErrUpstream):
+	case errors.Is(err, ErrUpstream):
 		httpx.Error(w, http.StatusBadGateway, err.Error())
-	case errors.Is(err, emailverify.ErrLinkSpent):
+	case errors.Is(err, ErrLinkSpent):
 		httpx.Error(w, http.StatusGone, err.Error())
 	default:
 		slog.Error("emailverify: request failed", "error", err)
@@ -74,7 +73,8 @@ type verifySendRequest struct {
 // own screens. A system outside Gerege Nexus does not come through here at all
 // — it holds its own key with the verification service and calls that service
 // directly, which is why this platform no longer issues keys.
-func (s *Service) handleVerifySend(w http.ResponseWriter, r *http.Request) {
+// HandleVerifySend asks the hosted service for a link.
+func (s *Service) HandleVerifySend(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
@@ -87,7 +87,7 @@ func (s *Service) handleVerifySend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims, _ := auth.UserFromContext(r.Context())
-	verification, err := s.emailVerify.Send(r.Context(), tenantID, emailverify.Request{
+	verification, err := s.Send(r.Context(), tenantID, Request{
 		Email:       req.Email,
 		RedirectURL: req.RedirectURL,
 		Purpose:     req.Purpose,
@@ -98,7 +98,7 @@ func (s *Service) handleVerifySend(w http.ResponseWriter, r *http.Request) {
 		emailVerifyError(w, err)
 		return
 	}
-	audit.Record(r.Context(), tenantID, claims.UserID, "emailverify.send", "email_verification",
+	audit.Record(r.Context(), tenantID, claims.UserID, "send", "email_verification",
 		map[string]any{"id": verification.ID, "purpose": verification.Purpose})
 	httpx.JSON(w, http.StatusOK, verification)
 }
@@ -110,11 +110,12 @@ func (s *Service) handleVerifySend(w http.ResponseWriter, r *http.Request) {
 // in the query is the whole authority, and it is claimed exactly once — the
 // return address travels through a mailbox and then a browser's history, so a
 // replay of it must not be able to re-assert anything.
-func (s *Service) handleVerifyLanded(w http.ResponseWriter, r *http.Request) {
+// HandleVerifyLanded receives the person the verification service sends back.
+func (s *Service) HandleVerifyLanded(w http.ResponseWriter, r *http.Request) {
 	locale := config.LocaleFromRequest(r)
-	verification, err := s.emailVerify.Confirm(r.Context(), r.URL.Query().Get("ref"))
+	verification, err := s.Confirm(r.Context(), r.URL.Query().Get("ref"))
 	if err != nil {
-		if !errors.Is(err, emailverify.ErrLinkSpent) {
+		if !errors.Is(err, ErrLinkSpent) {
 			slog.Error("emailverify: landing failed", "error", err)
 			writeVerifyPage(w, http.StatusInternalServerError, locale, false)
 			return
@@ -123,7 +124,7 @@ func (s *Service) handleVerifyLanded(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.Record(r.Context(), verification.TenantID, "recipient", "emailverify.confirmed", "email_verification",
+	audit.Record(r.Context(), verification.TenantID, "recipient", "confirmed", "email_verification",
 		map[string]any{"id": verification.ID, "source": verification.Source, "purpose": verification.Purpose})
 
 	// The destination was validated when the request was made, against the
@@ -138,7 +139,7 @@ func (s *Service) handleVerifyLanded(w http.ResponseWriter, r *http.Request) {
 // writeVerifyPage answers a click with a page rather than a JSON body: what
 // arrives here is a person in a browser who never asked for an API.
 func writeVerifyPage(w http.ResponseWriter, status int, locale string, confirmed bool) {
-	title, body := emailverify.ResultPage(locale, confirmed)
+	title, body := ResultPage(locale, confirmed)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	// Both strings are our own, but they are escaped anyway: the day one of
@@ -157,7 +158,8 @@ h1{font-size:20px;margin:0 0 12px}p{color:#475569;font-size:14px;line-height:1.6
 
 // handleEmailVerifyOverview is the settings screen in one request: what has
 // been asked for, and whether the service that sends it is reachable.
-func (s *Service) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Request) {
+// HandleOverview answers the operator screen.
+func (s *Service) HandleOverview(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
@@ -168,7 +170,7 @@ func (s *Service) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Reque
 			limit = parsed
 		}
 	}
-	overview, err := s.emailVerify.Overview(r.Context(), tenantID, limit)
+	overview, err := s.Overview(r.Context(), tenantID, limit)
 	if err != nil {
 		emailVerifyError(w, err)
 		return

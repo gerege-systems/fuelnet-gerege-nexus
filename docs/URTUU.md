@@ -23,7 +23,7 @@
 | Давхарга | Байршил | Юу хийдэг |
 | --- | --- | --- |
 | **Гэрээ** | `backend/pkg/urtuu` | Дугтуй, Ed25519 гарын үсэг, даалгаврын статусын машин, хүсэлтийн кодын төрөл. Distribution бүр (gov, commerce…) ижил ойлголттой байхын тулд `pkg`-д |
-| **Тээвэр** | `backend/internal/platform/urtuu` | Холбоос, гарах/ирэх дараалал, хүргэлтийн retry, идемпотент хүлээн авалт, pull/push цэгүүд. Платформын үйлчилгээ — суулгасан аппаас хамаарахгүй |
+| **Тээвэр** | `backend/internal/tenant/urtuu` | Холбоос, гарах/ирэх дараалал, хүргэлтийн retry, идемпотент хүлээн авалт, pull/push цэгүүд. Платформын үйлчилгээ — суулгасан аппаас хамаарахгүй |
 | **Апп «Өртөө»** | `backend/internal/apps/urtuu` (`io.gerege.nexus.urtuu`) | Даалгаврын амьдралын мөчлөг, дэлгэцүүд, самбар, тайлангууд. Тенант өөрөө суулгах бүтээгдэхүүн |
 
 **Яагаад тээврийг цөмд оруулсан бэ.** Админы байгуулсан холбоос дээгүүр яваа
@@ -75,7 +75,7 @@ handshake нь ойлгомжгүй алдаагаар унана.
 | `RING_BASE_URL` | Кодын эх сурвалж | ring.dgov.mn-ий хаяг. `mock` гэж тавибал хөгжүүлэлтийн жишиг кодууд ирнэ (нэр дээрээ «жишиг» гэж бичигдсэн). Тавигдаагүй бол импорт унтраалттай, локал кодууд ажиллана |
 | `RING_API_KEY` | Кодын эх сурвалж | Ring-ийн Bearer түлхүүр. `RING_BASE_URL` бодит хаягтай бол заавал |
 | `RING_PUBLIC_KEY` | Кодын эх сурвалж | Бүртгэлийн гарын үсэг шалгах Ed25519 нийтийн түлхүүр, base64. **Заавал** — шалгагдаагүй бүртгэл нь улсын бүх суулгац дээрх кодын утга, хугацааны нормыг өөрчлөх эрхтэй баримт |
-| `PLATFORM_TIMEZONE` | Платформ даяар | Календарийн цагийн бүс. Анхдагч `Asia/Ulaanbaatar`. Бүртгэлийн дугаарын он, хугацааны заагийг энэ шийднэ — тохируулгыг [`internal/platform/config/timezone.go`](../backend/internal/platform/config/timezone.go)-оос үз |
+| `PLATFORM_TIMEZONE` | Платформ даяар | Календарийн цагийн бүс. Анхдагч `Asia/Ulaanbaatar`. Бүртгэлийн дугаарын он, хугацааны заагийг энэ шийднэ — тохируулгыг [`internal/kernel/config/timezone.go`](../backend/internal/kernel/config/timezone.go)-оос үз |
 
 Түлхүүр үүсгэх:
 
@@ -181,7 +181,7 @@ Schema) болон хэдий хугацаанд хийхийг (SLA) өөрөө
 хэлбэрийг санал болгож өгнө. Гарын үсгийн вход нь каталог болон Өртөөгийн
 дугтуйтай яг ижил: `generated_at + '\n' + түүхий байт`. Нэг дүрэм гурван газар.
 
-Хэрэгжилт: [`internal/platform/urtuu/ring.go`](../backend/internal/platform/urtuu/ring.go).
+Хэрэгжилт: [`internal/tenant/urtuu/ring.go`](../backend/internal/tenant/urtuu/ring.go).
 
 - **Гарын үсэггүй бүртгэл хэзээ ч хүлээн авагдахгүй.** `RING_PUBLIC_KEY`
   тавигдаагүй бол импорт огт байхгүй.
@@ -417,7 +417,7 @@ Integration тестүүд яг үүнийг нэг процесс дотор х
 
 ```bash
 cd backend
-URTUU_TEST_DATABASE_URL=postgres://... go test ./internal/platform/urtuu/... ./internal/apps/urtuu/...
+URTUU_TEST_DATABASE_URL=postgres://... go test ./internal/tenant/urtuu/... ./internal/apps/urtuu/...
 ```
 
 ---

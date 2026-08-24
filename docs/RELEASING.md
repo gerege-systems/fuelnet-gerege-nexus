@@ -137,7 +137,7 @@ Go тоохгүй.
 
 ### `PlatformVersion` бол өөр тоо
 
-`internal/platform.PlatformVersion` нь **manifest-ийн шаардлагыг** шалгах
+`internal/kernel/config.PlatformVersion` нь **manifest-ийн шаардлагыг** шалгах
 хувилбар (`"platform": ">=1.0.0"`). Модулийн tag-тай нэг байх шаардлагагүй,
 бас нэг байлгах гэж оролдох ёсгүй — тэр хоёр өөр гэрээ:
 

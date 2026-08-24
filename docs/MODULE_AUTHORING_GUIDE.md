@@ -116,7 +116,7 @@ The cost is that a private route can become public by accident, and nothing in
 the diff would say so. So the rule is:
 
 > A route reachable without a session must be named in `publicRoutes` in
-> `backend/internal/platform/route_policy_test.go`.
+> `backend/pkg/platform/route_policy_test.go`.
 
 The test walks the real routing table, calls every route with no credentials,
 and fails on anything that answers `200` or `201` without being on the list. It
@@ -132,7 +132,9 @@ the actual answer.
 
 ### Using platform services
 
-Anything more than one app needs lives in `internal/platform/` and reaches a
+Anything more than one app needs lives in the platform itself — `internal/tenant/`
+for what acts inside one organisation, `internal/platform/` for what acts for the
+deployment, `internal/kernel/` for what neither owns — and reaches a
 module through its constructor, not through a package-level singleton. The
 server builds one instance in `NewServer` and passes it in, the way
 `gov_services` receives the integration manager.

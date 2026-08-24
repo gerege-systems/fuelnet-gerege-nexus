@@ -35,7 +35,7 @@ nginx-ээр гарсан Grafana (§4) эсвэл SSH tunnel.
 ### Хэмжүүр хаанаас ирдэг вэ
 
 Платформ өөрөө `/metrics` дээр дараахыг гаргана
-(`backend/internal/platform/observability/`):
+(`backend/internal/kernel/telemetry/`):
 
 | Хэмжүүр | Тайлбар |
 | --- | --- |

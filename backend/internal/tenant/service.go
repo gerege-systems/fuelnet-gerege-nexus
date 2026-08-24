@@ -290,7 +290,7 @@ func New(deps Deps) (*Service, error) {
 	// installation has no eID registration — it answers Enabled() false, which
 	// is the state a module is meant to ask about rather than a nil it has to
 	// guard.
-	nexus.Provide[nexus.Signer](Signing(eidMN))
+	nexus.Provide[nexus.Signer](signing.Rail(eidMN))
 	// The PDF signing rails, built here rather than in apps.Bootstrap.
 	//
 	// They are what nexus.SigningRails names, and a module that signs a PDF
@@ -977,7 +977,7 @@ func (s *Service) Routes(r chi.Router) {
 		// an address. Unauthenticated on purpose: they have not signed in, and
 		// may have no account here at all. The single-use reference in the
 		// query is the whole authority — see handleVerifyLanded.
-		api.Get("/verify/landed", s.handleVerifyLanded)
+		api.Get("/verify/landed", s.emailVerify.HandleVerifyLanded)
 
 		// Protected endpoints
 		api.Group(func(pr chi.Router) {
@@ -1053,11 +1053,11 @@ func (s *Service) Routes(r chi.Router) {
 			// credential the whole platform shares, so it is a signed-in act.
 			// App modules do not come through here — they hold the service and
 			// call it in process.
-			pr.With(security.SharedRateLimitMiddleware(s.verifyLimiter, s.sharedVerify)).Post("/verify/send", s.handleVerifySend)
+			pr.With(security.SharedRateLimitMiddleware(s.verifyLimiter, s.sharedVerify)).Post("/verify/send", s.emailVerify.HandleVerifySend)
 
 			// Who has been written to is an administrative read: it is a list
 			// of people's addresses and what they were asked to prove.
-			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.handleEmailVerifyOverview)
+			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.emailVerify.HandleOverview)
 
 			// AI Copilot, Speech, Translation & Forecasting
 			pr.Route("/ai", func(air chi.Router) {

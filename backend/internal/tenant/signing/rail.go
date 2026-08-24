@@ -6,7 +6,7 @@
  * The signing rail, as modules are handed it.
  */
 
-package tenant
+package signing
 
 import (
 	"context"
@@ -30,7 +30,10 @@ type signingRail struct{ eid *eidmongolia.Service }
 // Signing publishes the installation's signing rail. A deployment with no eID
 // registration still gets one: it answers Enabled() false, which is the honest
 // state and the one a module is meant to ask about.
-func Signing(eid *eidmongolia.Service) nexus.Signer { return signingRail{eid: eid} }
+// Rail publishes the signing rail. Named for what it is now that it lives
+// beside the rest of the signing code: Signing(...) inside package signing
+// would say the word twice and the type once.
+func Rail(eid *eidmongolia.Service) nexus.Signer { return signingRail{eid: eid} }
 
 func (r signingRail) Enabled() bool { return r.eid != nil && r.eid.Enabled() }
 

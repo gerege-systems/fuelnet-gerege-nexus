@@ -1,4 +1,4 @@
-package tenant
+package signing
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 // error that is deliberately not the citizen's refusal: an operator can
 // configure the rail and the caller may try again.
 func TestAnInstallationWithNoRailRefusesRatherThanAnsweringEmpty(t *testing.T) {
-	rail := Signing(nil)
+	rail := Rail(nil)
 
 	if rail.Enabled() {
 		t.Fatal("a deployment with no eID service cannot sign")
