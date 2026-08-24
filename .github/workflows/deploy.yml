@@ -504,6 +504,72 @@ jobs:
             # this deployment answers 404 for it — correctly. The check outlived
             # the thing it was checking and turned a good rollout red.
 
+      - name: Configure the control-plane network allowlist
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          CONTROL_PLANE_ALLOWED_CIDRS: ${{ secrets.CONTROL_PLANE_ALLOWED_CIDRS }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: CONTROL_PLANE_ALLOWED_CIDRS
+          script: |
+            set -euo pipefail
+            if [ -z "${CONTROL_PLANE_ALLOWED_CIDRS:-}" ]; then
+              echo "No managed control-plane CIDRs configured; preserving the server allowlist."
+              exit 0
+            fi
+            if ! sudo -n true 2>/dev/null; then
+              echo "::error::Passwordless sudo is required to configure the control-plane allowlist."
+              exit 1
+            fi
+
+            ALLOWLIST=/etc/nginx/snippets/cp-allowlist.conf
+            sudo install -d /etc/nginx/snippets
+            ALLOWLIST_BACKUP=""
+            if sudo test -f "$ALLOWLIST"; then
+              ALLOWLIST_BACKUP="${ALLOWLIST}.bak.$(date +%s)"
+              sudo cp "$ALLOWLIST" "$ALLOWLIST_BACKUP"
+            fi
+
+            ALLOWLIST_TEMP=$(mktemp)
+            trap 'rm -f "$ALLOWLIST_TEMP"' EXIT
+            printf '%s\n' \
+              '# Managed by the production deploy from CONTROL_PLANE_ALLOWED_CIDRS.' \
+              '# Update the GitHub Actions secret; do not edit this server copy.' \
+              > "$ALLOWLIST_TEMP"
+
+            CIDR_COUNT=0
+            for CIDR in $(printf '%s' "$CONTROL_PLANE_ALLOWED_CIDRS" | tr ',\n' '  '); do
+              if [[ ! "$CIDR" =~ ^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$ ]]; then
+                echo "::error::CONTROL_PLANE_ALLOWED_CIDRS contains an invalid token"
+                exit 1
+              fi
+              printf 'allow %s;\n' "$CIDR" >> "$ALLOWLIST_TEMP"
+              CIDR_COUNT=$((CIDR_COUNT + 1))
+            done
+            if [ "$CIDR_COUNT" -eq 0 ]; then
+              echo "::error::CONTROL_PLANE_ALLOWED_CIDRS did not contain a CIDR"
+              exit 1
+            fi
+            printf 'deny all;\n' >> "$ALLOWLIST_TEMP"
+            sudo install -o root -g root -m 0644 "$ALLOWLIST_TEMP" "$ALLOWLIST"
+
+            if ! sudo nginx -t; then
+              if [ -n "$ALLOWLIST_BACKUP" ]; then
+                sudo cp "$ALLOWLIST_BACKUP" "$ALLOWLIST"
+                sudo nginx -t && sudo systemctl reload nginx
+              else
+                sudo mv "$ALLOWLIST" "${ALLOWLIST}.rejected.$(date +%s)"
+              fi
+              echo "::error::nginx rejected the managed control-plane allowlist"
+              exit 1
+            fi
+            sudo systemctl reload nginx
+            echo "control-plane allowlist configured with $CIDR_COUNT CIDR(s)"
+
       - name: Route the control-plane API to the backend
         if: steps.guard.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.2.5
