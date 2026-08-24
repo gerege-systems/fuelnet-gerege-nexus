@@ -26,12 +26,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,11 +45,12 @@ type gateFixture struct {
 	// adds. Every request below is a GET, so the chain in pkg/platform would
 	// change nothing about what is being asserted here — which is which
 	// requests the app gate lets through.
-	router   chi.Router
-	pool     *pgxpool.Pool
-	tenantID string
-	userID   string
-	token    string
+	router       chi.Router
+	pool         *pgxpool.Pool
+	tenantID     string
+	userID       string
+	membershipID string
+	token        string
 }
 
 func newGateFixture(t *testing.T) *gateFixture {
@@ -93,10 +98,9 @@ func newGateFixture(t *testing.T) *gateFixture {
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id = $1`, f.userID) })
 
-	var membershipID string
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1, $2) RETURNING id::text`,
-		f.tenantID, f.userID).Scan(&membershipID); err != nil {
+		f.tenantID, f.userID).Scan(&f.membershipID); err != nil {
 		t.Fatalf("membership: %v", err)
 	}
 
@@ -112,7 +116,7 @@ func newGateFixture(t *testing.T) *gateFixture {
 		 )
 		 INSERT INTO tenant.membership_roles (membership_id, role_id)
 		 SELECT $2::uuid, r.id FROM r ON CONFLICT DO NOTHING`,
-		f.tenantID, membershipID); err != nil {
+		f.tenantID, f.membershipID); err != nil {
 		t.Fatalf("admin role: %v", err)
 	}
 
@@ -192,5 +196,145 @@ func TestAnAppsRoutesAreBehindItsInstallationAndAnothersAreNot(t *testing.T) {
 	}
 	if res.Code == http.StatusNotFound {
 		t.Fatalf("sso-clients answered 404; this test asserts nothing unless the route is served")
+	}
+}
+
+// A data-path request must keep serving the last known control decisions when
+// their source tables cannot be read. Each cache is warmed first; the locks
+// below then turn an accidental query into a deadline rather than allowing a
+// fast database to hide it.
+func TestARequestUsesCachedControlDecisionsWhenTheirTablesAreUnavailable(t *testing.T) {
+	f := newGateFixture(t)
+	ctx := context.Background()
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	appID := "io.gerege.test.dependency." + suffix
+	permission := "dependency." + suffix + ".read"
+	settingKey := "dependency.test." + suffix
+	roleCode := "dependency_" + suffix
+
+	settings.Register(settings.Spec{
+		Key: settingKey, Kind: settings.KindString, Default: "default",
+		Description: "test-only control/data dependency probe",
+	})
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO platform.platform_settings (key, value) VALUES ($1, 'cached')`, settingKey); err != nil {
+		t.Fatalf("setting: %v", err)
+	}
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO platform.feature_flags (key, description, owner, kind, enabled, rollout)
+		 VALUES ($1, 'test-only control/data dependency probe', 'test', 'kill_switch', FALSE, 100)`,
+		flags.ModuleKillSwitch(appID)); err != nil {
+		t.Fatalf("flag: %v", err)
+	}
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO platform.apps (id, slug, name) VALUES ($1, $2, 'Dependency probe')`,
+		appID, "dependency-"+suffix); err != nil {
+		t.Fatalf("app: %v", err)
+	}
+	f.install(t, appID)
+
+	// This user was an administrator only to keep the older gate fixture
+	// focused. Make it an ordinary member here so RequirePermission must use
+	// the memoized grant rather than taking the administrator shortcut.
+	if _, err := f.pool.Exec(ctx,
+		`DELETE FROM tenant.membership_roles WHERE membership_id = $1`, f.membershipID); err != nil {
+		t.Fatalf("remove fixture role: %v", err)
+	}
+	var roleID string
+	if err := f.pool.QueryRow(ctx,
+		`INSERT INTO tenant.roles (tenant_id, code, name) VALUES ($1, $2, 'Dependency probe') RETURNING id::text`,
+		f.tenantID, roleCode).Scan(&roleID); err != nil {
+		t.Fatalf("role: %v", err)
+	}
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO platform.permissions (code, name) VALUES ($1, 'Dependency probe')`, permission); err != nil {
+		t.Fatalf("permission: %v", err)
+	}
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO tenant.membership_roles (membership_id, role_id) VALUES ($1, $2)`,
+		f.membershipID, roleID); err != nil {
+		t.Fatalf("membership role: %v", err)
+	}
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO tenant.role_permissions (role_id, permission_id)
+		 SELECT $1, id FROM platform.permissions WHERE code = $2`, roleID, permission); err != nil {
+		t.Fatalf("role permission: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = f.pool.Exec(context.Background(), `DELETE FROM tenant.roles WHERE id = $1`, roleID)
+		_, _ = f.pool.Exec(context.Background(), `DELETE FROM platform.permissions WHERE code = $1`, permission)
+		_, _ = f.pool.Exec(context.Background(), `DELETE FROM platform.feature_flags WHERE key = $1`, flags.ModuleKillSwitch(appID))
+		_, _ = f.pool.Exec(context.Background(), `DELETE FROM platform.platform_settings WHERE key = $1`, settingKey)
+		_, _ = f.pool.Exec(context.Background(), `DELETE FROM platform.apps WHERE id = $1`, appID)
+	})
+
+	oldSettings, oldFlags := settings.Default, flags.Default
+	settings.UseStore(f.server.settings)
+	flags.UseStore(f.server.featureFlags)
+	t.Cleanup(func() {
+		settings.UseStore(oldSettings)
+		flags.UseStore(oldFlags)
+	})
+	if err := f.server.settings.Load(ctx); err != nil {
+		t.Fatalf("warm settings: %v", err)
+	}
+	if err := f.server.featureFlags.Load(ctx); err != nil {
+		t.Fatalf("warm flags: %v", err)
+	}
+	if suspended, _ := f.server.authn.TenantSuspended(ctx, f.tenantID); suspended {
+		t.Fatal("fixture tenant is suspended")
+	}
+	if installed, err := f.server.appinstall.AppInstalled(ctx, f.tenantID, appID); err != nil || !installed {
+		t.Fatalf("warm app gate: installed=%v error=%v", installed, err)
+	}
+	access.InvalidateTenant(f.tenantID)
+	if permissions, err := f.server.permissions.GetUserPermissions(ctx, f.tenantID, f.userID); err != nil || !permissions[permission] {
+		t.Fatalf("warm permission cache: permissions=%v error=%v", permissions, err)
+	}
+
+	blocker, err := f.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin blocker: %v", err)
+	}
+	t.Cleanup(func() { _ = blocker.Rollback(context.Background()) })
+	if _, err := blocker.Exec(ctx, `LOCK TABLE
+		platform.platform_settings,
+		platform.feature_flags,
+		platform.feature_flag_overrides,
+		platform.tenants,
+		tenant.app_installations,
+		tenant.role_permissions,
+		platform.permissions
+		IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatalf("lock control tables: %v", err)
+	}
+
+	// Prove the tables really are unavailable from the pool used by handlers.
+	probeCtx, cancelProbe := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancelProbe()
+	if _, err := f.pool.Exec(probeCtx, `SELECT 1 FROM platform.platform_settings LIMIT 1`); err == nil {
+		t.Fatal("control table remained readable while the blocker held its lock")
+	}
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := settings.Get(settingKey); got != "cached" {
+			t.Errorf("cached setting = %q, want cached", got)
+		}
+		if flags.Enabled(r.Context(), flags.ModuleKillSwitch(appID)) {
+			t.Error("cached kill switch unexpectedly enabled the refusal")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	permissionGate := nexus.RequirePermission(f.server.permissions, permission)(handler)
+	requestGate := f.server.appinstall.GateMiddleware(appID)(permissionGate)
+
+	reqCtx, cancelRequest := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelRequest()
+	req := httptest.NewRequest(http.MethodGet, "/dependency-probe", nil).WithContext(reqCtx)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: f.token})
+	rec := httptest.NewRecorder()
+	requestGate.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("cached request answered %d, want 204: %s", rec.Code, rec.Body.String())
 	}
 }
