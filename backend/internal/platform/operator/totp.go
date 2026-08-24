@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"crypto/rand"
@@ -25,8 +25,9 @@ import (
 const (
 	// totpIssuer is what shows up beside the code in the authenticator app.
 	totpIssuer = "Gerege Nexus Control Plane"
-	// totpPeriod is the length of one code, in seconds.
-	totpPeriod = 30
+	// TOTPPeriod is the length of one code, in seconds. Exported so a screen's
+	// test can produce the code its second factor would.
+	TOTPPeriod = 30
 	// totpSkew accepts the neighbouring step on either side, which covers a
 	// phone whose clock is off by a few seconds. One step, not two: every step
 	// of tolerance widens the window an intercepted code stays usable in.
@@ -58,7 +59,7 @@ func otpauthURI(email, secret string) string {
 	query := url.Values{
 		"secret": {secret},
 		"issuer": {totpIssuer},
-		"period": {fmt.Sprint(totpPeriod)},
+		"period": {fmt.Sprint(TOTPPeriod)},
 		"digits": {"6"},
 	}
 	return "otpauth://totp/" + label + "?" + query.Encode()
@@ -76,7 +77,7 @@ func verifyTOTP(secret, code string, at time.Time) (step int64, ok bool) {
 		return 0, false
 	}
 	opts := totp.ValidateOpts{
-		Period:    totpPeriod,
+		Period:    TOTPPeriod,
 		Skew:      totpSkew,
 		Digits:    otp.DigitsSix,
 		Algorithm: otp.AlgorithmSHA1,
@@ -87,7 +88,7 @@ func verifyTOTP(secret, code string, at time.Time) (step int64, ok bool) {
 	// cannot happen with a real secret, but must not become a way to replay a
 	// code as a later step) is recorded as the earliest it could be.
 	for offset := -int64(totpSkew); offset <= int64(totpSkew); offset++ {
-		candidate := at.Add(time.Duration(offset) * totpPeriod * time.Second)
+		candidate := at.Add(time.Duration(offset) * TOTPPeriod * time.Second)
 		valid, err := totp.ValidateCustom(code, secret, candidate, totp.ValidateOpts{
 			Period:    opts.Period,
 			Skew:      0,
@@ -95,7 +96,7 @@ func verifyTOTP(secret, code string, at time.Time) (step int64, ok bool) {
 			Algorithm: opts.Algorithm,
 		})
 		if err == nil && valid {
-			return candidate.Unix() / totpPeriod, true
+			return candidate.Unix() / TOTPPeriod, true
 		}
 	}
 	return 0, false

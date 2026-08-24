@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator/optest"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	usagemetric "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/usage"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -17,7 +21,7 @@ import (
 // metrics that are not sums — storage and active users — are not summed.
 
 func TestUsageIsCountedFromTheDatabase(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	service := configService(t, pool)
 	tenantID, _ := newTenant(t, pool)
 	userID, _ := newPerson(t, pool, tenantID)
@@ -79,7 +83,7 @@ func TestUsageIsCountedFromTheDatabase(t *testing.T) {
 // Active users is a peak and storage is a reading. Summing either would be a
 // number that grows for ever and means nothing.
 func TestTheMetricsThatAreNotSumsAreNotSummed(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	service := configService(t, pool)
 	tenantID, _ := newTenant(t, pool)
 	ctx := context.Background()
@@ -125,9 +129,9 @@ func TestTheMetricsThatAreNotSumsAreNotSummed(t *testing.T) {
 // The console reads usage and cannot write it — which is the answer to the
 // first question anybody asks of a metering system in a billing dispute.
 func TestTheConsoleCannotWriteUsage(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	tenantID, _ := newTenant(t, pool)
-	ctx := scoped(context.Background())
+	ctx := operator.Scoped(context.Background())
 
 	var count int
 	if err := pool.QueryRow(ctx,
@@ -147,7 +151,7 @@ func TestTheConsoleCannotWriteUsage(t *testing.T) {
 }
 
 func TestTheUsageExportIsOneRowPerDay(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	service := configService(t, pool)
 	tenantID, _ := newTenant(t, pool)
 	ctx := context.Background()
@@ -200,7 +204,7 @@ func (w *writerTo) WriteHeader(int)             {}
 // taken from the caller instead, the query would look for a date the audit row
 // is not on and write nothing at all.
 func TestUsageBelongsToADayOnThePlatformsClock(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	tenantID, _ := newTenant(t, pool)
 	userID, _ := newPerson(t, pool, tenantID)
 	ctx := context.Background()

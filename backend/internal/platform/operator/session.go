@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"context"
@@ -62,7 +62,9 @@ func NewSessionStore(db *pgxpool.Pool) *SessionStore { return &SessionStore{db: 
 // so that the idle timeout does not put a write on every request.
 const touchInterval = time.Minute
 
-func hashToken(token string) string {
+// HashToken is how a token becomes the row that stands for it. Shared because
+// the support screen issues links the same way a session is issued.
+func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
@@ -100,7 +102,7 @@ func (s *SessionStore) create(ctx context.Context, tx pgx.Tx, operatorID, userAg
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO operator_sessions (token_hash, operator_id, user_agent, ip_address, expires_at, stepped_up_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		hashToken(token), operatorID, userAgent, ip, expiresAt, steppedUpAt); err != nil {
+		HashToken(token), operatorID, userAgent, ip, expiresAt, steppedUpAt); err != nil {
 		return "", time.Time{}, fmt.Errorf("persist the operator session: %w", err)
 	}
 	return token, expiresAt, nil
@@ -116,7 +118,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, erro
 	if token == "" {
 		return Session{}, ErrSessionInvalid
 	}
-	ctx = scoped(ctx)
+	ctx = Scoped(ctx)
 
 	var (
 		sess        Session
@@ -141,7 +143,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, erro
 		  FROM operator_sessions s
 		  JOIN live ON live.id = s.id
 		  JOIN operator_accounts a ON a.id = s.operator_id`,
-		hashToken(token), SessionIdleTimeout.String(), touchInterval.String()).
+		HashToken(token), SessionIdleTimeout.String(), touchInterval.String()).
 		Scan(&sess.ID, &sess.Email, &sess.Name, &role, &steppedUpAt, &sess.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -162,7 +164,7 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, erro
 func (s *SessionStore) MarkSteppedUp(ctx context.Context, tx pgx.Tx, token string) error {
 	_, err := tx.Exec(ctx,
 		`UPDATE operator_sessions SET stepped_up_at = NOW()
-		  WHERE token_hash = $1 AND revoked_at IS NULL`, hashToken(token))
+		  WHERE token_hash = $1 AND revoked_at IS NULL`, HashToken(token))
 	if err != nil {
 		return fmt.Errorf("record the step-up: %w", err)
 	}
@@ -177,7 +179,7 @@ func (s *SessionStore) Revoke(ctx context.Context, tx pgx.Tx, token string) erro
 	}
 	_, err := tx.Exec(ctx,
 		`UPDATE operator_sessions SET revoked_at = NOW()
-		  WHERE token_hash = $1 AND revoked_at IS NULL`, hashToken(token))
+		  WHERE token_hash = $1 AND revoked_at IS NULL`, HashToken(token))
 	return err
 }
 

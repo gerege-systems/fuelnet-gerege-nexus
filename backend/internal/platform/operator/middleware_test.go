@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func reached(hit *bool) http.Handler {
 }
 
 func TestHostGateAnswersOnTheConsolesHostnameOnly(t *testing.T) {
-	service := &Service{host: "cp.nexus.gerege.mn"}
+	service := &Console{host: "cp.nexus.gerege.mn"}
 
 	cases := []struct {
 		name   string
@@ -65,7 +65,7 @@ func TestHostGateAnswersOnTheConsolesHostnameOnly(t *testing.T) {
 // it must never be.
 func TestHostGateIsClosedInProductionWithoutAHostname(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "production")
-	service := &Service{host: ""}
+	service := &Console{host: ""}
 
 	var hit bool
 	request := httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil)
@@ -84,7 +84,7 @@ func TestHostGateIsClosedInProductionWithoutAHostname(t *testing.T) {
 
 func TestHostGateIsOpenInDevelopmentWithoutAHostname(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "")
-	service := &Service{host: ""}
+	service := &Console{host: ""}
 
 	var hit bool
 	request := httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil)
@@ -99,7 +99,7 @@ func TestHostGateIsOpenInDevelopmentWithoutAHostname(t *testing.T) {
 }
 
 func TestRequireCapabilityFollowsTheRoleTable(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 	guarded := service.RequireCapability(CapOperatorRead)
 
 	cases := []struct {
@@ -137,7 +137,7 @@ func TestRequireCapabilityFollowsTheRoleTable(t *testing.T) {
 func TestRequireCapabilityRefusesAnUnauthenticatedRequest(t *testing.T) {
 	var hit bool
 	recorder := httptest.NewRecorder()
-	(&Service{}).RequireCapability(CapTenantRead)(reached(&hit)).
+	(&Console{}).RequireCapability(CapTenantRead)(reached(&hit)).
 		ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil))
 
 	if recorder.Code != http.StatusUnauthorized || hit {
@@ -146,7 +146,7 @@ func TestRequireCapabilityRefusesAnUnauthenticatedRequest(t *testing.T) {
 }
 
 func TestRequireStepUpExpires(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 
 	cases := []struct {
 		name        string
@@ -184,7 +184,7 @@ func TestRequireStepUpExpires(t *testing.T) {
 // The rule from §2.5, exercised: a write that answered successfully without an
 // audit row does not reach the caller as a success.
 func TestRequireAuditWithholdsAnUnrecordedWrite(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 
 	unrecorded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Set-Cookie", "cp_session=leaked")
@@ -211,7 +211,7 @@ func TestRequireAuditWithholdsAnUnrecordedWrite(t *testing.T) {
 }
 
 func TestRequireAuditReleasesARecordedWrite(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 
 	recorded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// What Do stamps after it commits.
@@ -243,7 +243,7 @@ func TestRequireAuditReleasesARecordedWrite(t *testing.T) {
 // withhold. Without this, every 400 and 401 from a console write would be
 // rewritten into a 500 and the reason the caller was refused would be lost.
 func TestRequireAuditLetsRefusalsThrough(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 
 	refusing := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -263,7 +263,7 @@ func TestRequireAuditLetsRefusalsThrough(t *testing.T) {
 }
 
 func TestRequireAuditDoesNotBufferReads(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 
 	var hit bool
 	recorder := httptest.NewRecorder()
@@ -279,7 +279,7 @@ func TestRequireAuditDoesNotBufferReads(t *testing.T) {
 // opens a transaction — so the check cannot be reached with a half-applied
 // change behind it.
 func TestDoRequiresAReason(t *testing.T) {
-	service := &Service{}
+	service := &Console{}
 	var ran bool
 	err := service.Do(context.Background(), Session{Operator: Operator{ID: "1"}},
 		Change{Action: "tenant.suspend", TargetType: "tenant", TargetID: "x"},

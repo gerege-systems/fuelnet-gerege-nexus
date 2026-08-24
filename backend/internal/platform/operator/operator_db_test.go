@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"context"
@@ -65,7 +65,7 @@ func openPool(t *testing.T) *pgxpool.Pool {
 func codeAt(t *testing.T, secret string, at time.Time) string {
 	t.Helper()
 	code, err := totp.GenerateCodeCustom(secret, at, totp.ValidateOpts{
-		Period: totpPeriod, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+		Period: TOTPPeriod, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
 	})
 	if err != nil {
 		t.Fatalf("generate a code: %v", err)
@@ -104,7 +104,7 @@ func newOperator(t *testing.T, pool *pgxpool.Pool, role Role) (Operator, string)
 	// without waiting thirty seconds between each, and without pretending a
 	// code can be reused, which is the property being protected.
 	if err := ConfirmSecondFactor(ctx, pool, operator.ID,
-		codeAt(t, enrolment.Secret, time.Now().Add(-totpPeriod*time.Second))); err != nil {
+		codeAt(t, enrolment.Secret, time.Now().Add(-TOTPPeriod*time.Second))); err != nil {
 		t.Fatalf("confirm the second factor: %v", err)
 	}
 	return operator, enrolment.Secret
@@ -115,7 +115,7 @@ func newOperator(t *testing.T, pool *pgxpool.Pool, role Role) (Operator, string)
 // behind, and it must be a locked door rather than a password-only one.
 func TestSignInRefusesAnUnconfirmedAccount(t *testing.T) {
 	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
+	service := New(pool)
 
 	email := fmt.Sprintf("unconfirmed+%d@controlplane.test", time.Now().UnixNano())
 	operator, enrolment, err := CreateOperator(context.Background(), pool, NewOperator{
@@ -138,7 +138,7 @@ func TestSignInRefusesAnUnconfirmedAccount(t *testing.T) {
 // then the same code again, which must not work twice.
 func TestSignInIssuesASessionAndRecordsIt(t *testing.T) {
 	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
+	service := New(pool)
 	operator, secret := newOperator(t, pool, RoleOperator)
 
 	// The current code, one step past the one enrolment consumed.
@@ -181,7 +181,7 @@ func TestSignInIssuesASessionAndRecordsIt(t *testing.T) {
 
 func TestSignInRefusesTheWrongPasswordAndLocksOut(t *testing.T) {
 	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
+	service := New(pool)
 	operator, secret := newOperator(t, pool, RoleOperator)
 
 	for attempt := 0; attempt < maxLoginFailures; attempt++ {
@@ -276,7 +276,7 @@ func TestOperatorRoleReadsButCannotWrite(t *testing.T) {
 // cannot be used to do it twice.
 func TestStepUpConfirmsAndCannotBeReplayed(t *testing.T) {
 	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
+	service := New(pool)
 	operator, secret := newOperator(t, pool, RoleSuperadmin)
 
 	signInRecorder := signIn(t, service, operator.Email, "correct horse battery",
@@ -293,7 +293,7 @@ func TestStepUpConfirmsAndCannotBeReplayed(t *testing.T) {
 
 	// The next step: later than the one sign-in consumed, and still inside the
 	// window verifyTOTP accepts.
-	code := codeAt(t, secret, time.Now().Add(totpPeriod*time.Second))
+	code := codeAt(t, secret, time.Now().Add(TOTPPeriod*time.Second))
 	recorder := stepUp(t, service, session, code)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("step-up answered %d: %s", recorder.Code, recorder.Body.String())
@@ -311,7 +311,7 @@ func TestStepUpConfirmsAndCannotBeReplayed(t *testing.T) {
 // keeps working until it expires eight hours later.
 func TestSignOutRevokesTheSession(t *testing.T) {
 	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
+	service := New(pool)
 	operator, secret := newOperator(t, pool, RoleSupport)
 
 	recorder := signIn(t, service, operator.Email, "correct horse battery", codeAt(t, secret, time.Now()))
@@ -339,7 +339,7 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 
 // Helpers.
 
-func signIn(t *testing.T, service *Service, email, password, code string) *httptest.ResponseRecorder {
+func signIn(t *testing.T, service *Console, email, password, code string) *httptest.ResponseRecorder {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"email": email, "password": password, "code": code})
 	request := httptest.NewRequest(http.MethodPost, "/cp/api/session", strings.NewReader(string(body)))
@@ -348,7 +348,7 @@ func signIn(t *testing.T, service *Service, email, password, code string) *httpt
 	return recorder
 }
 
-func stepUp(t *testing.T, service *Service, session Session, code string) *httptest.ResponseRecorder {
+func stepUp(t *testing.T, service *Console, session Session, code string) *httptest.ResponseRecorder {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"code": code})
 	request := httptest.NewRequest(http.MethodPost, "/cp/api/step-up", strings.NewReader(string(body)))

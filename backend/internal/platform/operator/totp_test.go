@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"strings"
@@ -33,7 +33,7 @@ func TestVerifyTOTPAcceptsTheSpecificationsVectors(t *testing.T) {
 			t.Errorf("code %s at %d was refused", c.code, c.at)
 			continue
 		}
-		if want := c.at / totpPeriod; step != want {
+		if want := c.at / TOTPPeriod; step != want {
 			t.Errorf("code %s at %d reported step %d, want %d", c.code, c.at, step, want)
 		}
 	}

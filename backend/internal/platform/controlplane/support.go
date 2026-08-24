@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
@@ -86,7 +88,7 @@ func (s *Service) FindPeople(ctx context.Context, query string) ([]Person, error
 		return []Person{}, nil
 	}
 
-	ctx, cancel := context.WithTimeout(scoped(ctx), queryTimeout)
+	ctx, cancel := context.WithTimeout(operator.Scoped(ctx), queryTimeout)
 	defer cancel()
 
 	rows, err := s.db.Query(ctx,
@@ -167,7 +169,7 @@ func (s *Service) membershipsFor(ctx context.Context, userIDs []string) (map[str
 // person reads one account, for the "before" of a change.
 func (s *Service) person(ctx context.Context, userID string) (Person, error) {
 	var found Person
-	err := s.db.QueryRow(scoped(ctx),
+	err := s.db.QueryRow(operator.Scoped(ctx),
 		`SELECT id::text, email, name, locked_until, failed_login_attempts
 		   FROM users WHERE id = $1::uuid`, userID).
 		Scan(&found.ID, &found.Email, &found.Name, &found.LockedUntil, &found.FailedLogins)
@@ -175,7 +177,7 @@ func (s *Service) person(ctx context.Context, userID string) (Person, error) {
 		return Person{}, ErrUserNotFound
 	}
 	if err != nil {
-		if isInvalidUUID(err) {
+		if operator.IsInvalidUUID(err) {
 			return Person{}, ErrUserNotFound
 		}
 		return Person{}, fmt.Errorf("control plane: read the person: %w", err)
@@ -188,12 +190,12 @@ func (s *Service) person(ctx context.Context, userID string) (Person, error) {
 // The columns this writes are the only two of `users` the console's database
 // role may write at all. A handler here that tried to change a password would
 // be refused by PostgreSQL, which is a better guarantee than this comment.
-func (s *Service) Unlock(ctx context.Context, sess Session, userID, reason string) error {
+func (s *Service) Unlock(ctx context.Context, sess operator.Session, userID, reason string) error {
 	before, err := s.person(ctx, userID)
 	if err != nil {
 		return err
 	}
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "user.unlock",
 		TargetType: "user",
 		TargetID:   userID,
@@ -211,13 +213,13 @@ func (s *Service) Unlock(ctx context.Context, sess Session, userID, reason strin
 //
 // What a person needs after leaving themselves signed in on a machine they no
 // longer have, and what an operator needs the moment an account is suspected.
-func (s *Service) RevokeSessions(ctx context.Context, sess Session, userID, reason string) (int64, error) {
+func (s *Service) RevokeSessions(ctx context.Context, sess operator.Session, userID, reason string) (int64, error) {
 	before, err := s.person(ctx, userID)
 	if err != nil {
 		return 0, err
 	}
 	var ended int64
-	err = s.Do(ctx, sess, Change{
+	err = s.op.Do(ctx, sess, operator.Change{
 		Action:     "user.sessions.revoke",
 		TargetType: "user",
 		TargetID:   userID,
@@ -246,7 +248,7 @@ func (s *Service) RevokeSessions(ctx context.Context, sess Session, userID, reas
 // the only mail rail this deployment has. That service's job is to prove an
 // address, and proving the address is exactly the precondition for setting a
 // password on the account that carries it.
-func (s *Service) SendCredentialLink(ctx context.Context, sess Session, userID, tenantID, purpose, reason string) error {
+func (s *Service) SendCredentialLink(ctx context.Context, sess operator.Session, userID, tenantID, purpose, reason string) error {
 	if purpose != "invite" && purpose != "reset" {
 		return fmt.Errorf("%q is not something this can send", purpose)
 	}
@@ -254,7 +256,7 @@ func (s *Service) SendCredentialLink(ctx context.Context, sess Session, userID, 
 	if err != nil {
 		return err
 	}
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "user.credential." + purpose,
 		TargetType: "user",
 		TargetID:   userID,
@@ -295,7 +297,7 @@ func (s *Service) issueCredentialGrant(ctx context.Context, tx pgx.Tx, userID, p
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO credential_grants (user_id, purpose, token_hash, issued_by_operator, expires_at)
 		 VALUES ($1::uuid, $2, $3, $4::uuid, NOW() + $5::interval)`,
-		userID, purpose, hashToken(token), operatorID, CredentialLinkTTL.String()); err != nil {
+		userID, purpose, operator.HashToken(token), operatorID, CredentialLinkTTL.String()); err != nil {
 		return "", fmt.Errorf("record the link: %w", err)
 	}
 	return token, nil
@@ -335,14 +337,14 @@ func CredentialLinkURL(token string) string {
 
 // invite is the first administrator's copy of the above, called by
 // CreateTenant once the organisation exists.
-func (s *Service) invite(ctx context.Context, tenantID, userID, email, tenantName string, sess Session) error {
-	tx, err := s.db.Begin(scoped(ctx))
+func (s *Service) invite(ctx context.Context, tenantID, userID, email, tenantName string, sess operator.Session) error {
+	tx, err := s.db.Begin(operator.Scoped(ctx))
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	token, err := s.issueCredentialGrant(scoped(ctx), tx, userID, "invite", sess.ID)
+	token, err := s.issueCredentialGrant(operator.Scoped(ctx), tx, userID, "invite", sess.ID)
 	if err != nil {
 		return err
 	}

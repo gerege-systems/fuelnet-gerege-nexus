@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -44,7 +46,7 @@ type BackgroundJob struct {
 // has nothing to fetch.
 func (s *Service) backgroundJobs(ctx context.Context) []BackgroundJob {
 	jobs := make([]BackgroundJob, 0, 3)
-	ctx = scoped(ctx)
+	ctx = operator.Scoped(ctx)
 
 	var lastRun *time.Time
 	var failures, pending int
@@ -138,7 +140,7 @@ type TenantTrouble struct {
 // know is "whose work is failing", and the audit trail records acts rather
 // than requests.
 func (s *Service) tenantTrouble(ctx context.Context) []TenantTrouble {
-	rows, err := s.db.Query(scoped(ctx),
+	rows, err := s.db.Query(operator.Scoped(ctx),
 		`SELECT a.tenant_id::text, COALESCE(t.name, ''), count(*), min(a.action)
 		   FROM audit_events a
 		   LEFT JOIN tenants t ON t.id = a.tenant_id
@@ -186,7 +188,7 @@ type BackupStatus struct {
 
 func (s *Service) backupStatus(ctx context.Context) BackupStatus {
 	status := BackupStatus{}
-	ctx = scoped(ctx)
+	ctx = operator.Scoped(ctx)
 
 	var size *int64
 	err := s.db.QueryRow(ctx,
@@ -215,8 +217,8 @@ func (s *Service) backupStatus(ctx context.Context) BackupStatus {
 }
 
 // RecordRestoreTest writes down that somebody restored a backup and it worked.
-func (s *Service) RecordRestoreTest(ctx context.Context, sess Session, detail, reason string) error {
-	return s.Do(ctx, sess, Change{
+func (s *Service) RecordRestoreTest(ctx context.Context, sess operator.Session, detail, reason string) error {
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "backup.restore_test",
 		TargetType: "platform",
 		TargetID:   "backups",
@@ -260,7 +262,7 @@ func (s *Service) catalogStatus(ctx context.Context) CatalogStatus {
 	// organisation left on the previous version of an app is invisible
 	// everywhere else — it looks like a working deployment until somebody
 	// telephones about a feature that is missing.
-	rows, err := s.db.Query(scoped(ctx),
+	rows, err := s.db.Query(operator.Scoped(ctx),
 		`SELECT i.app_id, COALESCE(a.name, i.app_id), i.installed_version, count(*)
 		   FROM app_installations i
 		   LEFT JOIN apps a ON a.id = i.app_id
@@ -317,7 +319,7 @@ func (s *Service) version(ctx context.Context) VersionInfo {
 	// place that says which migrations this database has actually seen, and a
 	// deployment whose image is newer than its schema is a real and quiet
 	// failure mode.
-	if err := s.db.QueryRow(scoped(ctx),
+	if err := s.db.QueryRow(operator.Scoped(ctx),
 		`SELECT version_id, tstamp FROM goose_db_version
 		  WHERE is_applied ORDER BY id DESC LIMIT 1`).
 		Scan(&info.Migration, &info.AppliedAt); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -361,7 +363,7 @@ func deployWorkflow() string {
 // deliberately does not follow the run: watching it would mean polling
 // somebody else's API for minutes, and GitHub already has a screen for it that
 // shows more than this console ever should.
-func (s *Service) TriggerDeploy(ctx context.Context, sess Session, ref, reason string) (string, error) {
+func (s *Service) TriggerDeploy(ctx context.Context, sess operator.Session, ref, reason string) (string, error) {
 	token := strings.TrimSpace(os.Getenv("GITHUB_DEPLOY_TOKEN"))
 	repository := strings.TrimSpace(os.Getenv("GITHUB_REPOSITORY"))
 	if token == "" || repository == "" {
@@ -372,7 +374,7 @@ func (s *Service) TriggerDeploy(ctx context.Context, sess Session, ref, reason s
 	}
 
 	runsURL := fmt.Sprintf("https://github.com/%s/actions/workflows/%s", repository, deployWorkflow())
-	err := s.Do(ctx, sess, Change{
+	err := s.op.Do(ctx, sess, operator.Change{
 		Action:     "deploy.trigger",
 		TargetType: "platform",
 		TargetID:   repository,

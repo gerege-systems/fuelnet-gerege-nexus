@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -38,9 +40,9 @@ const exportRowCap = 50_000
 
 // ExportBundle is an organisation's data, table by table.
 type ExportBundle struct {
-	Tenant     TenantState `json:"tenant"`
-	ExportedAt time.Time   `json:"exported_at"`
-	ExportedBy string      `json:"exported_by"`
+	Tenant     operator.TenantState `json:"tenant"`
+	ExportedAt time.Time            `json:"exported_at"`
+	ExportedBy string               `json:"exported_by"`
 	// Tables maps a table name to its rows. Keys are whatever the schema had
 	// at the time; a module added next year appears here without this file
 	// changing, which is the property that keeps an export from quietly
@@ -51,15 +53,15 @@ type ExportBundle struct {
 }
 
 // ExportTenant assembles the bundle.
-func (s *Service) ExportTenant(ctx context.Context, sess Session, tenantID string) (ExportBundle, error) {
-	state, err := s.tenantState(ctx, tenantID)
+func (s *Service) ExportTenant(ctx context.Context, sess operator.Session, tenantID string) (ExportBundle, error) {
+	state, err := s.op.StateOf(ctx, tenantID)
 	if err != nil {
 		return ExportBundle{}, err
 	}
 
 	// Audited first. An export that failed half way through has still been an
 	// attempt to read an organisation's data, and the trail should say so.
-	if err := s.do(ctx, sess, Change{
+	if err := s.op.Record(ctx, sess, operator.Change{
 		Action:     "tenant.export",
 		TargetType: "tenant",
 		TargetID:   tenantID,

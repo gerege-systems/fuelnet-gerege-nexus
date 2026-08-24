@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -60,7 +62,7 @@ var ErrUnknownEnforcement = errors.New(`enforcement must be "soft" or "hard"`)
 func (s *Service) GetQuota(ctx context.Context, tenantID string) (Quota, error) {
 	quota := Quota{TenantID: tenantID, Enforcement: EnforcementSoft, Enforced: []string{"users"}}
 
-	err := s.db.QueryRow(scoped(ctx),
+	err := s.db.QueryRow(operator.Scoped(ctx),
 		`SELECT COALESCE(q.max_users, -1), COALESCE(q.max_storage_mb, -1),
 		        COALESCE(q.max_ai_calls_monthly, -1),
 		        COALESCE(q.enforcement, 'soft'), COALESCE(q.updated_at, NOW()),
@@ -71,11 +73,11 @@ func (s *Service) GetQuota(ctx context.Context, tenantID string) (Quota, error) 
 		Scan(orNil(&quota.MaxUsers), orNil(&quota.MaxStorageMB), orNil(&quota.MaxAICallsMonthly),
 			&quota.Enforcement, &quota.UpdatedAt, &quota.Users)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Quota{}, ErrTenantNotFound
+		return Quota{}, operator.ErrTenantNotFound
 	}
 	if err != nil {
-		if isInvalidUUID(err) {
-			return Quota{}, ErrTenantNotFound
+		if operator.IsInvalidUUID(err) {
+			return Quota{}, operator.ErrTenantNotFound
 		}
 		return Quota{}, fmt.Errorf("control plane: read the limits: %w", err)
 	}
@@ -83,7 +85,7 @@ func (s *Service) GetQuota(ctx context.Context, tenantID string) (Quota, error) 
 }
 
 // SetQuota writes an organisation's limits.
-func (s *Service) SetQuota(ctx context.Context, sess Session, tenantID string, wanted Quota, reason string) error {
+func (s *Service) SetQuota(ctx context.Context, sess operator.Session, tenantID string, wanted Quota, reason string) error {
 	if wanted.Enforcement != EnforcementSoft && wanted.Enforcement != EnforcementHard {
 		return ErrUnknownEnforcement
 	}
@@ -92,7 +94,7 @@ func (s *Service) SetQuota(ctx context.Context, sess Session, tenantID string, w
 		return err
 	}
 
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.quota.set",
 		TargetType: "tenant",
 		TargetID:   tenantID,

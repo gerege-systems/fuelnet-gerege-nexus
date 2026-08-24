@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -20,7 +22,7 @@ import (
 //
 // Three things enforce "somebody else", and none of them is the handler:
 //
-//   - the capability table — only superadmin holds CapApprove;
+//   - the capability table — only superadmin holds operator.CapApprove;
 //   - this file — the requester is compared to the approver;
 //   - the database — `pending_approvals_two_people` is a CHECK constraint, so
 //     even a query written later, by somebody who has not read this file,
@@ -72,8 +74,8 @@ type Approval struct {
 // and it is visible to every operator until somebody answers it or it expires
 // — which is itself a control: a request to delete a customer's organisation
 // should be seen by people who did not make it.
-func (s *Service) RequestDeletion(ctx context.Context, sess Session, tenantID, reason string) (string, error) {
-	state, err := s.tenantState(ctx, tenantID)
+func (s *Service) RequestDeletion(ctx context.Context, sess operator.Session, tenantID, reason string) (string, error) {
+	state, err := s.op.StateOf(ctx, tenantID)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +84,7 @@ func (s *Service) RequestDeletion(ctx context.Context, sess Session, tenantID, r
 	}
 
 	var approvalID string
-	err = s.Do(ctx, sess, Change{
+	err = s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.deletion.request",
 		TargetType: "tenant",
 		TargetID:   tenantID,
@@ -123,7 +125,7 @@ func (s *Service) RequestDeletion(ctx context.Context, sess Session, tenantID, r
 
 // ListApprovals returns the requests still waiting for an answer.
 func (s *Service) ListApprovals(ctx context.Context) ([]Approval, error) {
-	rows, err := s.db.Query(scoped(ctx),
+	rows, err := s.db.Query(operator.Scoped(ctx),
 		`SELECT a.id::text, a.action, a.target_type, a.target_id,
 		        COALESCE(t.name, ''), a.payload,
 		        a.requested_by::text, COALESCE(o.name, o.email, ''),
@@ -158,8 +160,8 @@ func (s *Service) ListApprovals(ctx context.Context) ([]Approval, error) {
 // written: two superadmins pressing the button at the same moment would
 // otherwise both see an open request, and the organisation would be scheduled
 // twice by two people who each think they were the second signature.
-func (s *Service) Approve(ctx context.Context, sess Session, approvalID, reason string) error {
-	return s.Do(ctx, sess, Change{
+func (s *Service) Approve(ctx context.Context, sess operator.Session, approvalID, reason string) error {
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "approval.approve",
 		TargetType: "approval",
 		TargetID:   approvalID,
@@ -214,11 +216,11 @@ func (s *Service) Approve(ctx context.Context, sess Session, approvalID, reason 
 
 // Reject refuses a request. The organisation is untouched and the request
 // cannot be reopened — asking again is a new request, with a new reason.
-func (s *Service) Reject(ctx context.Context, sess Session, approvalID, reason string) error {
+func (s *Service) Reject(ctx context.Context, sess operator.Session, approvalID, reason string) error {
 	if reason == "" {
-		return ErrReasonRequired
+		return operator.ErrReasonRequired
 	}
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "approval.reject",
 		TargetType: "approval",
 		TargetID:   approvalID,

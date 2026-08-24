@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
 	"github.com/jackc/pgx/v5"
 )
@@ -103,7 +105,7 @@ type CreatedTenant struct {
 // store endpoint uses, with its dependency resolution and its compiled-module
 // check — because writing app_installations rows here would let the console
 // create an organisation whose apps have no Go module behind them.
-func (s *Service) CreateTenant(ctx context.Context, sess Session, params NewTenant) (CreatedTenant, error) {
+func (s *Service) CreateTenant(ctx context.Context, sess operator.Session, params NewTenant) (CreatedTenant, error) {
 	name := strings.TrimSpace(params.Name)
 	slug := strings.ToLower(strings.TrimSpace(params.Slug))
 	adminEmail := strings.ToLower(strings.TrimSpace(params.AdminEmail))
@@ -119,7 +121,7 @@ func (s *Service) CreateTenant(ctx context.Context, sess Session, params NewTena
 
 	created := CreatedTenant{Slug: slug, Name: name}
 	var adminUserID string
-	err := s.Do(ctx, sess, Change{
+	err := s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.create",
 		TargetType: "tenant",
 		Reason:     params.Reason,
@@ -300,15 +302,15 @@ func (s *Service) installApps(ctx context.Context, tenantID, userID string, apps
 
 // Suspend closes an organisation. Signing in stops working, every API call is
 // refused, and the data is untouched.
-func (s *Service) Suspend(ctx context.Context, sess Session, tenantID, reason string) error {
-	before, err := s.tenantState(ctx, tenantID)
+func (s *Service) Suspend(ctx context.Context, sess operator.Session, tenantID, reason string) error {
+	before, err := s.op.StateOf(ctx, tenantID)
 	if err != nil {
 		return err
 	}
 	// After the transaction either way: a rollback leaves the platform's cache
 	// holding what is still true, and a needless invalidation costs one query.
 	defer s.changed(tenantID)
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.suspend",
 		TargetType: "tenant",
 		TargetID:   tenantID,
@@ -335,8 +337,8 @@ func (s *Service) Suspend(ctx context.Context, sess Session, tenantID, reason st
 }
 
 // Resume reopens a suspended organisation.
-func (s *Service) Resume(ctx context.Context, sess Session, tenantID, reason string) error {
-	before, err := s.tenantState(ctx, tenantID)
+func (s *Service) Resume(ctx context.Context, sess operator.Session, tenantID, reason string) error {
+	before, err := s.op.StateOf(ctx, tenantID)
 	if err != nil {
 		return err
 	}
@@ -344,7 +346,7 @@ func (s *Service) Resume(ctx context.Context, sess Session, tenantID, reason str
 		return ErrNotSuspended
 	}
 	defer s.changed(tenantID)
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.resume",
 		TargetType: "tenant",
 		TargetID:   tenantID,
@@ -361,8 +363,8 @@ func (s *Service) Resume(ctx context.Context, sess Session, tenantID, reason str
 
 // CancelDeletion takes an organisation back off the deletion list. It is the
 // one-button recovery the grace period exists for.
-func (s *Service) CancelDeletion(ctx context.Context, sess Session, tenantID, reason string) error {
-	before, err := s.tenantState(ctx, tenantID)
+func (s *Service) CancelDeletion(ctx context.Context, sess operator.Session, tenantID, reason string) error {
+	before, err := s.op.StateOf(ctx, tenantID)
 	if err != nil {
 		return err
 	}
@@ -370,7 +372,7 @@ func (s *Service) CancelDeletion(ctx context.Context, sess Session, tenantID, re
 		return ErrNotScheduled
 	}
 	defer s.changed(tenantID)
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.deletion.cancel",
 		TargetType: "tenant",
 		TargetID:   tenantID,
@@ -381,36 +383,6 @@ func (s *Service) CancelDeletion(ctx context.Context, sess Session, tenantID, re
 			`UPDATE tenants SET deletion_scheduled_at = NULL WHERE id = $1::uuid`, tenantID)
 		return err
 	})
-}
-
-// TenantState is the lifecycle half of an organisation's row, used as the
-// "before" of every change so the audit trail records what was undone.
-type TenantState struct {
-	ID                  string     `json:"id"`
-	Slug                string     `json:"slug"`
-	Name                string     `json:"name"`
-	SuspendedAt         *time.Time `json:"suspended_at"`
-	SuspensionReason    string     `json:"suspension_reason"`
-	DeletionScheduledAt *time.Time `json:"deletion_scheduled_at"`
-}
-
-func (s *Service) tenantState(ctx context.Context, tenantID string) (TenantState, error) {
-	var state TenantState
-	err := s.db.QueryRow(scoped(ctx),
-		`SELECT id::text, slug, name, suspended_at, suspension_reason, deletion_scheduled_at
-		   FROM tenants WHERE id = $1::uuid`, tenantID).
-		Scan(&state.ID, &state.Slug, &state.Name, &state.SuspendedAt,
-			&state.SuspensionReason, &state.DeletionScheduledAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return TenantState{}, ErrTenantNotFound
-	}
-	if err != nil {
-		if isInvalidUUID(err) {
-			return TenantState{}, ErrTenantNotFound
-		}
-		return TenantState{}, fmt.Errorf("control plane: read the organisation's state: %w", err)
-	}
-	return state, nil
 }
 
 // StartDeletionSweep removes organisations whose grace period has run out.
@@ -498,8 +470,8 @@ func (s *Service) sweepDeletions(ctx context.Context) {
 // TenantsAwaitingDeletion is what the console's home screen shows, and it is
 // the other half of a grace period being useful: a countdown nobody can see is
 // a countdown nobody stops.
-func (s *Service) TenantsAwaitingDeletion(ctx context.Context) ([]TenantState, error) {
-	rows, err := s.db.Query(scoped(ctx),
+func (s *Service) TenantsAwaitingDeletion(ctx context.Context) ([]operator.TenantState, error) {
+	rows, err := s.db.Query(operator.Scoped(ctx),
 		`SELECT id::text, slug, name, suspended_at, suspension_reason, deletion_scheduled_at
 		   FROM tenants WHERE deletion_scheduled_at IS NOT NULL
 		  ORDER BY deletion_scheduled_at`)
@@ -508,9 +480,9 @@ func (s *Service) TenantsAwaitingDeletion(ctx context.Context) ([]TenantState, e
 	}
 	defer rows.Close()
 
-	states := make([]TenantState, 0, 4)
+	states := make([]operator.TenantState, 0, 4)
 	for rows.Next() {
-		var state TenantState
+		var state operator.TenantState
 		if err := rows.Scan(&state.ID, &state.Slug, &state.Name, &state.SuspendedAt,
 			&state.SuspensionReason, &state.DeletionScheduledAt); err != nil {
 			return nil, fmt.Errorf("control plane: read an organisation awaiting deletion: %w", err)

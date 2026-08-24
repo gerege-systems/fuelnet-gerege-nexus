@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 	"github.com/jackc/pgx/v5"
@@ -37,7 +39,7 @@ func (s *Service) ListSettings(ctx context.Context) ([]settings.Value, error) {
 	if s.settings == nil {
 		return nil, ErrNoSettingsStore
 	}
-	return s.settings.List(scoped(ctx))
+	return s.settings.List(operator.Scoped(ctx))
 }
 
 // SetSetting writes a value.
@@ -45,7 +47,7 @@ func (s *Service) ListSettings(ctx context.Context) ([]settings.Value, error) {
 // The audit row carries both values, so the trail answers "what was it before"
 // without anybody having to open the history — the two questions arrive
 // together in an incident.
-func (s *Service) SetSetting(ctx context.Context, sess Session, key, value, reason string) error {
+func (s *Service) SetSetting(ctx context.Context, sess operator.Session, key, value, reason string) error {
 	if s.settings == nil {
 		return ErrNoSettingsStore
 	}
@@ -55,7 +57,7 @@ func (s *Service) SetSetting(ctx context.Context, sess Session, key, value, reas
 	}
 
 	before := settings.Get(key)
-	err := s.Do(ctx, sess, Change{
+	err := s.op.Do(ctx, sess, operator.Change{
 		Action:     "settings.set",
 		TargetType: "setting",
 		TargetID:   key,
@@ -81,7 +83,7 @@ func (s *Service) SettingHistory(ctx context.Context, key string) ([]settings.Ch
 	if s.settings == nil {
 		return nil, ErrNoSettingsStore
 	}
-	return s.settings.History(scoped(ctx), key)
+	return s.settings.History(operator.Scoped(ctx), key)
 }
 
 // RollbackSetting puts a setting back to what a named change moved it from.
@@ -89,21 +91,21 @@ func (s *Service) SettingHistory(ctx context.Context, key string) ([]settings.Ch
 // A rollback is itself a change: it writes a new history row rather than
 // removing the one it undoes. A history that could be rewound would be a
 // history somebody could edit, and the value of this table is that it cannot.
-func (s *Service) RollbackSetting(ctx context.Context, sess Session, changeID, reason string) error {
+func (s *Service) RollbackSetting(ctx context.Context, sess operator.Session, changeID, reason string) error {
 	if s.settings == nil {
 		return ErrNoSettingsStore
 	}
 
 	var key string
 	var previous *string
-	err := s.db.QueryRow(scoped(ctx),
+	err := s.db.QueryRow(operator.Scoped(ctx),
 		`SELECT key, previous_value FROM platform_settings_history WHERE id = $1::uuid`,
 		changeID).Scan(&key, &previous)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrHistoryNotFound
 	}
 	if err != nil {
-		if isInvalidUUID(err) {
+		if operator.IsInvalidUUID(err) {
 			return ErrHistoryNotFound
 		}
 		return fmt.Errorf("control plane: read the change: %w", err)
@@ -128,7 +130,7 @@ func (s *Service) ListFlags(ctx context.Context) ([]flags.Flag, error) {
 	if s.flags == nil {
 		return nil, ErrNoFlagStore
 	}
-	return s.flags.List(scoped(ctx))
+	return s.flags.List(operator.Scoped(ctx))
 }
 
 // FlagInput is a flag as the console writes it.
@@ -144,7 +146,7 @@ type FlagInput struct {
 }
 
 // SaveFlag creates or updates a flag.
-func (s *Service) SaveFlag(ctx context.Context, sess Session, input FlagInput) error {
+func (s *Service) SaveFlag(ctx context.Context, sess operator.Session, input FlagInput) error {
 	if s.flags == nil {
 		return ErrNoFlagStore
 	}
@@ -162,7 +164,7 @@ func (s *Service) SaveFlag(ctx context.Context, sess Session, input FlagInput) e
 		return errors.New("a rollout is 0 to 100")
 	}
 
-	err := s.Do(ctx, sess, Change{
+	err := s.op.Do(ctx, sess, operator.Change{
 		Action:     "flag.save",
 		TargetType: "flag",
 		TargetID:   input.Key,
@@ -195,11 +197,11 @@ func (s *Service) SaveFlag(ctx context.Context, sess Session, input FlagInput) e
 // The console can do this, unlike almost everything else, because a flag that
 // cannot be removed is flag debt by construction: the expiry warning would
 // name flags nobody could act on.
-func (s *Service) DeleteFlag(ctx context.Context, sess Session, key, reason string) error {
+func (s *Service) DeleteFlag(ctx context.Context, sess operator.Session, key, reason string) error {
 	if s.flags == nil {
 		return ErrNoFlagStore
 	}
-	err := s.Do(ctx, sess, Change{
+	err := s.op.Do(ctx, sess, operator.Change{
 		Action:     "flag.delete",
 		TargetType: "flag",
 		TargetID:   key,
@@ -216,11 +218,11 @@ func (s *Service) DeleteFlag(ctx context.Context, sess Session, key, reason stri
 }
 
 // SetFlagOverride decides a flag for one organisation, or removes the decision.
-func (s *Service) SetFlagOverride(ctx context.Context, sess Session, key, tenantID string, enabled *bool, reason string) error {
+func (s *Service) SetFlagOverride(ctx context.Context, sess operator.Session, key, tenantID string, enabled *bool, reason string) error {
 	if s.flags == nil {
 		return ErrNoFlagStore
 	}
-	err := s.Do(ctx, sess, Change{
+	err := s.op.Do(ctx, sess, operator.Change{
 		Action:     "flag.override",
 		TargetType: "flag",
 		TargetID:   key,
@@ -249,13 +251,13 @@ func (s *Service) SetFlagOverride(ctx context.Context, sess Session, key, tenant
 }
 
 // SetTenantMaintenance opens or closes one organisation for writing.
-func (s *Service) SetTenantMaintenance(ctx context.Context, sess Session, tenantID string, on bool, message, reason string) error {
-	before, err := s.tenantState(ctx, tenantID)
+func (s *Service) SetTenantMaintenance(ctx context.Context, sess operator.Session, tenantID string, on bool, message, reason string) error {
+	before, err := s.op.StateOf(ctx, tenantID)
 	if err != nil {
 		return err
 	}
 	defer s.changed(tenantID)
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "tenant.maintenance",
 		TargetType: "tenant",
 		TargetID:   tenantID,
@@ -290,7 +292,7 @@ type Announcement struct {
 
 // ListAnnouncements returns them, newest first.
 func (s *Service) ListAnnouncements(ctx context.Context) ([]Announcement, error) {
-	rows, err := s.db.Query(scoped(ctx),
+	rows, err := s.db.Query(operator.Scoped(ctx),
 		`SELECT id::text, tenant_id::text, kind, title, body, starts_at, ends_at, created_at
 		   FROM announcements ORDER BY starts_at DESC LIMIT 100`)
 	if err != nil {
@@ -312,7 +314,7 @@ func (s *Service) ListAnnouncements(ctx context.Context) ([]Announcement, error)
 }
 
 // Announce broadcasts something, to everybody or to one organisation.
-func (s *Service) Announce(ctx context.Context, sess Session, announcement Announcement, reason string) error {
+func (s *Service) Announce(ctx context.Context, sess operator.Session, announcement Announcement, reason string) error {
 	if announcement.Title == "" {
 		return errors.New("an announcement needs something to say")
 	}
@@ -324,7 +326,7 @@ func (s *Service) Announce(ctx context.Context, sess Session, announcement Annou
 		return fmt.Errorf("%q is not a kind of announcement", announcement.Kind)
 	}
 
-	return s.Do(ctx, sess, Change{
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "announcement.create",
 		TargetType: "announcement",
 		TargetID:   valueOr(announcement.TenantID, "all"),
@@ -345,8 +347,8 @@ func (s *Service) Announce(ctx context.Context, sess Session, announcement Annou
 }
 
 // WithdrawAnnouncement removes one.
-func (s *Service) WithdrawAnnouncement(ctx context.Context, sess Session, id, reason string) error {
-	return s.Do(ctx, sess, Change{
+func (s *Service) WithdrawAnnouncement(ctx context.Context, sess operator.Session, id, reason string) error {
+	return s.op.Do(ctx, sess, operator.Change{
 		Action:     "announcement.withdraw",
 		TargetType: "announcement",
 		TargetID:   id,

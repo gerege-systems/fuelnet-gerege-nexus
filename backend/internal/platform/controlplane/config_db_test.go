@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator/optest"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
@@ -31,17 +35,17 @@ func configService(t *testing.T, pool *pgxpool.Pool) *Service {
 		t.Fatalf("load the flags: %v", err)
 	}
 
-	return &Service{db: pool, sessions: NewSessionStore(pool), settings: store, flags: flagStore}
+	return &Service{op: operator.New(pool), db: pool, settings: store, flags: flagStore}
 }
 
 // The line the access mode does not cross: somebody an operator invited is
 // already registered, so creating them is not just-in-time provisioning and is
 // not what private mode refuses.
 func TestAnInvitationStillWorksWhileThePlatformIsPrivate(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	service := configService(t, pool)
-	operator, _ := newOperator(t, pool, RoleOperator)
-	sess := sessionFor(operator)
+	account, _ := optest.Account(t, pool, operator.RoleOperator)
+	sess := sessionFor(account)
 	ctx := context.Background()
 
 	if err := service.SetSetting(ctx, sess, settings.AccessMode, settings.AccessPrivate,
@@ -96,10 +100,10 @@ func TestAnInvitationStillWorksWhileThePlatformIsPrivate(t *testing.T) {
 // A setting changes, is recorded, and can be put back — and the rollback is
 // itself a change rather than an erasure.
 func TestASettingChangesAndRollsBack(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	service := configService(t, pool)
-	operator, _ := newOperator(t, pool, RoleOperator)
-	sess := sessionFor(operator)
+	account, _ := optest.Account(t, pool, operator.RoleOperator)
+	sess := sessionFor(account)
 	ctx := context.Background()
 
 	// The history is append-only in spirit and cumulative in fact, so a
@@ -157,10 +161,10 @@ func TestASettingChangesAndRollsBack(t *testing.T) {
 
 // A kill switch, aimed at one organisation and then at everybody.
 func TestAFlagCanBeAimedAtOneOrganisation(t *testing.T) {
-	pool := openPool(t)
+	pool := optest.Pool(t)
 	service := configService(t, pool)
-	operator, _ := newOperator(t, pool, RoleOperator)
-	sess := sessionFor(operator)
+	account, _ := optest.Account(t, pool, operator.RoleOperator)
+	sess := sessionFor(account)
 	tenantID, _ := newTenant(t, pool)
 	ctx := context.Background()
 

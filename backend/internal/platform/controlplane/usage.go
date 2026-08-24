@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	usagemetric "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/usage"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 )
@@ -60,7 +62,7 @@ type Usage struct {
 
 // UsageFor assembles the chart.
 func (s *Service) UsageFor(ctx context.Context, tenantID string) (Usage, error) {
-	ctx = scoped(ctx)
+	ctx = operator.Scoped(ctx)
 	usage := Usage{TenantID: tenantID, Series: []UsageSeries{}}
 
 	quota, err := s.GetQuota(ctx, tenantID)

@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 // Role is what an operator is allowed to be. The four come from §2.2 of the
 // plan and are stored as text, checked by the database as well (migration

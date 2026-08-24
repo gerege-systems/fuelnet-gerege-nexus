@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
 )
 
 // The console's front page has to survive its sources being down, because the
@@ -129,7 +131,7 @@ func TestDeployingWithoutATokenIsRefusedBeforeAnythingHappens(t *testing.T) {
 
 	service := &Service{}
 	if _, err := service.TriggerDeploy(context.Background(),
-		Session{Operator: Operator{ID: "1"}}, "v1.2.3", "a release"); err == nil {
+		operator.Session{Operator: operator.Operator{ID: "1"}}, "v1.2.3", "a release"); err == nil {
 		t.Fatal("a deployment was triggered with no token")
 	}
 }

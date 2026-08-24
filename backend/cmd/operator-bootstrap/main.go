@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  *
  * Creates the first operator account for the control plane. There is no web
- * registration for the console, on purpose: see internal/platform/controlplane.
+ * registration for the console, on purpose: see internal/platform/operator.
  */
 
 package main
@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/term"
 )
@@ -27,7 +27,7 @@ import (
 func main() {
 	email := flag.String("email", "", "the operator's e-mail address")
 	name := flag.String("name", "", "the operator's name")
-	role := flag.String("role", string(controlplane.RoleSuperadmin),
+	role := flag.String("role", string(operator.RoleSuperadmin),
 		"superadmin, operator, support or auditor")
 	breakGlass := flag.Bool("break-glass", false,
 		"the emergency account: its use is logged at ERROR and pages the team")
@@ -63,7 +63,7 @@ func main() {
 	// person still holds the authenticator they enrolled — or they do not, in
 	// which case the row has to be removed and the command run again.
 	if *confirm {
-		id, err := controlplane.PendingEnrolment(ctx, db, *email)
+		id, err := operator.PendingEnrolment(ctx, db, *email)
 		if err != nil {
 			fail("%v", err)
 		}
@@ -78,21 +78,21 @@ func main() {
 		fail("%v", err)
 	}
 
-	operator, enrolment, err := controlplane.CreateOperator(ctx, db, controlplane.NewOperator{
+	account, enrolment, err := operator.CreateOperator(ctx, db, operator.NewOperator{
 		Email:      *email,
 		Name:       *name,
-		Role:       controlplane.Role(*role),
+		Role:       operator.Role(*role),
 		Password:   password,
 		BreakGlass: *breakGlass,
 	})
-	if errors.Is(err, controlplane.ErrOperatorExists) {
+	if errors.Is(err, operator.ErrOperatorExists) {
 		fail("an operator with that address already exists")
 	}
 	if err != nil {
 		fail("%v", err)
 	}
 
-	fmt.Printf("\nOperator created: %s (%s)\n\n", operator.Email, operator.Role)
+	fmt.Printf("\nOperator created: %s (%s)\n\n", account.Email, account.Role)
 	if *breakGlass {
 		fmt.Println("This is the BREAK-GLASS account. Put its password in the safe, not in a")
 		fmt.Println("password manager anybody uses daily: signing in with it pages the team.")
@@ -102,7 +102,7 @@ func main() {
 	fmt.Printf("\n  secret: %s\n  uri:    %s\n\n", enrolment.Secret, enrolment.URI)
 	fmt.Println("The account cannot sign in until a code from it is confirmed below.")
 
-	if confirmLoop(ctx, db, operator.ID, operator.Email) {
+	if confirmLoop(ctx, db, account.ID, account.Email) {
 		return
 	}
 
@@ -111,7 +111,7 @@ func main() {
 		"  operator-bootstrap -confirm -email %s\n"+
 		"or remove the row and start over:\n"+
 		"  DELETE FROM operator_accounts WHERE lower(email) = lower('%s');",
-		operator.Email, operator.Email)
+		account.Email, account.Email)
 }
 
 // confirmLoop asks for a code until one is right or three are not.
@@ -127,7 +127,7 @@ func confirmLoop(ctx context.Context, db *pgxpool.Pool, operatorID, email string
 		if err != nil {
 			fail("could not read the code: %v", err)
 		}
-		if err := controlplane.ConfirmSecondFactor(ctx, db, operatorID, strings.TrimSpace(code)); err == nil {
+		if err := operator.ConfirmSecondFactor(ctx, db, operatorID, strings.TrimSpace(code)); err == nil {
 			fmt.Printf("\nDone. %s can sign in at the control plane.\n", email)
 			return true
 		} else {
@@ -153,7 +153,7 @@ func readPassword() (string, error) {
 	// typed twice. Learning a requirement by being refused is a small thing
 	// that wastes somebody's time at exactly the wrong moment — the first
 	// minute of setting up the console.
-	fmt.Printf("Choose a password of at least %d characters.\n", controlplane.MinPasswordLength)
+	fmt.Printf("Choose a password of at least %d characters.\n", operator.MinPasswordLength)
 	fmt.Print("Password: ")
 	first, err := term.ReadPassword(fd)
 	fmt.Println()

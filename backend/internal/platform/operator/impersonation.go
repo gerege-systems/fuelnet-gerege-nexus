@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"context"
@@ -73,12 +73,12 @@ type Impersonation struct {
 // sign in as somebody, once, in the next minute. The session itself is created
 // on the platform's side, by RedeemImpersonation, which is where the cookie
 // can be set.
-func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID, userID, reason string) (string, error) {
+func (c *Console) BeginImpersonation(ctx context.Context, sess Session, tenantID, userID, reason string) (string, error) {
 	if reason == "" {
 		return "", ErrReasonRequired
 	}
 
-	state, err := s.tenantState(ctx, tenantID)
+	state, err := c.StateOf(ctx, tenantID)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +91,7 @@ func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID
 	}
 
 	var email string
-	err = s.db.QueryRow(scoped(ctx),
+	err = c.db.QueryRow(Scoped(ctx),
 		`SELECT u.email FROM users u
 		   JOIN memberships m ON m.user_id = u.id AND m.tenant_id = $2::uuid
 		  WHERE u.id = $1::uuid`, userID, tenantID).Scan(&email)
@@ -99,7 +99,7 @@ func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID
 		return "", ErrNotAMember
 	}
 	if err != nil {
-		if isInvalidUUID(err) {
+		if IsInvalidUUID(err) {
 			return "", ErrNotAMember
 		}
 		return "", fmt.Errorf("control plane: check the membership: %w", err)
@@ -111,7 +111,7 @@ func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID
 	}
 	handover := hex.EncodeToString(buf)
 
-	err = s.Do(ctx, sess, Change{
+	err = c.Do(ctx, sess, Change{
 		Action:     "user.impersonate",
 		TargetType: "tenant",
 		TargetID:   tenantID,
@@ -126,7 +126,7 @@ func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID
 			     (operator_id, operator_email, tenant_id, user_id, reason,
 			      handover_hash, handover_expires_at, ends_at)
 			 VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6, NOW() + $7::interval, NOW() + $8::interval)`,
-			sess.ID, sess.Email, tenantID, userID, reason, hashToken(handover),
+			sess.ID, sess.Email, tenantID, userID, reason, HashToken(handover),
 			handoverWindow.String(), ImpersonationWindow.String()); err != nil {
 			return fmt.Errorf("record the impersonation: %w", err)
 		}
@@ -156,8 +156,8 @@ func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID
 }
 
 // ListImpersonations shows an organisation who has been inside it.
-func (s *Service) ListImpersonations(ctx context.Context, tenantID string) ([]Impersonation, error) {
-	rows, err := s.db.Query(scoped(ctx),
+func (c *Console) ListImpersonations(ctx context.Context, tenantID string) ([]Impersonation, error) {
+	rows, err := c.db.Query(Scoped(ctx),
 		`SELECT i.id::text, i.operator_email, i.tenant_id::text, i.user_id::text,
 		        COALESCE(u.email, ''), i.reason, i.redeemed_at, i.ends_at, i.created_at
 		   FROM operator_impersonations i

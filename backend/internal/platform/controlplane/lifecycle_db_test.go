@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator/optest"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,15 +58,15 @@ func newPerson(t *testing.T, pool *pgxpool.Pool, tenantID string) (userID, email
 // sessionFor is an operator session value, as the middleware would have built
 // it. The handlers and the service take it as a parameter, so a test does not
 // have to sign in to exercise what they do.
-func sessionFor(operator Operator) Session {
-	return Session{Operator: operator, SteppedUpAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}
+func sessionFor(account operator.Operator) operator.Session {
+	return operator.Session{Operator: account, SteppedUpAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}
 }
 
 func TestSuspendEndsTheSessionsAndResumeRestores(t *testing.T) {
-	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
-	operator, _ := newOperator(t, pool, RoleOperator)
-	sess := sessionFor(operator)
+	pool := optest.Pool(t)
+	service := &Service{op: operator.New(pool), db: pool}
+	account, _ := optest.Account(t, pool, operator.RoleOperator)
+	sess := sessionFor(account)
 	tenantID, _ := newTenant(t, pool)
 	userID, _ := newPerson(t, pool, tenantID)
 
@@ -124,10 +128,10 @@ func TestSuspendEndsTheSessionsAndResumeRestores(t *testing.T) {
 // second person can only schedule it, and it is reversible until the day it is
 // not.
 func TestDeletionNeedsTwoPeopleAndThirtyDays(t *testing.T) {
-	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
-	asker, _ := newOperator(t, pool, RoleSuperadmin)
-	approver, _ := newOperator(t, pool, RoleSuperadmin)
+	pool := optest.Pool(t)
+	service := &Service{op: operator.New(pool), db: pool}
+	asker, _ := optest.Account(t, pool, operator.RoleSuperadmin)
+	approver, _ := optest.Account(t, pool, operator.RoleSuperadmin)
 	tenantID, _ := newTenant(t, pool)
 	ctx := context.Background()
 
@@ -199,8 +203,8 @@ func TestDeletionNeedsTwoPeopleAndThirtyDays(t *testing.T) {
 
 // The other half of the sweep: when the day does come, it goes.
 func TestTheSweepDeletesWhenTheGracePeriodHasEnded(t *testing.T) {
-	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
+	pool := optest.Pool(t)
+	service := &Service{op: operator.New(pool), db: pool}
 	tenantID, _ := newTenant(t, pool)
 	ctx := context.Background()
 
@@ -225,19 +229,19 @@ func TestTheSweepDeletesWhenTheGracePeriodHasEnded(t *testing.T) {
 // Impersonation writes to both trails before anybody has gone anywhere, and
 // refuses an organisation that is closed.
 func TestImpersonationRecordsBothSides(t *testing.T) {
-	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
-	operator, _ := newOperator(t, pool, RoleSupport)
-	sess := sessionFor(operator)
+	pool := optest.Pool(t)
+	service := &Service{op: operator.New(pool), db: pool}
+	account, _ := optest.Account(t, pool, operator.RoleSupport)
+	sess := sessionFor(account)
 	tenantID, _ := newTenant(t, pool)
 	userID, _ := newPerson(t, pool, tenantID)
 	ctx := context.Background()
 
-	if _, err := service.BeginImpersonation(ctx, sess, tenantID, userID, ""); !errors.Is(err, ErrReasonRequired) {
+	if _, err := service.op.BeginImpersonation(ctx, sess, tenantID, userID, ""); !errors.Is(err, operator.ErrReasonRequired) {
 		t.Fatalf("impersonating without a reason answered %v", err)
 	}
 
-	link, err := service.BeginImpersonation(ctx, sess, tenantID, userID, "customer reported a missing invoice")
+	link, err := service.op.BeginImpersonation(ctx, sess, tenantID, userID, "customer reported a missing invoice")
 	if err != nil {
 		t.Fatalf("begin the impersonation: %v", err)
 	}
@@ -246,7 +250,7 @@ func TestImpersonationRecordsBothSides(t *testing.T) {
 	}
 
 	// The operator's trail.
-	if got := auditCount(t, pool, operator.ID, "user.impersonate"); got != 1 {
+	if got := optest.AuditCount(t, pool, account.ID, "user.impersonate"); got != 1 {
 		t.Fatalf("the operator audit has %d rows, want 1", got)
 	}
 	// And the organisation's own — which is the half that makes this
@@ -264,29 +268,29 @@ func TestImpersonationRecordsBothSides(t *testing.T) {
 
 	// A person who does not work there cannot be borrowed.
 	otherTenant, _ := newTenant(t, pool)
-	if _, err := service.BeginImpersonation(ctx, sess, otherTenant, userID, "fishing"); !errors.Is(err, ErrNotAMember) {
+	if _, err := service.op.BeginImpersonation(ctx, sess, otherTenant, userID, "fishing"); !errors.Is(err, operator.ErrNotAMember) {
 		t.Fatalf("impersonating a non-member answered %v", err)
 	}
 
 	// And a suspended organisation is not a way in.
-	if err := service.Suspend(ctx, sessionFor(operator), tenantID, "suspended"); err != nil {
+	if err := service.Suspend(ctx, sessionFor(account), tenantID, "suspended"); err != nil {
 		t.Fatalf("suspend: %v", err)
 	}
-	if _, err := service.BeginImpersonation(ctx, sess, tenantID, userID, "still fishing"); !errors.Is(err, ErrTenantSuspended) {
+	if _, err := service.op.BeginImpersonation(ctx, sess, tenantID, userID, "still fishing"); !errors.Is(err, operator.ErrTenantSuspended) {
 		t.Fatalf("impersonating into a suspended organisation answered %v", err)
 	}
 }
 
 func TestQuotaIsStoredAndCounted(t *testing.T) {
-	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
-	operator, _ := newOperator(t, pool, RoleOperator)
+	pool := optest.Pool(t)
+	service := &Service{op: operator.New(pool), db: pool}
+	account, _ := optest.Account(t, pool, operator.RoleOperator)
 	tenantID, _ := newTenant(t, pool)
 	newPerson(t, pool, tenantID)
 	ctx := context.Background()
 
 	limit := 1
-	if err := service.SetQuota(ctx, sessionFor(operator), tenantID, Quota{
+	if err := service.SetQuota(ctx, sessionFor(account), tenantID, Quota{
 		MaxUsers: &limit, Enforcement: EnforcementHard,
 	}, "trial account"); err != nil {
 		t.Fatalf("set the limits: %v", err)
@@ -310,7 +314,7 @@ func TestQuotaIsStoredAndCounted(t *testing.T) {
 	if quota.Enforcement != EnforcementHard {
 		t.Fatalf("enforcement is %q", quota.Enforcement)
 	}
-	if err := service.SetQuota(ctx, sessionFor(operator), tenantID,
+	if err := service.SetQuota(ctx, sessionFor(account), tenantID,
 		Quota{Enforcement: "whenever"}, "typo"); !errors.Is(err, ErrUnknownEnforcement) {
 		t.Fatalf("an unknown enforcement mode answered %v", err)
 	}
@@ -319,9 +323,9 @@ func TestQuotaIsStoredAndCounted(t *testing.T) {
 // Unlocking is the one thing the console may write to somebody's account, and
 // the database is what says so: the same handler cannot touch a password.
 func TestUnlockIsAllTheConsoleMayWriteToAnAccount(t *testing.T) {
-	pool := openPool(t)
-	service := &Service{db: pool, sessions: NewSessionStore(pool)}
-	operator, _ := newOperator(t, pool, RoleSupport)
+	pool := optest.Pool(t)
+	service := &Service{op: operator.New(pool), db: pool}
+	account, _ := optest.Account(t, pool, operator.RoleSupport)
 	tenantID, _ := newTenant(t, pool)
 	userID, _ := newPerson(t, pool, tenantID)
 	ctx := context.Background()
@@ -332,7 +336,7 @@ func TestUnlockIsAllTheConsoleMayWriteToAnAccount(t *testing.T) {
 		t.Fatalf("lock the account: %v", err)
 	}
 
-	if err := service.Unlock(ctx, sessionFor(operator), userID, "they telephoned"); err != nil {
+	if err := service.Unlock(ctx, sessionFor(account), userID, "they telephoned"); err != nil {
 		t.Fatalf("unlock: %v", err)
 	}
 	var locked bool
@@ -347,17 +351,17 @@ func TestUnlockIsAllTheConsoleMayWriteToAnAccount(t *testing.T) {
 	// The column grant, exercised directly. If this ever succeeds, the console
 	// can set somebody's password, and every claim made in support.go about
 	// what it cannot do is false.
-	if _, err := pool.Exec(scoped(ctx),
+	if _, err := pool.Exec(operator.Scoped(ctx),
 		`UPDATE users SET password_hash = 'x' WHERE id = $1::uuid`, userID); err == nil {
 		t.Fatal("the operator role changed a password")
 	}
-	if _, err := pool.Exec(scoped(ctx),
+	if _, err := pool.Exec(operator.Scoped(ctx),
 		`UPDATE users SET email = 'taken@example.test' WHERE id = $1::uuid`, userID); err == nil {
 		t.Fatal("the operator role changed an address")
 	}
 	// And it cannot delete an organisation, which is what makes the grace
 	// period a guarantee rather than a habit.
-	if _, err := pool.Exec(scoped(ctx), `DELETE FROM tenants WHERE id = $1::uuid`, tenantID); err == nil {
+	if _, err := pool.Exec(operator.Scoped(ctx), `DELETE FROM tenants WHERE id = $1::uuid`, tenantID); err == nil {
 		t.Fatal("the operator role deleted an organisation")
 	}
 }

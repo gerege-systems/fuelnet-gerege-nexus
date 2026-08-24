@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"context"
@@ -46,9 +46,9 @@ func SessionFrom(ctx context.Context) (Session, bool) {
 // The production default is the important one. A deployment that forgets the
 // variable gets no console rather than a console reachable on the hostname
 // every tenant already uses.
-func (s *Service) HostGate(next http.Handler) http.Handler {
+func (c *Console) HostGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.hostAllowed(r) {
+		if !c.hostAllowed(r) {
 			httpx.Error(w, http.StatusNotFound, "not found")
 			return
 		}
@@ -56,16 +56,16 @@ func (s *Service) HostGate(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Service) hostAllowed(r *http.Request) bool {
-	if s.host == "" {
+func (c *Console) hostAllowed(r *http.Request) bool {
+	if c.host == "" {
 		return !config.IsProduction()
 	}
-	return requestHost(r) == s.host
+	return requestHost(r) == c.host
 }
 
 // Enabled reports whether this deployment has a console at all. Used by the
 // route table so that the frontend's own check has something to agree with.
-func (s *Service) Enabled() bool { return s.host != "" || !config.IsProduction() }
+func (c *Console) Enabled() bool { return c.host != "" || !config.IsProduction() }
 
 // RequireOperator resolves the console session and puts the request on the
 // operator's database role.
@@ -74,9 +74,9 @@ func (s *Service) Enabled() bool { return s.host != "" || !config.IsProduction()
 // see another organisation's rows, and it is applied in exactly one place — the
 // middleware that has just proved who is asking — rather than being available
 // to any handler that imports dbguard.
-func (s *Service) RequireOperator(next http.Handler) http.Handler {
+func (c *Console) RequireOperator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sess, err := s.sessions.Resolve(r.Context(), TokenFromRequest(r))
+		sess, err := c.sessions.Resolve(r.Context(), TokenFromRequest(r))
 		if err != nil {
 			if !errors.Is(err, ErrSessionInvalid) {
 				slog.Error("control plane: could not resolve the operator session", "error", err)
@@ -90,12 +90,12 @@ func (s *Service) RequireOperator(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), sessionKey{}, sess)
-		next.ServeHTTP(w, r.WithContext(scoped(ctx)))
+		next.ServeHTTP(w, r.WithContext(Scoped(ctx)))
 	})
 }
 
 // RequireCapability gates a route on what the operator's role may do.
-func (s *Service) RequireCapability(capability Capability) func(http.Handler) http.Handler {
+func (c *Console) RequireCapability(capability Capability) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sess, ok := SessionFrom(r.Context())
@@ -125,7 +125,7 @@ const StepUpRequiredCode = "step_up_required"
 // first commit adds tenant suspension, and a step-up mechanism designed at the
 // same time as the first thing that needs it tends to become that thing's
 // special case.
-func (s *Service) RequireStepUp(next http.Handler) http.Handler {
+func (c *Console) RequireStepUp(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := SessionFrom(r.Context())
 		if !ok {
@@ -154,7 +154,7 @@ func (s *Service) RequireStepUp(next http.Handler) http.Handler {
 // The cost is that a console response cannot stream. Nothing here streams, and
 // the day something does — an export, a log tail — it belongs on a route that
 // is a GET and never reaches this.
-func (s *Service) RequireAudit(next http.Handler) http.Handler {
+func (c *Console) RequireAudit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:

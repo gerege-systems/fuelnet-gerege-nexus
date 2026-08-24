@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/go-chi/chi/v5"
@@ -32,118 +34,118 @@ func (s *Service) Routes(r chi.Router) {
 	// RequireAudit next, above authentication rather than below it, so that it
 	// covers the sign-in route too — beginning a session is a write, and it is
 	// one of the writes an operator audit exists to hold.
-	r.Use(s.HostGate)
-	r.Use(s.RequireAudit)
+	r.Use(s.op.HostGate)
+	r.Use(s.op.RequireAudit)
 
 	r.Group(func(anon chi.Router) {
 		anon.Use(security.RateLimitMiddleware(security.NewIPRateLimiter(loginRate, 5)))
-		anon.Post("/session", s.HandleLogin)
+		anon.Post("/session", s.op.HandleLogin)
 	})
 
 	r.Group(func(signedIn chi.Router) {
-		signedIn.Use(s.RequireOperator)
+		signedIn.Use(s.op.RequireOperator)
 
-		signedIn.Get("/me", s.HandleMe)
-		signedIn.Delete("/session", s.HandleLogout)
-		signedIn.Post("/step-up", s.HandleStepUp)
+		signedIn.Get("/me", s.op.HandleMe)
+		signedIn.Delete("/session", s.op.HandleLogout)
+		signedIn.Post("/step-up", s.op.HandleStepUp)
 
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/tenants", s.handleListTenants)
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/tenants/{id}", s.handleGetTenant)
-		signedIn.With(s.RequireCapability(CapAuditRead)).Get("/audit", s.handleListAudit)
-		signedIn.With(s.RequireCapability(CapOperatorRead)).Get("/operators", s.handleListOperators)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/tenants", s.handleListTenants)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/tenants/{id}", s.handleGetTenant)
+		signedIn.With(s.op.RequireCapability(operator.CapAuditRead)).Get("/audit", s.handleListAudit)
+		signedIn.With(s.op.RequireCapability(operator.CapOperatorRead)).Get("/operators", s.handleListOperators)
 
 		// The organisation's life. Suspension is reversible and needs one
 		// operator; deletion is not and needs two, which is why it goes
 		// through the approvals below rather than having a route of its own
 		// that does the deed.
-		signedIn.With(s.RequireCapability(CapTenantCreate)).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantCreate)).
 			Post("/tenants", s.handleCreateTenant)
-		signedIn.With(s.RequireCapability(CapTenantSuspend), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantSuspend), s.op.RequireStepUp).
 			Post("/tenants/{id}/suspend", s.handleSuspendTenant)
-		signedIn.With(s.RequireCapability(CapTenantSuspend), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantSuspend), s.op.RequireStepUp).
 			Post("/tenants/{id}/resume", s.handleResumeTenant)
-		signedIn.With(s.RequireCapability(CapTenantDelete), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantDelete), s.op.RequireStepUp).
 			Post("/tenants/{id}/deletion", s.handleRequestDeletion)
 		// Cancelling a deletion needs neither a second person nor a second
 		// factor. It is the safe direction: the asymmetry is the point of a
 		// grace period, and a recovery that is harder than the mistake is a
 		// recovery nobody manages in time.
-		signedIn.With(s.RequireCapability(CapTenantSuspend)).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantSuspend)).
 			Delete("/tenants/{id}/deletion", s.handleCancelDeletion)
 		// The export reads the organisation's actual data, so it is gated like
 		// the deletion it usually precedes rather than like a read: the same
 		// capability, and a second factor. See export.go for why this one
 		// action is allowed to leave the console's usual boundary.
-		signedIn.With(s.RequireCapability(CapTenantDelete), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantDelete), s.op.RequireStepUp).
 			Get("/tenants/{id}/export", s.handleExportTenant)
-		signedIn.With(s.RequireCapability(CapQuotaWrite), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapQuotaWrite), s.op.RequireStepUp).
 			Put("/tenants/{id}/quota", s.handleSetQuota)
 
 		// What is counting down. On its own route rather than inside the
 		// organisation list, because it is the one screen an operator should
 		// look at without being asked to.
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/deletions", s.handleListDeletions)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/deletions", s.handleListDeletions)
 
-		signedIn.With(s.RequireCapability(CapApprove)).Get("/approvals", s.handleListApprovals)
-		signedIn.With(s.RequireCapability(CapApprove), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapApprove)).Get("/approvals", s.handleListApprovals)
+		signedIn.With(s.op.RequireCapability(operator.CapApprove), s.op.RequireStepUp).
 			Post("/approvals/{id}/approve", s.handleApprove)
-		signedIn.With(s.RequireCapability(CapApprove)).
+		signedIn.With(s.op.RequireCapability(operator.CapApprove)).
 			Post("/approvals/{id}/reject", s.handleReject)
 
 		// The help desk.
-		signedIn.With(s.RequireCapability(CapSupport)).Get("/people", s.handleFindPeople)
-		signedIn.With(s.RequireCapability(CapSupport), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapSupport)).Get("/people", s.handleFindPeople)
+		signedIn.With(s.op.RequireCapability(operator.CapSupport), s.op.RequireStepUp).
 			Post("/people/{id}/unlock", s.handleUnlock)
-		signedIn.With(s.RequireCapability(CapSupport), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapSupport), s.op.RequireStepUp).
 			Post("/people/{id}/sessions/revoke", s.handleRevokeSessions)
-		signedIn.With(s.RequireCapability(CapSupport), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapSupport), s.op.RequireStepUp).
 			Post("/people/{id}/credential-link", s.handleCredentialLink)
 
-		signedIn.With(s.RequireCapability(CapImpersonate), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapImpersonate), s.op.RequireStepUp).
 			Post("/tenants/{id}/impersonate", s.handleImpersonate)
 
 		// How the platform behaves. Reading is part of the tenant-read
 		// capability because "what is this deployment configured to do" is
 		// context for every other screen; writing is its own.
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/settings", s.handleListSettings)
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/settings/history", s.handleSettingHistory)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/settings", s.handleListSettings)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/settings/history", s.handleSettingHistory)
 		// Step-up on the write: the access mode is here, and switching a
 		// platform to public is the single most consequential field in the
 		// console.
-		signedIn.With(s.RequireCapability(CapSettingsWrite), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapSettingsWrite), s.op.RequireStepUp).
 			Put("/settings/{key}", s.handleSetSetting)
-		signedIn.With(s.RequireCapability(CapSettingsWrite), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapSettingsWrite), s.op.RequireStepUp).
 			Post("/settings/rollback/{id}", s.handleRollbackSetting)
 
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/flags", s.handleListFlags)
-		signedIn.With(s.RequireCapability(CapFlagsWrite)).Post("/flags", s.handleSaveFlag)
-		signedIn.With(s.RequireCapability(CapFlagsWrite)).Delete("/flags/{key}", s.handleDeleteFlag)
-		signedIn.With(s.RequireCapability(CapFlagsWrite)).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/flags", s.handleListFlags)
+		signedIn.With(s.op.RequireCapability(operator.CapFlagsWrite)).Post("/flags", s.handleSaveFlag)
+		signedIn.With(s.op.RequireCapability(operator.CapFlagsWrite)).Delete("/flags/{key}", s.handleDeleteFlag)
+		signedIn.With(s.op.RequireCapability(operator.CapFlagsWrite)).
 			Put("/flags/{key}/override", s.handleFlagOverride)
 
-		signedIn.With(s.RequireCapability(CapSettingsWrite)).
+		signedIn.With(s.op.RequireCapability(operator.CapSettingsWrite)).
 			Post("/tenants/{id}/maintenance", s.handleTenantMaintenance)
 
 		// What each organisation used, and the same thing as a spreadsheet.
-		signedIn.With(s.RequireCapability(CapTenantRead)).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).
 			Get("/tenants/{id}/usage", s.handleUsage)
-		signedIn.With(s.RequireCapability(CapTenantRead)).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).
 			Get("/tenants/{id}/usage.csv", s.handleUsageCSV)
 
 		// The front page, and the operations behind it.
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/health", s.handleHealth)
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/catalog/status", s.handleCatalogStatusRoute)
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/catalog/overview", s.handleCatalogOverviewRoute)
-		signedIn.With(s.RequireCapability(CapSettingsWrite), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/health", s.handleHealth)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/catalog/status", s.handleCatalogStatusRoute)
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/catalog/overview", s.handleCatalogOverviewRoute)
+		signedIn.With(s.op.RequireCapability(operator.CapSettingsWrite), s.op.RequireStepUp).
 			Post("/catalog/sync", s.handleCatalogSyncRoute)
-		signedIn.With(s.RequireCapability(CapDeploy), s.RequireStepUp).
+		signedIn.With(s.op.RequireCapability(operator.CapDeploy), s.op.RequireStepUp).
 			Post("/deploy", s.handleDeploy)
-		signedIn.With(s.RequireCapability(CapSettingsWrite)).
+		signedIn.With(s.op.RequireCapability(operator.CapSettingsWrite)).
 			Post("/backups/restore-test", s.handleRestoreTest)
 
-		signedIn.With(s.RequireCapability(CapTenantRead)).Get("/announcements", s.handleListAnnouncements)
-		signedIn.With(s.RequireCapability(CapAnnounce)).Post("/announcements", s.handleAnnounce)
-		signedIn.With(s.RequireCapability(CapAnnounce)).
+		signedIn.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/announcements", s.handleListAnnouncements)
+		signedIn.With(s.op.RequireCapability(operator.CapAnnounce)).Post("/announcements", s.handleAnnounce)
+		signedIn.With(s.op.RequireCapability(operator.CapAnnounce)).
 			Delete("/announcements/{id}", s.handleWithdrawAnnouncement)
 	})
 }
@@ -174,13 +176,13 @@ const maxWriteBody = 32 << 10
 // that every handler below is three lines rather than fifteen.
 func fail(w http.ResponseWriter, err error, doing string) {
 	switch {
-	case errors.Is(err, ErrTenantNotFound), errors.Is(err, ErrUserNotFound),
+	case errors.Is(err, operator.ErrTenantNotFound), errors.Is(err, ErrUserNotFound),
 		errors.Is(err, ErrApprovalNotFound):
 		httpx.Error(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, ErrReasonRequired), errors.Is(err, ErrInvalidSlug),
+	case errors.Is(err, operator.ErrReasonRequired), errors.Is(err, ErrInvalidSlug),
 		errors.Is(err, ErrSlugTaken), errors.Is(err, ErrNotSuspended),
 		errors.Is(err, ErrNotScheduled), errors.Is(err, ErrAlreadyScheduled),
-		errors.Is(err, ErrNotAMember), errors.Is(err, ErrTenantSuspended),
+		errors.Is(err, operator.ErrNotAMember), errors.Is(err, operator.ErrTenantSuspended),
 		errors.Is(err, ErrUnknownEnforcement), errors.Is(err, ErrMailNotConfigured),
 		errors.Is(err, ErrDeployNotConfigured), errors.Is(err, ErrDeployRefused),
 		errors.Is(err, ErrHistoryNotFound), errors.Is(err, ErrNoSettingsStore),
@@ -201,7 +203,7 @@ func fail(w http.ResponseWriter, err error, doing string) {
 }
 
 func (s *Service) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var params NewTenant
 	if !decode(w, r, &params) {
 		return
@@ -215,7 +217,7 @@ func (s *Service) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleSuspendTenant(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -228,7 +230,7 @@ func (s *Service) handleSuspendTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleResumeTenant(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -241,7 +243,7 @@ func (s *Service) handleResumeTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleRequestDeletion(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -261,7 +263,7 @@ func (s *Service) handleRequestDeletion(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Service) handleCancelDeletion(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -274,7 +276,7 @@ func (s *Service) handleCancelDeletion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleExportTenant(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	bundle, err := s.ExportTenant(r.Context(), sess, chi.URLParam(r, "id"))
 	if err != nil {
 		fail(w, err, "could not export the organisation")
@@ -286,7 +288,7 @@ func (s *Service) handleExportTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleSetQuota(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		Quota
 		Reason string `json:"reason"`
@@ -320,7 +322,7 @@ func (s *Service) handleListApprovals(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleApprove(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -333,7 +335,7 @@ func (s *Service) handleApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleReject(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -355,7 +357,7 @@ func (s *Service) handleFindPeople(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleUnlock(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -368,7 +370,7 @@ func (s *Service) handleUnlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleRevokeSessions(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -382,7 +384,7 @@ func (s *Service) handleRevokeSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleCredentialLink(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		// TenantID is which organisation the mail is sent on behalf of. The
@@ -407,7 +409,7 @@ func (s *Service) handleCredentialLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleImpersonate(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		UserID string `json:"user_id"`
@@ -415,7 +417,7 @@ func (s *Service) handleImpersonate(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	link, err := s.BeginImpersonation(r.Context(), sess, chi.URLParam(r, "id"), body.UserID, body.Reason)
+	link, err := s.op.BeginImpersonation(r.Context(), sess, chi.URLParam(r, "id"), body.UserID, body.Reason)
 	if err != nil {
 		fail(w, err, "could not start the session")
 		return
@@ -425,7 +427,7 @@ func (s *Service) handleImpersonate(w http.ResponseWriter, r *http.Request) {
 	// itself for the cookie to land where it belongs.
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"url":     link,
-		"minutes": int(ImpersonationWindow.Minutes()),
+		"minutes": int(operator.ImpersonationWindow.Minutes()),
 	})
 }
 
@@ -441,15 +443,15 @@ func (s *Service) handleListTenants(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleGetTenant(w http.ResponseWriter, r *http.Request) {
 	detail, err := s.GetTenant(r.Context(), chi.URLParam(r, "id"))
-	if errors.Is(err, ErrTenantNotFound) {
+	if errors.Is(err, operator.ErrTenantNotFound) {
 		httpx.Error(w, http.StatusNotFound, "no such organisation")
 		return
 	}
 	if err != nil {
 		// An id that is not a UUID reaches here as a database error rather than
-		// as ErrTenantNotFound, and answering 500 for a typed-in URL would put
+		// as operator.ErrTenantNotFound, and answering 500 for a typed-in URL would put
 		// a red line in the error tracker for somebody's slip.
-		if isInvalidUUID(err) {
+		if operator.IsInvalidUUID(err) {
 			httpx.Error(w, http.StatusNotFound, "no such organisation")
 			return
 		}
@@ -509,7 +511,7 @@ func (s *Service) handleSettingHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleSetSetting(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		Value string `json:"value"`
@@ -525,7 +527,7 @@ func (s *Service) handleSetSetting(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleRollbackSetting(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -547,7 +549,7 @@ func (s *Service) handleListFlags(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleSaveFlag(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var input FlagInput
 	if !decode(w, r, &input) {
 		return
@@ -560,7 +562,7 @@ func (s *Service) handleSaveFlag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleDeleteFlag(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -573,7 +575,7 @@ func (s *Service) handleDeleteFlag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleFlagOverride(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		TenantID string `json:"tenant_id"`
@@ -593,7 +595,7 @@ func (s *Service) handleFlagOverride(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleTenantMaintenance(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		On      bool   `json:"on"`
@@ -620,7 +622,7 @@ func (s *Service) handleListAnnouncements(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Service) handleAnnounce(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		Announcement
 		Reason string `json:"reason"`
@@ -636,7 +638,7 @@ func (s *Service) handleAnnounce(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleWithdrawAnnouncement(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -658,7 +660,7 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleDeploy(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		Ref string `json:"ref"`
@@ -675,7 +677,7 @@ func (s *Service) handleDeploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleRestoreTest(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body struct {
 		reasoned
 		Detail string `json:"detail"`
@@ -725,7 +727,7 @@ func (s *Service) handleCatalogOverviewRoute(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Service) handleCatalogSyncRoute(w http.ResponseWriter, r *http.Request) {
-	sess, _ := SessionFrom(r.Context())
+	sess, _ := operator.SessionFrom(r.Context())
 	var body reasoned
 	if !decode(w, r, &body) {
 		return
@@ -746,7 +748,7 @@ func (s *Service) handleCatalogSyncRoute(w http.ResponseWriter, r *http.Request)
 	// Record the audit trail outside the sync transaction: the catalog sync
 	// writes to the platform database, while the audit record belongs in the
 	// operator database. They are separate concerns and must not share a tx.
-	if err := s.Do(r.Context(), sess, Change{
+	if err := s.op.Do(r.Context(), sess, operator.Change{
 		Action:     "catalog.sync",
 		TargetType: "platform",
 		TargetID:   "catalog",

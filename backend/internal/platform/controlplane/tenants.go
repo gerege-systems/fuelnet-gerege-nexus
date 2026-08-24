@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
+
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // What the console may know about an organisation, and how.
@@ -66,7 +67,7 @@ type TenantSummary struct {
 // somebody telephones: the name they call themselves, the slug in the URL, and
 // the registration number on the letter.
 func (s *Service) ListTenants(ctx context.Context, search string) ([]TenantSummary, error) {
-	ctx, cancel := context.WithTimeout(scoped(ctx), queryTimeout)
+	ctx, cancel := context.WithTimeout(operator.Scoped(ctx), queryTimeout)
 	defer cancel()
 
 	// The counts are subqueries rather than joins with a GROUP BY: the numbers
@@ -109,17 +110,6 @@ func (s *Service) ListTenants(ctx context.Context, search string) ([]TenantSumma
 	return summaries, rows.Err()
 }
 
-// ErrTenantNotFound is what a detail page gets for an id that is not there.
-var ErrTenantNotFound = errors.New("no such organisation")
-
-// isInvalidUUID reports whether an error is PostgreSQL refusing to read a
-// string as a uuid — 22P02, which is what /cp/api/tenants/not-a-uuid produces.
-// It is a bad address, not a broken server, and it is answered as one.
-func isInvalidUUID(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "22P02"
-}
-
 // TenantApp is one app an organisation has.
 type TenantApp struct {
 	ID          string    `json:"id"`
@@ -160,14 +150,14 @@ type TenantDetail struct {
 	// on the same page as the organisation's own trail on purpose: the two
 	// belong to the same story, and separating them is how "who suspended this
 	// tenant" becomes a question somebody has to know where to ask.
-	OperatorActions []AuditEntry `json:"operator_actions"`
+	OperatorActions []operator.AuditEntry `json:"operator_actions"`
 	// Quota is the limits and where they stand, so the page that can change
 	// them does not need a second request to show them.
 	Quota Quota `json:"quota"`
 	// Impersonations is who has been inside this organisation, most recent
 	// first. On the operator's page as well as the organisation's own, because
 	// an operator about to go in should see who was there this morning.
-	Impersonations []Impersonation `json:"impersonations"`
+	Impersonations []operator.Impersonation `json:"impersonations"`
 }
 
 // activityPageSize bounds the recent-activity list on the detail page.
@@ -179,7 +169,7 @@ const activityPageSize = 25
 // different shapes and joining them would either multiply rows or need window
 // functions to undo the multiplication. The console is not a hot path.
 func (s *Service) GetTenant(ctx context.Context, tenantID string) (TenantDetail, error) {
-	ctx, cancel := context.WithTimeout(scoped(ctx), queryTimeout)
+	ctx, cancel := context.WithTimeout(operator.Scoped(ctx), queryTimeout)
 	defer cancel()
 
 	var detail TenantDetail
@@ -201,7 +191,7 @@ func (s *Service) GetTenant(ctx context.Context, tenantID string) (TenantDetail,
 			&detail.SuspendedAt, &detail.SuspensionReason, &detail.DeletionScheduledAt,
 			&detail.MaintenanceAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return TenantDetail{}, ErrTenantNotFound
+		return TenantDetail{}, operator.ErrTenantNotFound
 	}
 	if err != nil {
 		return TenantDetail{}, fmt.Errorf("control plane: read the organisation: %w", err)
@@ -222,7 +212,7 @@ func (s *Service) GetTenant(ctx context.Context, tenantID string) (TenantDetail,
 	if detail.Quota, err = s.GetQuota(ctx, tenantID); err != nil {
 		return TenantDetail{}, err
 	}
-	if detail.Impersonations, err = s.ListImpersonations(ctx, tenantID); err != nil {
+	if detail.Impersonations, err = s.op.ListImpersonations(ctx, tenantID); err != nil {
 		return TenantDetail{}, err
 	}
 	return detail, nil
@@ -306,7 +296,7 @@ func (s *Service) tenantActivity(ctx context.Context, tenantID string) ([]Tenant
 
 // ListOperators is the roster: who can reach this console at all.
 func (s *Service) ListOperators(ctx context.Context) ([]OperatorSummary, error) {
-	ctx, cancel := context.WithTimeout(scoped(ctx), queryTimeout)
+	ctx, cancel := context.WithTimeout(operator.Scoped(ctx), queryTimeout)
 	defer cancel()
 
 	rows, err := s.db.Query(ctx,
@@ -326,7 +316,7 @@ func (s *Service) ListOperators(ctx context.Context) ([]OperatorSummary, error) 
 			&row.DisabledAt, &row.LastLoginAt, &row.CreatedAt); err != nil {
 			return nil, fmt.Errorf("control plane: read an operator: %w", err)
 		}
-		row.Role = Role(role)
+		row.Role = operator.Role(role)
 		operators = append(operators, row)
 	}
 	return operators, rows.Err()
@@ -335,7 +325,7 @@ func (s *Service) ListOperators(ctx context.Context) ([]OperatorSummary, error) 
 // OperatorSummary is one row of the roster. No password state, no TOTP secret,
 // no session tokens — the columns that would make this list worth stealing.
 type OperatorSummary struct {
-	Operator
+	operator.Operator
 	DisabledAt  *time.Time `json:"disabled_at"`
 	LastLoginAt *time.Time `json:"last_login_at"`
 	CreatedAt   time.Time  `json:"created_at"`

@@ -1,4 +1,4 @@
-package controlplane
+package operator
 
 import (
 	"context"
@@ -60,7 +60,7 @@ type account struct {
 //
 // The order of the checks is deliberate: the password is verified before the
 // code, and a wrong password never says whether the code would have been right.
-func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
+func (c *Console) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
 	var req struct {
 		Email    string `json:"email"`
@@ -72,8 +72,8 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := scoped(r.Context())
-	acct, found, err := s.lookupAccount(ctx, req.Email)
+	ctx := Scoped(r.Context())
+	acct, found, err := c.lookupAccount(ctx, req.Email)
 	if err != nil {
 		slog.Error("control plane: could not read the operator account", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "could not sign you in")
@@ -83,12 +83,12 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		// The comparison is run and discarded. See dummyPasswordHash.
 		security.CheckPasswordHash(req.Password, dummyPasswordHash)
-		s.denyLogin(ctx, w, "unknown", acct, false)
+		c.denyLogin(ctx, w, "unknown", acct, false)
 		return
 	}
 	if acct.disabled {
 		security.CheckPasswordHash(req.Password, dummyPasswordHash)
-		s.denyLogin(ctx, w, "disabled", acct, true)
+		c.denyLogin(ctx, w, "disabled", acct, true)
 		return
 	}
 	if acct.locked {
@@ -96,11 +96,11 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// No failure is counted here: a live lockout that every further attempt
 		// extended would let somebody who knows an operator's address keep that
 		// operator locked out for as long as they cared to keep typing.
-		s.denyLogin(ctx, w, "locked", acct, true)
+		c.denyLogin(ctx, w, "locked", acct, true)
 		return
 	}
 	if !security.CheckPasswordHash(req.Password, acct.passwordHash) {
-		s.failLogin(ctx, w, "bad_password", acct)
+		c.failLogin(ctx, w, "bad_password", acct)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if !acct.totpConfirmed || acct.totpSecret == "" {
 		slog.Warn("control plane: an operator account has no second factor",
 			"operator_id", acct.id, "email", acct.email)
-		s.denyLogin(ctx, w, "no_second_factor", acct, true)
+		c.denyLogin(ctx, w, "no_second_factor", acct, true)
 		return
 	}
 
@@ -120,7 +120,7 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if !ok || step <= acct.totpLastStep {
 		// step <= last is a code that has already been used. It is answered as
 		// a wrong code, because to the person typing it that is what it is.
-		s.failLogin(ctx, w, "bad_code", acct)
+		c.failLogin(ctx, w, "bad_code", acct)
 		return
 	}
 
@@ -133,7 +133,7 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if acct.breakGlass {
 		action = "operator.session.break_glass"
 	}
-	err = s.do(ctx, sess, Change{
+	err = c.Record(ctx, sess, Change{
 		Action:     action,
 		TargetType: "operator",
 		TargetID:   acct.id,
@@ -147,7 +147,7 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		var err error
-		token, expiresAt, err = s.sessions.create(ctx, tx, acct.id, r.UserAgent(), clientIPFrom(ctx), true)
+		token, expiresAt, err = c.sessions.create(ctx, tx, acct.id, r.UserAgent(), clientIPFrom(ctx), true)
 		return err
 	})
 	if err != nil {
@@ -174,10 +174,10 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // lookupAccount finds an operator by address, case-insensitively.
-func (s *Service) lookupAccount(ctx context.Context, email string) (account, bool, error) {
+func (c *Console) lookupAccount(ctx context.Context, email string) (account, bool, error) {
 	var acct account
 	var role string
-	err := s.db.QueryRow(ctx,
+	err := c.db.QueryRow(ctx,
 		`SELECT id::text, email, name, role, password_hash, totp_secret,
 		        totp_confirmed_at IS NOT NULL, totp_last_step,
 		        (locked_until IS NOT NULL AND locked_until > NOW()),
@@ -198,14 +198,14 @@ func (s *Service) lookupAccount(ctx context.Context, email string) (account, boo
 
 // failLogin counts a failed attempt, locks the account if it was the last one
 // allowed, and answers.
-func (s *Service) failLogin(ctx context.Context, w http.ResponseWriter, result string, acct account) {
+func (c *Console) failLogin(ctx context.Context, w http.ResponseWriter, result string, acct account) {
 	// One statement, so that two attempts arriving together cannot both read
 	// the same count and write the same number back. A lockout that has run its
 	// course starts counting from one rather than continuing — the tenant side
 	// explains the reasoning at length in auth_handlers.go, and it is the same
 	// reasoning: otherwise one lockout makes every later single mistake lock
 	// the account again.
-	if _, err := s.db.Exec(ctx,
+	if _, err := c.db.Exec(ctx,
 		`UPDATE operator_accounts
 		    SET failed_login_attempts = next.count,
 		        locked_until = CASE WHEN next.count >= $2 THEN NOW() + $3::interval END,
@@ -219,7 +219,7 @@ func (s *Service) failLogin(ctx context.Context, w http.ResponseWriter, result s
 		acct.id, maxLoginFailures, loginLockoutWindow.String()); err != nil {
 		slog.Error("control plane: could not record the failed sign-in", "error", err)
 	}
-	s.denyLogin(ctx, w, result, acct, true)
+	c.denyLogin(ctx, w, result, acct, true)
 }
 
 // denyLogin answers a refused sign-in and leaves a trail.
@@ -233,13 +233,13 @@ func (s *Service) failLogin(ctx context.Context, w http.ResponseWriter, result s
 // The audit row is written for a known account only; there is no operator to
 // attribute an unknown address to, and an audit table that accepts rows for
 // accounts that do not exist is one an attacker can write to.
-func (s *Service) denyLogin(ctx context.Context, w http.ResponseWriter, result string, acct account, known bool) {
+func (c *Console) denyLogin(ctx context.Context, w http.ResponseWriter, result string, acct account, known bool) {
 	telemetry.RecordControlPlaneLogin(result)
 	if known {
 		sess := Session{Operator: Operator{ID: acct.id, Email: acct.email, Name: acct.name, Role: acct.role}}
 		// The caller may have hung up; the record of their attempt outlives
 		// that, the way the tenant side's audit writes do.
-		if err := s.do(context.WithoutCancel(ctx), sess, Change{
+		if err := c.Record(context.WithoutCancel(ctx), sess, Change{
 			Action:     "operator.session.denied",
 			TargetType: "operator",
 			TargetID:   acct.id,
@@ -252,7 +252,7 @@ func (s *Service) denyLogin(ctx context.Context, w http.ResponseWriter, result s
 }
 
 // HandleLogout ends the session the request arrived with.
-func (s *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
+func (c *Console) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	sess, ok := SessionFrom(r.Context())
 	if !ok {
 		ClearSessionCookie(w)
@@ -260,12 +260,12 @@ func (s *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.do(r.Context(), sess, Change{
+	if err := c.Record(r.Context(), sess, Change{
 		Action:     "operator.session.end",
 		TargetType: "operator",
 		TargetID:   sess.ID,
 	}, func(ctx context.Context, tx pgx.Tx) error {
-		return s.sessions.Revoke(ctx, tx, sess.Token)
+		return c.sessions.Revoke(ctx, tx, sess.Token)
 	}); err != nil {
 		slog.Error("control plane: could not sign the operator out", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "could not sign you out")
@@ -277,7 +277,7 @@ func (s *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleStepUp re-confirms the second factor for the next few minutes.
-func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
+func (c *Console) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 	sess, ok := SessionFrom(r.Context())
 	if !ok {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
@@ -293,8 +293,8 @@ func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := scoped(r.Context())
-	acct, found, err := s.lookupAccount(ctx, sess.Email)
+	ctx := Scoped(r.Context())
+	acct, found, err := c.lookupAccount(ctx, sess.Email)
 	if err != nil {
 		slog.Error("control plane: could not read the operator account", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "could not confirm your code")
@@ -307,7 +307,7 @@ func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.do(ctx, sess, Change{
+	if err := c.Record(ctx, sess, Change{
 		Action:     "operator.step_up",
 		TargetType: "operator",
 		TargetID:   sess.ID,
@@ -317,7 +317,7 @@ func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 			acct.id, step); err != nil {
 			return err
 		}
-		return s.sessions.MarkSteppedUp(ctx, tx, sess.Token)
+		return c.sessions.MarkSteppedUp(ctx, tx, sess.Token)
 	}); err != nil {
 		slog.Error("control plane: could not record the step-up", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "could not confirm your code")
@@ -332,7 +332,7 @@ func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 
 // HandleMe answers who the caller is, which is what the console's shell asks on
 // every page load to decide whether to show itself or the sign-in screen.
-func (s *Service) HandleMe(w http.ResponseWriter, r *http.Request) {
+func (c *Console) HandleMe(w http.ResponseWriter, r *http.Request) {
 	sess, ok := SessionFrom(r.Context())
 	if !ok {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
