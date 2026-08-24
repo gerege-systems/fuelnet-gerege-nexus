@@ -66,8 +66,8 @@ func (h *Handlers) HandleCredentialCheck(w http.ResponseWriter, r *http.Request)
 	var email, purpose string
 	err := h.db.QueryRow(r.Context(),
 		`SELECT u.email, g.purpose
-		   FROM credential_grants g
-		   JOIN users u ON u.id = g.user_id
+		   FROM platform.credential_grants g
+		   JOIN platform.users u ON u.id = g.user_id
 		  WHERE g.token_hash = $1 AND g.redeemed_at IS NULL AND g.expires_at > NOW()`,
 		hashRecoveryToken(token)).Scan(&email, &purpose)
 	if err != nil {
@@ -117,7 +117,7 @@ func (h *Handlers) HandleCredentialRedeem(w http.ResponseWriter, r *http.Request
 	// let the same link be spent twice by two requests a millisecond apart.
 	var userID, purpose string
 	err = tx.QueryRow(r.Context(),
-		`UPDATE credential_grants SET redeemed_at = NOW()
+		`UPDATE platform.credential_grants SET redeemed_at = NOW()
 		  WHERE token_hash = $1 AND redeemed_at IS NULL AND expires_at > NOW()
 		RETURNING user_id::text, purpose`,
 		hashRecoveryToken(req.Token)).Scan(&userID, &purpose)
@@ -132,7 +132,7 @@ func (h *Handlers) HandleCredentialRedeem(w http.ResponseWriter, r *http.Request
 	}
 
 	if _, err := tx.Exec(r.Context(),
-		`UPDATE users SET password_hash = $2, failed_login_attempts = 0, locked_until = NULL
+		`UPDATE platform.users SET password_hash = $2, failed_login_attempts = 0, locked_until = NULL
 		  WHERE id = $1::uuid`, userID, hash); err != nil {
 		slog.Error("could not set a chosen password", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "that could not be saved")
@@ -142,7 +142,7 @@ func (h *Handlers) HandleCredentialRedeem(w http.ResponseWriter, r *http.Request
 	// new password is often somebody whose old one was known to a person it
 	// should not have been.
 	if _, err := tx.Exec(r.Context(),
-		`UPDATE sessions SET revoked_at = NOW()
+		`UPDATE tenant.sessions SET revoked_at = NOW()
 		  WHERE user_id = $1::uuid AND revoked_at IS NULL AND expires_at > NOW()`,
 		userID); err != nil {
 		slog.Error("could not end the sessions after a password change", "error", err)
@@ -186,7 +186,7 @@ func (h *Handlers) HandleImpersonationRedeem(w http.ResponseWriter, r *http.Requ
 	var impersonationID, tenantID, userID, operatorID, operatorEmail, reason string
 	var endsAt time.Time
 	err = tx.QueryRow(r.Context(),
-		`UPDATE operator_impersonations SET redeemed_at = NOW()
+		`UPDATE platform.operator_impersonations SET redeemed_at = NOW()
 		  WHERE handover_hash = $1 AND redeemed_at IS NULL AND handover_expires_at > NOW()
 		RETURNING id::text, tenant_id::text, user_id::text, operator_id::text,
 		          operator_email, reason, ends_at`,
@@ -222,7 +222,7 @@ func (h *Handlers) HandleImpersonationRedeem(w http.ResponseWriter, r *http.Requ
 	// The console wrote "requested" when the link was minted; this is the row
 	// that says somebody walked through the door.
 	if _, err := tx.Exec(r.Context(),
-		`INSERT INTO audit_events (tenant_id, user_id, action, resource, details)
+		`INSERT INTO tenant.audit_events (tenant_id, user_id, action, resource, details)
 		 VALUES ($1::uuid, $2, 'security.impersonation.started', $3, $4)`,
 		tenantID, "operator:"+operatorID, userID,
 		map[string]any{
@@ -262,7 +262,7 @@ func newImpersonationSession(r *http.Request, tx pgx.Tx, userID, tenantID, opera
 		return "", err
 	}
 	if _, err := tx.Exec(r.Context(),
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address,
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address,
 		                       expires_at, impersonated_by)
 		 VALUES ($1, $2::uuid, $3::uuid, 'impersonation', $4, $5, $6, $7::uuid)`,
 		auth.HashSessionToken(token), userID, tenantID, r.UserAgent(),
@@ -280,7 +280,7 @@ func (h *Handlers) EndImpersonations(ctx context.Context) {
 	defer cancel()
 
 	if _, err := h.db.Exec(sweepCtx,
-		`UPDATE operator_impersonations SET ended_at = NOW()
+		`UPDATE platform.operator_impersonations SET ended_at = NOW()
 		  WHERE ended_at IS NULL AND ends_at <= NOW()`); err != nil {
 		slog.Warn("could not close the finished impersonations", "error", err)
 	}

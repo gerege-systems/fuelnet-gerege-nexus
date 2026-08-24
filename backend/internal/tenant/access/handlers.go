@@ -54,9 +54,9 @@ func (h *Handlers) HandleAccessOverview(w http.ResponseWriter, r *http.Request) 
 	rows, err := h.db.Query(r.Context(), `
 		SELECT r.id::text,r.code,r.name,r.description,r.active,r.is_system,
 		       COALESCE(array_agg(p.code ORDER BY p.code) FILTER (WHERE p.code IS NOT NULL),'{}')
-		FROM roles r
-		LEFT JOIN role_permissions rp ON rp.role_id=r.id
-		LEFT JOIN permissions p ON p.id=rp.permission_id
+		FROM tenant.roles r
+		LEFT JOIN tenant.role_permissions rp ON rp.role_id=r.id
+		LEFT JOIN platform.permissions p ON p.id=rp.permission_id
 		WHERE r.tenant_id=$1 GROUP BY r.id ORDER BY r.is_system DESC,r.name`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load roles")
@@ -82,7 +82,7 @@ func (h *Handlers) HandleAccessOverview(w http.ResponseWriter, r *http.Request) 
 	}
 
 	permissions := make([]accessPermission, 0)
-	rows, err = h.db.Query(r.Context(), `SELECT code,name,description,split_part(code,'.',1) FROM permissions ORDER BY split_part(code,'.',1),code`)
+	rows, err = h.db.Query(r.Context(), `SELECT code,name,description,split_part(code,'.',1) FROM platform.permissions ORDER BY split_part(code,'.',1),code`)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load permissions")
 		return
@@ -105,12 +105,12 @@ func (h *Handlers) HandleAccessOverview(w http.ResponseWriter, r *http.Request) 
 	members := make([]accessMember, 0)
 	rows, err = h.db.Query(r.Context(), `
 		SELECT m.id::text,u.id::text,u.name,u.email,
-		       EXISTS (SELECT 1 FROM membership_roles amr JOIN roles ar ON ar.id=amr.role_id
+		       EXISTS (SELECT 1 FROM tenant.membership_roles amr JOIN tenant.roles ar ON ar.id=amr.role_id
 		               WHERE amr.membership_id=m.id AND ar.tenant_id=m.tenant_id AND ar.code='admin' AND ar.active),
 		       COALESCE(array_agg(r.id::text ORDER BY r.name) FILTER (WHERE r.id IS NOT NULL),'{}')
-		FROM memberships m JOIN users u ON u.id=m.user_id
-		LEFT JOIN membership_roles mr ON mr.membership_id=m.id
-		LEFT JOIN roles r ON r.id=mr.role_id AND r.tenant_id=m.tenant_id
+		FROM tenant.memberships m JOIN platform.users u ON u.id=m.user_id
+		LEFT JOIN tenant.membership_roles mr ON mr.membership_id=m.id
+		LEFT JOIN tenant.roles r ON r.id=mr.role_id AND r.tenant_id=m.tenant_id
 		WHERE m.tenant_id=$1 GROUP BY m.id,u.id ORDER BY u.name,u.email`, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to load members")
@@ -154,7 +154,7 @@ func (h *Handlers) HandleCreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := uuid.NewString()
-	_, err := h.db.Exec(r.Context(), `INSERT INTO roles(id,tenant_id,code,name,description) VALUES($1,$2,$3,$4,$5)`, id, tenantID, req.Code, req.Name, req.Description)
+	_, err := h.db.Exec(r.Context(), `INSERT INTO tenant.roles(id,tenant_id,code,name,description) VALUES($1,$2,$3,$4,$5)`, id, tenantID, req.Code, req.Name, req.Description)
 	if err != nil {
 		httpx.Error(w, 409, "role code already exists")
 		return
@@ -179,7 +179,7 @@ func (h *Handlers) HandleUpdateRole(w http.ResponseWriter, r *http.Request) {
 	var system bool
 	var beforeName, beforeDesc string
 	var beforeActive bool
-	if h.db.QueryRow(r.Context(), `SELECT is_system,name,description,active FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &beforeName, &beforeDesc, &beforeActive) != nil {
+	if h.db.QueryRow(r.Context(), `SELECT is_system,name,description,active FROM tenant.roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &beforeName, &beforeDesc, &beforeActive) != nil {
 		httpx.Error(w, 404, "role not found")
 		return
 	}
@@ -187,7 +187,7 @@ func (h *Handlers) HandleUpdateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 409, "system roles cannot be disabled")
 		return
 	}
-	_, err := h.db.Exec(r.Context(), `UPDATE roles SET name=$1,description=$2,active=$3 WHERE id=$4 AND tenant_id=$5`, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), req.Active, id, tenantID)
+	_, err := h.db.Exec(r.Context(), `UPDATE tenant.roles SET name=$1,description=$2,active=$3 WHERE id=$4 AND tenant_id=$5`, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description), req.Active, id, tenantID)
 	if err != nil {
 		httpx.Error(w, 500, "failed to update role")
 		return
@@ -202,7 +202,7 @@ func (h *Handlers) HandleDeleteRole(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var system bool
 	var code string
-	if h.db.QueryRow(r.Context(), `SELECT is_system,code FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &code) != nil {
+	if h.db.QueryRow(r.Context(), `SELECT is_system,code FROM tenant.roles WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&system, &code) != nil {
 		httpx.Error(w, 404, "role not found")
 		return
 	}
@@ -210,7 +210,7 @@ func (h *Handlers) HandleDeleteRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 409, "system roles cannot be deleted")
 		return
 	}
-	if _, err := h.db.Exec(r.Context(), `DELETE FROM roles WHERE id=$1 AND tenant_id=$2`, id, tenantID); err != nil {
+	if _, err := h.db.Exec(r.Context(), `DELETE FROM tenant.roles WHERE id=$1 AND tenant_id=$2`, id, tenantID); err != nil {
 		httpx.Error(w, 500, "failed to delete role")
 		return
 	}
@@ -230,7 +230,7 @@ func (h *Handlers) HandleSetRolePermissions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var code string
-	if h.db.QueryRow(r.Context(), `SELECT code FROM roles WHERE id=$1 AND tenant_id=$2 AND active`, id, tenantID).Scan(&code) != nil {
+	if h.db.QueryRow(r.Context(), `SELECT code FROM tenant.roles WHERE id=$1 AND tenant_id=$2 AND active`, id, tenantID).Scan(&code) != nil {
 		httpx.Error(w, 404, "active role not found")
 		return
 	}
@@ -255,22 +255,22 @@ func (h *Handlers) HandleSetRolePermissions(w http.ResponseWriter, r *http.Reque
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	var valid int
 	if len(clean) > 0 {
-		if err = tx.QueryRow(r.Context(), `SELECT count(*) FROM permissions WHERE code=ANY($1)`, clean).Scan(&valid); err != nil || valid != len(clean) {
+		if err = tx.QueryRow(r.Context(), `SELECT count(*) FROM platform.permissions WHERE code=ANY($1)`, clean).Scan(&valid); err != nil || valid != len(clean) {
 			httpx.Error(w, 400, "one or more permissions are unknown")
 			return
 		}
 	}
-	before, err := collectStrings(r.Context(), tx, `SELECT p.code FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=$1 ORDER BY p.code`, id)
+	before, err := collectStrings(r.Context(), tx, `SELECT p.code FROM tenant.role_permissions rp JOIN platform.permissions p ON p.id=rp.permission_id WHERE rp.role_id=$1 ORDER BY p.code`, id)
 	if err != nil {
 		httpx.Error(w, 500, "failed to read the current permissions")
 		return
 	}
-	if _, err = tx.Exec(r.Context(), `DELETE FROM role_permissions WHERE role_id=$1`, id); err != nil {
+	if _, err = tx.Exec(r.Context(), `DELETE FROM tenant.role_permissions WHERE role_id=$1`, id); err != nil {
 		httpx.Error(w, 500, "failed to clear permissions")
 		return
 	}
 	if len(clean) > 0 {
-		_, err = tx.Exec(r.Context(), `INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE code=ANY($2)`, id, clean)
+		_, err = tx.Exec(r.Context(), `INSERT INTO tenant.role_permissions(role_id,permission_id) SELECT $1,id FROM platform.permissions WHERE code=ANY($2)`, id, clean)
 	}
 	if err != nil || tx.Commit(r.Context()) != nil {
 		httpx.Error(w, 500, "failed to save permissions")
@@ -298,7 +298,7 @@ func (h *Handlers) HandleSetMembershipRoles(w http.ResponseWriter, r *http.Reque
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	var exists bool
-	if tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM memberships WHERE id=$1 AND tenant_id=$2)`, id, tenantID).Scan(&exists) != nil || !exists {
+	if tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM tenant.memberships WHERE id=$1 AND tenant_id=$2)`, id, tenantID).Scan(&exists) != nil || !exists {
 		httpx.Error(w, 404, "membership not found")
 		return
 	}
@@ -312,27 +312,27 @@ func (h *Handlers) HandleSetMembershipRoles(w http.ResponseWriter, r *http.Reque
 	}
 	var valid int
 	if len(clean) > 0 {
-		_ = tx.QueryRow(r.Context(), `SELECT count(*) FROM roles WHERE tenant_id=$1 AND active AND id=ANY($2)`, tenantID, clean).Scan(&valid)
+		_ = tx.QueryRow(r.Context(), `SELECT count(*) FROM tenant.roles WHERE tenant_id=$1 AND active AND id=ANY($2)`, tenantID, clean).Scan(&valid)
 		if valid != len(clean) {
 			httpx.Error(w, 400, "one or more roles are invalid or inactive")
 			return
 		}
 	}
-	before, err := collectStrings(r.Context(), tx, `SELECT role_id::text FROM membership_roles WHERE membership_id=$1 ORDER BY role_id`, id)
+	before, err := collectStrings(r.Context(), tx, `SELECT role_id::text FROM tenant.membership_roles WHERE membership_id=$1 ORDER BY role_id`, id)
 	if err != nil {
 		httpx.Error(w, 500, "failed to read the current role assignment")
 		return
 	}
 	var removedAdmin bool
 	if err = tx.QueryRow(r.Context(), `
-		SELECT EXISTS(SELECT 1 FROM membership_roles mr JOIN roles r ON r.id=mr.role_id WHERE mr.membership_id=$1 AND r.code='admin')
-		   AND NOT EXISTS(SELECT 1 FROM roles r WHERE r.id=ANY($2) AND r.tenant_id=$3 AND r.code='admin')`, id, clean, tenantID).Scan(&removedAdmin); err != nil {
+		SELECT EXISTS(SELECT 1 FROM tenant.membership_roles mr JOIN tenant.roles r ON r.id=mr.role_id WHERE mr.membership_id=$1 AND r.code='admin')
+		   AND NOT EXISTS(SELECT 1 FROM tenant.roles r WHERE r.id=ANY($2) AND r.tenant_id=$3 AND r.code='admin')`, id, clean, tenantID).Scan(&removedAdmin); err != nil {
 		httpx.Error(w, 500, "failed to validate administrator assignment")
 		return
 	}
 	if removedAdmin {
 		var otherAdmins int
-		if err = tx.QueryRow(r.Context(), `SELECT count(DISTINCT mr.membership_id) FROM membership_roles mr JOIN roles r ON r.id=mr.role_id JOIN memberships m ON m.id=mr.membership_id WHERE r.tenant_id=$1 AND r.code='admin' AND r.active AND m.id<>$2`, tenantID, id).Scan(&otherAdmins); err != nil {
+		if err = tx.QueryRow(r.Context(), `SELECT count(DISTINCT mr.membership_id) FROM tenant.membership_roles mr JOIN tenant.roles r ON r.id=mr.role_id JOIN tenant.memberships m ON m.id=mr.membership_id WHERE r.tenant_id=$1 AND r.code='admin' AND r.active AND m.id<>$2`, tenantID, id).Scan(&otherAdmins); err != nil {
 			httpx.Error(w, 500, "failed to validate administrators")
 			return
 		}
@@ -341,8 +341,8 @@ func (h *Handlers) HandleSetMembershipRoles(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	if _, err = tx.Exec(r.Context(), `DELETE FROM membership_roles WHERE membership_id=$1`, id); err == nil && len(clean) > 0 {
-		_, err = tx.Exec(r.Context(), `INSERT INTO membership_roles(membership_id,role_id) SELECT $1,id FROM roles WHERE tenant_id=$2 AND active AND id=ANY($3)`, id, tenantID, clean)
+	if _, err = tx.Exec(r.Context(), `DELETE FROM tenant.membership_roles WHERE membership_id=$1`, id); err == nil && len(clean) > 0 {
+		_, err = tx.Exec(r.Context(), `INSERT INTO tenant.membership_roles(membership_id,role_id) SELECT $1,id FROM tenant.roles WHERE tenant_id=$2 AND active AND id=ANY($3)`, id, tenantID, clean)
 	}
 	if err != nil || tx.Commit(r.Context()) != nil {
 		httpx.Error(w, 500, "failed to assign roles")
@@ -395,6 +395,6 @@ func (h *Handlers) recordAccessChange(r *http.Request, actor, action, resource, 
 	h.forgetGrants(tenantID)
 	beforeJSON, _ := json.Marshal(before)
 	afterJSON, _ := json.Marshal(after)
-	_, _ = h.db.Exec(r.Context(), `INSERT INTO access_change_events(tenant_id,actor_user_id,action,resource_type,resource_id,before_state,after_state) VALUES($1,$2,$3,$4,$5,$6,$7)`, tenantID, actor, action, resource, resourceID, beforeJSON, afterJSON)
+	_, _ = h.db.Exec(r.Context(), `INSERT INTO tenant.access_change_events(tenant_id,actor_user_id,action,resource_type,resource_id,before_state,after_state) VALUES($1,$2,$3,$4,$5,$6,$7)`, tenantID, actor, action, resource, resourceID, beforeJSON, afterJSON)
 	audit.Record(r.Context(), tenantID, actor, "access."+action, resource, map[string]any{"resource_id": resourceID})
 }

@@ -55,20 +55,22 @@ func tenantWithMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, token
 	slug := fmt.Sprintf("recov-%d", time.Now().UnixNano())
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).Scan(&tenantID); err != nil {
+		`INSERT INTO platform.tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).Scan(&tenantID); err != nil {
 		t.Fatalf("create the organisation: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id=$1::uuid`, tenantID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id=$1::uuid`, tenantID)
+	})
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, name) VALUES ($1, 'x', 'Member') RETURNING id::text`,
+		`INSERT INTO platform.users (email, password_hash, name) VALUES ($1, 'x', 'Member') RETURNING id::text`,
 		slug+"@identity.invalid").Scan(&userID); err != nil {
 		t.Fatalf("create the person: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1::uuid`, userID) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id=$1::uuid`, userID) })
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`, tenantID, userID); err != nil {
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`, tenantID, userID); err != nil {
 		t.Fatalf("add the membership: %v", err)
 	}
 
@@ -77,7 +79,7 @@ func tenantWithMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, token
 		t.Fatalf("mint a token: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, expires_at)
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, expires_at)
 		 VALUES ($1, $2::uuid, $3::uuid, NOW() + INTERVAL '1 hour')`,
 		auth.HashSessionToken(token), userID, tenantID); err != nil {
 		t.Fatalf("create the session: %v", err)
@@ -97,7 +99,7 @@ func TestACredentialLinkWorksOnceAndEndsTheSessions(t *testing.T) {
 		t.Fatalf("mint a link: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO credential_grants (user_id, purpose, token_hash, expires_at)
+		`INSERT INTO platform.credential_grants (user_id, purpose, token_hash, expires_at)
 		 VALUES ($1::uuid, 'invite', $2, NOW() + INTERVAL '1 hour')`,
 		userID, hashRecoveryToken(link)); err != nil {
 		t.Fatalf("issue the grant: %v", err)
@@ -135,13 +137,13 @@ func TestAnImpersonationHandoverProducesAMarkedSession(t *testing.T) {
 
 	var operatorID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO operator_accounts (email, name, role, password_hash)
+		`INSERT INTO platform.operator_accounts (email, name, role, password_hash)
 		 VALUES ($1, 'Operator', 'support', 'x') RETURNING id::text`,
 		fmt.Sprintf("imp-%d@controlplane.test", time.Now().UnixNano())).Scan(&operatorID); err != nil {
 		t.Fatalf("create the operator: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM operator_accounts WHERE id=$1::uuid`, operatorID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.operator_accounts WHERE id=$1::uuid`, operatorID)
 	})
 
 	handover, err := auth.NewSessionToken()
@@ -149,7 +151,7 @@ func TestAnImpersonationHandoverProducesAMarkedSession(t *testing.T) {
 		t.Fatalf("mint a handover: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO operator_impersonations
+		`INSERT INTO platform.operator_impersonations
 		     (operator_id, operator_email, tenant_id, user_id, reason,
 		      handover_hash, handover_expires_at, ends_at)
 		 VALUES ($1::uuid, 'operator@example.mn', $2::uuid, $3::uuid, 'a support call',
@@ -198,7 +200,7 @@ func TestAnImpersonationHandoverProducesAMarkedSession(t *testing.T) {
 	// The organisation is told, in its own trail, that somebody came in.
 	var started int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM audit_events
+		`SELECT count(*) FROM tenant.audit_events
 		  WHERE tenant_id = $1::uuid AND action = 'security.impersonation.started'`,
 		tenantID).Scan(&started); err != nil {
 		t.Fatalf("read the organisation's trail: %v", err)

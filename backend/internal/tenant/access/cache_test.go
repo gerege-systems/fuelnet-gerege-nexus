@@ -19,33 +19,33 @@ func seedMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, roleID, per
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (name, slug) VALUES ($1,$1) RETURNING id::text`,
+		`INSERT INTO platform.tenants (name, slug) VALUES ($1,$1) RETURNING id::text`,
 		"rbactest-"+suffix).Scan(&tenantID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id=$1`, tenantID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, userID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id=$1`, tenantID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id=$1`, userID)
 	})
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, name) VALUES ($1,'x','t') RETURNING id::text`,
+		`INSERT INTO platform.users (email, password_hash, name) VALUES ($1,'x','t') RETURNING id::text`,
 		"rbactest-"+suffix+"@example.mn").Scan(&userID); err != nil {
 		t.Fatal(err)
 	}
 	var membershipID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1,$2) RETURNING id::text`,
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1,$2) RETURNING id::text`,
 		tenantID, userID).Scan(&membershipID); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO roles (tenant_id, code, name) VALUES ($1,'cachetest','Cache Test') RETURNING id::text`,
+		`INSERT INTO tenant.roles (tenant_id, code, name) VALUES ($1,'cachetest','Cache Test') RETURNING id::text`,
 		tenantID).Scan(&roleID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO membership_roles (membership_id, role_id) VALUES ($1,$2)
+		`INSERT INTO tenant.membership_roles (membership_id, role_id) VALUES ($1,$2)
 		 ON CONFLICT DO NOTHING`, membershipID, roleID); err != nil {
 		t.Fatal(err)
 	}
@@ -57,11 +57,11 @@ func seedMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, roleID, per
 	// in whichever database it was pointed at.
 	permission = "cachetest." + suffix
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO permissions (code, name) VALUES ($1,$1)`, permission); err != nil {
+		`INSERT INTO platform.permissions (code, name) VALUES ($1,$1)`, permission); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM permissions WHERE code=$1`, permission)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.permissions WHERE code=$1`, permission)
 	})
 	return tenantID, userID, roleID, permission
 }
@@ -91,15 +91,15 @@ func TestRevokingAPermissionTakesEffectOnceTheTenantIsInvalidated(t *testing.T) 
 
 	grant := func() {
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO role_permissions (role_id, permission_id)
-			 SELECT $1, id FROM permissions WHERE code=$2 ON CONFLICT DO NOTHING`,
+			`INSERT INTO tenant.role_permissions (role_id, permission_id)
+			 SELECT $1, id FROM platform.permissions WHERE code=$2 ON CONFLICT DO NOTHING`,
 			roleID, permission); err != nil {
 			t.Fatal(err)
 		}
 	}
 	revoke := func() {
 		if _, err := pool.Exec(ctx,
-			`DELETE FROM role_permissions WHERE role_id=$1`, roleID); err != nil {
+			`DELETE FROM tenant.role_permissions WHERE role_id=$1`, roleID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -144,8 +144,8 @@ func TestCallersCannotWriteIntoEachOthersGrants(t *testing.T) {
 	store := access.NewSQLPermissionStore(pool)
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO role_permissions (role_id, permission_id)
-		 SELECT $1, id FROM permissions WHERE code=$2 ON CONFLICT DO NOTHING`,
+		`INSERT INTO tenant.role_permissions (role_id, permission_id)
+		 SELECT $1, id FROM platform.permissions WHERE code=$2 ON CONFLICT DO NOTHING`,
 		roleID, permission); err != nil {
 		t.Fatal(err)
 	}
