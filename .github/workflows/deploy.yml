@@ -557,7 +557,29 @@ jobs:
               fi
             fi
 
-            sudo nginx -t && sudo systemctl reload nginx
+            # Older installations redirected the console root temporarily.
+            # Keep the live vhost in sync with the checked-in permanent route;
+            # a 308 also preserves the request method if a client sends one.
+            ROOT_REDIRECT_BACKUP=""
+            if sudo grep -qE 'return[[:space:]]+302[[:space:]]+/cp;' "$LIVE"; then
+              ROOT_REDIRECT_BACKUP="${LIVE}.root-redirect.bak.$(date +%s)"
+              sudo cp "$LIVE" "$ROOT_REDIRECT_BACKUP"
+              sudo sed -i -E 's@return[[:space:]]+302[[:space:]]+/cp;@return 308 /cp;@' "$LIVE"
+            fi
+            if ! sudo grep -qE 'return[[:space:]]+308[[:space:]]+/cp;' "$LIVE"; then
+              echo "::error::control-plane root is not configured with its permanent /cp redirect"
+              exit 1
+            fi
+
+            if ! sudo nginx -t; then
+              if [ -n "$ROOT_REDIRECT_BACKUP" ]; then
+                sudo cp "$ROOT_REDIRECT_BACKUP" "$LIVE"
+                sudo nginx -t && sudo systemctl reload nginx
+              fi
+              echo "::error::nginx rejected the permanent control-plane root redirect"
+              exit 1
+            fi
+            sudo systemctl reload nginx
 
             STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
               -H "Host: $CONTROL_PLANE_HOST" http://127.0.0.1:8082/api/platform/v1/health)
