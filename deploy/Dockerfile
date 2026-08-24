@@ -29,7 +29,7 @@ COPY backend/ ./
 ARG VERSION=1.0.0
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
-    -ldflags="-w -s -X github.com/gerege-systems/open-gerege-nexus/backend/internal/platform.PlatformVersion=${VERSION}" \
+    -ldflags="-w -s -X github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config.PlatformVersion=${VERSION}" \
     -o /bin/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/migrate ./cmd/migrate
 

@@ -38,7 +38,7 @@ jobs:
       - name: Record both version numbers
         run: |
           echo "module tag:      ${GITHUB_REF_NAME}"
-          echo "PlatformVersion: $(grep -oE 'PlatformVersion = "[^"]+"' internal/platform/server.go | cut -d'"' -f2)"
+          echo "PlatformVersion: $(grep -oE 'PlatformVersion = "[^"]+"' internal/kernel/config/version.go | cut -d'"' -f2)"
 
       # The contract, checked one more time on the exact commit being published.
       # CI has already run these on main; a tag can be pushed to any commit.

@@ -140,7 +140,7 @@ jobs:
       - name: Resolve the platform version
         id: version
         run: |
-          value=$(grep -oE 'PlatformVersion = "[^"]+"' backend/internal/platform/server.go | cut -d'"' -f2)
+          value=$(grep -oE 'PlatformVersion = "[^"]+"' backend/internal/kernel/config/version.go | cut -d'"' -f2)
           echo "value=$value" >> "$GITHUB_OUTPUT"
           echo "building as platform $value"
 
