@@ -30,12 +30,12 @@ import (
 // Empty until a distribution says otherwise, and empty is an ordinary answer —
 // a platform with no apps of its own installs none. Note what empty also
 // switches off: the catalogue-staleness refusal in internal/platform's
-// verifyCatalogVersions is written against this list, so a deployment that
+// VerifyCatalogVersions is written against this list, so a deployment that
 // declares nothing here is a deployment where a catalogue older than the
 // binary is accepted whole.
 //
 // A default app should be one this binary carries, but nothing checks that at
-// startup: verifyCatalogVersions asks only whether the catalogue names the id,
+// startup: VerifyCatalogVersions asks only whether the catalogue names the id,
 // and it skips any id with no compiled module by design. An id with a
 // catalogue entry and no module boots clean and then fails once per tenant,
 // for ever, inside EnsureDefaultApps.

@@ -9,7 +9,7 @@
  * are about is the gate a module's routes sit behind.
  */
 
-package tenant
+package appinstall
 
 import (
 	"testing"

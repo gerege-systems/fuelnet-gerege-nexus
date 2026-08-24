@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package tenant
+package appinstall
 
 import (
 	"log/slog"
@@ -16,15 +16,15 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-func (s *Service) appGateMiddleware(appID string) func(http.Handler) http.Handler {
+func (h *Handlers) GateMiddleware(appID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return s.authn.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return h.authn.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenantID, ok := nexus.RequireTenant(w, r)
 			if !ok {
 				return
 			}
 
-			// Whether a tenant has this app — see appInstalled, which the
+			// Whether a tenant has this app — see AppInstalled, which the
 			// authorization endpoint asks the same question of on behalf of
 			// apps that run outside this binary. A database that cannot answer
 			// refuses here rather than admitting: this is the check that keeps
@@ -40,7 +40,7 @@ func (s *Service) appGateMiddleware(appID string) func(http.Handler) http.Handle
 				return
 			}
 
-			enabled, err := s.appInstalled(r.Context(), tenantID, appID)
+			enabled, err := h.AppInstalled(r.Context(), tenantID, appID)
 			if err != nil {
 				slog.Error("could not check the app installation", "error", err,
 					"app_id", appID, "tenant_id", tenantID)
@@ -55,7 +55,7 @@ func (s *Service) appGateMiddleware(appID string) func(http.Handler) http.Handle
 			// matching Odoo's ir.model.access behaviour. Government workflow has
 			// its own action- and unit-aware permission checks.
 			if permission := appRequestPermission(appID, r.Method, r.URL.Path); permission != "" {
-				access.RequirePermission(s.permissions, permission)(next).ServeHTTP(w, r)
+				access.RequirePermission(h.permissions, permission)(next).ServeHTTP(w, r)
 				return
 			}
 			next.ServeHTTP(w, r)

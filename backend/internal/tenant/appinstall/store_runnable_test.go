@@ -1,9 +1,8 @@
-package tenant
+package appinstall
 
 import (
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/appinstall"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
@@ -63,11 +62,11 @@ func TestAnExternalAppIsOfferedWithoutAModule(t *testing.T) {
 func TestTheInstalledListDropsAnAppThisBinaryCannotRun(t *testing.T) {
 	withModules(t, gatedModule{})
 
-	server := &Service{installer: appinstall.NewAppInstaller(nil, []catalog.CatalogApp{
+	server := New(Deps{Installer: NewAppInstaller(nil, []catalog.CatalogApp{
 		{ID: "io.gerege.test.gated", Slug: "gated", Version: "1.0.0"},
 		// Advertised by the signed catalogue, built from another repository.
 		{ID: "io.gerege.nexus.gov_services", Slug: "gov-services", Version: "1.1.0"},
-	}, "1.0.0")}
+	}, "1.0.0")})
 
 	if !server.presentableInstallation("io.gerege.test.gated") {
 		t.Error("an app with a compiled module must stay on the list")
@@ -90,7 +89,7 @@ func TestTheInstalledListDropsAnAppThisBinaryCannotRun(t *testing.T) {
 func TestAnInstalledModuleTheCatalogueHasNotHeardOfIsKept(t *testing.T) {
 	withModules(t, gatedModule{})
 
-	server := &Service{installer: appinstall.NewAppInstaller(nil, nil, "1.0.0")}
+	server := New(Deps{Installer: NewAppInstaller(nil, nil, "1.0.0")})
 	if !server.presentableInstallation("io.gerege.test.gated") {
 		t.Error("a compiled module must be listed even when the catalogue is silent about it")
 	}

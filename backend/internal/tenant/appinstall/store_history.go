@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package tenant
+package appinstall
 
 import (
 	"encoding/json"
@@ -64,13 +64,13 @@ type historyEntry struct {
 	Added  string `json:"added,omitempty"`
 }
 
-// handleAppHistory answers with one app's releases and this tenant's dealings
+// HandleAppHistory answers with one app's releases and this tenant's dealings
 // with it.
 //
 // It is a member-level read behind the app's own permission rather than an
 // administrative one: "what changed in the app I use" is a question the people
 // using it ask, and the answer names no one outside their own organisation.
-func (s *Service) handleAppHistory(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAppHistory(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
@@ -80,19 +80,19 @@ func (s *Service) handleAppHistory(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "invalid app slug format")
 		return
 	}
-	app, found := s.installer.GetAppBySlug(slug)
+	app, found := h.installer.GetAppBySlug(slug)
 	if !found {
 		httpx.Error(w, http.StatusNotFound, "app not found")
 		return
 	}
 
 	locale := config.LocaleFromRequest(r)
-	releases, err := s.appReleaseHistory(r, app.ID, locale)
+	releases, err := h.appReleaseHistory(r, app.ID, locale)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to read the release history")
 		return
 	}
-	events, installedVersion, err := s.appInstallationHistory(r, tenantID, app.ID)
+	events, installedVersion, err := h.appInstallationHistory(r, tenantID, app.ID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to read the installation history")
 		return
@@ -123,8 +123,8 @@ func (s *Service) handleAppHistory(w http.ResponseWriter, r *http.Request) {
 
 // appReleaseHistory reads what the publisher shipped, from the manifests
 // SyncCatalog has been recording since long before anything read them back.
-func (s *Service) appReleaseHistory(r *http.Request, appID, locale string) ([]historyEntry, error) {
-	rows, err := s.db.Query(r.Context(),
+func (h *Handlers) appReleaseHistory(r *http.Request, appID, locale string) ([]historyEntry, error) {
+	rows, err := h.db.Query(r.Context(),
 		`SELECT version, manifest, published_at FROM app_versions
 		  WHERE app_id = $1 ORDER BY published_at DESC`, appID)
 	if err != nil {
@@ -164,8 +164,8 @@ func (s *Service) appReleaseHistory(r *http.Request, appID, locale string) ([]hi
 }
 
 // appInstallationHistory reads what this tenant did, and what it is running.
-func (s *Service) appInstallationHistory(r *http.Request, tenantID, appID string) ([]historyEntry, string, error) {
-	rows, err := s.db.Query(r.Context(),
+func (h *Handlers) appInstallationHistory(r *http.Request, tenantID, appID string) ([]historyEntry, string, error) {
+	rows, err := h.db.Query(r.Context(),
 		`SELECT e.event_type, e.details, e.created_at, ai.installed_version,
 		        COALESCE(u.name, '')
 		   FROM installation_events e

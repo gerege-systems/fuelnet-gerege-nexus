@@ -68,50 +68,18 @@ var crossPlaneExceptions = map[string]map[string]string{}
 //
 // The values are destinations. The plane is the first segment; the ones with no
 // slash are the composition root itself.
+// Where each file still sitting in a plane's root package is going.
+//
+// Four left, and all four are the composition root doing its job rather than
+// work waiting to be done: service.go builds the plane, and the three tests
+// build the whole of it because what they assert is the assembly — which
+// capabilities a built plane publishes, that an extra module is constructed,
+// and that a module's routes are behind the gate. A handler would not belong
+// here, and this is what says so.
 var plannedTenantPackages = map[string]string{
-	// ------------------------------------------------------------ packages
-
-	// --------------------------------------------- files in the root package
-	// The platform decides whether strangers may sign up and whether the
-	// deployment is read-only; this applies the answer on a tenant's request,
-	// through the settings store rather than a query. That is §2.9's rule
-	// working, so the file follows the request path it serves.
-	"access_mode.go":      "tenant/access",
-	"access_mode_test.go": "tenant/access",
-	// "The tenant-facing half of two things the control plane starts", says
-	// its own header. It reads credential_grants, which is a platform table
-	// and not one of the five a tenant may read — see the PR.
-	"app_gate_test.go": "tenant/appinstall",
-	"appgate_test.go":  "tenant/appinstall",
-	"appgate.go":       "tenant/appinstall",
-	// The tenant's own store screens, not the platform's catalogue: every one
-	// of these handlers reads claims.TenantID and installs for that
-	// organisation. The catalogue they read is the deployment's and is parsed
-	// in kernel/appcatalog.
-	"catalog_handlers.go":      "tenant/appinstall",
-	"catalog_history.go":       "tenant/appinstall",
-	"catalog_history_test.go":  "tenant/appinstall",
-	"catalog_overview.go":      "tenant/appinstall",
-	"catalog_runnable_test.go": "tenant/appinstall",
-	"catalog_versions_test.go": "tenant/appinstall",
-	// Suspension and the user quota are read on the request path, not written
-	// by the console: "a cached read on the request path, like the app gate
-	// beside it", says the file. The console's half of an organisation's
-	// lifecycle is in platform/controlplane.
-	"suspension_test.go":      "tenant/access",
-	"tenant_lifecycle.go":     "tenant/access + tenant/quota",
-	"auth_handlers.go":        "tenant/auth",
-	"capabilities_test.go":    "tenant/appinstall",
-	"eid_linking_test.go":     "tenant/identity",
-	"emailverify_handlers.go": "tenant/emailverify",
-	"external_app_test.go":    "tenant/appinstall",
-	"external_apps.go":        "tenant/appinstall",
-	"extra_modules_test.go":   "tenant/appinstall",
-	"login_lockout_test.go":   "tenant/auth",
-	"middleware.go":           "tenant/auth", // appGateMiddleware follows external_apps.go
-	"module_platform.go":      "tenant/appinstall",
-	"signing.go":              "tenant/signing",
-	"signing_test.go":         "tenant/signing",
+	"capabilities_test.go":  "tenant (asserts what building the plane publishes)",
+	"extra_modules_test.go": "tenant (asserts a distribution's module is constructed)",
+	"gate_e2e_test.go":      "tenant (asserts a module's routes are behind the gate, through the assembled router)",
 }
 
 // Nothing. internal/platform's root holds one file — service.go, the plane

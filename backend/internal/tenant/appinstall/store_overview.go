@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package tenant
+package appinstall
 
 import (
 	"net/http"
@@ -54,7 +54,7 @@ type overviewApp struct {
 	ReleaseSummary string `json:"release_summary,omitempty"`
 }
 
-// handleStoreOverview is the administrator's single view of what this instance
+// HandleStoreOverview is the administrator's single view of what this instance
 // is carrying and where its catalogue came from.
 //
 // It answers the question the per-app screens cannot: not "is this app up to
@@ -72,26 +72,26 @@ type overviewApp struct {
 // many others run a given app, obtained by deliberately bypassing the isolation
 // dbguard exists to enforce. The installation columns below are this tenant's
 // own. If a platform-operator role is ever introduced, the count belongs to it.
-func (s *Service) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleStoreOverview(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
 
-	installed, err := s.installer.GetInstallationsForTenant(r.Context(), tenantID)
+	installed, err := h.installer.GetInstallationsForTenant(r.Context(), tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load installed apps")
 		return
 	}
 
-	held, err := s.heldApps(r, tenantID)
+	held, err := h.heldApps(r, tenantID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "failed to load held apps")
 		return
 	}
 
 	locale := config.LocaleFromRequest(r)
-	available := s.installer.GetCatalog()
+	available := h.installer.GetCatalog()
 	rows := make([]overviewApp, 0, len(available))
 	drifted := 0
 	for _, app := range available {
@@ -123,17 +123,17 @@ func (s *Service) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	s.syncMu.RLock()
-	at, syncOK, failure := s.lastSyncAt, s.lastSyncOK, s.lastSyncErr
-	s.syncMu.RUnlock()
+	h.syncMu.RLock()
+	at, syncOK, failure := h.lastSyncAt, h.lastSyncOK, h.lastSyncErr
+	h.syncMu.RUnlock()
 
 	source := "file"
-	if s.catalogSource.Remote() {
+	if h.catalogue.Remote() {
 		source = "registry"
 	}
 	sync := map[string]any{
 		"source":        source,
-		"sync_interval": s.catalogSource.SyncInterval().String(),
+		"sync_interval": h.catalogue.SyncInterval().String(),
 	}
 	if !at.IsZero() {
 		sync["last_sync_at"] = at
@@ -164,8 +164,8 @@ func (s *Service) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 // a hold. An app that was held and has since been upgraded is not held any
 // more, and reading only for the presence of a held event would keep saying it
 // was.
-func (s *Service) heldApps(r *http.Request, tenantID string) (map[string]bool, error) {
-	rows, err := s.db.Query(r.Context(),
+func (h *Handlers) heldApps(r *http.Request, tenantID string) (map[string]bool, error) {
+	rows, err := h.db.Query(r.Context(),
 		`SELECT ai.app_id
 		   FROM app_installations ai
 		   JOIN LATERAL (

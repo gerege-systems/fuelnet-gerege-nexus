@@ -5,7 +5,7 @@
  *
  * The app gate, tested through the app that made it worth testing.
  *
- * Every compiled module is mounted behind appGateMiddleware, and until now
+ * Every compiled module is mounted behind GateMiddleware, and until now
  * nothing asserted what it does — the gate was one line in registerAppModuleRoutes
  * and the closest thing to a test was the route-policy sweep, which only asks
  * whether a stranger is refused. The e-Government app is the one where the
@@ -150,7 +150,7 @@ func (f *gateFixture) install(t *testing.T, appID string) {
 	}
 	// The gate caches its answer for thirty seconds, which is longer than this
 	// test takes.
-	f.server.forgetAppGate(f.tenantID)
+	f.server.appinstall.ForgetGate(f.tenantID)
 }
 
 // An app's routes are behind its installation, and another app's are not.

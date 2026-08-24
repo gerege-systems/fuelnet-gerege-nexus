@@ -5,7 +5,7 @@
  * The app gate, continued into applications that run somewhere else.
  */
 
-package tenant
+package appinstall
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// appInstalled reports whether a tenant has an app installed and enabled.
+// AppInstalled reports whether a tenant has an app installed and enabled.
 //
 // It is asked on the way into every request a module app serves, and again at
 // the authorization endpoint for every external one, so it is cached: the row
@@ -27,36 +27,36 @@ import (
 // one is. A database that is down would otherwise pin "not installed" onto the
 // tenant for the length of the entry, and the app would stay missing after it
 // came back.
-func (s *Service) appInstalled(ctx context.Context, tenantID, appID string) (bool, error) {
+func (h *Handlers) AppInstalled(ctx context.Context, tenantID, appID string) (bool, error) {
 	cacheKey := memo.Key(tenantID, appID)
-	if enabled, cached := s.appGate.Get(cacheKey); cached {
+	if enabled, cached := h.appGate.Get(cacheKey); cached {
 		return enabled, nil
 	}
 
 	var enabled bool
-	err := s.db.QueryRow(ctx,
+	err := h.db.QueryRow(ctx,
 		`SELECT enabled FROM app_installations WHERE tenant_id = $1 AND app_id = $2`,
 		tenantID, appID).Scan(&enabled)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		s.appGate.Put(cacheKey, false)
+		h.appGate.Put(cacheKey, false)
 		return false, nil
 	case err != nil:
 		return false, err
 	}
-	s.appGate.Put(cacheKey, enabled)
+	h.appGate.Put(cacheKey, enabled)
 	return enabled, nil
 }
 
-// installedAppSet answers "which apps does this tenant have" in one query.
+// InstalledAppSet answers "which apps does this tenant have" in one query.
 //
 // The per-app gate above is the cached one, asked once per request for one
 // known app. The reports module needs the whole set, and asking the cache
 // twelve times would be twelve round trips on a cold cache to build a list.
 // Uncached deliberately: it is one query per report listing, and a stale answer
 // here would show a report for an app that had just been uninstalled.
-func (s *Service) installedAppSet(ctx context.Context, tenantID string) (map[string]bool, error) {
-	rows, err := s.db.Query(ctx,
+func (h *Handlers) InstalledAppSet(ctx context.Context, tenantID string) (map[string]bool, error) {
+	rows, err := h.db.Query(ctx,
 		`SELECT app_id FROM app_installations WHERE tenant_id = $1 AND enabled`, tenantID)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (s *Service) installedAppSet(ctx context.Context, tenantID string) (map[str
 // externalAppGate answers the SSO provider's question: may this tenant's user
 // sign in to this client?
 //
-// A module app is kept from an uninstalled tenant by appGateMiddleware, which
+// A module app is kept from an uninstalled tenant by GateMiddleware, which
 // stands in front of the routes the module serves. An external app serves no
 // routes here — the only thing this platform does for it is say who somebody is
 // — so the authorization endpoint is where the same rule has to be applied, and
@@ -90,8 +90,8 @@ type externalAppGate struct {
 	installed func(ctx context.Context, tenantID, appID string) (bool, error)
 }
 
-func (s *Service) newExternalAppGate() externalAppGate {
-	return externalAppGate{catalog: s.installer.GetCatalog, installed: s.appInstalled}
+func (h *Handlers) NewExternalAppGate() externalAppGate {
+	return externalAppGate{catalog: h.installer.GetCatalog, installed: h.AppInstalled}
 }
 
 // AllowClient reports whether the client is reachable for the tenant.

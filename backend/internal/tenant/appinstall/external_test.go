@@ -1,4 +1,4 @@
-package tenant
+package appinstall
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 // checked is that a third party can describe their running platform in a file
 // and have this one accept it, so a copy of that file written to suit the test
 // would be checking the test.
-const exampleExternalManifest = "../../../catalog/manifests/example-external.json"
+const exampleExternalManifest = "../../../../catalog/manifests/example-external.json"
 
 // externalCatalogApp is the shipped example as the store would carry it.
 func externalCatalogApp(t *testing.T) catalog.CatalogApp {
@@ -53,7 +53,7 @@ func TestTheShippedExternalManifestIsAcceptedAsOne(t *testing.T) {
 	}
 	// And no compiled module is expected of it. This is the check that made
 	// every external app uninstallable until it learned about them.
-	if err := verifyCatalogVersions(withDefaultApp(app)); err != nil {
+	if err := VerifyCatalogVersions(withDefaultApp(app)); err != nil {
 		t.Fatalf("expected an external app to need no compiled module: %v", err)
 	}
 }

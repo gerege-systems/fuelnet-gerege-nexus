@@ -12,7 +12,7 @@
  * two modules that need it rather than offered to all of them.
  */
 
-package tenant
+package appinstall
 
 import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
@@ -32,7 +32,7 @@ type modulePlatform struct {
 	perms nexus.PermissionStore
 }
 
-func newModulePlatform(db *pgxpool.Pool) modulePlatform {
+func NewModulePlatform(db *pgxpool.Pool) modulePlatform {
 	return modulePlatform{db: db, perms: access.NewSQLPermissionStore(db)}
 }
 

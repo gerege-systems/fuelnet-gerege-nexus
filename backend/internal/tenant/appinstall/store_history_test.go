@@ -1,4 +1,4 @@
-package tenant
+package appinstall
 
 import (
 	"context"
@@ -120,7 +120,7 @@ func event(t *testing.T, pool *pgxpool.Pool, installID, kind string, details map
 func TestReleaseHistoryCarriesTheChronicleInTheCallersLanguage(t *testing.T) {
 	pool := historyPool(t)
 	_, _, appID, _ := installedApp(t, pool)
-	server := &Service{db: pool}
+	server := New(Deps{DB: pool})
 
 	entries, err := server.appReleaseHistory(httptest.NewRequest("GET", "/", nil), appID, "mn")
 	if err != nil {
@@ -163,7 +163,7 @@ func TestReleaseHistoryCarriesTheChronicleInTheCallersLanguage(t *testing.T) {
 func TestInstallationHistoryTellsAPersonFromTheSweep(t *testing.T) {
 	pool := historyPool(t)
 	tenantID, userID, appID, installID := installedApp(t, pool)
-	server := &Service{db: pool}
+	server := New(Deps{DB: pool})
 
 	event(t, pool, installID, "installed", map[string]string{"version": "1.0.0", "user_id": userID})
 	event(t, pool, installID, "upgraded", map[string]string{"from": "1.0.0", "to": "1.1.0", "user_id": "system"})
@@ -208,7 +208,7 @@ func TestInstallationHistoryTellsAPersonFromTheSweep(t *testing.T) {
 func TestHeldReadsTheLatestEventNotAnyEvent(t *testing.T) {
 	pool := historyPool(t)
 	tenantID, userID, appID, installID := installedApp(t, pool)
-	server := &Service{db: pool}
+	server := New(Deps{DB: pool})
 
 	event(t, pool, installID, "held", map[string]string{"reason": "permissions", "added": "contacts.manage"})
 	held, err := server.heldApps(httptest.NewRequest("GET", "/", nil), tenantID)
