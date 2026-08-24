@@ -109,7 +109,7 @@ func (s *Service) handleSSOConfig(w http.ResponseWriter, r *http.Request) {
 	// Whether this platform admits strangers. The sign-in screen reads it to
 	// decide whether to offer a way in at all — a "sign up" affordance on a
 	// private deployment is an invitation to a refusal.
-	answer["access_mode"] = accessMode()
+	answer["access_mode"] = auth.AccessMode()
 
 	answer["google"] = map[string]any{"enabled": false}
 	if s.googleLoginEnabled() && s.localLoginAllowed() {
@@ -191,7 +191,7 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	userID, tenantID, err := s.resolveOrProvisionSSOUser(r.Context(), s.ssoClient.Config(), identity)
 	if err != nil {
-		var refusal signInError
+		var refusal auth.SignInError
 		if errors.As(err, &refusal) {
 			slog.Info("refused a verified SSO identity", "reason", refusal.Error(), "subject", identity.Subject)
 			s.failSSO(w, r, "no_account")
@@ -202,7 +202,7 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "sso")
+	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "sso")
 	if err != nil {
 		slog.Error("could not establish a session for an SSO sign-in", "error", err, "user_id", userID)
 		s.failSSO(w, r, "session_failed")
@@ -229,32 +229,6 @@ func (s *Service) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Service) failSSO(w http.ResponseWriter, r *http.Request, reason string) {
 	telemetry.RecordLogin(telemetry.LoginSSO, false)
 	http.Redirect(w, r, config.WebOrigin()+"/login?sso_error="+reason, http.StatusFound)
-}
-
-// ErrNoOrganisation means the account is real and the identity is theirs, but
-// they belong to no organisation, so there is nothing to sign in to.
-//
-// Deliberately not a signInError. That type is what the Google callback reads
-// as "nobody here recognises this account", and it answers by parking the
-// identity and asking for eID. Somebody whose provider account is already
-// linked must never be sent down that road again — it is the loop this whole
-// change exists to close, and it would be indistinguishable from the bug.
-var ErrNoOrganisation = errors.New("this account does not belong to any organisation")
-
-// firstTenantFor is the organisation a session for this person opens in.
-//
-// Separate from the identity lookup on purpose: which organisation somebody
-// works in has no bearing on whether the provider account is theirs, and
-// letting it decide is what made a linked identity vanish.
-func (s *Service) firstTenantFor(ctx context.Context, userID string) (string, error) {
-	var tenantID string
-	err := s.db.QueryRow(ctx,
-		`SELECT tenant_id::text FROM memberships WHERE user_id = $1
-		  ORDER BY created_at, tenant_id LIMIT 1`, userID).Scan(&tenantID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrNoOrganisation
-	}
-	return tenantID, err
 }
 
 // resolveOrProvisionSSOUser maps a verified provider identity onto a local
@@ -284,7 +258,7 @@ func (s *Service) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.C
 		issuer, identity.Subject).Scan(&userID)
 	if err == nil {
 		s.touchSSOIdentity(ctx, issuer, identity)
-		tenantID, err = s.firstTenantFor(ctx, userID)
+		tenantID, err = s.authn.FirstTenantFor(ctx, userID)
 		if err != nil {
 			return "", "", err
 		}
@@ -329,7 +303,7 @@ func (s *Service) resolveOrProvisionSSOUser(ctx context.Context, cfg ssoclient.C
 func (s *Service) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
 	issuer, slug := cfg.Issuer, cfg.TenantSlug
 	if slug == "" {
-		return "", "", signInError{"your identity is verified but this deployment has no account for you"}
+		return "", "", auth.NewSignInError("your identity is verified but this deployment has no account for you")
 	}
 	if err = s.db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug = $1`, slug).Scan(&tenantID); err != nil {
 		return "", "", err
@@ -376,15 +350,15 @@ func (s *Service) provisionSSOUser(ctx context.Context, cfg ssoclient.Config, id
 	// The platform's access mode. A federated provider vouching for somebody
 	// is not the same as this platform having decided to admit them, and in
 	// private mode it is the second half that is missing.
-	if err = mayProvisionAccount("sso"); err != nil {
+	if err = auth.MayProvisionAccount("sso"); err != nil {
 		return "", "", err
 	}
 	// The organisation's limit, checked before it grows. A provider that
 	// authenticates the whole of a company would otherwise walk an
 	// organisation past whatever the console set for it, one sign-in at a
 	// time, with nobody deciding to.
-	if err = s.checkUserQuota(ctx, tenantID); err != nil {
-		return "", "", signInError{"this organisation has reached the number of people it may have"}
+	if err = s.authn.CheckUserQuota(ctx, tenantID); err != nil {
+		return "", "", auth.NewSignInError("this organisation has reached the number of people it may have")
 	}
 	if _, err = tx.Exec(ctx,
 		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1,$2)

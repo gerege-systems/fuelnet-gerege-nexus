@@ -4,10 +4,10 @@
  * Distributed under the Apache 2.0 License.
  *
  * Whether strangers may become users of this platform, and what a platform in
- * maintenance still allows.
+ * Maintenance still allows.
  */
 
-package tenant
+package auth
 
 import (
 	"context"
@@ -46,19 +46,19 @@ import (
 // ErrProvisioningClosed is what the account-creating paths get in private mode.
 var ErrProvisioningClosed = errors.New("this platform is closed: only people who have already been registered may sign in")
 
-// accessMode returns the current mode.
-func accessMode() string { return settings.Get(settings.AccessMode) }
+// AccessMode returns the current mode.
+func AccessMode() string { return settings.Get(settings.AccessMode) }
 
 // PlatformIsPublic reports whether strangers may be provisioned. Exported for
 // the handful of screens that ask before offering to sign somebody up.
-func PlatformIsPublic() bool { return accessMode() == settings.AccessPublic }
+func PlatformIsPublic() bool { return AccessMode() == settings.AccessPublic }
 
-// mayProvisionAccount is the one check.
+// MayProvisionAccount is the one check.
 //
-// It returns a signInError, so every caller that already knows how to show a
+// It returns a SignInError, so every caller that already knows how to show a
 // reason to somebody signing in shows this one — in their own language, on the
 // sign-in screen, rather than as a 500 they cannot act on.
-func mayProvisionAccount(method string) error {
+func MayProvisionAccount(method string) error {
 	if PlatformIsPublic() {
 		return nil
 	}
@@ -68,7 +68,7 @@ func mayProvisionAccount(method string) error {
 	// the support call that follows — "it says I have no access" — which is
 	// answered by this line naming the method they used.
 	slog.Info("refused to provision an account: the platform is private", "method", method)
-	return signInError{"Энэ платформ хаалттай горимд байна. Танд эрх нээгдээгүй байна — " +
+	return SignInError{"Энэ платформ хаалттай горимд байна. Танд эрх нээгдээгүй байна — " +
 		"байгууллагынхаа админаас урилга хүсэн үү."}
 }
 
@@ -78,7 +78,7 @@ func mayProvisionAccount(method string) error {
 // you may look, you may not change. The platform-wide one is a setting; a
 // single organisation's is a column on its row, set by the console.
 //
-// Reads are deliberately still allowed. A maintenance mode that refuses
+// Reads are deliberately still allowed. A Maintenance mode that refuses
 // everything is an outage with a nicer message, and the reason to have one at
 // all is to keep people able to see what they need while something underneath
 // is being moved.
@@ -93,8 +93,8 @@ type maintenanceNotice struct {
 	Scope string `json:"scope,omitempty"`
 }
 
-// maintenance reports whether writing is closed for this organisation.
-func (s *Service) maintenance(ctx context.Context, tenantID string) maintenanceNotice {
+// Maintenance reports whether writing is closed for this organisation.
+func (h *Handlers) Maintenance(ctx context.Context, tenantID string) maintenanceNotice {
 	if settings.Bool(settings.Maintenance) {
 		return maintenanceNotice{
 			Active:  true,
@@ -108,11 +108,11 @@ func (s *Service) maintenance(ctx context.Context, tenantID string) maintenanceN
 
 	var at *time.Time
 	var message string
-	if err := s.db.QueryRow(ctx,
+	if err := h.db.QueryRow(ctx,
 		`SELECT maintenance_at, maintenance_message FROM tenants WHERE id = $1::uuid`,
 		tenantID).Scan(&at, &message); err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			slog.Warn("could not check whether the organisation is in maintenance",
+			slog.Warn("could not check whether the organisation is in Maintenance",
 				"tenant_id", tenantID, "error", err)
 		}
 		return maintenanceNotice{}
@@ -123,12 +123,12 @@ func (s *Service) maintenance(ctx context.Context, tenantID string) maintenanceN
 	return maintenanceNotice{Active: true, Scope: "tenant", Message: message}
 }
 
-// refuseIfReadOnly answers 503 to a write while maintenance is on.
+// RefuseIfReadOnly answers 503 to a write while Maintenance is on.
 //
 // Safe methods pass, and so does signing out: somebody who wants to leave
-// should always be able to, and a maintenance mode that traps people in a
+// should always be able to, and a Maintenance mode that traps people in a
 // session is one nobody will turn on again.
-func (s *Service) refuseIfReadOnly(w http.ResponseWriter, r *http.Request, tenantID string) bool {
+func (h *Handlers) RefuseIfReadOnly(w http.ResponseWriter, r *http.Request, tenantID string) bool {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return false
@@ -137,7 +137,7 @@ func (s *Service) refuseIfReadOnly(w http.ResponseWriter, r *http.Request, tenan
 		return false
 	}
 
-	notice := s.maintenance(r.Context(), tenantID)
+	notice := h.Maintenance(r.Context(), tenantID)
 	if !notice.Active {
 		return false
 	}
@@ -152,12 +152,12 @@ func (s *Service) refuseIfReadOnly(w http.ResponseWriter, r *http.Request, tenan
 	w.Header().Set("Retry-After", "600")
 	httpx.JSON(w, http.StatusServiceUnavailable, map[string]any{
 		"error":       message,
-		"maintenance": notice,
+		"Maintenance": notice,
 	})
 	return true
 }
 
-// Notice is one thing the platform wants to tell somebody: a maintenance
+// Notice is one thing the platform wants to tell somebody: a Maintenance
 // window, or an announcement an operator broadcast.
 type Notice struct {
 	Kind  string `json:"kind"`
@@ -165,44 +165,44 @@ type Notice struct {
 	Body  string `json:"body"`
 }
 
-// notices assembles what the shell should show this person.
+// Notices assembles what the shell should show this person.
 //
 // One query and one settings read, on /me, which the shell asks for on every
 // page load anyway — rather than a second endpoint the shell would have to
 // remember to poll.
-func (s *Service) notices(ctx context.Context, tenantID string) []Notice {
-	notices := make([]Notice, 0, 2)
+func (h *Handlers) Notices(ctx context.Context, tenantID string) []Notice {
+	Notices := make([]Notice, 0, 2)
 
-	if notice := s.maintenance(ctx, tenantID); notice.Active {
+	if notice := h.Maintenance(ctx, tenantID); notice.Active {
 		message := notice.Message
 		if message == "" {
 			message = "Платформ засварын горимд байна: одоогоор зөвхөн унших боломжтой."
 		}
-		notices = append(notices, Notice{Kind: "maintenance", Title: message})
+		Notices = append(Notices, Notice{Kind: "Maintenance", Title: message})
 	}
 
-	rows, err := s.db.Query(ctx,
+	rows, err := h.db.Query(ctx,
 		`SELECT kind, title, body FROM announcements
 		  WHERE starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
 		  ORDER BY starts_at DESC
 		  LIMIT 5`)
 	if err != nil {
 		slog.Warn("could not read the announcements", "error", err)
-		return notices
+		return Notices
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var notice Notice
 		if err := rows.Scan(&notice.Kind, &notice.Title, &notice.Body); err != nil {
 			slog.Warn("could not read an announcement", "error", err)
-			return notices
+			return Notices
 		}
-		notices = append(notices, notice)
+		Notices = append(Notices, notice)
 	}
-	return notices
+	return Notices
 }
 
-// warnAboutConflictingConfiguration says so when the demo seeder and a private
+// WarnAboutConflictingConfiguration says so when the demo seeder and a private
 // platform are both asked for.
 //
 // The seeder creates accounts, which is precisely what private mode exists to
@@ -211,7 +211,7 @@ func (s *Service) notices(ctx context.Context, tenantID string) []Notice {
 // meant is worse than saying so — and the console's home screen shows the same
 // warning, because a line in a boot log is seen by nobody after the first
 // morning.
-func warnAboutConflictingConfiguration() {
+func WarnAboutConflictingConfiguration() {
 	if !config.SeedingEnabled() {
 		return
 	}
@@ -220,7 +220,7 @@ func warnAboutConflictingConfiguration() {
 	}
 	slog.Warn("the demo seeder is enabled while the platform is private; "+
 		"the seeded accounts exist but nobody else will be provisioned",
-		"access_mode", accessMode(), "remedy",
+		"access_mode", AccessMode(), "remedy",
 		"switch the platform to public in the console, or unset SEED_DEMO_DATA")
 }
 

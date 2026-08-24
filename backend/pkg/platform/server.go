@@ -89,7 +89,7 @@ func newServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...te
 		Installer: tenantPlane, Mail: tenantPlane.Mail(),
 		TenantChanged: tenantPlane.ForgetSuspension,
 		Settings:      settingsStore, Flags: flagsStore,
-		Warnings: tenant.ConfigurationWarnings, CatalogStatus: tenantPlane.CatalogStatus,
+		Warnings: tenantPlane.ConfigurationWarnings, CatalogStatus: tenantPlane.CatalogStatus,
 		SyncCatalog:     tenantPlane.SyncCatalog,
 		PlatformVersion: config.PlatformVersion,
 	})

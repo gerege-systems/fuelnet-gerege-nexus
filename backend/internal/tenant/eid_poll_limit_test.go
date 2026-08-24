@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
+
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 )
 
@@ -35,19 +37,19 @@ func exhaust(t *testing.T, limiter *security.IPRateLimiter, n int) int {
 // office throttling itself out just the same.
 func TestPollAndLoginBudgetsAreIndependent(t *testing.T) {
 	s := &Service{
-		loginLimiter: newLoginLimiter(),
-		pollLimiter:  newPollLimiter(),
+		loginLimiter: auth.NewLoginLimiter(),
+		pollLimiter:  auth.NewPollLimiter(),
 	}
 
-	if spent := exhaust(t, s.pollLimiter, pollBurst); spent == 0 {
+	if spent := exhaust(t, s.pollLimiter, auth.PollBurst); spent == 0 {
 		t.Fatal("the poll limiter refused everything")
 	}
 	if allowed := exhaust(t, s.loginLimiter, 1); allowed != 1 {
 		t.Errorf("polling consumed the sign-in budget: a citizen at %s cannot sign in", officeAddr)
 	}
-	if pollRatePerMinute <= loginRatePerMinute || pollBurst <= loginBurst {
+	if auth.PollRatePerMinute <= auth.LoginRatePerMinute || auth.PollBurst <= auth.LoginBurst {
 		t.Errorf("the poll budget (%d/min, burst %d) is no more generous than sign-in (%d/min, burst %d), so separating them changed nothing",
-			pollRatePerMinute, pollBurst, loginRatePerMinute, loginBurst)
+			auth.PollRatePerMinute, auth.PollBurst, auth.LoginRatePerMinute, auth.LoginBurst)
 	}
 }
 
@@ -57,13 +59,13 @@ func TestPollAndLoginBudgetsAreIndependent(t *testing.T) {
 func TestPollBudgetCoversAnOfficeWaitingAtOnce(t *testing.T) {
 	const pollsPerCitizenPerMinute = 60.0 / 25.0
 
-	limiter := newPollLimiter()
+	limiter := auth.NewPollLimiter()
 	burst := exhaust(t, limiter, 100)
 	if concurrent := float64(burst) / pollsPerCitizenPerMinute; concurrent < 5 {
 		t.Errorf("the burst covers only %.1f citizens starting together, too few for a shared address", concurrent)
 	}
 
-	if perMinute := float64(pollRatePerMinute); perMinute/pollsPerCitizenPerMinute < 20 {
+	if perMinute := float64(auth.PollRatePerMinute); perMinute/pollsPerCitizenPerMinute < 20 {
 		t.Errorf("%.0f polls per minute sustains only %.1f waiting citizens per address", perMinute, perMinute/pollsPerCitizenPerMinute)
 	}
 }
@@ -71,10 +73,10 @@ func TestPollBudgetCoversAnOfficeWaitingAtOnce(t *testing.T) {
 // Sign-in itself stays tight: it is the endpoint worth guessing against, and
 // starting a session pushes a notification to a real person's phone.
 func TestLoginBudgetStaysTight(t *testing.T) {
-	if loginRatePerMinute > 10 {
-		t.Errorf("login rate %d/min is no longer a meaningful brake on guessing", loginRatePerMinute)
+	if auth.LoginRatePerMinute > 10 {
+		t.Errorf("login rate %d/min is no longer a meaningful brake on guessing", auth.LoginRatePerMinute)
 	}
-	if allowed := exhaust(t, newLoginLimiter(), 50); allowed > 10 {
+	if allowed := exhaust(t, auth.NewLoginLimiter(), 50); allowed > 10 {
 		t.Errorf("a burst of %d sign-in attempts got through from one address", allowed)
 	}
 }

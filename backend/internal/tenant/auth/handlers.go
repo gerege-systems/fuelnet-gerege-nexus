@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package tenant
+package auth
 
 import (
 	"context"
@@ -25,10 +25,8 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eidmongolia"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -42,14 +40,14 @@ const (
 )
 
 var dummyPasswordHash = func() string {
-	hash, err := auth.HashPassword("constant-time-missing-user-placeholder")
+	hash, err := HashPassword("constant-time-missing-user-placeholder")
 	if err != nil {
 		panic(err)
 	}
 	return hash
 }()
 
-func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
 	var req struct {
 		Email    string `json:"email"`
@@ -69,7 +67,7 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var userID, passwordHash, tenantID, name string
 	var isAdmin bool
 	var lockedUntil pgtype.Timestamptz
-	err := s.db.QueryRow(r.Context(),
+	err := h.db.QueryRow(r.Context(),
 		`SELECT u.id, u.password_hash, u.name,
 		        EXISTS (
 		            SELECT 1 FROM membership_roles mr
@@ -90,25 +88,25 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "login service unavailable")
 		return
 	}
-	passwordOK := auth.CheckPasswordHash(req.Password, passwordHash)
+	passwordOK := CheckPasswordHash(req.Password, passwordHash)
 	locked := lockedUntil.Valid && lockedUntil.Time.After(time.Now())
 	if !passwordOK || locked {
 		if userID != "" && !locked {
-			s.recordLoginFailure(r.Context(), userID)
+			h.recordLoginFailure(r.Context(), userID)
 		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
 		telemetry.RecordLogin(telemetry.LoginPassword, false)
 		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
-	_, _ = s.db.Exec(r.Context(), `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
+	_, _ = h.db.Exec(r.Context(), `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
 
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "password")
+	token, expiresAt, err := h.IssueSession(r, userID, tenantID, "password")
 	if err != nil {
-		reportSessionFailure(w, err)
+		ReportSessionFailure(w, err)
 		return
 	}
-	auth.SetSessionCookie(w, token, expiresAt)
+	SetSessionCookie(w, token, expiresAt)
 
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{"email": req.Email})
 	telemetry.RecordLogin(telemetry.LoginPassword, true)
@@ -138,7 +136,7 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 // count below the threshold writes NULL — rather than left to assert a lockout
 // that has expired.
 //
-// Callers must not use it on an account that is currently locked; handleLogin
+// Callers must not use it on an account that is currently locked; HandleLogin
 // checks that before calling, so a live lockout is never extended by attempts
 // made during it.
 const loginFailureStatement = `
@@ -156,18 +154,18 @@ const loginFailureStatement = `
 // logged rather than surfaced: the caller is already answering 401, and turning
 // a bookkeeping error into a 500 would tell whoever is guessing that this
 // address exists.
-func (s *Service) recordLoginFailure(ctx context.Context, userID string) {
-	if _, err := s.db.Exec(ctx, loginFailureStatement,
+func (h *Handlers) recordLoginFailure(ctx context.Context, userID string) {
+	if _, err := h.db.Exec(ctx, loginFailureStatement,
 		userID, maxLoginFailures, loginLockoutWindow.String()); err != nil {
 		slog.Error("failed to record a login failure", "user_id", userID, "error", err)
 	}
 }
 
-func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	// Logout previously only cleared the cookie; the token stayed valid
 	// forever for anyone who had captured it.
-	if token := auth.TokenFromRequest(r); token != "" {
-		if err := s.sessions.Revoke(r.Context(), token); err != nil {
+	if token := TokenFromRequest(r); token != "" {
+		if err := h.sessions.Revoke(r.Context(), token); err != nil {
 			slog.Error("failed to revoke session", "error", err)
 		}
 	}
@@ -182,12 +180,11 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// Read before the cookie is cleared, and cleared after: the hint is spent
 	// here and is of no use to the next session.
 	endSession := ""
-	if s.ssoClientEnabled() {
-		endSession = s.ssoClient.EndSessionURL(r.Context(), ssoclient.IDTokenFromRequest(r))
-		ssoclient.ClearIDTokenCookie(w)
+	if h.endSession != nil {
+		endSession = h.endSession(w, r)
 	}
 
-	auth.ClearSessionCookie(w)
+	ClearSessionCookie(w)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status": "logged_out",
@@ -197,19 +194,19 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTenants answers which tenants the caller may act for.
+// HandleTenants answers which tenants the caller may act for.
 //
 // A user with one membership gets a list of one. That is not a wasted answer:
 // it is what lets the client show where it is without claiming there is
 // somewhere else to go.
-func (s *Service) handleTenants(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.UserFromContext(r.Context())
+func (h *Handlers) HandleTenants(w http.ResponseWriter, r *http.Request) {
+	claims, err := UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	options, err := s.sessions.TenantsForUser(nexus.WithoutTenant(r.Context()), claims.UserID)
+	options, err := h.sessions.TenantsForUser(nexus.WithoutTenant(r.Context()), claims.UserID)
 	if err != nil {
 		slog.Error("failed to list the tenants a user belongs to", "user_id", claims.UserID, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to list tenants")
@@ -226,20 +223,20 @@ func (s *Service) handleTenants(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func activeOrCurrent(claims auth.UserClaims) []string {
+func activeOrCurrent(claims UserClaims) []string {
 	if len(claims.AllowedTenantIDs) > 0 {
 		return claims.AllowedTenantIDs
 	}
 	return []string{claims.TenantID}
 }
 
-// handleSetActiveTenants chooses which organisations this session reads across.
+// HandleSetActiveTenants chooses which organisations this session reads across.
 //
 // The list is a request, not an instruction: every id is held against an active
 // membership and the ones that do not survive are dropped rather than refused,
 // so a tab left open since before somebody changed jobs narrows quietly instead
 // of failing. The organisation being acted in is always kept.
-func (s *Service) handleSetActiveTenants(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleSetActiveTenants(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		TenantIDs []string `json:"tenant_ids"`
 	}
@@ -254,14 +251,14 @@ func (s *Service) handleSetActiveTenants(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	token := auth.TokenFromRequest(r)
+	token := TokenFromRequest(r)
 	if token == "" {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	active, err := s.sessions.SetActiveTenants(r.Context(), token, body.TenantIDs)
+	active, err := h.sessions.SetActiveTenants(r.Context(), token, body.TenantIDs)
 	if err != nil {
-		if errors.Is(err, auth.ErrSessionInvalid) {
+		if errors.Is(err, ErrSessionInvalid) {
 			httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -272,15 +269,15 @@ func (s *Service) handleSetActiveTenants(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, map[string]any{"active": active})
 }
 
-// handleSwitchTenant moves the caller's session to another of their tenants.
+// HandleSwitchTenant moves the caller's session to another of their tenants.
 //
 // Until this existed, which tenant a person acted in was decided once, at
 // login, by whichever membership was oldest — someone who works for two
 // organisations could reach only one of them, and the only way to change that
 // was to edit the database. Signing out and back in would not have helped: the
 // login picks the same oldest membership every time, deliberately.
-func (s *Service) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.UserFromContext(r.Context())
+func (h *Handlers) HandleSwitchTenant(w http.ResponseWriter, r *http.Request) {
+	claims, err := UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -303,13 +300,13 @@ func (s *Service) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := s.sessions.SwitchTenant(nexus.WithoutTenant(r.Context()), auth.TokenFromRequest(r), req.TenantID)
+	token, expiresAt, err := h.sessions.SwitchTenant(nexus.WithoutTenant(r.Context()), TokenFromRequest(r), req.TenantID)
 	switch {
-	case errors.Is(err, auth.ErrNotAMember):
+	case errors.Is(err, ErrNotAMember):
 		// Not 404: whether that tenant exists is not this caller's business.
 		httpx.Error(w, http.StatusForbidden, "no membership in that tenant")
 		return
-	case errors.Is(err, auth.ErrSessionInvalid):
+	case errors.Is(err, ErrSessionInvalid):
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	case err != nil:
@@ -318,7 +315,7 @@ func (s *Service) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.SetSessionCookie(w, token, expiresAt)
+	SetSessionCookie(w, token, expiresAt)
 	// Recorded against the tenant being left, because that is the trail an
 	// administrator of it reads: this person stopped acting here, and when.
 	audit.Record(r.Context(), claims.TenantID, claims.UserID, "auth.tenant_switched", "session",
@@ -330,7 +327,7 @@ func (s *Service) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleLogoutEverywhere ends every session the caller holds.
+// HandleLogoutEverywhere ends every session the caller holds.
 //
 // Logging out ends the session in front of you. This is for the one you left
 // somewhere else — a machine in an office you have left, a desktop client on a
@@ -340,21 +337,21 @@ func (s *Service) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
 // It is inside the authenticated group, so the caller is proving they hold one
 // of the sessions they are ending. The cookie here is cleared too: the session
 // it names is among those just revoked.
-func (s *Service) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.UserFromContext(r.Context())
+func (h *Handlers) HandleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
+	claims, err := UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	revoked, err := s.sessions.RevokeAllForUser(r.Context(), claims.UserID)
+	revoked, err := h.sessions.RevokeAllForUser(r.Context(), claims.UserID)
 	if err != nil {
 		slog.Error("failed to revoke every session", "user_id", claims.UserID, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to end the other sessions")
 		return
 	}
 
-	auth.ClearSessionCookie(w)
+	ClearSessionCookie(w)
 	audit.Record(r.Context(), claims.TenantID, claims.UserID, "auth.logout_everywhere", "session",
 		map[string]any{"revoked": revoked})
 	httpx.JSON(w, http.StatusOK, map[string]any{"status": "logged_out_everywhere", "revoked": revoked})
@@ -374,10 +371,10 @@ func (s *Service) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request)
 // and the next person there could not sign in at all. So this is budgeted by
 // how many of them may plausibly be waiting behind a single address at once.
 const (
-	loginRatePerMinute = 5
-	loginBurst         = 5
-	pollRatePerMinute  = 60
-	pollBurst          = 15
+	LoginRatePerMinute = 5
+	LoginBurst         = 5
+	PollRatePerMinute  = 60
+	PollBurst          = 15
 
 	// The AI budget was here until 2026-08-23. It moved to the app that spends
 	// it — internal/apps/ai — which asks for the same numbers through
@@ -386,42 +383,42 @@ const (
 	// The verification endpoint spends a mailbox credential the whole platform
 	// shares, which is why it is budgeted and why it stays here: it is the
 	// platform's own route.
-	verifyRatePerMinute = 60
-	verifyBurst         = 20
+	VerifyRatePerMinute = 60
+	VerifyBurst         = 20
 )
 
-func newLoginLimiter() *security.IPRateLimiter {
-	return security.NewIPRateLimiter(rate.Limit(float64(loginRatePerMinute)/60.0), loginBurst)
+func NewLoginLimiter() *security.IPRateLimiter {
+	return security.NewIPRateLimiter(rate.Limit(float64(LoginRatePerMinute)/60.0), LoginBurst)
 }
 
-func newPollLimiter() *security.IPRateLimiter {
-	return security.NewIPRateLimiter(rate.Limit(float64(pollRatePerMinute)/60.0), pollBurst)
+func NewPollLimiter() *security.IPRateLimiter {
+	return security.NewIPRateLimiter(rate.Limit(float64(PollRatePerMinute)/60.0), PollBurst)
 }
 
-// issueSession creates a persisted session bound to the caller's IP and agent.
-// issueSession is the one funnel every way of signing in passes through —
+// IssueSession creates a persisted session bound to the caller's IP and agent.
+// IssueSession is the one funnel every way of signing in passes through —
 // password, eID, ДАН, Google, a federated provider, a staff PIN — which is why
 // the suspension check lives here rather than in each of them. An organisation
 // the control plane has closed cannot be signed in to by any route, including
 // one added next year by somebody who never read this file.
-func (s *Service) issueSession(r *http.Request, userID, tenantID, method string) (string, time.Time, error) {
-	if suspended, reason := s.tenantSuspended(r.Context(), tenantID); suspended {
+func (h *Handlers) IssueSession(r *http.Request, userID, tenantID, method string) (string, time.Time, error) {
+	if suspended, reason := h.TenantSuspended(r.Context(), tenantID); suspended {
 		if reason != "" {
 			return "", time.Time{}, fmt.Errorf("%w: %s", ErrTenantSuspended, reason)
 		}
 		return "", time.Time{}, ErrTenantSuspended
 	}
-	return s.sessions.Create(r.Context(), userID, tenantID, method,
+	return h.sessions.Create(r.Context(), userID, tenantID, method,
 		r.UserAgent(), security.ClientIP(r))
 }
 
-// reportSessionFailure answers a sign-in that could not produce a session.
+// ReportSessionFailure answers a sign-in that could not produce a session.
 //
 // A suspended organisation is the caller's to know about — they will otherwise
 // try the same password all afternoon — and everything else is ours. 403
-// rather than 401 for the same reason authMiddleware uses it: signing in again
+// rather than 401 for the same reason Middleware uses it: signing in again
 // is not the remedy.
-func reportSessionFailure(w http.ResponseWriter, err error) {
+func ReportSessionFailure(w http.ResponseWriter, err error) {
 	if errors.Is(err, ErrTenantSuspended) {
 		httpx.Error(w, http.StatusForbidden, err.Error())
 		return
@@ -430,18 +427,23 @@ func reportSessionFailure(w http.ResponseWriter, err error) {
 	httpx.Error(w, http.StatusInternalServerError, "failed to establish session")
 }
 
-// signInError carries a reason that is meant for the person signing in. Account
+// SignInError carries a reason that is meant for the person signing in. Account
 // linking also fails for reasons that are ours alone — a missing key, a broken
 // query, a rejected hash — and those are logged, never rendered: the citizen
 // once saw "bcrypt: password length exceeds 72 bytes" in the eID card.
-type signInError struct{ msg string }
+type SignInError struct{ msg string }
 
-func (e signInError) Error() string { return e.msg }
+func (e SignInError) Error() string { return e.msg }
 
-// reportSignInFailure answers with the reason when it is the caller's to act
+// NewSignInError carries a reason that is meant for the person signing in. The
+// field stays unexported so that the only way to make one is to decide that the
+// sentence is theirs to read.
+func NewSignInError(msg string) SignInError { return SignInError{msg: msg} }
+
+// ReportSignInFailure answers with the reason when it is the caller's to act
 // on, and with a stable message otherwise.
-func reportSignInFailure(w http.ResponseWriter, err error) {
-	var visible signInError
+func ReportSignInFailure(w http.ResponseWriter, err error) {
+	var visible SignInError
 	if errors.As(err, &visible) {
 		httpx.Error(w, http.StatusForbidden, visible.Error())
 		return
@@ -460,7 +462,7 @@ func eidLinkingDigest(linkingKey, subject string) string {
 	return fmt.Sprintf("%x", mac.Sum(nil))
 }
 
-// linkEIDIdentity records who a signed-in user is to eID Mongolia.
+// LinkEIDIdentity records who a signed-in user is to eID Mongolia.
 //
 // Qualified remote signing addresses the citizen by their ETSI semantics
 // identifier, and until this row exists nothing on the platform knows how to
@@ -471,7 +473,7 @@ func eidLinkingDigest(linkingKey, subject string) string {
 // It is best effort on purpose. Sign-in has already succeeded by this point,
 // and failing the login because a convenience row could not be written would
 // trade a working session for a missing one.
-func (s *Service) linkEIDIdentity(ctx context.Context, userID string, identity *eid.EIDIdentity) {
+func (h *Handlers) LinkEIDIdentity(ctx context.Context, userID string, identity *eid.EIDIdentity) {
 	if identity == nil {
 		return
 	}
@@ -495,7 +497,7 @@ func (s *Service) linkEIDIdentity(ctx context.Context, userID string, identity *
 		slog.Warn("could not record what eID returned", "error", err)
 		claims = []byte("{}")
 	}
-	if _, err := s.db.Exec(ctx,
+	if _, err := h.db.Exec(ctx,
 		`INSERT INTO user_eid_identities
 		     (user_id, civil_id, reg_number, person_etsi, given_name, surname, claims, last_seen_at)
 		 VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, NULLIF($5,''), NULLIF($6,''), $7, NOW())
@@ -514,10 +516,10 @@ func (s *Service) linkEIDIdentity(ctx context.Context, userID string, identity *
 	}
 }
 
-// resolveOrProvisionEIDUser links an eID subject to a stable, non-PII local
+// ResolveOrProvisionEIDUser links an eID subject to a stable, non-PII local
 // identifier. JIT provisioning is opt-in per tenant and always receives the
 // standard user role through the membership_default_role database trigger.
-func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.EIDIdentity) (userID, tenantID string, err error) {
+func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.EIDIdentity) (userID, tenantID string, err error) {
 	subject := strings.TrimSpace(identity.CivilID)
 	if subject == "" {
 		subject = strings.TrimSpace(identity.RegNumber)
@@ -530,10 +532,10 @@ func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.E
 	// explains: a citizen whose eID is linked here is the same citizen whether
 	// or not they currently belong to an organisation, and letting the
 	// membership decide made a linked identity read as an unknown one.
-	err = s.db.QueryRow(ctx,
+	err = h.db.QueryRow(ctx,
 		`SELECT user_id::text FROM user_eid_identities WHERE person_etsi=$1`, personEtsi).Scan(&userID)
 	if err == nil {
-		tenantID, err = s.firstTenantFor(ctx, userID)
+		tenantID, err = h.FirstTenantFor(ctx, userID)
 		if err != nil {
 			return "", "", err
 		}
@@ -548,7 +550,7 @@ func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.E
 	}
 	digest := eidLinkingDigest(linkingKey, subject)
 	syntheticEmail := "eid+" + digest[:32] + "@identity.invalid"
-	if err = s.db.QueryRow(ctx,
+	if err = h.db.QueryRow(ctx,
 		`SELECT u.id::text, m.tenant_id::text FROM users u JOIN memberships m ON m.user_id=u.id WHERE u.email=$1
 		 ORDER BY m.created_at, m.tenant_id LIMIT 1`,
 		syntheticEmail).Scan(&userID, &tenantID); err == nil {
@@ -561,14 +563,14 @@ func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.E
 	// tenant: a deployment that set EID_JIT_TENANT_SLUG once and has since
 	// been closed should stop provisioning, and this is the order in which
 	// that reads correctly.
-	if err := mayProvisionAccount("eid"); err != nil {
+	if err := MayProvisionAccount("eid"); err != nil {
 		return "", "", err
 	}
 	tenantSlug := strings.TrimSpace(os.Getenv("EID_JIT_TENANT_SLUG"))
 	if tenantSlug == "" {
-		return "", "", signInError{"eID identity is verified but account provisioning is disabled"}
+		return "", "", SignInError{"eID identity is verified but account provisioning is disabled"}
 	}
-	if err = s.db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug=$1`, tenantSlug).Scan(&tenantID); err != nil {
+	if err = h.db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug=$1`, tenantSlug).Scan(&tenantID); err != nil {
 		return "", "", fmt.Errorf("eID provisioning tenant %q is unavailable: %w", tenantSlug, err)
 	}
 	name := strings.TrimSpace(identity.LastName + " " + identity.FirstName)
@@ -577,11 +579,11 @@ func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.E
 	}
 	// The synthetic account has no password login path. Keep the random-looking
 	// preimage within bcrypt's strict 72-byte input limit.
-	passwordHash, err := auth.HashPassword(digest)
+	passwordHash, err := HashPassword(digest)
 	if err != nil {
 		return "", "", err
 	}
-	tx, err := s.db.Begin(ctx)
+	tx, err := h.db.Begin(ctx)
 	if err != nil {
 		return "", "", err
 	}
@@ -595,8 +597,8 @@ func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.E
 	// See the same check in sso_client_handlers.go: provisioning somebody on
 	// their first eID sign-in is exactly the path by which an organisation
 	// grows without anybody choosing to add a person.
-	if err = s.checkUserQuota(ctx, tenantID); err != nil {
-		return "", "", signInError{"Энэ байгууллага хэрэглэгчийн тооны хязгаартаа хүрсэн байна"}
+	if err = h.CheckUserQuota(ctx, tenantID); err != nil {
+		return "", "", SignInError{"Энэ байгууллага хэрэглэгчийн тооны хязгаартаа хүрсэн байна"}
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO memberships(tenant_id,user_id) VALUES($1,$2) ON CONFLICT(tenant_id,user_id) DO NOTHING`, tenantID, userID); err != nil {
 		return "", "", err
@@ -607,8 +609,8 @@ func (s *Service) resolveOrProvisionEIDUser(ctx context.Context, identity *eid.E
 	return userID, tenantID, nil
 }
 
-func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.UserFromContext(r.Context())
+func (h *Handlers) HandleMe(w http.ResponseWriter, r *http.Request) {
+	claims, err := UserFromContext(r.Context())
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -616,15 +618,15 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	var name, email string
 	var tenantName string
-	_ = s.db.QueryRow(r.Context(), `SELECT name, email FROM users WHERE id = $1`, claims.UserID).Scan(&name, &email)
-	_ = s.db.QueryRow(r.Context(), `SELECT name FROM tenants WHERE id = $1`, claims.TenantID).Scan(&tenantName)
+	_ = h.db.QueryRow(r.Context(), `SELECT name, email FROM users WHERE id = $1`, claims.UserID).Scan(&name, &email)
+	_ = h.db.QueryRow(r.Context(), `SELECT name FROM tenants WHERE id = $1`, claims.TenantID).Scan(&tenantName)
 
 	// The effective grant of every role the member holds, so a screen can hide
 	// what the caller may not do. Administrators bypass the check, so their
 	// list stays empty rather than enumerating the whole catalog.
 	granted := make([]string, 0)
 	if !claims.IsAdmin {
-		if permissions, permErr := s.permissions.GetUserPermissions(r.Context(), claims.TenantID, claims.UserID); permErr == nil {
+		if permissions, permErr := h.permissions.GetUserPermissions(r.Context(), claims.TenantID, claims.UserID); permErr == nil {
 			for code := range permissions {
 				granted = append(granted, code)
 			}
@@ -641,9 +643,9 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 		"email":       email,
 		"is_admin":    claims.IsAdmin,
 		"permissions": granted,
-		// What the platform wants to tell this person right now: a maintenance
+		// What the platform wants to tell this person right now: a Maintenance
 		// window, or an announcement an operator broadcast.
-		"notices": s.notices(r.Context(), claims.TenantID),
+		"Notices": h.Notices(r.Context(), claims.TenantID),
 		// Whether a platform operator is inside this account right now. The
 		// shell draws a banner from it that cannot be dismissed — the person
 		// whose screen this is has a right to know, and so does anybody

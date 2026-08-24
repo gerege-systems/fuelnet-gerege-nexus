@@ -74,6 +74,12 @@ type Service struct {
 	// configured it is that registry, its disk cache and the file behind them.
 	catalogSource *appcatalog.Provider
 	sessions      *auth.SessionStore
+	// authn is the sign-in half of this plane: the handlers, the middleware
+	// every authenticated route sits behind, and the two checks that run on
+	// every request — is this organisation suspended, and is the deployment
+	// read-only. It is the bottom of the plane, so everything else may reach
+	// for it and it reaches for nothing here.
+	authn         *auth.Handlers
 	loginLimiter  *security.IPRateLimiter
 	pollLimiter   *security.IPRateLimiter
 	verifyLimiter *security.IPRateLimiter
@@ -257,7 +263,7 @@ func New(deps Deps) (*Service, error) {
 	// ask for by name. The assistant is the one metered kind today and it is an
 	// app now, so without this the app would be enforcing a number nobody sold
 	// — or nothing at all.
-	nexus.Provide[nexus.Quota](quotaRail{db: db})
+	nexus.Provide[nexus.Quota](auth.NewQuotaRail(db))
 	nexus.Provide[nexus.SignatureCounter](telemetry.AsSignatureCounter())
 	// The report engine, as six methods rather than as fifteen package
 	// functions. See pkg/nexus/reportengine.go for why the three-step ones are
@@ -429,12 +435,12 @@ func New(deps Deps) (*Service, error) {
 		reportScheduler: reportScheduler,
 		catalogSource:   catalogSource,
 		sessions:        auth.NewSessionStore(db, auth.DefaultSessionTTL),
-		loginLimiter:    newLoginLimiter(),
-		pollLimiter:     newPollLimiter(),
+		loginLimiter:    auth.NewLoginLimiter(),
+		pollLimiter:     auth.NewPollLimiter(),
 		// Every send is a call to somebody else's service on a shared key, so
 		// there is a cruder guard in front of the per-tenant allowance the
 		// service itself applies: one per second sustained, twenty in a burst.
-		verifyLimiter:      security.NewIPRateLimiter(rate.Limit(float64(verifyRatePerMinute)/60.0), verifyBurst),
+		verifyLimiter:      security.NewIPRateLimiter(rate.Limit(float64(auth.VerifyRatePerMinute)/60.0), auth.VerifyBurst),
 		emailVerify:        emailverify.NewService(db),
 		eidSvc:             eidSvc,
 		danSvc:             danSvc,
@@ -449,13 +455,21 @@ func New(deps Deps) (*Service, error) {
 		urtuuLink:          urtuuLink,
 		permissions:        permissions,
 		appGate:            memo.New[bool](appGateTTL),
-		suspended:          memo.New[bool](suspendedTTL),
+		suspended:          memo.New[bool](auth.SuspendedTTL),
 		settings:           deps.Settings,
 		featureFlags:       deps.Flags,
 		bus:                bus,
 		backgroundApps:     appRuntime.Background,
 		eidMN:              eidMN,
 	}
+
+	s.authn = auth.New(auth.Deps{
+		DB: db, Sessions: s.sessions, Suspended: s.suspended, Bus: bus,
+		Permissions: permissions,
+		// Nil unless this deployment federates: a sign-out then has a second
+		// half, at the provider that signed the person in.
+		EndSession: endSessionURL(federatedSignIn),
+	})
 
 	// And now the closure above has something to call.
 	server = s
@@ -489,18 +503,18 @@ func New(deps Deps) (*Service, error) {
 	// message can arrive as soon as the subscriber connects.
 	s.bus.Register(access.GrantCacheName, access.GrantCache())
 	s.bus.Register(appGateCacheName, s.appGate)
-	s.bus.Register(suspendedCacheName, s.suspended)
+	s.bus.Register(auth.SuspendedCacheName, s.suspended)
 	// Said once at startup and again on the console's home screen, because a
 	// contradiction between two pieces of configuration is exactly the thing
 	// nobody notices until it matters.
-	warnAboutConflictingConfiguration()
+	auth.WarnAboutConflictingConfiguration()
 
 	// Deployment-wide budgets for the endpoints where a per-replica one is not
 	// a budget at all. Each is nil without Redis, and a nil one allows.
 	client := s.bus.Client()
-	s.sharedLogin = security.NewSharedLimiter(client, "login", loginRatePerMinute, time.Minute)
-	s.sharedPoll = security.NewSharedLimiter(client, "poll", pollRatePerMinute, time.Minute)
-	s.sharedVerify = security.NewSharedLimiter(client, "verify", verifyRatePerMinute, time.Minute)
+	s.sharedLogin = security.NewSharedLimiter(client, "login", auth.LoginRatePerMinute, time.Minute)
+	s.sharedPoll = security.NewSharedLimiter(client, "poll", auth.PollRatePerMinute, time.Minute)
+	s.sharedVerify = security.NewSharedLimiter(client, "verify", auth.VerifyRatePerMinute, time.Minute)
 
 	return s, nil
 }
@@ -809,6 +823,14 @@ func (s *Service) applyCatalogToInstallations(ctx context.Context) {
 	s.bus.Invalidate(appGateCacheName, "")
 }
 
+// ForgetSuspension drops one organisation's cached lifecycle state, here and
+// on every replica, after the console has changed it.
+func (s *Service) ForgetSuspension(tenantID string) { s.authn.ForgetSuspension(tenantID) }
+
+// ConfigurationWarnings are this deployment's own complaints about how it is
+// configured, which the console shows on its home screen.
+func (s *Service) ConfigurationWarnings() []string { return auth.ConfigurationWarnings() }
+
 // Mail is the rail the console borrows to invite an organisation's first
 // administrator. Exposed rather than rebuilt there: one rail, one set of
 // records, one place a send is rate limited.
@@ -901,7 +923,7 @@ func (s *Service) Routes(r chi.Router) {
 		// own. On a deployment that federates, requireLocalLogin closes all of
 		// them and says where sign-in actually happens — see
 		// sso_client_handlers.go for why that is all or nothing.
-		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.requireLocalLogin(s.handleLogin))
+		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/login", s.requireLocalLogin(s.authn.HandleLogin))
 		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/login", s.requireLocalLogin(s.handleEIDLogin))
 		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start", s.requireLocalLogin(s.handleEIDStart))
 		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/eid/start-id", s.requireLocalLogin(s.handleEIDStartByNationalID))
@@ -910,7 +932,7 @@ func (s *Service) Routes(r chi.Router) {
 		// a busy office throttle itself out of signing in at all.
 		api.With(security.SharedRateLimitMiddleware(s.pollLimiter, s.sharedPoll)).Post("/auth/eid/poll", s.requireLocalLogin(s.handleEIDPoll))
 		api.With(security.SharedRateLimitMiddleware(s.loginLimiter, s.sharedLogin)).Post("/auth/dan/login", s.requireLocalLogin(s.handleDANLogin))
-		api.Post("/auth/logout", s.handleLogout)
+		api.Post("/auth/logout", s.authn.HandleLogout)
 
 		// Signing in through the provider this deployment is a client of.
 		//
@@ -981,9 +1003,9 @@ func (s *Service) Routes(r chi.Router) {
 
 		// Protected endpoints
 		api.Group(func(pr chi.Router) {
-			pr.Use(s.authMiddleware)
+			pr.Use(s.authn.Middleware)
 
-			pr.Get("/auth/me", s.handleMe)
+			pr.Get("/auth/me", s.authn.HandleMe)
 			// A person's own record: which identities are linked to this
 			// account and what each provider said. Inside the authenticated
 			// group and answering only for the caller — see profile_handlers.go.
@@ -1005,22 +1027,22 @@ func (s *Service) Routes(r chi.Router) {
 			// the name is on the sidebar already; writing is administrative,
 			// because these fields print on documents.
 			pr.Get("/tenant/profile", s.handleGetTenantProfile)
-			pr.With(s.requireAdmin).Put("/tenant/profile", s.handleUpdateTenantProfile)
+			pr.With(s.authn.RequireAdmin).Put("/tenant/profile", s.handleUpdateTenantProfile)
 			// Ending the session in front of you needs no proof beyond the
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.
-			pr.Post("/auth/logout-all", s.handleLogoutEverywhere)
+			pr.Post("/auth/logout-all", s.authn.HandleLogoutEverywhere)
 			// Which organisations this person may act for, and moving the
 			// session to one of them. Both cross tenants by definition, so
 			// they run on the platform path — see handleTenants.
-			pr.Get("/auth/tenants", s.handleTenants)
-			pr.Post("/auth/tenants/active", s.handleSetActiveTenants)
-			pr.Post("/auth/switch-tenant", s.handleSwitchTenant)
+			pr.Get("/auth/tenants", s.authn.HandleTenants)
+			pr.Post("/auth/tenants/active", s.authn.HandleSetActiveTenants)
+			pr.Post("/auth/switch-tenant", s.authn.HandleSwitchTenant)
 			pr.Get("/menus", s.handleMenus)
-			pr.With(s.requireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
-			pr.With(s.requireAdmin).Get("/admin/devices", s.handleListDevices)
-			pr.With(s.requireAdmin).Put("/admin/devices/staff-pin", s.staffPIN.HandleSetPIN)
-			pr.With(s.requireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
+			pr.With(s.authn.RequireAdmin).Post("/admin/devices/enrollment-codes", s.handleCreateEnrollmentCode)
+			pr.With(s.authn.RequireAdmin).Get("/admin/devices", s.handleListDevices)
+			pr.With(s.authn.RequireAdmin).Put("/admin/devices/staff-pin", s.staffPIN.HandleSetPIN)
+			pr.With(s.authn.RequireAdmin).Put("/admin/devices/status", s.handleUpdateDeviceStatus)
 			pr.Post("/push-tokens", s.handleRegisterPushToken)
 
 			// Consent screen. The browser endpoint at /oauth2/auth redirects
@@ -1033,7 +1055,7 @@ func (s *Service) Routes(r chi.Router) {
 			// Tenant access control. Mutations are deliberately admin-only;
 			// authorization configuration can otherwise be used to self-elevate.
 			pr.Route("/admin/access", func(ac chi.Router) {
-				ac.Use(s.requireAdmin)
+				ac.Use(s.authn.RequireAdmin)
 				ac.Get("/overview", s.handleAccessOverview)
 				ac.Post("/roles", s.handleCreateRole)
 				ac.Put("/roles/{id}", s.handleUpdateRole)
@@ -1057,7 +1079,7 @@ func (s *Service) Routes(r chi.Router) {
 
 			// Who has been written to is an administrative read: it is a list
 			// of people's addresses and what they were asked to prove.
-			pr.With(s.requireAdmin).Get("/admin/email-verification/overview", s.emailVerify.HandleOverview)
+			pr.With(s.authn.RequireAdmin).Get("/admin/email-verification/overview", s.emailVerify.HandleOverview)
 
 			// AI Copilot, Speech, Translation & Forecasting
 			pr.Route("/ai", func(air chi.Router) {
@@ -1070,7 +1092,7 @@ func (s *Service) Routes(r chi.Router) {
 			})
 
 			pr.Route("/admin/ai", func(aair chi.Router) {
-				aair.Use(s.requireAdmin)
+				aair.Use(s.authn.RequireAdmin)
 				aair.Get("/prompts", s.aiSvc.HandleAIListPrompts)
 				aair.Put("/prompts/{key}", s.aiSvc.HandleAIUpdatePrompt)
 				aair.Get("/knowledge", s.aiSvc.HandleAIListKnowledge)
@@ -1079,7 +1101,7 @@ func (s *Service) Routes(r chi.Router) {
 
 			// Integrations
 			pr.Route("/integrations", func(ir chi.Router) {
-				ir.Use(s.requireAdmin)
+				ir.Use(s.authn.RequireAdmin)
 				ir.Get("/", s.integrationHandler.HandleList)
 				ir.Post("/", s.integrationHandler.HandleRegister)
 				ir.Get("/providers", s.integrationHandler.HandleProviders)
@@ -1103,7 +1125,7 @@ func (s *Service) Routes(r chi.Router) {
 			pr.Get("/store/apps/{slug}/history", s.handleAppHistory)
 
 			pr.Group(func(ar chi.Router) {
-				ar.Use(s.requireAdmin)
+				ar.Use(s.authn.RequireAdmin)
 				ar.Post("/store/apps/{slug}/install", s.handleInstallApp)
 				ar.Post("/store/apps/{slug}/upgrade", s.handleUpgradeApp)
 				// Whether an app follows the catalogue on its own. Reading it
@@ -1169,7 +1191,7 @@ func (s *Service) registerRenamedRouteAliases(r chi.Router) {
 		// redirect that answers a stranger tells them which paths this
 		// deployment serves, and it would be the one route on the platform that
 		// replies to no session at all.
-		cr.Use(s.authMiddleware)
+		cr.Use(s.authn.Middleware)
 		cr.Handle("/organisation", movedTo("/api/v1/tenant/profile"))
 		cr.Handle("/me/preferences", movedTo("/api/v1/profile/preferences"))
 		// /departments and /people were redirected under /api/v1/organisation
@@ -1209,3 +1231,19 @@ func withQuery(path string, r *http.Request) string {
 // read by that timer with no synchronisation at all, and the list decides what
 // gets installed into every tenant.
 func SetDefaultApps(appIDs []string) { appinstall.DefaultApps = slices.Clone(appIDs) }
+
+// endSessionURL is the federated half of signing out, as a callback the
+// sign-in package can hold without naming the client.
+//
+// Nil when this deployment authenticates its own people, which is what
+// auth.Handlers checks: there is no provider to return anybody to.
+func endSessionURL(client *ssoclient.Client) auth.EndSessionURLFunc {
+	if client == nil || !client.Config().Enabled() {
+		return nil
+	}
+	return func(w http.ResponseWriter, r *http.Request) string {
+		url := client.EndSessionURL(r.Context(), ssoclient.IDTokenFromRequest(r))
+		ssoclient.ClearIDTokenCookie(w)
+		return url
+	}
+}

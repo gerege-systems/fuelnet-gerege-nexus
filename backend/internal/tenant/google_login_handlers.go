@@ -252,12 +252,12 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		// missing is an organisation to sign in to. Parking the identity and
 		// asking for eID would prove something nobody is disputing and end in
 		// exactly the same place, which is what it used to do — every time.
-		if errors.Is(err, ErrNoOrganisation) {
+		if errors.Is(err, auth.ErrNoOrganisation) {
 			slog.Info("a linked Google account belongs to nobody's organisation", "email", identity.Email)
 			s.failGoogle(w, r, "no_organisation")
 			return
 		}
-		var refusal signInError
+		var refusal auth.SignInError
 		if errors.As(err, &refusal) {
 			// Not a refusal any more. Google has said which Google account this
 			// is; it cannot say who the person is, and that is what this
@@ -283,7 +283,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "google")
+	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "google")
 	if err != nil {
 		slog.Error("could not establish a session for a Google sign-in", "error", err, "user_id", userID)
 		s.failGoogle(w, r, "session_failed")
@@ -339,7 +339,7 @@ func domainOf(email string) string {
 // national identity verified via eID.
 //
 // If the Google identity (issuer, subject) is already bound to a user account,
-// it logs them in directly. Otherwise, it returns a signInError so the caller
+// it logs them in directly. Otherwise, it returns a auth.SignInError so the caller
 // can park the identity and require a one-time eID binding.
 func (s *Service) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, identity *ssoclient.Identity) (userID, tenantID string, err error) {
 	issuer := cfg.Issuer
@@ -349,7 +349,7 @@ func (s *Service) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, i
 		issuer, identity.Subject).Scan(&userID)
 	if err == nil {
 		s.touchSSOIdentity(ctx, issuer, identity)
-		tenantID, err = s.firstTenantFor(ctx, userID)
+		tenantID, err = s.authn.FirstTenantFor(ctx, userID)
 		if err != nil {
 			return "", "", err
 		}
@@ -359,5 +359,5 @@ func (s *Service) resolveGoogleUser(ctx context.Context, cfg ssoclient.Config, i
 		return "", "", err
 	}
 
-	return "", "", signInError{"Google account is not bound to any user"}
+	return "", "", auth.NewSignInError("Google account is not bound to any user")
 }

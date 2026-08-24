@@ -1,4 +1,4 @@
-package tenant
+package auth
 
 import (
 	"context"
@@ -65,7 +65,7 @@ func lockoutState(t *testing.T, pool *pgxpool.Pool, userID string) (attempts int
 
 func TestLoginLockoutEngagesOnTheThreshold(t *testing.T) {
 	pool := lockoutPool(t)
-	server := &Service{db: pool}
+	server := &Handlers{db: pool}
 	userID := lockoutUser(t, pool)
 
 	for i := 1; i < maxLoginFailures; i++ {
@@ -93,7 +93,7 @@ func TestLoginLockoutEngagesOnTheThreshold(t *testing.T) {
 // knew the address.
 func TestLapsedLockoutDoesNotRelockOnASingleFailure(t *testing.T) {
 	pool := lockoutPool(t)
-	server := &Service{db: pool}
+	server := &Handlers{db: pool}
 	userID := lockoutUser(t, pool)
 
 	// An account that reached the threshold and whose window has since passed.
@@ -118,7 +118,7 @@ func TestLapsedLockoutDoesNotRelockOnASingleFailure(t *testing.T) {
 // count does not amount to switching the lockout off.
 func TestLockoutStillEngagesAfterALapse(t *testing.T) {
 	pool := lockoutPool(t)
-	server := &Service{db: pool}
+	server := &Handlers{db: pool}
 	userID := lockoutUser(t, pool)
 
 	if _, err := pool.Exec(context.Background(),

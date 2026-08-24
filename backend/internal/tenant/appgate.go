@@ -13,80 +13,12 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
-func (s *Service) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := auth.TokenFromRequest(r)
-		if token == "" {
-			httpx.Error(w, http.StatusUnauthorized, "unauthorized: missing session token")
-			return
-		}
-
-		claims, err := s.sessions.Resolve(r.Context(), token)
-		if err != nil {
-			httpx.Error(w, http.StatusUnauthorized, "unauthorized: invalid or expired session")
-			return
-		}
-
-		// A suspended organisation is one nobody may act in, including the
-		// people already signed in to it. Suspending revokes their sessions in
-		// the same transaction, so this is the belt to that braces: a client
-		// holding a token issued a moment before, or a replica whose cache is
-		// a few seconds behind, is refused here.
-		if s.refuseIfSuspended(w, r, claims.TenantID) {
-			return
-		}
-
-		// Maintenance is checked after suspension and before anything else,
-		// and only for writes: the point of a maintenance window is that
-		// people can still see what they need.
-		if s.refuseIfReadOnly(w, r, claims.TenantID) {
-			return
-		}
-
-		ctx := auth.WithUserContext(r.Context(), claims)
-		if claims.Impersonated {
-			// Everything this request records is marked as ours. It is done
-			// here, once, rather than in the handlers that write audit rows:
-			// there are dozens of them, in every module, and a mark that each
-			// of them has to remember is a mark that is missing from whichever
-			// one somebody writes next.
-			ctx = audit.MarkImpersonated(ctx, claims.ImpersonatedBy)
-		}
-		ctx = nexus.WithTenantID(ctx, claims.TenantID)
-		// The organisations this session reads across, straight from the
-		// session row. dbguard turns it into the policy's array; almost every
-		// session carries none and behaves exactly as it always has.
-		ctx = nexus.WithAllowedTenants(ctx, claims.AllowedTenantIDs)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-// requireAdmin gates tenant-administrative endpoints. It must be layered after
-// authMiddleware.
-func (s *Service) requireAdmin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, err := auth.UserFromContext(r.Context())
-		if err != nil {
-			httpx.Error(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		if !claims.IsAdmin {
-			httpx.Error(w, http.StatusForbidden, "forbidden: tenant administrator role required")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (s *Service) appGateMiddleware(appID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return s.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return s.authn.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenantID, ok := nexus.RequireTenant(w, r)
 			if !ok {
 				return

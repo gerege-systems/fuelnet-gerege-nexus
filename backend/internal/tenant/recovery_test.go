@@ -1,3 +1,15 @@
+/*
+ * Gerege Nexus
+ * Copyright (c) 2026 Gerege Systems Development Team, Gerege Nomadica Foundation
+ * Distributed under the Apache 2.0 License.
+ *
+ * The two links the console hands out, redeemed here.
+ *
+ * They were beside the suspension tests while both were methods on one struct.
+ * They are about credential_grants and operator_impersonations rather than
+ * about suspension, and they travel with access_recovery.go.
+ */
+
 package tenant
 
 import (
@@ -6,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,22 +28,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// The tenant-facing half of CP-2, against a real schema: a suspended
-// organisation is refused everywhere, an invitation can be redeemed once, and
-// an impersonation produces a session that says what it is.
-//
-// These run through the actual middleware and the actual handlers rather than
-// against the queries, because what is being tested is that the checks are
-// *wired in* — a suspension the console records and the platform never reads
-// would pass every query-level test there is.
-
-func suspensionServer(t *testing.T) (*Service, *pgxpool.Pool) {
+func recoveryServer(t *testing.T) (*Service, *pgxpool.Pool) {
 	t.Helper()
-	pool := lockoutPool(t)
+	dsn := os.Getenv("AUTH_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set AUTH_TEST_DATABASE_URL to a migrated test database to run the recovery tests")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	sessions := auth.NewSessionStore(pool, time.Hour)
+	suspended := memo.New[bool](auth.SuspendedTTL)
 	return &Service{
 		db:        pool,
-		sessions:  auth.NewSessionStore(pool, time.Hour),
-		suspended: memo.New[bool](suspendedTTL),
+		sessions:  sessions,
+		suspended: suspended,
+		// Redeeming either link makes a session, and making one asks whether
+		// the organisation is closed first.
+		authn: auth.New(auth.Deps{DB: pool, Sessions: sessions, Suspended: suspended}),
 	}, pool
 }
 
@@ -38,7 +55,7 @@ func suspensionServer(t *testing.T) (*Service, *pgxpool.Pool) {
 func tenantWithMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, token string) {
 	t.Helper()
 	ctx := context.Background()
-	slug := fmt.Sprintf("susp-%d", time.Now().UnixNano())
+	slug := fmt.Sprintf("recov-%d", time.Now().UnixNano())
 
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).Scan(&tenantID); err != nil {
@@ -71,73 +88,10 @@ func tenantWithMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, token
 	return tenantID, userID, token
 }
 
-// A live session in a suspended organisation is refused by the middleware
-// every other authenticated route sits behind.
-func TestASuspendedOrganisationIsRefusedByEveryRoute(t *testing.T) {
-	server, pool := suspensionServer(t)
-	tenantID, _, token := tenantWithMember(t, pool)
-
-	reached := false
-	guarded := server.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reached = true
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/contacts", nil)
-	request.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
-	recorder := httptest.NewRecorder()
-	guarded.ServeHTTP(recorder, request)
-	if !reached || recorder.Code != http.StatusOK {
-		t.Fatalf("a healthy organisation was refused: %d", recorder.Code)
-	}
-
-	if _, err := pool.Exec(context.Background(),
-		`UPDATE tenants SET suspended_at = NOW(), suspension_reason = 'unpaid' WHERE id = $1::uuid`,
-		tenantID); err != nil {
-		t.Fatalf("suspend: %v", err)
-	}
-	server.suspended = memo.New[bool](suspendedTTL) // what the invalidation bus does across replicas
-
-	reached = false
-	request = httptest.NewRequest(http.MethodGet, "/api/v1/contacts", nil)
-	request.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
-	recorder = httptest.NewRecorder()
-	guarded.ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("a suspended organisation answered %d, want 403", recorder.Code)
-	}
-	if reached {
-		t.Fatal("the request reached the handler")
-	}
-	// The reason is shown: somebody being refused should know whether to call
-	// their account manager or their administrator.
-	if !strings.Contains(recorder.Body.String(), "unpaid") {
-		t.Fatalf("the refusal did not carry the reason: %s", recorder.Body.String())
-	}
-}
-
-// Signing in is refused at the one place every method of signing in passes
-// through, so no route needs to remember.
-func TestSigningInToASuspendedOrganisationIsRefused(t *testing.T) {
-	server, pool := suspensionServer(t)
-	tenantID, userID, _ := tenantWithMember(t, pool)
-
-	if _, err := pool.Exec(context.Background(),
-		`UPDATE tenants SET suspended_at = NOW() WHERE id = $1::uuid`, tenantID); err != nil {
-		t.Fatalf("suspend: %v", err)
-	}
-
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
-	if _, _, err := server.issueSession(request, userID, tenantID, "password"); err == nil {
-		t.Fatal("a session was issued for a suspended organisation")
-	}
-}
-
 // The invitation and reset link: one use, and the account's sessions go with
 // the password change.
 func TestACredentialLinkWorksOnceAndEndsTheSessions(t *testing.T) {
-	server, pool := suspensionServer(t)
+	server, pool := recoveryServer(t)
 	_, userID, token := tenantWithMember(t, pool)
 	ctx := context.Background()
 
@@ -178,7 +132,7 @@ func TestACredentialLinkWorksOnceAndEndsTheSessions(t *testing.T) {
 // The impersonation handover: one use, a session that ends when the visit
 // does, and claims that say whose it really is.
 func TestAnImpersonationHandoverProducesAMarkedSession(t *testing.T) {
-	server, pool := suspensionServer(t)
+	server, pool := recoveryServer(t)
 	tenantID, userID, _ := tenantWithMember(t, pool)
 	ctx := context.Background()
 

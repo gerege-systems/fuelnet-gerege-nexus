@@ -1,12 +1,10 @@
-package tenant
+package auth
 
 import (
 	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 )
 
 // The JIT preimage was once the digest plus a ":eid-only" suffix — 73 bytes
@@ -22,7 +20,7 @@ func TestEIDLinkingDigestHashesUnderBcrypt(t *testing.T) {
 		if len(digest) > 72 {
 			t.Fatalf("digest for %q exceeds bcrypt's 72-byte input limit", subject)
 		}
-		if _, err := auth.HashPassword(digest); err != nil {
+		if _, err := HashPassword(digest); err != nil {
 			t.Fatalf("bcrypt rejected the digest for %q: %v", subject, err)
 		}
 	}
@@ -44,7 +42,7 @@ func TestEIDLinkingDigestIsStableAndSubjectBound(t *testing.T) {
 
 func TestReportSignInFailureHidesInternalReasons(t *testing.T) {
 	rec := httptest.NewRecorder()
-	reportSignInFailure(rec, errors.New("bcrypt: password length exceeds 72 bytes"))
+	ReportSignInFailure(rec, errors.New("bcrypt: password length exceeds 72 bytes"))
 	if rec.Code != 500 {
 		t.Errorf("internal failure answered %d, want 500", rec.Code)
 	}
@@ -53,7 +51,7 @@ func TestReportSignInFailureHidesInternalReasons(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	reportSignInFailure(rec, signInError{"eID identity is verified but account provisioning is disabled"})
+	ReportSignInFailure(rec, NewSignInError("eID identity is verified but account provisioning is disabled"))
 	if rec.Code != 403 {
 		t.Errorf("caller-facing failure answered %d, want 403", rec.Code)
 	}

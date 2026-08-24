@@ -105,15 +105,15 @@ func (s *Service) handleEIDPoll(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusUnauthorized, "eID identity verification failed")
 		return
 	}
-	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), result.Identity)
+	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), result.Identity)
 	if err != nil {
-		reportSignInFailure(w, err)
+		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.linkEIDIdentity(r.Context(), userID, result.Identity)
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid-app")
+	s.authn.LinkEIDIdentity(r.Context(), userID, result.Identity)
+	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "eid-app")
 	if err != nil {
-		reportSessionFailure(w, err)
+		auth.ReportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -157,16 +157,16 @@ func (s *Service) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), identity)
+	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), identity)
 	if err != nil {
-		reportSignInFailure(w, err)
+		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.linkEIDIdentity(r.Context(), userID, identity)
+	s.authn.LinkEIDIdentity(r.Context(), userID, identity)
 
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "eid")
+	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "eid")
 	if err != nil {
-		reportSessionFailure(w, err)
+		auth.ReportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
@@ -229,16 +229,16 @@ func (s *Service) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		CivilID: profile.CivilID, RegNumber: profile.RegNumber, FirstName: profile.FirstName, LastName: profile.LastName,
 		VerifiedStatus: true,
 	}
-	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), identity)
+	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), identity)
 	if err != nil {
-		reportSignInFailure(w, err)
+		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.linkEIDIdentity(r.Context(), userID, identity)
+	s.authn.LinkEIDIdentity(r.Context(), userID, identity)
 
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "dan")
+	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "dan")
 	if err != nil {
-		reportSessionFailure(w, err)
+		auth.ReportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)

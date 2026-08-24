@@ -193,16 +193,7 @@ func newLinkFixture(t *testing.T) *linkFixture {
 	fixture := &linkFixture{
 		pool:   pool,
 		google: google,
-		server: &Service{
-			db:          pool,
-			sessions:    auth.NewSessionStore(pool, auth.DefaultSessionTTL),
-			googleLogin: google.client(t, "https://nexus.test.invalid/api/v1/auth/google/callback"),
-			// issueSession asks whether the organisation is suspended before it
-			// will make a session, and that answer is memoised. A zero Server
-			// has no cache to ask, so anything reaching a sign-in panics rather
-			// than failing — which is a fixture hole, not a finding.
-			suspended: memo.New[bool](suspendedTTL),
-		},
+		server: newLinkService(pool, google.client(t, "https://nexus.test.invalid/api/v1/auth/google/callback")),
 	}
 	fixture.userID, fixture.session = fixture.newSignedInPerson(t)
 	return fixture
@@ -483,5 +474,23 @@ func TestUnlinkingGoogleLeavesTheEIDPinned(t *testing.T) {
 	f.server.handleUnlinkIdentity(rec, req)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("removing the last identity returned %d, want 409", rec.Code)
+	}
+}
+
+// newLinkService builds enough of the plane for a sign-in to complete.
+//
+// IssueSession asks whether the organisation is suspended before it will make a
+// session, and that answer is memoised. A sign-in package with no cache to ask
+// panics rather than failing — which is a fixture hole, not a finding.
+func newLinkService(pool *pgxpool.Pool, google *ssoclient.Client) *Service {
+	sessions := auth.NewSessionStore(pool, auth.DefaultSessionTTL)
+	return &Service{
+		db:          pool,
+		sessions:    sessions,
+		googleLogin: google,
+		suspended:   memo.New[bool](auth.SuspendedTTL),
+		authn: auth.New(auth.Deps{
+			DB: pool, Sessions: sessions, Suspended: memo.New[bool](auth.SuspendedTTL),
+		}),
 	}
 }

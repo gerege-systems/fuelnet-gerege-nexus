@@ -83,8 +83,11 @@ var plannedTenantPackages = map[string]string{
 	// "The tenant-facing half of two things the control plane starts", says
 	// its own header. It reads credential_grants, which is a platform table
 	// and not one of the five a tenant may read — see the PR.
-	"access_recovery.go": "tenant/access",
-	"app_gate_test.go":   "tenant/appinstall",
+	"access_recovery.go":     "tenant/access",
+	"app_gate_test.go":       "tenant/appinstall",
+	"appgate.go":             "tenant/appinstall",
+	"accessmode_sso_test.go": "tenant/ssoclient",
+	"recovery_test.go":       "tenant/access",
 	// The tenant's own store screens, not the platform's catalogue: every one
 	// of these handlers reads claims.TenantID and installs for that
 	// organisation. The catalogue they read is the deployment's and is parsed

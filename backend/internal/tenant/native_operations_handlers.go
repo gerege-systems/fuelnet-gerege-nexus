@@ -154,9 +154,9 @@ func (s *Service) handleDeviceStaffPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expires, err := s.issueSession(r, identity.UserID, device.TenantID, "staff-pin")
+	token, expires, err := s.authn.IssueSession(r, identity.UserID, device.TenantID, "staff-pin")
 	if err != nil {
-		reportSessionFailure(w, err)
+		auth.ReportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expires)

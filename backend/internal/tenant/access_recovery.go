@@ -206,8 +206,8 @@ func (s *Service) handleImpersonationRedeem(w http.ResponseWriter, r *http.Reque
 	// suspended in the minute between the operator asking and following the
 	// link, and a suspension that impersonation could step around would not be
 	// a suspension.
-	if suspended, _ := s.tenantSuspended(r.Context(), tenantID); suspended {
-		httpx.Error(w, http.StatusForbidden, ErrTenantSuspended.Error())
+	if suspended, _ := s.authn.TenantSuspended(r.Context(), tenantID); suspended {
+		httpx.Error(w, http.StatusForbidden, auth.ErrTenantSuspended.Error())
 		return
 	}
 

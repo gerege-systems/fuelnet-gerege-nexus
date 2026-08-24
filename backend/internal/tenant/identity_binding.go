@@ -270,12 +270,12 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 	// linked to it rather than given a second — which is the case that makes
 	// this flow worth having: somebody who signed in with eID last month and
 	// with Google today is one person, and now the platform knows it.
-	userID, tenantID, err := s.resolveOrProvisionEIDUser(r.Context(), result.Identity)
+	userID, tenantID, err := s.authn.ResolveOrProvisionEIDUser(r.Context(), result.Identity)
 	if err != nil {
-		reportSignInFailure(w, err)
+		auth.ReportSignInFailure(w, err)
 		return
 	}
-	s.linkEIDIdentity(r.Context(), userID, result.Identity)
+	s.authn.LinkEIDIdentity(r.Context(), userID, result.Identity)
 
 	// And the provider identity that started all this, with everything it said.
 	var claims map[string]any
@@ -294,9 +294,9 @@ func (s *Service) handleBindingEIDPoll(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("could not clear a spent binding", "error", err)
 	}
 
-	token, expiresAt, err := s.issueSession(r, userID, tenantID, "bind-eid")
+	token, expiresAt, err := s.authn.IssueSession(r, userID, tenantID, "bind-eid")
 	if err != nil {
-		reportSessionFailure(w, err)
+		auth.ReportSessionFailure(w, err)
 		return
 	}
 	auth.SetSessionCookie(w, token, expiresAt)

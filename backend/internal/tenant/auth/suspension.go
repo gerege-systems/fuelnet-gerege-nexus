@@ -7,7 +7,7 @@
  * suspended organisation cannot be used, and a full one cannot grow.
  */
 
-package tenant
+package auth
 
 import (
 	"context"
@@ -24,43 +24,43 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// suspendedTTL bounds how long a replica keeps believing an organisation is
+// SuspendedTTL bounds how long a replica keeps believing an organisation is
 // running after another replica has suspended it.
 //
 // Thirty seconds, matching the app gate, and it is not the primary control:
 // suspending revokes every live session in the same transaction, so the people
 // already signed in are stopped immediately. This is what stops the *next*
 // request from a client that had not noticed yet.
-const suspendedTTL = 30 * time.Second
+const SuspendedTTL = 30 * time.Second
 
-// suspendedCacheName is what the invalidation bus knows the cache as, so that
+// SuspendedCacheName is what the invalidation bus knows the cache as, so that
 // resuming an organisation takes effect on every replica at once rather than
 // after the slowest of them has waited out its own copy.
-const suspendedCacheName = "suspended"
+const SuspendedCacheName = "suspended"
 
 // forgetSuspension drops one organisation's cached state, here and everywhere.
-func (s *Service) ForgetSuspension(tenantID string) {
-	s.bus.Invalidate(suspendedCacheName, memo.Key(tenantID, ""))
+func (h *Handlers) ForgetSuspension(tenantID string) {
+	h.bus.Invalidate(SuspendedCacheName, memo.Key(tenantID, ""))
 }
 
 // ErrTenantSuspended is what every path refuses with.
 var ErrTenantSuspended = errors.New("this organisation has been suspended")
 
-// tenantSuspended reports whether an organisation is closed.
+// TenantSuspended reports whether an organisation is closed.
 //
 // A cached read on the request path, like the app gate beside it. The query
 // runs on the platform path deliberately: the caller may not have a tenant
 // context yet — this is asked during sign-in, before any session exists — and
 // `tenants` carries no tenant_id, so no policy applies to it either way.
-func (s *Service) tenantSuspended(ctx context.Context, tenantID string) (bool, string) {
+func (h *Handlers) TenantSuspended(ctx context.Context, tenantID string) (bool, string) {
 	key := memo.Key(tenantID, "")
-	if suspended, cached := s.suspended.Get(key); cached {
-		return suspended, s.suspensionReason(ctx, tenantID, suspended)
+	if suspended, cached := h.suspended.Get(key); cached {
+		return suspended, h.suspensionReason(ctx, tenantID, suspended)
 	}
 
 	var suspended bool
 	var reason string
-	err := s.db.QueryRow(ctx,
+	err := h.db.QueryRow(ctx,
 		`SELECT suspended_at IS NOT NULL OR deletion_scheduled_at IS NOT NULL,
 		        suspension_reason
 		   FROM tenants WHERE id = $1::uuid`, tenantID).Scan(&suspended, &reason)
@@ -78,28 +78,28 @@ func (s *Service) tenantSuspended(ctx context.Context, tenantID string) (bool, s
 		return false, ""
 	}
 
-	s.suspended.Put(key, suspended)
+	h.suspended.Put(key, suspended)
 	return suspended, reason
 }
 
 // suspensionReason fetches the sentence to show, only when there is one to
 // show. The cache holds the boolean rather than the text so that a reason
 // edited in the console is never served from memory.
-func (s *Service) suspensionReason(ctx context.Context, tenantID string, suspended bool) string {
+func (h *Handlers) suspensionReason(ctx context.Context, tenantID string, suspended bool) string {
 	if !suspended {
 		return ""
 	}
 	var reason string
-	_ = s.db.QueryRow(ctx, `SELECT suspension_reason FROM tenants WHERE id = $1::uuid`,
+	_ = h.db.QueryRow(ctx, `SELECT suspension_reason FROM tenants WHERE id = $1::uuid`,
 		tenantID).Scan(&reason)
 	return reason
 }
 
-// refuseIfSuspended answers 403 and reports true when the organisation is
-// closed. Layered into authMiddleware, so every authenticated route on the
+// RefuseIfSuspended answers 403 and reports true when the organisation is
+// closed. Layered into Middleware, so every authenticated route on the
 // platform is covered by one check rather than by each handler remembering.
-func (s *Service) refuseIfSuspended(w http.ResponseWriter, r *http.Request, tenantID string) bool {
-	suspended, reason := s.tenantSuspended(r.Context(), tenantID)
+func (h *Handlers) RefuseIfSuspended(w http.ResponseWriter, r *http.Request, tenantID string) bool {
+	suspended, reason := h.TenantSuspended(r.Context(), tenantID)
 	if !suspended {
 		return false
 	}
@@ -125,17 +125,17 @@ func (s *Service) refuseIfSuspended(w http.ResponseWriter, r *http.Request, tena
 // ErrQuotaExceeded is a hard limit refusing to be crossed.
 var ErrQuotaExceeded = errors.New("this organisation has reached its limit")
 
-// checkUserQuota decides whether one more person may join an organisation.
+// CheckUserQuota decides whether one more person may join an organisation.
 //
 // Soft mode logs and allows; hard mode refuses. The count and the limit are
 // read in one statement, so two people joining at the same moment cannot both
 // see the last free place — the check is still not a lock, and it does not
 // need to be: a limit exceeded by one because of a race is a warning on a
 // screen, not a breach.
-func (s *Service) checkUserQuota(ctx context.Context, tenantID string) error {
+func (h *Handlers) CheckUserQuota(ctx context.Context, tenantID string) error {
 	var limit, current int
 	var enforcement string
-	err := s.db.QueryRow(ctx,
+	err := h.db.QueryRow(ctx,
 		`SELECT COALESCE(q.max_users, -1), COALESCE(q.enforcement, 'soft'),
 		        (SELECT count(*) FROM memberships m WHERE m.tenant_id = $1::uuid)
 		   FROM tenants t
@@ -162,7 +162,7 @@ func (s *Service) checkUserQuota(ctx context.Context, tenantID string) error {
 	return ErrQuotaExceeded
 }
 
-// quotaRail publishes the platform's metered allowances to modules, and is what
+// QuotaRail publishes the platform's metered allowances to modules, and is what
 // nexus.QuotaGate resolves to.
 //
 // It holds the pool rather than the Server because of when it is asked: a
@@ -173,9 +173,12 @@ func (s *Service) checkUserQuota(ctx context.Context, tenantID string) error {
 // An unmetered kind gets middleware that admits everything. A module asking for
 // a meter this deployment does not keep is not an error — it is a module that
 // runs on more deployments than this one.
-type quotaRail struct{ db *pgxpool.Pool }
+type QuotaRail struct{ db *pgxpool.Pool }
 
-func (q quotaRail) Gate(kind string) func(http.Handler) http.Handler {
+// NewQuotaRail publishes the platform's metered allowances to modules.
+func NewQuotaRail(db *pgxpool.Pool) QuotaRail { return QuotaRail{db: db} }
+
+func (q QuotaRail) Gate(kind string) func(http.Handler) http.Handler {
 	if kind != "ai" {
 		slog.Warn("a module asked for a quota this platform does not meter; the route is ungated", "kind", kind)
 		return func(next http.Handler) http.Handler { return next }
