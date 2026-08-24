@@ -566,12 +566,14 @@ jobs:
               *) echo "::error::versioned control-plane API answered $STATUS through the backend"; exit 1 ;;
             esac
 
-            LEGACY=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' \
+            LEGACY_HEADERS=$(curl -sS -D - -o /dev/null \
               -H "Host: $CONTROL_PLANE_HOST" http://127.0.0.1:8082/cp/api/health)
-            case "$LEGACY" in
-              "308 http://$CONTROL_PLANE_HOST/api/platform/v1/health"|\
-              "308 https://$CONTROL_PLANE_HOST/api/platform/v1/health")
-                echo "legacy control-plane API returns its guarded 308"
-                ;;
-              *) echo "::error::legacy control-plane API did not return the expected 308: $LEGACY"; exit 1 ;;
-            esac
+            LEGACY_STATUS=$(printf '%s\n' "$LEGACY_HEADERS" | awk 'NR == 1 { print $2 }')
+            LEGACY_LOCATION=$(printf '%s\n' "$LEGACY_HEADERS" | \
+              awk 'tolower($1) == "location:" { gsub("\\r", "", $2); print $2; exit }')
+            if [ "$LEGACY_STATUS" = 308 ] && [ "$LEGACY_LOCATION" = "/api/platform/v1/health" ]; then
+              echo "legacy control-plane API returns its guarded 308"
+            else
+              echo "::error::legacy control-plane API returned status=$LEGACY_STATUS location=$LEGACY_LOCATION"
+              exit 1
+            fi
