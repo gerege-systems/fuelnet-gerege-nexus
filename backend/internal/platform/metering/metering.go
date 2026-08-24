@@ -48,7 +48,8 @@ func Metrics() []string {
 // Collector writes the daily rows.
 type Collector struct{ db *pgxpool.Pool }
 
-func New(db *pgxpool.Pool) *Collector { return &Collector{db: db} }
+// NewCollector builds the nightly job that writes the daily rows.
+func NewCollector(db *pgxpool.Pool) *Collector { return &Collector{db: db} }
 
 // Start runs the collection shortly after every midnight, and once at startup.
 //

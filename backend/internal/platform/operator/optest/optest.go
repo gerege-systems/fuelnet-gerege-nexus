@@ -139,3 +139,52 @@ func AuditCount(t *testing.T, pool *pgxpool.Pool, operatorID, action string) int
 	}
 	return count
 }
+
+// sessionFor is an operator session value, as the middleware would have built
+// it. The handlers and the service take it as a parameter, so a test does not
+// have to sign in to exercise what they do.
+// Session is an operator session value, as the middleware would have built
+// it. The screens take one as a parameter, so a test does not have to sign in
+// to exercise what they do.
+func Session(account operator.Operator) operator.Session {
+	return operator.Session{Operator: account, SteppedUpAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}
+}
+
+// newTenant makes an organisation for one test and takes it away afterwards.
+// Tenant creates an organisation for a screen's test to act on, and removes
+// it afterwards.
+func Tenant(t *testing.T, pool *pgxpool.Pool) (id, slug string) {
+	t.Helper()
+	slug = fmt.Sprintf("cp-test-%d", time.Now().UnixNano())
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).
+		Scan(&id); err != nil {
+		t.Fatalf("create a test organisation: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, id)
+	})
+	return id, slug
+}
+
+// newPerson adds somebody to an organisation.
+// Person creates somebody in an organisation, and removes them afterwards.
+func Person(t *testing.T, pool *pgxpool.Pool, tenantID string) (userID, email string) {
+	t.Helper()
+	email = fmt.Sprintf("person-%d@controlplane.test", time.Now().UnixNano())
+	ctx := context.Background()
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO users (email, password_hash, name) VALUES ($1, 'x', 'Test Person')
+		 RETURNING id::text`, email).Scan(&userID); err != nil {
+		t.Fatalf("create a test person: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`,
+		tenantID, userID); err != nil {
+		t.Fatalf("add the person to the organisation: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1::uuid`, userID)
+	})
+	return userID, email
+}

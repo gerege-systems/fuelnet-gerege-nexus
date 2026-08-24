@@ -82,3 +82,7 @@ const (
 	// immediately following it; short enough that walking away ends it.
 	StepUpWindow = 5 * time.Minute
 )
+
+// QueryTimeout bounds one console read. A screen that hangs is a screen an
+// operator reloads, and a reload is another connection held open.
+const QueryTimeout = 10 * time.Second
