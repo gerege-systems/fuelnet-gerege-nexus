@@ -47,7 +47,7 @@ func normaliseHost(raw string) string {
 }
 
 // IsInvalidUUID reports whether an error is PostgreSQL refusing to read a
-// string as a uuid — 22P02, which is what /cp/api/tenants/not-a-uuid produces.
+// string as a uuid — 22P02, which is what /api/platform/v1/tenants/not-a-uuid produces.
 // It is a bad address, not a broken server, and it is answered as one.
 func IsInvalidUUID(err error) bool {
 	var pgErr *pgconn.PgError

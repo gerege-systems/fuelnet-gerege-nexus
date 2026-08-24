@@ -45,6 +45,8 @@ package platform
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
@@ -180,7 +182,28 @@ var loginRate = rate.Every(12e9)
 // environment is one where "is the console reachable" has a different answer in
 // production from the one the tests exercise.
 func (s *Service) Routes(r chi.Router) {
-	r.Route("/cp/api", s.console)
+	r.Route("/api/platform/v1", s.console)
+
+	// Keep the old address for one release, but only as a redirect. Mounting the
+	// console twice would duplicate its security boundary and let the two route
+	// trees drift. HostGate still wraps the compatibility address: even a
+	// Location header must not disclose the console on a public hostname.
+	legacy := s.op.HostGate(http.HandlerFunc(movedConsoleRoute))
+	r.Handle("/cp/api", legacy)
+	r.Handle("/cp/api/*", legacy)
+}
+
+// movedConsoleRoute preserves the remainder of the old path and its query.
+// StatusPermanentRedirect is 308, so methods and request bodies survive.
+//
+// DEPRECATED: remove in vNEXT together with the /cp/api compatibility route.
+func movedConsoleRoute(w http.ResponseWriter, r *http.Request) {
+	suffix := strings.TrimPrefix(r.URL.Path, "/cp/api")
+	target := "/api/platform/v1" + suffix
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, target, http.StatusPermanentRedirect)
 }
 
 // console is everything under that prefix.

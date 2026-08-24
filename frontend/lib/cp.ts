@@ -7,13 +7,13 @@
  * here, and sharing the module would mean every screen in the product carrying
  * the console's calls in its bundle.
  *
- * Addresses are relative. The console is served on its own hostname and its API
- * is /cp/api on that same hostname, so a relative path is always right and an
- * absolute one — the pattern lib/apiBase.ts has to unpick for the device lines
- * — would be a way to get it wrong.
+ * Addresses are relative. The console is served on its own hostname and its
+ * API is /api/platform/v1 on that same hostname, so a relative path is always
+ * right and an absolute one — the pattern lib/apiBase.ts has to unpick for the
+ * device lines — would be a way to get it wrong.
  */
 
-const BASE = "/cp/api";
+const BASE = "/api/platform/v1";
 
 export type OperatorRole = "superadmin" | "operator" | "support" | "auditor";
 

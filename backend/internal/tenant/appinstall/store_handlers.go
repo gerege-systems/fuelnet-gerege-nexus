@@ -410,7 +410,7 @@ func (h *Handlers) HandleUpgradeApp(w http.ResponseWriter, r *http.Request) {
 // administrator who presses it needs to know whether anything moved.
 func (h *Handlers) HandleSyncCatalog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Deprecation", "true")
-	w.Header().Set("Link", `</cp/api/catalog/sync>; rel="successor-version"`)
+	w.Header().Set("Link", `</api/platform/v1/catalog/sync>; rel="successor-version"`)
 	w.Header().Set("Sunset", "Sat, 01 Mar 2026 00:00:00 GMT")
 
 	if !h.catalogue.Remote() {
@@ -501,7 +501,7 @@ func (h *Handlers) HandleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
 // being a mystery, because the reason is on the installed-apps list beside it.
 func (h *Handlers) HandleCatalogStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Deprecation", "true")
-	w.Header().Set("Link", `</cp/api/catalog/status>; rel="successor-version"`)
+	w.Header().Set("Link", `</api/platform/v1/catalog/status>; rel="successor-version"`)
 	w.Header().Set("Sunset", "Sat, 01 Feb 2027 00:00:00 GMT")
 
 	h.syncMu.RLock()

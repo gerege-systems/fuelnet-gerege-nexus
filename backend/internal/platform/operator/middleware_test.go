@@ -33,7 +33,7 @@ func TestHostGateAnswersOnTheConsolesHostnameOnly(t *testing.T) {
 		{"in capitals", "CP.Nexus.Gerege.MN", http.StatusOK},
 		// The one that matters. The console and the platform are the same
 		// process listening on the same socket, so without this gate every
-		// /cp/api route would be served to anybody who found it on the public
+		// /api/platform/v1 route would be served to anybody who found it on the public
 		// hostname.
 		{"the platform's hostname", "nexus.gerege.mn", http.StatusNotFound},
 		{"a look-alike", "cp.nexus.gerege.mn.attacker.example", http.StatusNotFound},
@@ -43,7 +43,7 @@ func TestHostGateAnswersOnTheConsolesHostnameOnly(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var hit bool
-			request := httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil)
+			request := httptest.NewRequest(http.MethodGet, "/api/platform/v1/tenants", nil)
 			request.Host = c.host
 			recorder := httptest.NewRecorder()
 
@@ -68,7 +68,7 @@ func TestHostGateIsClosedInProductionWithoutAHostname(t *testing.T) {
 	service := &Console{host: ""}
 
 	var hit bool
-	request := httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/platform/v1/tenants", nil)
 	request.Host = "nexus.gerege.mn"
 	recorder := httptest.NewRecorder()
 
@@ -87,7 +87,7 @@ func TestHostGateIsOpenInDevelopmentWithoutAHostname(t *testing.T) {
 	service := &Console{host: ""}
 
 	var hit bool
-	request := httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/platform/v1/tenants", nil)
 	request.Host = "localhost:3000"
 	recorder := httptest.NewRecorder()
 
@@ -118,7 +118,7 @@ func TestRequireCapabilityFollowsTheRoleTable(t *testing.T) {
 
 	for _, c := range cases {
 		var hit bool
-		request := httptest.NewRequest(http.MethodGet, "/cp/api/operators", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/platform/v1/operators", nil)
 		request = request.WithContext(context.WithValue(request.Context(), sessionKey{},
 			Session{Operator: Operator{ID: "1", Role: c.role}}))
 		recorder := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestRequireCapabilityRefusesAnUnauthenticatedRequest(t *testing.T) {
 	var hit bool
 	recorder := httptest.NewRecorder()
 	(&Console{}).RequireCapability(CapTenantRead)(reached(&hit)).
-		ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil))
+		ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/platform/v1/tenants", nil))
 
 	if recorder.Code != http.StatusUnauthorized || hit {
 		t.Fatalf("an unauthenticated request answered %d", recorder.Code)
@@ -162,7 +162,7 @@ func TestRequireStepUpExpires(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var hit bool
-			request := httptest.NewRequest(http.MethodPost, "/cp/api/tenants/x/suspend", nil)
+			request := httptest.NewRequest(http.MethodPost, "/api/platform/v1/tenants/x/suspend", nil)
 			request = request.WithContext(context.WithValue(request.Context(), sessionKey{},
 				Session{Operator: Operator{ID: "1", Role: RoleSuperadmin}, SteppedUpAt: c.steppedUpAt}))
 			recorder := httptest.NewRecorder()
@@ -194,7 +194,7 @@ func TestRequireAuditWithholdsAnUnrecordedWrite(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	service.RequireAudit(unrecorded).ServeHTTP(recorder,
-		httptest.NewRequest(http.MethodPost, "/cp/api/tenants/x/suspend", nil))
+		httptest.NewRequest(http.MethodPost, "/api/platform/v1/tenants/x/suspend", nil))
 
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("an unrecorded write answered %d, want 500", recorder.Code)
@@ -225,7 +225,7 @@ func TestRequireAuditReleasesARecordedWrite(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	service.RequireAudit(recorded).ServeHTTP(recorder,
-		httptest.NewRequest(http.MethodPost, "/cp/api/session", nil))
+		httptest.NewRequest(http.MethodPost, "/api/platform/v1/session", nil))
 
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("a recorded write answered %d, want 201", recorder.Code)
@@ -252,7 +252,7 @@ func TestRequireAuditLetsRefusalsThrough(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	service.RequireAudit(refusing).ServeHTTP(recorder,
-		httptest.NewRequest(http.MethodPost, "/cp/api/session", nil))
+		httptest.NewRequest(http.MethodPost, "/api/platform/v1/session", nil))
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("a refusal answered %d, want 401", recorder.Code)
@@ -268,7 +268,7 @@ func TestRequireAuditDoesNotBufferReads(t *testing.T) {
 	var hit bool
 	recorder := httptest.NewRecorder()
 	service.RequireAudit(reached(&hit)).ServeHTTP(recorder,
-		httptest.NewRequest(http.MethodGet, "/cp/api/tenants", nil))
+		httptest.NewRequest(http.MethodGet, "/api/platform/v1/tenants", nil))
 
 	if !hit || recorder.Code != http.StatusOK {
 		t.Fatalf("a read was interfered with: %d", recorder.Code)

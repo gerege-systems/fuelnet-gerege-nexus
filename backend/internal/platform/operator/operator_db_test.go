@@ -324,7 +324,7 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 		t.Fatalf("resolve: %v", err)
 	}
 
-	request := httptest.NewRequest(http.MethodDelete, "/cp/api/session", nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/platform/v1/session", nil)
 	request = request.WithContext(withSession(request.Context(), session))
 	out := httptest.NewRecorder()
 	service.HandleLogout(out, request)
@@ -342,7 +342,7 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 func signIn(t *testing.T, service *Console, email, password, code string) *httptest.ResponseRecorder {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"email": email, "password": password, "code": code})
-	request := httptest.NewRequest(http.MethodPost, "/cp/api/session", strings.NewReader(string(body)))
+	request := httptest.NewRequest(http.MethodPost, "/api/platform/v1/session", strings.NewReader(string(body)))
 	recorder := httptest.NewRecorder()
 	service.HandleLogin(recorder, request)
 	return recorder
@@ -351,7 +351,7 @@ func signIn(t *testing.T, service *Console, email, password, code string) *httpt
 func stepUp(t *testing.T, service *Console, session Session, code string) *httptest.ResponseRecorder {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"code": code})
-	request := httptest.NewRequest(http.MethodPost, "/cp/api/step-up", strings.NewReader(string(body)))
+	request := httptest.NewRequest(http.MethodPost, "/api/platform/v1/step-up", strings.NewReader(string(body)))
 	request = request.WithContext(withSession(request.Context(), session))
 	recorder := httptest.NewRecorder()
 	service.HandleStepUp(recorder, request)
