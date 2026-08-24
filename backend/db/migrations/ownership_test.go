@@ -22,7 +22,40 @@
  * counting the routes first — the core served none of those apps' endpoints,
  * so nothing here could read the tables anyway.
  *
- * Sixty-nine remain, and this test is what keeps that true.
+ * Sixty-six remain, and this test is what keeps that true. That sentence said
+ * sixty-nine until now — 108, less the twenty-eight and the eleven — and the
+ * arithmetic was right on the day it was written. Migration 00078 has run
+ * since, taking urtuu_tasks, urtuu_task_events and urtuu_numbers to the Өртөө
+ * module. A count kept in a comment is only true until the next migration, so
+ * this one was counted from the list below rather than carried forward.
+ *
+ * Which plane a table belongs to.
+ *
+ * Ownership answers "is this the platform's table or an app's". It does not
+ * answer the question the two planes ask, which is whose behalf a row is held
+ * on: a deployment holds one platform_settings, and it holds one sessions per
+ * organisation. So every entry carries a plane as well, decided by one
+ * sentence (docs/TWO_PLANES_PROPOSAL.md §2.1):
+ *
+ *	A row that exists once per deployment is the platform plane. A row that
+ *	exists separately for each tenant is the tenant plane.
+ *
+ * There is no third value. Code both planes need is not a third plane, it is
+ * the floor underneath them, and it owns no table.
+ *
+ * A tenant_id column is the usual sign of the tenant plane but not the rule.
+ * Six tenant tables have none — esign_batch_items, membership_roles,
+ * role_permissions, installation_events, oauth2_access_tokens, report_grants —
+ * because they hang off a parent row that does. Five go the other way:
+ * announcements, feature_flag_overrides, operator_impersonations,
+ * tenant_quotas and usage_events carry a tenant_id and are still the
+ * platform's, because the platform writes them and a tenant only reads its
+ * own. Those five are the boundary between the planes, and they were not
+ * chosen here: policy_shape_test.go had already found the same five and
+ * written "console, FOR SELECT" beside them, before anyone was looking for a
+ * boundary. TestBoundaryTablesAreThePlatforms below keeps the two lists from
+ * drifting, because everything that comes after — the schemas, the grants, the
+ * import rules — is drawn to that line.
  */
 
 package migrations_test
@@ -36,51 +69,97 @@ import (
 	"testing"
 )
 
-// Every table the platform's migrations create, and who it is for.
+// A table, and the two things a review needs to know about it: whose behalf
+// its rows are held on, and what it is for.
+type table struct {
+	plane   string // "tenant" or "platform" — the §2.1 rule, nothing else
+	purpose string
+}
+
+// Every table the platform's migrations create, who it is for, and which plane
+// it belongs to.
 //
 // A new name here is not refused — the platform does grow tables. It is made
 // visible: adding one means adding a line to this list, and that line is a
-// sentence in a review saying "this belongs to the platform", which somebody
-// can disagree with. Before, a CREATE TABLE in a 300-line migration was
-// indistinguishable from every other line in it.
-var platformTables = map[string]string{
-	// -------------------------------------------------------- the platform's
-	"access_change_events": "access control", "announcements": "control plane",
-	"app_dependencies": "app store", "app_installations": "app store",
-	"app_versions": "app store", "apps": "app store",
-	"audit_events": "audit", "credential_grants": "access recovery",
-	"device_enrollment_codes": "devices",
-	"device_telemetry":        "devices", "devices": "devices",
-	"eid_sign_state":      "eID",
-	"email_verifications": "email verification",
-	"esign_batch_items":   "signing rail", "esign_batches": "signing rail",
-	"esign_documents": "signing rail", "esign_settings": "signing rail",
-	"esign_sign_sessions": "signing rail", "esign_signature_logs": "signing rail",
-	"feature_flag_overrides": "control plane", "feature_flags": "control plane",
-	"identity_binding_sessions": "identity", "installation_events": "app store",
-	"integration_deliveries": "integrations", "integration_oauth_states": "integrations",
-	"integrations": "integrations", "membership_roles": "access control",
-	"memberships": "access control", "oauth2_access_tokens": "OAuth2 provider",
-	"oauth2_authorization_codes": "OAuth2 provider", "oauth2_clients": "OAuth2 provider",
-	"oauth2_signing_keys": "OAuth2 provider",
-	"oauth2_consents":     "OAuth2 provider", "oauth2_tokens": "OAuth2 provider",
-	"operator_accounts": "control plane", "operator_audit": "control plane",
-	"operator_impersonations": "control plane", "operator_sessions": "control plane",
-	"pending_approvals": "control plane", "permissions": "access control",
-	"platform_backups": "control plane", "platform_settings": "control plane",
-	"platform_settings_history": "control plane", "push_tokens": "devices",
-	"report_grants": "report sharing", "report_schedules": "reports",
-	"role_permissions": "access control", "roles": "access control",
-	"sessions": "auth", "staff_pin_credentials": "devices",
-	"store_app_versions": "app store", "tenant_profiles": "tenants",
-	"tenant_quotas": "tenants", "tenants": "tenants",
-	"urtuu_deliveries": "Өртөө", "urtuu_inbox": "Өртөө",
-	"urtuu_outbox":     "Өртөө",
-	"urtuu_peer_codes": "Өртөө", "urtuu_peers": "Өртөө",
-	"urtuu_request_codes": "Өртөө",
-	"usage_events":        "usage",
-	"user_eid_identities": "identity", "user_sso_identities": "identity",
-	"users": "users", "ai_knowledge": "assistant", "ai_prompts": "assistant",
+// sentence in a review saying "this belongs to the platform, on this plane",
+// which somebody can disagree with. Before, a CREATE TABLE in a 300-line
+// migration was indistinguishable from every other line in it.
+var platformTables = map[string]table{
+	// ---------------------------------------------------- the platform plane
+	// One row per deployment, whoever is signed in.
+	"announcements":             {"platform", "control plane"},
+	"app_dependencies":          {"platform", "app store"},
+	"app_versions":              {"platform", "app store"},
+	"apps":                      {"platform", "app store"},
+	"credential_grants":         {"platform", "access recovery"},
+	"eid_sign_state":            {"platform", "eID"},
+	"feature_flag_overrides":    {"platform", "control plane"},
+	"feature_flags":             {"platform", "control plane"},
+	"identity_binding_sessions": {"platform", "identity"},
+	"oauth2_signing_keys":       {"platform", "OAuth2 provider"},
+	"operator_accounts":         {"platform", "control plane"},
+	"operator_audit":            {"platform", "control plane"},
+	"operator_impersonations":   {"platform", "control plane"},
+	"operator_sessions":         {"platform", "control plane"},
+	"pending_approvals":         {"platform", "control plane"},
+	// The names of the rights, not who holds them: role_permissions is the
+	// tenant's half of this pair.
+	"permissions":               {"platform", "access control"},
+	"platform_backups":          {"platform", "control plane"},
+	"platform_settings":         {"platform", "control plane"},
+	"platform_settings_history": {"platform", "control plane"},
+	"store_app_versions":        {"platform", "app store"},
+	"tenant_quotas":             {"platform", "tenants"},
+	"tenants":                   {"platform", "tenants"},
+	"usage_events":              {"platform", "usage"},
+	// A person is one person across the organisations they belong to; the
+	// membership is what is per-tenant, and that is on the other side.
+	"user_eid_identities": {"platform", "identity"},
+	"user_sso_identities": {"platform", "identity"},
+	"users":               {"platform", "users"},
+
+	// ------------------------------------------------------ the tenant plane
+	// One row per organisation, and no organisation reads another's.
+	"access_change_events":       {"tenant", "access control"},
+	"ai_knowledge":               {"tenant", "assistant"},
+	"ai_prompts":                 {"tenant", "assistant"},
+	"app_installations":          {"tenant", "app store"},
+	"audit_events":               {"tenant", "audit"},
+	"device_enrollment_codes":    {"tenant", "devices"},
+	"device_telemetry":           {"tenant", "devices"},
+	"devices":                    {"tenant", "devices"},
+	"email_verifications":        {"tenant", "email verification"},
+	"esign_batch_items":          {"tenant", "signing rail"},
+	"esign_batches":              {"tenant", "signing rail"},
+	"esign_documents":            {"tenant", "signing rail"},
+	"esign_settings":             {"tenant", "signing rail"},
+	"esign_sign_sessions":        {"tenant", "signing rail"},
+	"esign_signature_logs":       {"tenant", "signing rail"},
+	"installation_events":        {"tenant", "app store"},
+	"integration_deliveries":     {"tenant", "integrations"},
+	"integration_oauth_states":   {"tenant", "integrations"},
+	"integrations":               {"tenant", "integrations"},
+	"membership_roles":           {"tenant", "access control"},
+	"memberships":                {"tenant", "access control"},
+	"oauth2_access_tokens":       {"tenant", "OAuth2 provider"},
+	"oauth2_authorization_codes": {"tenant", "OAuth2 provider"},
+	"oauth2_clients":             {"tenant", "OAuth2 provider"},
+	"oauth2_consents":            {"tenant", "OAuth2 provider"},
+	"oauth2_tokens":              {"tenant", "OAuth2 provider"},
+	"push_tokens":                {"tenant", "devices"},
+	"report_grants":              {"tenant", "report sharing"},
+	"report_schedules":           {"tenant", "reports"},
+	"role_permissions":           {"tenant", "access control"},
+	"roles":                      {"tenant", "access control"},
+	"sessions":                   {"tenant", "auth"},
+	"staff_pin_credentials":      {"tenant", "devices"},
+	"tenant_profiles":            {"tenant", "tenants"},
+	"urtuu_deliveries":           {"tenant", "Өртөө"},
+	"urtuu_inbox":                {"tenant", "Өртөө"},
+	"urtuu_outbox":               {"tenant", "Өртөө"},
+	"urtuu_peer_codes":           {"tenant", "Өртөө"},
+	"urtuu_peers":                {"tenant", "Өртөө"},
+	"urtuu_request_codes":        {"tenant", "Өртөө"},
 }
 
 var (
@@ -144,14 +223,19 @@ func TestPlatformMigrationsOwnNoAppTable(t *testing.T) {
 	%s
 
 An app's table belongs in the app's own migrations — a module registers them
-with nexus.Migrations and they run under goose_db_version_<slug>. A table
+with nexus.Migrations and they run under public.goose_db_version_<slug>. A table
 created here is a table every deployment carries whether or not it has the app,
 and it can never leave with the app: 28 of the 108 tables here are already in
 that position.
 
 If this really is a platform table, add it to platformTables in
-db/migrations/ownership_test.go with a word for what it is for. That line is the
-decision, and a review can disagree with it.`,
+db/migrations/ownership_test.go with a word for what it is for and the plane it
+belongs to:
+
+	a row that exists once per deployment is the platform plane; a row that
+	exists separately for each tenant is the tenant plane
+
+That line is the decision, and a review can disagree with it.`,
 			len(unlisted), strings.Join(unlisted, "\n\t"))
 	}
 
@@ -166,6 +250,78 @@ decision, and a review can disagree with it.`,
 	sort.Strings(stale)
 	for _, table := range stale {
 		t.Errorf("platformTables claims %q but no migration creates it", table)
+	}
+}
+
+// A plane is one of two things, and the absence of one is not the third.
+//
+// The value is a string because the list reads better with it spelled out, and
+// a string is a thing somebody can leave empty or invent a value for. "shared",
+// "both" or "core" would each be a reasonable-sounding way to avoid deciding,
+// and deciding is the whole of what this list is for: a table serving both
+// planes is a table on the wrong side of a line that has not been drawn yet.
+func TestEveryTableDeclaresAPlane(t *testing.T) {
+	var undecided []string
+	for name, entry := range platformTables {
+		if entry.plane != "tenant" && entry.plane != "platform" {
+			undecided = append(undecided, name+" ("+entry.plane+")")
+		}
+	}
+	sort.Strings(undecided)
+	for _, name := range undecided {
+		t.Errorf(`%s is on neither plane.
+
+A row that exists once per deployment is the platform plane; a row that exists
+separately for each tenant is the tenant plane. There is no third value: shared
+code is the floor underneath both planes and owns no table, so a table that
+seems to want one is a table whose owner has not been decided.`, name)
+	}
+}
+
+// The five tables the planes meet on are the platform's.
+//
+// The platform writes them and a tenant reads its own rows, which is why they
+// carry a tenant_id and are still not the tenant's — the one place §2.1's rule
+// and the tenant_id column disagree. Everything after this is drawn to that
+// line: which schema the table lands in, which role is granted SELECT on it,
+// which side of the import boundary the code reading it lives on.
+//
+// So it is checked against the other list rather than restated here.
+// policy_shape_test.go marked these five "console, FOR SELECT" long before
+// there was a plane to put them on, and two lists of five names in two files
+// drift the moment one of them is edited alone.
+func TestBoundaryTablesAreThePlatforms(t *testing.T) {
+	const consoleRead = "console, FOR SELECT"
+
+	var boundary []string
+	for name, reason := range narrowPolicies {
+		if reason != consoleRead {
+			continue
+		}
+		boundary = append(boundary, name)
+		if plane := platformTables[name].plane; plane != "platform" {
+			t.Errorf(`%s is the boundary between the planes but ownership_test.go puts it on the %q plane.
+
+policy_shape_test.go calls it %q: the platform writes it, the console shows it
+and a tenant reads only its own rows through a FOR SELECT policy. That is the
+platform plane by §2.1 — the row is the deployment's statement about a tenant,
+not the tenant's own row — and a schema move or a grant written from the other
+answer would hand the tenant plane something it may only read.`,
+				name, plane, consoleRead)
+		}
+	}
+
+	sort.Strings(boundary)
+	if len(boundary) != 5 {
+		t.Errorf(`the boundary is %d table(s), not five:
+
+	%s
+
+The five are announcements, feature_flag_overrides, operator_impersonations,
+tenant_quotas and usage_events. Widening or narrowing that set is a decision
+about where the planes touch, which is worth arguing about in a review; it is
+not something to arrive at by editing a reason string in the other file.`,
+			len(boundary), strings.Join(boundary, "\n\t"))
 	}
 }
 

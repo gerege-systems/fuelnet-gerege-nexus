@@ -25,7 +25,11 @@
 | **Нэвтрэлтийн горим `platform.access_mode`** (анхдагч **private**) | ✅ CP-3 |
 | Ажиглалтын тойм, deploy товч, **нөөцлөлт**, каталогийн харагдац | ✅ CP-4 |
 | Metering: хэрэглээний тоолол, график, CSV, **AI-ийн сарын квот хэрэгжинэ** | ✅ CP-5 |
-| **Каталог синкийн удирдлага & Deprecation шилжилт** (`/cp/api/catalog/...`) | ✅ CP-46 |
+| **Каталог синкийн удирдлага & Deprecation шилжилт** (`/api/platform/v1/catalog/...`) | ✅ CP-46 |
+
+Control plane API-ийн canonical prefix нь `/api/platform/v1`. Өмнөх
+`/cp/api` prefix нь нэг release-ийн хугацаанд `HostGate`-ийн ард 308 redirect
+буцаана; шинэ client болон monitoring бүгд canonical prefix ашиглана.
 
 ## 2. Гурван давхарга
 
@@ -215,7 +219,7 @@ Google мөн үүгээр явдаг) хоёулаа `mayProvisionAccount`-ыг
 ## 4ё. Динамик тохиргоо ба feature flag
 
 `platform_settings` — түлхүүр бүр **Go кодод бүртгэгдсэн** байх ёстой
-(`internal/platform/settings/keys.go`). Өгөгдлийн санд утга л хадгалагдана;
+(`internal/kernel/settings/keys.go`). Өгөгдлийн санд утга л хадгалагдана;
 registry-д байхгүй түлхүүр уншигдахгүй тул хүснэгтэд гараар мөр нэмэх нь
 платформын зан төлөвийг өөрчлөх зам биш.
 

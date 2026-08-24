@@ -5,12 +5,12 @@
  *
  * What clock this platform keeps.
  *
- * In the SDK rather than in internal/platform/config, where it was, because a
+ * In the SDK rather than in internal/kernel/config, where it was, because a
  * module needs it and a module may live in another repository: a register
  * number carries a year, a report covers a range of days, a schedule fires at
  * an hour. Every one of those is a calendar decision, and a module that reached
  * for time.Now() in UTC would put a Mongolian office's Monday morning on
- * Sunday. internal/platform/config still answers to the same names — it
+ * Sunday. internal/kernel/config still answers to the same names — it
  * delegates here, so there is one clock and not two.
  */
 

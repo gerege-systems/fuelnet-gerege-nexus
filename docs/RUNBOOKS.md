@@ -742,7 +742,7 @@ docker compose -f deploy/docker-compose.monitoring.yml \
    - `no_second_factor` → bootstrap тасалдсан бүртгэл байна. §3.4-ийг үз.
 2. Аль хаягнаас ирснийг:
    ```bash
-   grep '/cp/api/session' /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head
+   grep '/api/platform/v1/session' /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head
    ```
 3. Тэр хаяг хэний вэ? `cp-allowlist.conf` дотор хэн байгааг хар.
 

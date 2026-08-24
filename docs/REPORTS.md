@@ -33,7 +33,7 @@ package billing
 
 import (
     "context"
-    "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+    "github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
 )
 
 type revenueByMonth struct{}

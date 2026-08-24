@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 )
 
 // Nothing appears in the navigation unless there is something behind it.
 //
-// This was internal/platform/menu's, over a table of screens still to be built
+// This was internal/tenant/menu's, over a table of screens still to be built
 // that only this repository's apps could appear in. The table went on
 // 2026-08-23 — a module declares its own entries now, in whichever of its two
 // groups it means — and the assertion came here, where the modules are.

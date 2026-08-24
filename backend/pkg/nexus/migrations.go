@@ -35,7 +35,7 @@ import (
 //	    return m
 //	}
 //
-// Each module gets its own goose version table — goose_db_version_<slug> — for
+// Each module gets its own goose version table — public.goose_db_version_<slug> — for
 // the reason cmd/migrate already wrote down: goose keeps one row per applied
 // version in one table, so a module's 00001 and the platform's 00001 would be
 // the same row.

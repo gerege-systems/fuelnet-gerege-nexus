@@ -2,7 +2,7 @@
 
 Төрийн үйлчилгээний процессын жагсаалтыг нэг эх сурвалжаас тараах формат.
 Энэ бол **ring.dgov.mn-д санал болгож буй гэрээ** бөгөөд Gerege Nexus талын
-хэрэгжилт нь [`backend/internal/platform/urtuu/ring.go`](../backend/internal/platform/urtuu/ring.go).
+хэрэгжилт нь [`backend/internal/tenant/urtuu/ring.go`](../backend/internal/tenant/urtuu/ring.go).
 
 [Баримт бичгийн төв рүү буцах](README.md) ·
 [«Өртөө» суваг](URTUU.md) ·

@@ -16,8 +16,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 )
 
 // resolveCatalogPath locates catalog/apps.json.
@@ -148,16 +148,16 @@ func seedInitialData(ctx context.Context, db *pgxpool.Pool, installer appInstall
 // deployment that once created the tenant by hand keeps the row it has.
 func ensureTenant(ctx context.Context, db *pgxpool.Pool, id, slug, name string) (string, error) {
 	var existing string
-	if err := db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug = $1`, slug).Scan(&existing); err == nil {
+	if err := db.QueryRow(ctx, `SELECT id::text FROM platform.tenants WHERE slug = $1`, slug).Scan(&existing); err == nil {
 		return existing, nil
 	}
 	if _, err := db.Exec(ctx,
-		`INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3) ON CONFLICT (slug) DO NOTHING`,
+		`INSERT INTO platform.tenants (id, slug, name) VALUES ($1, $2, $3) ON CONFLICT (slug) DO NOTHING`,
 		id, slug, name); err != nil {
 		return "", err
 	}
 	var created string
-	if err := db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug = $1`, slug).Scan(&created); err != nil {
+	if err := db.QueryRow(ctx, `SELECT id::text FROM platform.tenants WHERE slug = $1`, slug).Scan(&created); err != nil {
 		return "", err
 	}
 	return created, nil
@@ -165,7 +165,7 @@ func ensureTenant(ctx context.Context, db *pgxpool.Pool, id, slug, name string) 
 
 func ensureDemoUser(ctx context.Context, db *pgxpool.Pool) (string, error) {
 	var userID string
-	if err := db.QueryRow(ctx, `SELECT id::text FROM users WHERE email = $1`, demoEmail).Scan(&userID); err == nil {
+	if err := db.QueryRow(ctx, `SELECT id::text FROM platform.users WHERE email = $1`, demoEmail).Scan(&userID); err == nil {
 		return userID, nil
 	}
 
@@ -174,12 +174,12 @@ func ensureDemoUser(ctx context.Context, db *pgxpool.Pool) (string, error) {
 		return "", err
 	}
 	if _, err := db.Exec(ctx,
-		`INSERT INTO users (id, email, password_hash, name, is_admin)
+		`INSERT INTO platform.users (id, email, password_hash, name, is_admin)
 		 VALUES ($1, $2, $3, 'System Admin', FALSE)
 		 ON CONFLICT (email) DO NOTHING`, demoUserID, demoEmail, passHash); err != nil {
 		return "", err
 	}
-	if err := db.QueryRow(ctx, `SELECT id::text FROM users WHERE email = $1`, demoEmail).Scan(&userID); err != nil {
+	if err := db.QueryRow(ctx, `SELECT id::text FROM platform.users WHERE email = $1`, demoEmail).Scan(&userID); err != nil {
 		return "", err
 	}
 	return userID, nil
@@ -191,14 +191,14 @@ func ensureDemoUser(ctx context.Context, db *pgxpool.Pool) (string, error) {
 // on the primary key, which is not the conflict the ON CONFLICT below covers.
 func ensureDemoMembership(ctx context.Context, db *pgxpool.Pool, tenantID, userID, roleID string) {
 	if _, err := db.Exec(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1, $2)
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1, $2)
 		 ON CONFLICT (tenant_id, user_id) DO NOTHING`, tenantID, userID); err != nil {
 		slog.Error("failed to seed membership", "error", err)
 		return
 	}
 
 	if _, err := db.Exec(ctx,
-		`INSERT INTO roles (id, tenant_id, code, name) VALUES ($1, $2, 'admin', 'Tenant Admin')
+		`INSERT INTO tenant.roles (id, tenant_id, code, name) VALUES ($1, $2, 'admin', 'Tenant Admin')
 		 ON CONFLICT (tenant_id, code) DO NOTHING`, roleID, tenantID); err != nil {
 		slog.Error("failed to seed admin role", "error", err)
 		return
@@ -206,17 +206,17 @@ func ensureDemoMembership(ctx context.Context, db *pgxpool.Pool, tenantID, userI
 
 	var membershipID, adminRoleID string
 	if err := db.QueryRow(ctx,
-		`SELECT id::text FROM memberships WHERE tenant_id = $1 AND user_id = $2`,
+		`SELECT id::text FROM tenant.memberships WHERE tenant_id = $1 AND user_id = $2`,
 		tenantID, userID).Scan(&membershipID); err != nil {
 		return
 	}
 	if err := db.QueryRow(ctx,
-		`SELECT id::text FROM roles WHERE tenant_id = $1 AND code = 'admin'`, tenantID).Scan(&adminRoleID); err != nil {
+		`SELECT id::text FROM tenant.roles WHERE tenant_id = $1 AND code = 'admin'`, tenantID).Scan(&adminRoleID); err != nil {
 		return
 	}
 
 	if _, err := db.Exec(ctx,
-		`INSERT INTO membership_roles (membership_id, role_id) VALUES ($1, $2)
+		`INSERT INTO tenant.membership_roles (membership_id, role_id) VALUES ($1, $2)
 		 ON CONFLICT DO NOTHING`, membershipID, adminRoleID); err != nil {
 		slog.Error("failed to grant admin role", "error", err)
 	}

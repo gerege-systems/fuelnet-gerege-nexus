@@ -120,7 +120,7 @@ dictionary-д баттай байгаа үед хэрэглэнэ (`gov.state.*`
 
 Дараах зүйлс dictionary-д **байхгүй** — эдгээрийг сервер орчуулна:
 
-- **Цэсний шошго** — `backend/internal/platform/menu/menu.go` дахь blueprint ба
+- **Цэсний шошго** — `backend/internal/tenant/menu/menu.go` дахь blueprint ба
   модулийн `Menus()` дотор `Labels: map[string]string{"mn": ...}` талбараар.
   Хүсэлтийн `Accept-Language` header-ээр сонгогдоно.
 - **Апп дэлгүүрийн тайлбар** — app catalog-ийн manifest дотор.

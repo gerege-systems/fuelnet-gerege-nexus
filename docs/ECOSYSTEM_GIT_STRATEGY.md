@@ -210,7 +210,7 @@ route redirect. Энэ зардал нь SDK гарсны **дараа** төл�
 
 | Хэсэг | Тайлбар |
 | --- | --- |
-| `internal/platform/*` бүхэлдээ | auth, SSO provider/client, tenant, RBAC, dbguard, appcatalog/appinstaller/appregistry, resilience, observability, audit, settings, flags, quota, metering, controlplane, reporting engine, eid/dan/gerege(ХУР) клиентүүд, emailverify, ai, integration — платформ гэдгийн тодорхойлолт |
+| `internal/tenant/*`, `internal/platform/*`, `internal/kernel/*` бүхэлдээ | auth, SSO provider/client, tenant, RBAC, dbguard, appcatalog/appinstaller/appregistry, resilience, observability, audit, settings, flags, quota, metering, controlplane, reporting engine, eid/dan/gerege(ХУР) клиентүүд, emailverify, ai, integration — платформ гэдгийн тодорхойлолт |
 | Frontend shell | login/auth/settings/profile/organisation/apps(store UI)/module framework/cp/impersonate/reports + kiosk бүрхүүл (төхөөрөмжийн туршлага нь платформынх) |
 | `native-apps/*`, `catalog/` schema + tooling, `deploy/` суурь | Бүрхүүл, гэрээ, дэд бүтэц |
 
@@ -443,7 +443,7 @@ distribution залгамжилж, appstore.gerege.mn дээр Nexus платф�
 
 Тест бичихэд тэр даруй хоёр зөрчил гарав, хоёул жинхэнэ:
 
-* `internal/platform/server.go` нь `egov.Rail`-ыг нэрлэхийн тулд аппыг
+* `pkg/platform/server.go` нь `egov.Rail`-ыг нэрлэхийн тулд аппыг
   импортолж байв. Төрөл нь `internal/platform/staterail` руу нүүв — утгыг
   платформ бүтээдэг, түүний төрөл платформынх байх ёстой;
 * `appinstaller`-ийн тест жинхэнэ `organisation` модулийг барьж байв. Одоо

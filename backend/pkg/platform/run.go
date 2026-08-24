@@ -45,15 +45,15 @@ import (
 	"syscall"
 	"time"
 
-	core "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/identity/eid"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -93,7 +93,7 @@ type Options struct {
 	// DefaultApps are installed for every organisation without anybody asking.
 	//
 	// A distribution's decision, not the platform's. The list used to be a
-	// package variable in internal/platform/appinstaller naming this
+	// package variable in internal/tenant/appinstall naming this
 	// repository's own apps; when the first of them moved out
 	// (client-gerege-nexus, 2026-08-23) the behaviour moved with it and had
 	// nowhere to be declared — a deployment could carry an app that every
@@ -116,7 +116,7 @@ func Run(opts Options) error {
 	// on every line written while a request is being served. Without that, a
 	// log line in Loki can only be found by its text, and the four lines one
 	// failing request produced are scattered among everyone else's.
-	observability.SetupLogging(slog.LevelInfo)
+	telemetry.SetupLogging(slog.LevelInfo)
 	if err := config.ValidateProduction(); err != nil {
 		return fmt.Errorf("invalid production configuration: %w", err)
 	}
@@ -136,7 +136,7 @@ func Run(opts Options) error {
 	ctx := context.Background()
 
 	// Initialize OpenTelemetry distributed tracing
-	shutdownTracing, err := observability.SetupTracing(ctx, "gerege-nexus", os.Getenv("ENVIRONMENT"))
+	shutdownTracing, err := telemetry.SetupTracing(ctx, "gerege-nexus", os.Getenv("ENVIRONMENT"))
 	if err != nil {
 		slog.Error("failed to setup tracing", "error", err)
 	} else {
@@ -147,7 +147,7 @@ func Run(opts Options) error {
 
 	// Panics and unhandled errors, grouped by what broke rather than scattered
 	// through the log. Off without SENTRY_DSN.
-	shutdownErrors, err := observability.SetupErrorTracking("gerege-nexus", os.Getenv("ENVIRONMENT"))
+	shutdownErrors, err := telemetry.SetupErrorTracking("gerege-nexus", os.Getenv("ENVIRONMENT"))
 	if err != nil {
 		slog.Error("failed to setup error tracking", "error", err)
 	} else {
@@ -174,7 +174,7 @@ func Run(opts Options) error {
 
 	// A span per query, so a slow request shows which statement it waited on
 	// rather than a gap between two spans. Also dormant without tracing.
-	observability.InstrumentPool(poolConfig)
+	telemetry.InstrumentPool(poolConfig)
 
 	db, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
@@ -186,13 +186,13 @@ func Run(opts Options) error {
 	// it. This is the half of the golden signals /metrics could not answer, and
 	// it is the first thing to look at when latency rises without traffic
 	// rising with it.
-	observability.RegisterPoolCollector(db)
+	telemetry.RegisterPoolCollector(db)
 
 	// Where audit rows go. Before this the trail was stdout only — unsearchable
 	// and gone with the container.
 	audit.UseDatabase(db)
 	// And the same recorder for anything written against the public SDK. An
-	// app module cannot import internal/platform/audit, so it calls
+	// app module cannot import internal/tenant/audit, so it calls
 	// nexus.Audit; without this line those events would be logged and dropped
 	// while the platform's own reached the table, which is the worst of the
 	// three possible states because the trail would look complete.
@@ -240,9 +240,9 @@ func Run(opts Options) error {
 	// Before the server is built: NewServer checks the catalogue against this
 	// list and refuses to start when an id has no module behind it, which is
 	// the check that catches a stale catalogue.
-	core.SetDefaultApps(opts.DefaultApps)
+	tenant.SetDefaultApps(opts.DefaultApps)
 
-	srv, err := core.NewServer(db, catalogPath, bus, core.ExtraModules(opts.Modules))
+	srv, err := newServer(db, catalogPath, bus, tenant.ExtraModules(opts.Modules))
 	if err != nil {
 		return fmt.Errorf("failed to initialize platform server: %w", err)
 	}
@@ -255,7 +255,7 @@ func Run(opts Options) error {
 	// those tenants, and an installation row references the apps table, which
 	// NewServer is what fills from the catalogue file.
 	if databaseReachable {
-		seedInitialData(ctx, db, srv)
+		seedInitialData(ctx, db, srv.tenant)
 	}
 
 	// Background jobs run until this context is cancelled during shutdown, so
