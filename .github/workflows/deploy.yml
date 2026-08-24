@@ -566,25 +566,36 @@ jobs:
               fi
             fi
 
-            # Older installations redirected the console root temporarily.
-            # Keep the live vhost in sync with the checked-in permanent route;
-            # a 308 also preserves the request method if a client sends one.
-            ROOT_REDIRECT_BACKUP=""
-            if sudo grep -qE 'return[[:space:]]+302[[:space:]]+/cp;' "$LIVE"; then
-              ROOT_REDIRECT_BACKUP="${LIVE}.root-redirect.bak.$(date +%s)"
-              sudo cp "$LIVE" "$ROOT_REDIRECT_BACKUP"
-              sudo sed -i -E 's@return[[:space:]]+302[[:space:]]+/cp;@return 308 /cp;@' "$LIVE"
-            fi
-            if ! sudo grep -qE 'return[[:space:]]+308[[:space:]]+/cp;' "$LIVE"; then
-              echo "::error::control-plane root is not configured with its permanent /cp redirect"
-              exit 1
-            fi
+            # Certbot and historical installs can split one hostname across
+            # several included files. Work from nginx's loaded topology, not a
+            # guessed vhost path, so every active temporary /cp redirect moves
+            # together. Keep per-file backups for an all-or-nothing rollback.
+            mapfile -t NGINX_CONFIGS < <(sudo nginx -T 2>&1 | \
+              sed -n 's@^# configuration file \(.*\):$@\1@p' | sort -u)
+            ROOT_REDIRECT_FILES=()
+            ROOT_REDIRECT_BACKUPS=()
+            for CONFIG_SOURCE in "${NGINX_CONFIGS[@]}"; do
+              CONFIG_SOURCE=$(sudo readlink -f "$CONFIG_SOURCE")
+              if [ -f "$CONFIG_SOURCE" ] && \
+                 sudo grep -qE 'return[[:space:]]+302[[:space:]]+/cp;' "$CONFIG_SOURCE"; then
+                CONFIG_BACKUP="${CONFIG_SOURCE}.root-redirect.bak.$(date +%s)"
+                sudo cp "$CONFIG_SOURCE" "$CONFIG_BACKUP"
+                ROOT_REDIRECT_FILES+=("$CONFIG_SOURCE")
+                ROOT_REDIRECT_BACKUPS+=("$CONFIG_BACKUP")
+                sudo sed -i -E 's@return[[:space:]]+302[[:space:]]+/cp;@return 308 /cp;@' "$CONFIG_SOURCE"
+              fi
+            done
+
+            restore_root_redirects() {
+              local index
+              for index in "${!ROOT_REDIRECT_FILES[@]}"; do
+                sudo cp "${ROOT_REDIRECT_BACKUPS[$index]}" "${ROOT_REDIRECT_FILES[$index]}"
+              done
+              sudo nginx -t && sudo systemctl reload nginx
+            }
 
             if ! sudo nginx -t; then
-              if [ -n "$ROOT_REDIRECT_BACKUP" ]; then
-                sudo cp "$ROOT_REDIRECT_BACKUP" "$LIVE"
-                sudo nginx -t && sudo systemctl reload nginx
-              fi
+              restore_root_redirects
               echo "::error::nginx rejected the permanent control-plane root redirect"
               exit 1
             fi
@@ -599,6 +610,7 @@ jobs:
                { [ "$ROOT_LOCATION" = "/cp" ] || [ "$ROOT_LOCATION" = "https://$CONTROL_PLANE_HOST/cp" ]; }; then
               echo "control-plane root returns its permanent /cp redirect"
             else
+              restore_root_redirects
               echo "::error::control-plane root returned status=$ROOT_STATUS location=$ROOT_LOCATION"
               exit 1
             fi
