@@ -1,24 +1,25 @@
 # Баримт бичгийн төв — Documentation Hub
 
-> Энэ бүх баримт нь вэб хэлбэрээр
+> Одоогийн нийтлэх баримтууд вэб хэлбэрээр
 > **[gerege-systems.github.io/open-gerege-nexus](https://gerege-systems.github.io/open-gerege-nexus/)**
 > хаяг дээр нийтлэгддэг. Сайт нь энэ хавтасны Markdown файлуудаас
 > угсрагддаг тул эх сурвалж нь энд хэвээр байна —
 > [`docs/site/`](site/) хавтсыг үзнэ үү.
 
-Энэ хавтас нь **Gerege Nexus**-ын бүх баримт бичиг болон орчуулгыг
-агуулна. Үндсэн хэл нь монгол; орчуулгууд нь файлын нэрийн `_AR`, `_ZH`, `_EN`,
-`_FR`, `_RU`, `_ES` дагаварт хадгалагдана.
+Энэ хавтас нь **Gerege Nexus**-ын баримт бичиг, түүхэн design record болон
+байгаа орчуулгуудыг агуулна. Үндсэн хэл нь монгол; орчуулга байгаа файл
+`_AR`, `_ZH`, `_EN`, `_FR`, `_RU`, `_ES` дагавар хэрэглэнэ. Бүтээгдэхүүний
+тойм долоон хэлээр бүрэн; техникийн баримт бүр заавал долоон хувилбартай биш.
 
 **Хэлний бодлого: монгол хэл + НҮБ-ын албан ёсны 6 хэл** (араб, хятад, англи,
 франц, орос, испани) — нийт 7 хэл. Монгол хэл эх сурвалж, бусад нь орчуулга.
 Шинэ хэл нэмэхийн өмнө энэ бодлогыг өөрчлөх шаардлагатай: жагсаалт нь дур
 зоргоор биш, олон улсын байгууллагуудын хэрэглэдэг жишигт тулгуурласан.
 
-This directory holds every Gerege Nexus document and translation. Mongolian is
-the source language. **The language policy is Mongolian plus the six official
-languages of the United Nations** (Arabic, Chinese, English, French, Russian,
-Spanish) — seven in total.
+This directory holds Gerege Nexus documentation, historical design records,
+and the translations that exist. Mongolian is the source language. The product
+overview follows the language policy of Mongolian plus the six official UN
+languages; individual technical documents may remain in their source language.
 
 <p>
   <a href="../README.md"><img src="assets/icons/flag-mn.png" width="18" height="18" alt=""> Монгол</a>
@@ -50,19 +51,13 @@ Spanish) — seven in total.
 | Русский | [`README_RU.md`](README_RU.md) |
 | Español | [`README_ES.md`](README_ES.md) |
 
-## Техникийн баримт — Technical documentation
+## Одоогийн ажиллагааны баримт — Current documentation
 
 | Баримт | Хэл | Тайлбар |
 | --- | --- | --- |
 | [`ARCHITECTURE_SPECIFICATION.md`](ARCHITECTURE_SPECIFICATION.md) | MN | Платформын давхаргууд, өгөгдлийн загвар, архитектурын шийдвэрүүд |
 | [`ARCHITECTURE_SPECIFICATION_EN.md`](ARCHITECTURE_SPECIFICATION_EN.md) | EN | Architecture specification |
 | [`SSO_FEDERATION.md`](SSO_FEDERATION.md) | MN | Нэг суулгацыг нөгөөгийн SSO клиент болгох: env, урсгал, гарах зам |
-| [`ECOSYSTEM_GIT_STRATEGY.md`](ECOSYSTEM_GIT_STRATEGY.md) | MN | Зуун платформ нэг цөм дээр: юу цөмд үлдэж, юу distribution болох, хилийг хэрхэн тестээр барих |
-| [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md) | MN | Цөмийн хил хаана байх ёстой вэ — аппын ажил цөмийн юуг хөдөлгөдгийн хэмжилт, оношилгоо, зургаан үе шат |
-| [`adr/0001-domain-first.md`](adr/0001-domain-first.md) | MN | Домэйн эхэнд: аппын дүрэм платформоо мэдэхгүй — хэрэгжилт, хоёр хойшлуулалт, дөрвөн дүрэм |
-| [`adr/0002-one-signing-rail.md`](adr/0002-one-signing-rail.md) | MN | Гарын үсгийн зам нэг (`eidmongolia`), ба «гарын үсэг» гэдэг үг хоёр зүйлийг нэрлэж байсан нь |
-| [`adr/0003-a-document-carries-what-is-signed.md`](adr/0003-a-document-carries-what-is-signed.md) | MN | Баримт файлаа авч явна; гурван хэлбэр — pades, detached, approval |
-| [`adr/0004-a-pilot-that-did-not-ship.md`](adr/0004-a-pilot-that-did-not-ship.md) | MN | Өртөө яагаад өнөөдөр distribution болж гарахгүй вэ — гурван хэмжсэн саад ба тэдгээрийн дараалал |
 | [`SHELL_CONTRACT.md`](SHELL_CONTRACT.md) | MN | Native бүрхүүл ба web ажлын мужийн `window.GeregeShell` гэрээ |
 | [`NATIVE_LOGIN_SPEC.md`](NATIVE_LOGIN_SPEC.md) | MN | Swift, C#, Kotlin клиентүүдийн нэвтрэлтийн зан төлөв |
 | [`NATIVE_SETTINGS_SPEC.md`](NATIVE_SETTINGS_SPEC.md) | MN | Бүрхүүл, төхөөрөмж, peripheral, fleet тохиргоо |
@@ -78,14 +73,41 @@ Spanish) — seven in total.
 | [`MONITORING.md`](MONITORING.md) | MN | Ажиглалтын стек: асаах, Grafana, лог хайх, шинэ хэмжүүр нэмэх |
 | [`RUNBOOKS.md`](RUNBOOKS.md) | MN | Дохио бүрд: юу болсон, юу шалгах, яаж засах, хэзээ өргөжүүлэх |
 | [`CONTROL_PLANE.md`](CONTROL_PLANE.md) | MN | Операторын консол: босгох, эрх, анхны оператор үүсгэх, аюулгүй байдлын дүрмүүд |
-| [`MONITORING_AND_REPORTING_PROPOSAL.md`](MONITORING_AND_REPORTING_PROPOSAL.md) | MN | Ажиглалт ба тайлангийн давхаргын дизайны санал |
-| [`URTUU_PROPOSAL.md`](URTUU_PROPOSAL.md) | MN | «Өртөө» сувгийн дизайны санал ба үе шатууд |
-| [`CONTROL_PLANE_PLAN.md`](CONTROL_PLANE_PLAN.md) | MN | Операторын консолын дизайн ба үе шатуудын төлөвлөгөө |
-| [`PEER_PROPOSAL.md`](PEER_PROPOSAL.md) | MN | «Хөрш» — Nexus биш системийг Өртөөний бүрэн эрхт талд оруулах санал |
-| [`APPSTORE_SEPARATION_PLAN.md`](APPSTORE_SEPARATION_PLAN.md) | MN | App Store-ыг appstore.gerege.mn дээр салгаж байршуулах төлөвлөгөө |
-| [`APPSTORE_PHASE2_PLAN.md`](APPSTORE_PHASE2_PLAN.md) | MN | «Шастир» ба платформ нэгдлийн 2-р үе шатын төлөвлөгөө |
-| [`DOCUMENTS_WORKLOG.md`](DOCUMENTS_WORKLOG.md) | MN | Баримт ба цахим гарын үсгийн ажлын төлөв — юу хийгдсэн, юу үлдсэн |
+| [`TWO_PLANES_REVIEW.md`](TWO_PLANES_REVIEW.md) | MN | Хоёр урсгалын хэрэгжсэн төлөв, баталгаа, үлдсэн backlog |
 | [`TRANSLATION_GUIDE.md`](TRANSLATION_GUIDE.md) | MN | Долоон хэлний толь бичиг, орчуулга нэмэх урсгал |
+
+## Архитектурын шийдвэр — Architecture decisions
+
+ADR нь кодын одоогийн хэлбэрийг **яагаад** сонгосныг тайлбарлана. Одоогийн
+зан төлөвийг мэдэхдээ дээрх ажиллагааны баримтыг, шалтгааныг мэдэхдээ ADR-ыг
+уншина.
+
+| Баримт | Хэл | Тайлбар |
+| --- | --- | --- |
+| [`ECOSYSTEM_GIT_STRATEGY.md`](ECOSYSTEM_GIT_STRATEGY.md) | MN | Цөм, distribution, каталог ба нийтийн SDK-ийн хил |
+| [`adr/0001-domain-first.md`](adr/0001-domain-first.md) | MN | Аппын дүрэм платформоо импортлохгүй |
+| [`adr/0002-one-signing-rail.md`](adr/0002-one-signing-rail.md) | MN | Гарын үсгийн зам нэг (`eidmongolia`) |
+| [`adr/0003-a-document-carries-what-is-signed.md`](adr/0003-a-document-carries-what-is-signed.md) | MN | Баримт файлаа авч явна: pades, detached, approval |
+| [`adr/0004-a-pilot-that-did-not-ship.md`](adr/0004-a-pilot-that-did-not-ship.md) | MN | Өртөөний distribution pilot яагаад гараагүй вэ |
+| [`adr/0005-two-planes-one-origin-each.md`](adr/0005-two-planes-one-origin-each.md) | MN | Нэг бинарь, хоёр origin: тенант ба операторын хаалга |
+
+## Санал, төлөвлөгөө, ажлын түүх — Historical design records
+
+Эдгээр нь шийдвэр гаргах үеийн хэмжилт, хувилбар, хэрэгжүүлэлтийн дарааллыг
+хадгална. **Одоогийн API, package зам, тохиргооны source of truth биш.** Файл
+бүрийн status banner болон холбоосоор canonical баримт руу орно.
+
+| Баримт | Хэл | Тайлбар |
+| --- | --- | --- |
+| [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md) | MN | Цөмийн хилийн хэмжилт ба хэрэгжсэн салгалтын төлөвлөгөө |
+| [`TWO_PLANES_PROPOSAL.md`](TWO_PLANES_PROPOSAL.md) | MN | `tenant`/`platform`/`kernel`, хоёр schema-ийн анхны санал |
+| [`MONITORING_AND_REPORTING_PROPOSAL.md`](MONITORING_AND_REPORTING_PROPOSAL.md) | MN | Ажиглалт ба тайлангийн дизайны санал |
+| [`URTUU_PROPOSAL.md`](URTUU_PROPOSAL.md) | MN | «Өртөө» сувгийн дизайны санал ба үе шатууд |
+| [`CONTROL_PLANE_PLAN.md`](CONTROL_PLANE_PLAN.md) | MN | Операторын консолын анхны дизайн ба үе шатууд |
+| [`PEER_PROPOSAL.md`](PEER_PROPOSAL.md) | MN | Nexus биш системийг Өртөөний талд оруулах санал |
+| [`APPSTORE_SEPARATION_PLAN.md`](APPSTORE_SEPARATION_PLAN.md) | MN | App Store салгах төлөвлөгөө |
+| [`APPSTORE_PHASE2_PLAN.md`](APPSTORE_PHASE2_PLAN.md) | MN | «Шастир» ба платформ нэгдлийн 2-р үе шат |
+| [`DOCUMENTS_WORKLOG.md`](DOCUMENTS_WORKLOG.md) | MN | Баримт ба цахим гарын үсгийн ажлын түүх |
 
 ## Хэрэгжүүлэлтийн prompt-ууд — Implementation prompts
 
@@ -99,6 +121,7 @@ prompt-ын төлөвлөгөө ба эцэст нь хэрэгжсэн зүй�
 | [`MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md`](MONITORING_AND_REPORTING_IMPLEMENTATION_PROMPT.md) | MN | Мониторинг ба тайлангийн системийг хэрэгжүүлэх prompt |
 | [`DOMAIN_FIRST_PROMPT.md`](DOMAIN_FIRST_PROMPT.md) | MN | Домэйн давхаргыг салгах prompt — үр дүн нь [`adr/0001-domain-first.md`](adr/0001-domain-first.md) |
 | [`CORE_BOUNDARY_PROMPTS.md`](CORE_BOUNDARY_PROMPTS.md) | MN | [`CORE_BOUNDARY_PLAN.md`](CORE_BOUNDARY_PLAN.md)-ыг хэрэгжүүлэх үе шат бүрийн prompt — арваулаа хэрэгжсэн, үр дүнгийн хүснэгттэй |
+| [`TWO_PLANES_PROMPTS.md`](TWO_PLANES_PROMPTS.md) | MN | [`TWO_PLANES_PROPOSAL.md`](TWO_PLANES_PROPOSAL.md)-ыг хэрэгжүүлэх Үе A–H-ийн prompt |
 
 ## Төслийн журам — Project governance
 

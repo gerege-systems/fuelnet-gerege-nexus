@@ -70,6 +70,9 @@ const PAGES = [
   {src: "docs/adr/0001-domain-first.md", slug: "adr-0001-domain-first", title: "ADR 0001 — Домэйн эхэнд", group: "Архитектур"},
   {src: "docs/adr/0002-one-signing-rail.md", slug: "adr-0002-one-signing-rail", title: "ADR 0002 — Гарын үсгийн зам нэг", group: "Архитектур"},
   {src: "docs/adr/0003-a-document-carries-what-is-signed.md", slug: "adr-0003-document-carries", title: "ADR 0003 — Баримт файлаа авч явна", group: "Архитектур"},
+  {src: "docs/adr/0004-a-pilot-that-did-not-ship.md", slug: "adr-0004-pilot", title: "ADR 0004 — Гараагүй pilot", group: "Архитектур"},
+  {src: "docs/adr/0005-two-planes-one-origin-each.md", slug: "adr-0005-two-origins", title: "ADR 0005 — Нэг бинарь, хоёр origin", group: "Архитектур"},
+  {src: "docs/TWO_PLANES_REVIEW.md", slug: "two-planes-review", title: "Хоёр урсгалын хэрэгжилтийн шалгалт", group: "Архитектур"},
 
   {src: "docs/MODULE_AUTHORING_GUIDE.md", slug: "module-authoring", title: "Модуль хөгжүүлэх заавар", group: "Хөгжүүлэлт"},
   {src: "docs/TRANSLATION_GUIDE.md", slug: "translation", title: "Орчуулгын гарын авлага", group: "Хөгжүүлэлт"},
@@ -87,6 +90,7 @@ const PAGES = [
   // published page to an unpublished one leaves the site.
   {src: "docs/MONITORING.md", slug: "monitoring", title: "Мониторинг", group: "Ажиллагаа"},
   {src: "docs/RUNBOOKS.md", slug: "runbooks", title: "Runbook-ууд", group: "Ажиллагаа"},
+  {src: "docs/CONTROL_PLANE.md", slug: "control-plane", title: "Control plane", group: "Ажиллагаа"},
   {src: "docs/MONITORING_AND_REPORTING_PROPOSAL.md", slug: "monitoring-proposal", title: "Ажиглалт ба тайлангийн санал", group: "Ажиллагаа"},
 
   {src: "docs/SHELL_CONTRACT.md", slug: "shell-contract", title: "Bridge гэрээ", group: "Native клиентүүд"},

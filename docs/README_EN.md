@@ -74,28 +74,29 @@ from **Settings → Appearance**. See the
 
 ### 1. High-performance modular monolith
 
-- **Compile-time Go app modules** — `contacts`, `products`, `inventory`,
-  `billing`, `documents` and `sso_clients` compile into one binary and are
-  invoked in-process.
+- **Compile-time Go app modules** — core carries only `sso_clients`.
+  Product distributions register their modules through the public `pkg/nexus`
+  contract in the final binary, where they are invoked in-process.
 - **Per-tenant app store** — application entitlements, menus and RBAC are driven
   from PostgreSQL (`app_installations`).
 - **Dependency resolver** — recursive resolution over a directed acyclic graph
   with cycle detection and semver constraint checking.
-- **Catalog sync** — `catalog/apps.json` is the single source of truth; the
-  `apps` table is reconciled from it on every boot.
+- **Catalog sync** — production fetches a signed catalog from
+  `APP_CATALOG_URL`; development/offline mode falls back to
+  `catalog/apps.json`, and metadata is reconciled into `platform.apps`.
 
-### 2. Cloud-native resilience engine
+### 2. Cloud-native resilience and multiple replicas
 
 | Module | Purpose |
 | --- | --- |
-| `resilience/breaker.go` | Google SRE style adaptive circuit breaker |
-| `resilience/loadshedder.go` | Sheds load with `503` + `Retry-After` under pressure |
-| `resilience/singleflight.go` | Collapses duplicate in-flight work |
-| `resilience/retry.go` | Exponential backoff retry helper |
+| `internal/kernel/resilience/loadshedder.go` | Sheds load with `503` + `Retry-After` under pressure |
+| `internal/kernel/cache/bus.go` | Redis-backed invalidation across replicas, with a local fallback |
+| `internal/kernel/memo/memo.go` | Short-TTL, prefix-invalidated local cache for authorisation decisions |
+| `internal/kernel/async/async.go` | Named goroutines with panic recovery and stack logging |
 
 ### 3. National digital infrastructure
 
-- **XYP — State Information Exchange** (`platform/gerege/xyp.go`): citizen civil
+- **XYP — State Information Exchange** (`internal/tenant/identity/gerege/xyp.go`): citizen civil
   registration (`WS100101`) and legal entity verification (`WS100201`).
 - **National E-ID and DAN** ([`developer.gerege.mn`](https://developer.gerege.mn),
   [`eidmongolia.mn`](https://eidmongolia.mn)) — PKI digital signature, mobile
@@ -103,7 +104,7 @@ from **Settings → Appearance**. See the
 - **Built-in OAuth2 / OIDC provider**
   (`/.well-known/openid-configuration`) issuing client-credentials tokens to
   third-party systems.
-- **Email verification** (`platform/emailverify`) — one shared flow for proving
+- **Email verification** (`internal/tenant/emailverify`) — one shared flow for proving
   an address, called in process by every app module. The mail is sent by the
   hosted service (`enigma.mn`), so the platform holds no mailbox credential and
   owns no sender address; the verification is recorded when the person comes
@@ -116,14 +117,18 @@ from **Settings → Appearance**. See the
 
 ### 4. AI copilot and analytics
 
-- **AI assistant** (`platform/ai/copilot.go`) — intent-classified conversation
+- **AI assistant** (`internal/tenant/ai/copilot.go`) — intent-classified conversation
   wired to live tenant data.
-- **Inventory demand forecaster** (`platform/ai/inventory_forecaster.go`) —
-  safety-stock and reorder-point recommendations from historical movement.
+- **Stock forecast endpoint** (`internal/tenant/ai/handlers.go`) — delegates to
+  an enabled distribution's `stock_forecast` capability and returns `404` when
+  no module provides it.
 
 ---
 
 ## Business applications
+
+Most applications below are distribution modules: they bring their own code
+and migrations through `pkg/nexus`; the core repository does not carry them.
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
@@ -149,9 +154,13 @@ backend/
   cmd/migrate/        Goose migration runner
   db/migrations/      SQL migrations
   internal/
-    module.go         The Go Module contract
-    apps/             Business modules
-    platform/         Platform core services
+    kernel/           Plane-neutral technical primitives
+    tenant/           Work performed for one organisation
+    platform/         Operations for the whole deployment
+    apps/             Modules carried by this distribution
+  pkg/
+    nexus/            Public SDK and contracts for external modules
+    platform/         Composition root for both planes
 frontend/             Next.js 16 (App Router) web client
 catalog/              App store catalog and manifests
 deploy/               Production Dockerfile, Nginx config

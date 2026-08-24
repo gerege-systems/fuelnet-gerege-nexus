@@ -49,7 +49,8 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 **Баримт бичиг:
 [gerege-systems.github.io/open-gerege-nexus](https://gerege-systems.github.io/open-gerege-nexus/)**
-— энэ репод байгаа бүх баримт долоон хэлээр, хайхад хялбар вэб хэлбэрээр.
+— одоогийн баримтууд хайхад хялбар вэб хэлбэрээр; бүтээгдэхүүний тойм нь
+монгол болон НҮБ-ын албан ёсны зургаан хэлээр бий.
 
 ---
 
@@ -95,28 +96,30 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 ### 1. Өндөр бүтээмжтэй модуль монолит архитектур
 
-- **Compile-time Go апп модулиуд** — модулиуд (`contacts`, `products`,
-  `inventory`, `billing`, `documents`, `sso_clients`) нэг бинарид
-  компиллогдож, процесс дотроо дуудагдана.
+- **Compile-time Go апп модулиуд** — цөм зөвхөн `sso_clients` модулийг авч
+  явна. Бусад бүтээгдэхүүний distribution өөрийн модулиудыг нийтийн
+  `pkg/nexus` contract-аар эцсийн бинарид бүртгэж, процесс дотроо дуудна.
 - **Тенант бүрийн апп стор** — тенант тус бүрийн апп эрх, меню, RBAC тохиргоо
   PostgreSQL (`app_installations`) дээр динамикаар удирдагдана.
 - **Хамаарал шийдвэрлэх хөдөлгүүр** — DAG (Directed Acyclic Graph) дээр
   тулгуурласан рекурсив шийдвэрлэлт, мөчлөг илрүүлэлт, semver шалгалт.
-- **Каталог синк** — `catalog/apps.json` нь цорын ганц эх сурвалж; `apps`
-  хүснэгт ачаалал бүрт үүнээс шинэчлэгдэнэ.
+- **Каталог синк** — production `APP_CATALOG_URL`-аас гарын үсэгтэй каталог
+  татна; URL тохируулаагүй development/offline орчинд `catalog/apps.json`
+  fallback ашиглаж, metadata-г `platform.apps`-д синк хийнэ.
 
-### 2. Cloud-native тэсвэрлэлтийн хөдөлгүүр
+### 2. Cloud-native тэсвэрлэлт ба олон replica
 
 | Модуль | Зориулалт |
 | --- | --- |
-| `resilience/breaker.go` | Google SRE загварын adaptive circuit breaker |
-| `resilience/loadshedder.go` | Ачаалал хэтэрсэн үед `503` + `Retry-After` |
-| `resilience/singleflight.go` | Давхардсан хүсэлтийг нэгтгэж кэшийн ачаалал бууруулах |
-| `resilience/retry.go` | Экспоненциал ухралттай давталт |
+| `internal/kernel/resilience/loadshedder.go` | Зэрэг ажиллах хүсэлт хязгаараас давахад `503` + `Retry-After` |
+| `internal/kernel/cache/bus.go` | Redis pub/sub-аар эрх, session, аппын кэшийн хүчингүй болголтыг replica бүрд түгээнэ |
+| `internal/kernel/memo/memo.go` | Эрхийн шийдвэрт зориулсан хугацаатай, prefix-ээр хүчингүй болдог process-local кэш |
+| `internal/kernel/async/async.go` | Background goroutine-ийн panic-ийг process унагахгүйгээр нэртэй лог болгоно |
 
 ### 3. Төрийн цахим дэд бүтцийн интеграци
 
-- **ХУР — Төрийн мэдээлэл солилцооны систем** (`platform/gerege/xyp.go`):
+- **ХУР — Төрийн мэдээлэл солилцооны систем**
+  (`internal/tenant/identity/gerege/xyp.go`):
   иргэний бүртгэл (`WS100101`), хуулийн этгээдийн баталгаажуулалт (`WS100201`).
   Клиент нь платформд үлдэж, хэрэглэгчид харагдах нүүр нь `apps/egov` —
   лавлагаа, сувгийн төлөв, лавлагааны түүх гурван дэлгэц (`/egov`).
@@ -132,7 +135,7 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
   аппуудад identity өгсөөр байна. Клиент болсон үед эндэх нэвтрэлт хаагдаж,
   гарах үед провайдер дээрээс гарч буцаж ирнэ —
   [`docs/SSO_FEDERATION.md`](docs/SSO_FEDERATION.md).
-- **И-мэйл баталгаажуулалт** (`platform/emailverify`) — хаяг эзэмшлийг батлах
+- **И-мэйл баталгаажуулалт** (`internal/tenant/emailverify`) — хаяг эзэмшлийг батлах
   нэгдсэн урсгал, платформын бүх апп модуль Go дуудлагаар ашиглана. Захидлыг
   хостинг үйлчилгээ (`enigma.mn`) илгээх тул платформ SMTP нууц үг, илгээгчийн
   хаяг эзэмшихгүй. Хэрэглэгч буцаж ирэхэд баталгаажуулалт бүртгэгдэнэ — буцах
@@ -144,15 +147,19 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 
 ### 4. AI Copilot ба бизнес аналитик
 
-- **AI туслах** (`platform/ai/copilot.go`) — тенантын өгөгдлийн сангийн бодит
+- **AI туслах** (`internal/tenant/ai/copilot.go`) — тенантын өгөгдлийн сангийн бодит
   төлөвт холбогдсон, зорилго ангилдаг харилцан яриа.
-- **Агуулахын эрэлт таамаглагч** (`platform/ai/inventory_forecaster.go`) —
-  түүхэн хөдөлгөөнд тулгуурлан аюулгүйн үлдэгдэл ба дахин захиалгын цэгийг
-  санал болгоно.
+- **Агуулахын эрэлт таамаг** (`internal/tenant/ai/handlers.go`) —
+  `/api/v1/ai/stock-forecast` нь distribution-аас бүртгэсэн `stock_forecast`
+  capability-г дуудна; тухайн суулгац capability өгөөгүй бол `404` буцаана.
 
 ---
 
-## Бэлэн бизнес аппликейшнүүд
+## Каталогоор түгээдэг бизнес аппликейшнүүд
+
+Доорх аппуудын ихэнх нь платформын цөмд код, хүснэгтээ хадгалахгүй. Distribution
+нь нийтийн `pkg/nexus` SDK-аар модулиа бүртгэж, өөрийн миграцаа авчирна; каталог
+нь тухайн суулгацад аль хувилбарыг санал болгохыг шийднэ.
 
 | # | Апп | ID | Зам | Тайлбар |
 | --- | --- | --- | --- | --- |
@@ -165,7 +172,6 @@ E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **м�
 | 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
 | 8 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | Энэ платформоор дамжуулан нэвтрэх системүүдийн OAuth2 клиент бүртгэл |
 | 9 | State Services | `io.gerege.nexus.gov_services` | `/gov-services` | Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, баталгаажуулалт, цаг захиалга |
-| 10 | PDF цахим гарын үсэг | `io.gerege.nexus.esign` | `/esign` | eID Mongolia (PIN2) хуулийн хүчин төгөлдөр цахим гарын үсэг, Gerege eSign HSM, багц баталгаажуулалт, гарын үсгийн лог |
 
 Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрутууд нээгдэнэ. Суулгаагүй апп
 руу хандвал `403 Forbidden` буцна.
@@ -180,9 +186,13 @@ backend/
   cmd/migrate/        Goose миграцийн ажиллуулагч
   db/migrations/      SQL миграцууд
   internal/
-    module.go         Модулийн Go гэрээ (Module interface)
-    apps/             Бизнес модулиуд
-    platform/         Платформын цөм үйлчилгээнүүд
+    kernel/           Хоёр урсгалын техникийн суурь; аль нэгийг импортлохгүй
+    tenant/           Нэг байгууллагын нэрийн өмнөөс ажиллах урсгал
+    platform/         Deployment-ийг бүхэлд нь удирдах операторын урсгал
+    apps/             Энэ distribution-д хамт ирдэг бизнес модулиуд
+  pkg/
+    nexus/            Гадаад модулийн нийтийн SDK ба гэрээнүүд
+    platform/         Хоёр урсгалыг нэг process/router болгон угсрах root
 frontend/             Next.js 16 (App Router) вэб клиент
 native-apps/          Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)
 catalog/              Апп сторын каталог ба manifest-ууд
@@ -297,14 +307,15 @@ NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
 
 ## Автомат deploy
 
-`main` салбар руу push хийх бүрд [`deploy.yml`](.github/workflows/deploy.yml)
-ажиллана:
+`main` салбарын **CI амжилттай дууссаны дараа**
+[`deploy.yml`](.github/workflows/deploy.yml) `workflow_run`-аар ажиллана:
 
 1. Backend ба frontend образыг GHCR руу угсарч илгээнэ (`:latest` ба `:<sha>`).
 2. `docker-compose.prod.yml`-ийг серверт хуулна.
 3. Серверт `.env`-ийг GitHub secret-ээс шинээр бичиж, образуудыг татна.
 4. Миграц бүрэн дуусмагц API ба frontend солигдоно.
-5. `/health` ба `/ready`-г шалгаж, амжилтгүй бол лог хэвлээд алдаа өгнө.
+5. `/health` ба `/ready`, OIDC route, control-plane host/API boundary-г
+   сервер дотроос шалгаж, амжилтгүй бол rollout-ыг унагана.
 
 Гараар ажиллуулахдаа Actions → *Deploy to Production* → **Run workflow**
 (шаардвал тодорхой tag зааж болно).
@@ -318,6 +329,10 @@ NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
 | `SSO_DEFAULT_CLIENT_SECRET` | Тийм | Production дээр OAuth2 client-д зайлшгүй |
 | `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | Үгүй | Анхдагч: `nexus.gerege.mn` / `deploy` / `22` |
 | `PUBLIC_ORIGIN` | Үгүй | Анхдагч: `https://nexus.gerege.mn` |
+| `CONTROL_PLANE_ALLOWED_CIDRS` | CP асаалттай үед тийм | CP nginx allowlist. Invalid CIDR, host-bit зөрүү, `0.0.0.0/0`, `::/0`-ийг deploy татгалзана |
+
+Repository variable `CONTROL_PLANE_HOST` нь production консолын hostname-ийг
+өгнө. Хоосон бол backend ба frontend хоёулаа консолыг 404-өөр хаана.
 
 > Production домэйн нь `nexus.gerege.mn`. Өмнөх `openerp.gerege.mn` домэйныг
 > Gerege Nexus нэршилд шилжихэд орлуулсан. `PUBLIC_ORIGIN` нь CORS, OIDC issuer,
@@ -390,6 +405,9 @@ NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
 | `GET` | `/api/v1/auth/sso/config` | Энэ суулгац хэрхэн нэвтрүүлдэг — нэвтрэх дэлгэц уншина |
 | `GET` | `/api/v1/auth/sso/start` | Провайдер дээр нэвтрэлт эхлүүлнэ (PKCE, state, nonce) |
 | `GET` | `/api/v1/auth/sso/callback` | Провайдерээс буцаж ирэх цэг |
+| `POST` | `/api/platform/v1/session` | Операторын нууц үг + TOTP нэвтрэлт (`cp.` host дээр л) |
+| `GET` | `/api/platform/v1/audit` | Append-only операторын audit |
+| `GET` | `/api/platform/v1/health` | Control-plane эрүүл мэндийн тойм |
 
 Нэвтрэлтийн токен нь HttpOnly cookie эсвэл `Authorization: Bearer <token>`
 толгойгоор дамжина.
@@ -409,7 +427,13 @@ cd backend && go vet ./... && golangci-lint run
 cd backend && govulncheck ./...
 
 # Frontend build
-cd frontend && npm run build
+cd frontend && npm run test && npx tsc --noEmit && npm run lint && npm run build
+
+# Built frontend-ийн hostname boundary smoke test
+cd frontend && npm run host:smoke
+
+# Нийтлэгдэх баримт ба дотоод холбоос
+cd docs/site && npm run check
 ```
 
 CI нь push ба pull request бүр дээр lint, тест, frontend build, Docker образ

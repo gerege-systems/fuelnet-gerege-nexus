@@ -1,415 +1,259 @@
-# Control Plane — операторын консол
+# Control plane — операторын консол
 
-Платформыг удирддаг консол: `cp.nexus.gerege.mn`. Энэ баримт нь **хэрхэн
-босгох, хэрхэн ажиллуулах** тухай. Яагаад ийм байдлаар зохиогдсоныг
-[CONTROL_PLANE_PLAN.md](CONTROL_PLANE_PLAN.md)-аас үзнэ үү.
+`cp.nexus.gerege.mn` дээрх платформын урсгалыг босгох, хамгаалах, ажиллуулах
+одоогийн заавар. Шинэчлэгдсэн: 2026-08-24.
 
-[Баримт бичгийн төв рүү буцах](README.md) ·
-Холбоотой: [Мониторинг](MONITORING.md) · [Runbook](RUNBOOKS.md)
+[Баримт бичгийн төв](README.md) · [Архитектур](ARCHITECTURE_SPECIFICATION.md) ·
+[ADR-0005](adr/0005-two-planes-one-origin-each.md) ·
+[Мониторинг](MONITORING.md) · [Runbook](RUNBOOKS.md)
 
 ---
 
-## 1. Одоо юу байгаа вэ
+## 1. Одоогийн contract
 
-| Боломж | Төлөв |
+| Талбар | Утга |
 | --- | --- |
-| Операторын бүртгэл, нууц үг + TOTP, lockout | ✅ CP-1 |
-| Богино session (8 цаг, 30 мин idle), step-up | ✅ CP-1 |
-| Append-only `operator_audit`, бичих үйлдэл бүрд заавал | ✅ CP-1 |
-| Тенантын жагсаалт/дэлгэрэнгүй, операторын жагсаалт, audit хайлт | ✅ CP-1 |
-| Тенант үүсгэх (аппын багц + эхний админд урилга) | ✅ CP-2 |
-| Түдгэлзүүлэх/сэргээх, устгал (2 хүн + 30 хоног), export | ✅ CP-2 |
-| Quota (хэрэглэгчийн тоо хэрэгжинэ), дэмжлэгийн үйлдлүүд | ✅ CP-2 |
-| Impersonation (шалтгаан, 30 мин, banner, хоёр талын audit) | ✅ CP-2 |
-| Динамик тохиргоо (түүх + буцаалт), feature flag, засварын горим, зарлал | ✅ CP-3 |
-| **Нэвтрэлтийн горим `platform.access_mode`** (анхдагч **private**) | ✅ CP-3 |
-| Ажиглалтын тойм, deploy товч, **нөөцлөлт**, каталогийн харагдац | ✅ CP-4 |
-| Metering: хэрэглээний тоолол, график, CSV, **AI-ийн сарын квот хэрэгжинэ** | ✅ CP-5 |
-| **Каталог синкийн удирдлага & Deprecation шилжилт** (`/api/platform/v1/catalog/...`) | ✅ CP-46 |
+| Origin | `https://cp.nexus.gerege.mn` |
+| Frontend | `/` нь 308-аар `/cp` руу; UI нь `/cp/*` |
+| Canonical API | `/api/platform/v1/*` — одоогоор 44 route |
+| Legacy API | `/cp/api/*` нь HostGate-ийн ард 308; vNEXT-д устгана |
+| Нэвтрэлт | Нууц үг + баталгаажсан TOTP |
+| Cookie | `cp_session`, тенантын `session_token`-оос тусдаа |
+| Session | Дээд тал нь 8 цаг, 30 минут idle, мэдрэмтгий үйлдэлд step-up |
+| Account | `platform.operator_accounts`; `platform.users` биш |
+| DB role | `gerege_nexus_operator` |
+| Audit | `platform.operator_audit`, append-only; write бүртэй нэг transaction |
 
-Control plane API-ийн canonical prefix нь `/api/platform/v1`. Өмнөх
-`/cp/api` prefix нь нэг release-ийн хугацаанд `HostGate`-ийн ард 308 redirect
-буцаана; шинэ client болон monitoring бүгд canonical prefix ашиглана.
+Нэг Go бинарь tenant ба platform plane-ийг зэрэг үйлчилдэг ч origin, identity,
+cookie, DB role, audit нь тусдаа. Энэ хилийг нэгтгэж болохгүй. Оператор
+тенантын нүдээр харахдаа хоёр дахь энгийн login биш, audit-тай impersonation
+ашиглана.
 
-## 2. Гурван давхарга
+## 2. Хамгаалалтын давхаргууд
 
-Консол руу хүрэхийн тулд гурвуулангаас өнгөрөх ёстой. Нэг нь нөгөөдөө
-итгэдэггүй:
+Консол руу хүрэхийн тулд дараах бүх хаалгыг дарааллаар өнгөрнө:
 
-1. **nginx-ийн хаягийн allowlist** — `deploy/nginx/snippets/cp-allowlist.conf`.
-   Жагсаалтад байхгүй хаягнаас ирсэн хүсэлт 403 авч, аппликейшн рүү огт
-   хүрэхгүй. Репод ирдэг хувилбар нь `deny all` — тохируулаагүй консол
-   нээлттэй байснаас хаалттай байх нь зөв.
-2. **`CONTROL_PLANE_HOST`** — API ба frontend хоёулаа энэ нэрээр ирээгүй
-   хүсэлтэд **404** хариулна (403 биш: 403 нь тэнд ямар нэг зүйл байгааг
-   баталгаажуулна). Production дээр хоосон орхивол консол огт байхгүй.
-3. **Нэвтрэлт** — нууц үг + TOTP. Хоёр дахь хүчин зүйлгүй бүртгэл нэвтэрч
-   чадахгүй.
+1. **nginx CIDR allowlist.** `deploy/nginx/snippets/cp-allowlist.conf` server
+   block-ийн түвшинд frontend болон API-г бүхэлд нь хаана. Тохиргоогүй үед
+   fail-closed `deny all` байна.
+2. **Тусдаа origin.** `CONTROL_PLANE_HOST`-оос өөр Host дээр backend HostGate
+   болон frontend proxy `404` буцаана. `403` биш тул консолын оршин байгааг
+   зарлахгүй.
+3. **Операторын session.** Нууц үг, TOTP, lockout, idle timeout, step-up
+   үйлчилнэ. Public signup байхгүй.
+4. **Хязгаарлагдсан DB role.** Query бүр `dbguard.AsOperator` context-оор
+   `gerege_nexus_operator` role-д орно; login role-оор чимээгүй үргэлжлэхгүй.
+5. **Заавал audit.** `operator.RequireAudit` ба `operator.Do` нь write болон
+   audit мөрийг хамт commit хийнэ.
 
-## 3. Босгох
+Эдгээр нь бие биеэ орлохгүй. CIDR буруу болсон ч HostGate/session/role
+үлдэнэ; аппын алдаа гарсан ч nginx allowlist урд нь үлдэнэ.
 
-### 3.1 nginx
+## 3. Production-д босгох
+
+### 3.1 DNS, TLS, nginx
+
+`cp.nexus.gerege.mn` DNS нь deployment server-ийг заана. Репогийн
+`deploy/nginx/cp.nexus.gerege.mn.conf` болон
+`deploy/nginx/snippets/cp-allowlist.conf`-ыг идэвхжүүлээд TLS сертификат
+олгоно:
 
 ```bash
 sudo cp deploy/nginx/cp.nexus.gerege.mn.conf /etc/nginx/sites-available/
 sudo cp deploy/nginx/snippets/cp-allowlist.conf /etc/nginx/snippets/
-sudo ln -s /etc/nginx/sites-available/cp.nexus.gerege.mn.conf /etc/nginx/sites-enabled/
-
-# Операторуудын бодит хаягийг бичнэ — эс бөгөөс консол хэнд ч нээгдэхгүй.
-sudo nano /etc/nginx/snippets/cp-allowlist.conf
-
-sudo nginx -t && sudo systemctl reload nginx
+sudo ln -s /etc/nginx/sites-available/cp.nexus.gerege.mn.conf \
+  /etc/nginx/sites-enabled/cp.nexus.gerege.mn.conf
+sudo nginx -t
+sudo systemctl reload nginx
 sudo certbot --nginx -d cp.nexus.gerege.mn
 ```
 
-DNS дээр `cp.nexus.gerege.mn` нь тухайн серверийг заасан байх ёстой.
+GitHub Actions production deploy дараах тохиргоог хэрэглэнэ:
 
-Production deploy дээр хаягуудыг GitHub Actions-ийн
-`CONTROL_PLANE_ALLOWED_CIDRS` secret-д зай, шинэ мөр эсвэл таслалаар тусгаарлан
-хадгална. Deploy нь түүгээр `cp-allowlist.conf`-ыг үүсгэж, `nginx -t` унавал
-өмнөх файлыг сэргээнэ. Secret хоосон бол сервер дээрх гараар тохируулсан
-allowlist-ыг хөндөхгүй.
+| GitHub тохиргоо | Жишээ | Үүрэг |
+| --- | --- | --- |
+| Repository variable `CONTROL_PLANE_HOST` | `cp.nexus.gerege.mn` | Backend/frontend-ийн origin gate |
+| Secret `CONTROL_PLANE_ALLOWED_CIDRS` | `203.0.113.10/32, 2001:db8:1::/64` | nginx allowlist үүсгэх |
 
-Тогтмол office/VPN хаягийг аль болох CIDR-аар оруул. Түр зуурын нэг IPv4
-хаяг бол `203.0.113.10/32` хэлбэртэй байна; хаяг солигдоход secret-ийг
-шинэчилж deploy-ийг дахин ажиллуулна. Deploy нь IP/CIDR бүрийг бүтцээр нь
-шалгана: network CIDR-ийн host bit зөрсөн утга болон бүх интернетийг нээх
-`0.0.0.0/0`, `::/0`-ийг зөвшөөрөхгүй.
+CIDR secret зай, шинэ мөр, таслалаар тусгаарласан утга авч болно. Renderer нь
+invalid CIDR, host bit зөрсөн network, бүх интернетийг нээх `0.0.0.0/0` ба
+`::/0`-ийг татгалзана. Secret хоосон бол сервер дээрх одоогийн allowlist-ыг
+дарж бичихгүй. Тогтмол хаяг байхгүй бол CIDR-ийг улам өргөсгөхийн оронд VPN
+эсвэл identity-aware proxy хэрэглэнэ.
 
-### 3.2 Env
+### 3.2 Env ба контейнер
 
-`deploy/.env.prod` дотор:
+Production env-д дор хаяж:
 
-```
+```dotenv
 CONTROL_PLANE_HOST=cp.nexus.gerege.mn
 ```
 
-Дараа нь `docker compose -f docker-compose.prod.yml up -d backend frontend`.
-Энэ утга backend ба frontend хоёуланд очно — тэдгээр нь нэг дүрмийн хоёр тал.
+Энэ утга backend болон frontend хоёрт ижил очих ёстой. Compose startup goose
+migration-уудыг ажиллуулна. `00049_control_plane.sql`-аас эхэлсэн control-plane
+schema/role, `00079_two_schemas.sql`, `00080_search_path_has_no_public.sql`
+хүртэл бүрэн орсны дараа API ажиллана.
 
-### 3.3 Миграц
+Startup log-д operator role bind амжилттайг шалга. Role эсвэл grant дутуу үед
+console query login role-оор үргэлжлэхгүй, хаалттай унах нь санаатай.
 
-`00049_control_plane.sql` нь гурван хүснэгт ба `gerege_nexus_operator` role,
-`00050_control_plane_lifecycle.sql` нь амьдралын мөчлөгийн багана, quota,
-зөвшөөрөл, impersonation, нэвтрэлт сэргээх хүснэгтүүдийг үүсгэнэ. `docker compose up` нь миграцыг өөрөө ажиллуулна. Лог дээр:
+### 3.3 Анхны оператор
 
-```
-dbguard: the control plane may bind its own database role role=gerege_nexus_operator
-```
-
-гэж гарвал бэлэн. Гараагүй бол консол ажиллахгүй (санаатай — role-гүйгээр
-query нь login role-оор явахгүй, огт явахгүй).
-
-### 3.4 Анхны оператор
-
-Вэб бүртгэл **байхгүй**. Эхний бүртгэлийг DB-ийн эрхтэй хүн тушаалаар үүсгэнэ:
+Вэб бүртгэл байхгүй. DB эрхтэй хүн контейнер дотор bootstrap command ажиллуулна:
 
 ```bash
 docker exec -it gerege_nexus_backend /app/operator-bootstrap \
-    -email you@gerege.mn -name "Таны нэр" -role superadmin
+  -email you@gerege.mn -name "Таны нэр" -role superadmin
 ```
 
-Тушаал нь нууц үгийг хоёр удаа асууж (харагдахгүй), TOTP-ийн нууц ба
-`otpauth://` URI-г нэг удаа хэвлэнэ. Түүнийг authenticator-т нэмээд
-(1Password, Aegis, Google Authenticator) кодыг нь буцааж бичиж
-баталгаажуулна. **Баталгаажуулаагүй бүртгэл нэвтэрч чадахгүй** — тасалдсан
-bootstrap нь нууц үгээр нээгддэг хаалга биш, түгжигдсэн хаалга үлдээнэ.
+Command нууц үгийг TTY-ээс хоёр удаа асууж, TOTP secret ба `otpauth://` URI-г
+нэг удаа харуулна. Authenticator-т нэмээд кодоор баталгаажуул. Баталгаажаагүй
+эсвэл дундаа тасарсан account нэвтэрч чадахгүй. Нууц үгийг flag/env-д бүү
+дамжуул: shell history, process list, container inspect-д үлдэнэ.
 
-`docker exec` дээр `-it` заавал: нууц үг терминалаас уншигдана. Flag эсвэл
-env-ээр нууц үг дамжуулах зам байхгүй — тэдгээр нь shell-ийн түүх,
-процессын жагсаалт, контейнерийн `inspect`-д үлддэг.
+## 4. Хөгжүүлэлтийн хоёр origin
 
-## 4. Үүргүүд
+`.env.example` болон `docker-compose.yml` development-д
+`CONTROL_PLANE_HOST=cp.localhost` ашиглана:
 
-| Үүрэг | Юу хийж чадах вэ |
+```text
+Тенант:   http://nexus.localhost:3000
+Консол:   http://cp.localhost:3000     → 308 → /cp
+CP API:   http://cp.localhost:8080/api/platform/v1
+```
+
+Орчин үеийн browser `*.localhost`-ыг loopback руу шийддэг. Ингэснээр HostGate,
+cookie separation, CSRF Origin шалгалт production-д анх удаа биш, local test
+дээр ажиллана.
+
+Frontend-ийн host contract:
+
+```text
+Host == CONTROL_PLANE_HOST
+  /                       → 308 /cp
+  /cp, /cp/*              → allow
+  /api/platform/v1/*      → allow
+  бусад зам               → 404
+
+Host != CONTROL_PLANE_HOST
+  /cp, /cp/*              → 404
+```
+
+## 5. Үүрэг ба эрх
+
+| Үүрэг | Үндсэн боломж |
 | --- | --- |
-| `superadmin` | Бүгд — устгал хүсэх, зөвшөөрөх, export, impersonation |
-| `operator` | Тенант үүсгэх, түдгэлзүүлэх/сэргээх, quota, дэмжлэг. Устгал ба impersonation ҮГҮЙ |
-| `support` | Унших, дэмжлэгийн үйлдлүүд, impersonation |
+| `superadmin` | Бүх capability; устгал хүсэх/өөр хүний хүсэлтийг зөвшөөрөх, export, impersonation |
+| `operator` | Тенант үүсгэх, lifecycle, quota, дэмжлэг; устгал ба impersonation үгүй |
+| `support` | Унших, дэмжлэг, impersonation; platform administration үгүй |
 | `auditor` | Зөвхөн унших |
 
-Дөрөв нь **шат биш**: `operator` нь байгууллага үүсгэж чадах ч дотор нь орж
-харж чадахгүй, `support` нь эсрэгээрээ. Устгал нь superadmin-ий хүсэлт ба
-**өөр** superadmin-ий зөвшөөрөл.
+Үүргүүд шаталсан hierarchy биш. Capability mapping нь
+`backend/internal/platform/operator` package-д төвлөрнө; handler бүр role name
+дахин тайлбарлах ёсгүй. Устгалын хүсэлтийг үүсгэсэн superadmin өөрөө
+зөвшөөрөхгүй.
 
-Дараагийн үе шатууд эрхийг `capabilities` (`internal/platform/controlplane/
-operator.go`) хүснэгтэд мөр нэмэх байдлаар өргөтгөнө — handler дотор
-`if role == "superadmin"` гэж бичихгүй.
+## 6. Үйл ажиллагааны contract
 
-## 4б. Тенантын амьдралын мөчлөг
+### Тенантын lifecycle
 
-```
-идэвхтэй → түдгэлзсэн        (буцаах боломжтой, 1 оператор, шалтгаантай)
-         → устгал хүлээж буй  (2 superadmin, дараа нь 30 хоног, буцаах боломжтой)
-         → устсан             (товч биш, хугацаа дуусахад ажиллах цэвэрлэгээ)
-```
-
-- **Түдгэлзүүлэх** нь тухайн байгууллагын бүх session-ыг нэг transaction-д
-  хаана. Нэвтрэх зам бүр (нууц үг, eID, ДАН, Google, SSO, staff PIN) нэг
-  цэгээр дамждаг тул бүгд 403 болно.
-- **Устгах** нь товч дарахад юу ч устгахгүй: хүсэлт үүсч, **өөр** superadmin
-  зөвшөөрөх ёстой (өөрөө өөрийгөө зөвшөөрөхийг DB-ийн CHECK хориглоно).
-  Зөвшөөрсний дараа 30 хоногийн хугацаа эхэлж, тэр хугацаанд нэг товчоор
-  буцаана. Хугацаа дуусахад цагийн ажил мөрүүдийг устгана.
-- **Консолд DELETE эрх хаана ч байхгүй.** Устгалыг гүйцэтгэдэг цэвэрлэгээ нь
-  платформын зам (login role)-аар явдаг. Өөрөөр хэлбэл консолын дурын алдаа
-  байгууллагыг устгаж чадахгүй.
-- **Export** нь тухайн байгууллагын өгөгдлийг JSON багцаар өгнө. Энэ бол
-  консолын цорын ганц "тенантын өгөгдөл уншдаг" үйлдэл бөгөөд тусдаа эрх,
-  step-up, audit-тай (`internal/platform/controlplane/export.go`-ийн
-  тайлбарыг үз).
-
-## 4в. Impersonation
-
-Оператор байгууллага дотор орж харах нь таван нөхцөлтэй: **шалтгаан бичигдэнэ**,
-**TOTP дахин**, **30 минут**, **улбар шар banner**, **хоёр талын audit**.
-
-Консол нь нэг удаагийн, 60 секундын hand-over token үүсгэж линк өгнө (cookie
-домэйн хооронд тавигдахгүй тул). Тенантын талд `/impersonate` хуудас түүнийг
-session болгож солино. Тэр session нь `impersonated_by`-тай тул:
-
-- `/api/v1/auth/me` нь `impersonated: true` буцаана → бүрхүүл banner харуулна;
-- тэр session-оос бичигдсэн audit мөр бүр `impersonated`, `operator_id`
-  тэмдэгтэй болно (`audit.MarkImpersonated`);
-- байгууллагын өөрийнх нь `audit_events`-д "хүсэлт" ба "эхэлсэн" гэсэн хоёр мөр
-  үлдэнэ, `operator_impersonations` хүснэгтийг тэд өөрсдөө уншиж чадна.
-
-Түдгэлзсэн байгууллага руу орох боломжгүй — түдгэлзүүлэлтийг тойрох зам байх
-ёсгүй.
-
-## 4г. Дэмжлэг ба нууц үг сэргээх
-
-Платформ дээр өмнө нь **нууц үг сэргээх зам байгаагүй**. CP-2 нь нэг механизм
-нэмэв: `credential_grants` — нэг удаагийн, 24 цагийн token. Урилга ба сэргээлт
-хоёулаа үүгээр явна; захидлыг одоо байгаа emailverify рүү дамжуулна.
-
-Оператор нууц үгийг **тохируулж чадахгүй** — зөвхөн холбоос илгээнэ. Үүнийг
-Go код биш, PostgreSQL баталгаажуулна:
-
-```sql
-GRANT UPDATE (failed_login_attempts, locked_until) ON users TO gerege_nexus_operator;
+```text
+active → suspended → active
+active → pending deletion → cancelled
+                          → deleted (approval + 30 хоногийн grace дараа job)
 ```
 
-Багана нэрлэсэн GRANT тул `password_hash`, `email`, `is_admin`-д хүрэх аргагүй.
+- Suspend нь тухайн тенантын session-уудыг transaction дотор revoke хийнэ.
+- Deletion нь хоёр өөр superadmin шаардсан approval; grace хугацаанд цуцалж
+  болно.
+- Console role-д шууд bulk `DELETE` эрх байхгүй. Хугацаа дууссан цэвэрлэгээг
+  background job platform замаар гүйцэтгэнэ.
+- Export нь тусдаа capability, step-up, audit шаардсан JSON багц.
 
-## 4д. Quota
+### Impersonation
 
-`tenant_quotas`: хэрэглэгчийн тоо, хадгалалт (MB), AI дуудлага/сар. Горим нь
-`soft` (анхааруулга) эсвэл `hard` (татгалзана). NULL нь "хязгааргүй", 0 нь
-"хязгаар нь тэг" — хоёр өөр утга.
+Оператор шалтгаан бичиж TOTP step-up хийсний дараа 60 секунд хүчинтэй нэг
+удаагийн hand-over token авна. Тенантын `/impersonate` хуудас түүнийг 30
+минутын `session_token` болгоно. UI banner харуулж, operator ба tenant audit
+хоёуланд actor/reason үлдэнэ. Түдгэлзсэн тенант руу нэвтрэхгүй.
 
-**CP-2 дээр зөвхөн хэрэглэгчийн тоо хэрэгжинэ**: бусад хоёрыг хэмжих өгөгдөл
-(CP-5-ын `usage_events`) хараахан алга. UI нь тэдгээрийг "бүртгэгдэнэ, гэхдээ
-хараахан хэрэгжихгүй" гэж тэмдэглэж харуулна — хэрэгжихгүй хязгаарыг
-хэрэгжиж байгаа мэт харуулах нь хязгааргүй байхаас дор.
+### Settings, flags, maintenance
 
-## 4е. Нэвтрэлтийн горим: public / private
+- Platform setting key кодын registry-д бүртгэлтэй байх ёстой; secret төрлийн
+  setting байхгүй. Нууц env/GitHub secret-д үлдэнэ.
+- Утгын precedence: DB → env → default. Өөрчлөлт ба rollback бүр түүхтэй.
+- Feature flag нь release, kill switch, experiment төрөл, tenant override,
+  тогтвортой percentage rollout, expiry дэмжинэ.
+- `module.<app-id>.disabled` kill switch module route-д `503` өгнө.
+- Maintenance mode уншихыг нээлттэй үлдээж write-д `503` + `Retry-After`
+  өгнө; logout үргэлж нээлттэй.
 
-Платформын хамгийн чухал ганц тохиргоо. **Анхдагч нь `private`.**
+### Metering, backup, catalog
 
-| Горим | Утга |
-| --- | --- |
-| `private` | Зөвхөн урьдчилан бүртгэгдсэн хүн нэвтэрнэ. eID, ДАН, Google, SSO-гоор баталгаажсан ч **бүртгэлгүй хүнд данс үүсэхгүй**. |
-| `public` | Анх удаа нэвтэрсэн хүнд данс автоматаар үүснэ (JIT provisioning). |
+Usage event-үүд tenant quota, хэрэглээний график, CSV export-ийг тэжээнэ.
+Backup restore test болон deploy action нь operator capability, step-up,
+audit-тай. Catalog API status/overview/sync өгч, running platform version-той
+manifest compatibility-г шалгана.
 
-Юуг **хаадаггүй** вэ:
+## 7. Консолын дэлгэц ба API
 
-- Бүртгэлтэй хүний нэвтрэлт. Горим нь данс үүсгэхийг шийднэ, нэвтрэлтийг биш.
-- **Урилга.** Оператор эсвэл тенантын админ хүн урих нь өөрөө урьдчилсан
-  бүртгэл тул private горимд ч ажиллана — тэр замаар үүссэн данс нь JIT биш.
-- Операторын консол. Оператор бол өөр хүснэгт, өөр ертөнц.
+Одоогийн frontend дэлгэцүүд:
 
-Шалгалт нэг цэгт: данс ҮҮСГЭДЭГ хоёр зам (eID-ийн JIT, федерацийн JIT —
-Google мөн үүгээр явдаг) хоёулаа `mayProvisionAccount`-ыг дууддаг. Нэвтрэх
-дэлгэц горимоо `/api/v1/auth/sso/config`-оос уншиж, private үед тайлбар
-харуулна.
+- `/cp` — ажиллагааны товч хураангуй; investigation dashboard биш;
+- `/cp/tenants` ба `/cp/tenants/[id]` — байгууллага, lifecycle, apps, usage;
+- `/cp/support` — хүмүүс, session/credential тусламж, impersonation;
+- `/cp/approvals` — хоёр хүний шийдвэр;
+- `/cp/config` — settings, flags, maintenance;
+- `/cp/announcements` — tenant banner;
+- `/cp/audit` — append-only operator audit хайлт ба өөрчлөлтийн snapshot.
 
-`SEED_DEMO_DATA` асаалттай атлаа платформ private байвал boot дээр
-анхааруулга бичигдэж, консолын тохиргооны дэлгэцэд гарна: seeder нь данс
-үүсгэдэг, private нь түүнийг хориглодог — хоёрын аль нэг нь хүслээ биш.
+API-д байгаа боловч тусдаа UI дэлгэцгүй contract:
 
-## 4ё. Динамик тохиргоо ба feature flag
+- `GET /operators` — operator account/role жагсаалт;
+- `GET /deletions` — deletion queue;
+- `GET /catalog/overview`, `GET /catalog/status` — client method бий, нүүрийн
+  health/catalog summary-аас цааш тусдаа харагдацгүй.
 
-`platform_settings` — түлхүүр бүр **Go кодод бүртгэгдсэн** байх ёстой
-(`internal/kernel/settings/keys.go`). Өгөгдлийн санд утга л хадгалагдана;
-registry-д байхгүй түлхүүр уншигдахгүй тул хүснэгтэд гараар мөр нэмэх нь
-платформын зан төлөвийг өөрчлөх зам биш.
+Эдгээрийг “хийсэн UI” гэж runbook-д тэмдэглэхгүй. Boundary health block болон
+хоёр session зэрэг нээлттэйг хэлэх indicator мөн хэрэгжээгүй backlog хэвээр.
 
-**Нууц утга орох боломжгүй.** `Kind` төрөлд `secret` гэж байхгүй бөгөөд
-`Register` нь нэрэндээ `secret`, `password`, `token`, `api_key` агуулсан
-түлхүүрийг panic-аар татгалзана. Нууц нь env ба GitHub secrets-д үлдэнэ.
+## 8. Шалгах
 
-Утгын дараалал: **DB → env → анхдагч**. Тиймээс env-ээ л тохируулаад консол
-руу хэзээ ч ороогүй суулгац юу ч мэдрэхгүй.
-
-Өөрчлөлт бүр `platform_settings_history`-д шалтгаантайгаа бичигдэж, нэг
-товчоор буцаана — буцаалт нь өөрөө бас нэг өөрчлөлт (түүхийг цэвэрлэдэг
-буцаалт нь юу болсныг нуух хамгийн хялбар арга байх байсан).
-
-Feature flag: `release | kill_switch | experiment`, тенант бүрийн override,
-хувиар нээх (тенантын id-гийн тогтвортой hash — 10%-д багтсан тенант 50%-д
-ч багтана), хугацаа. Хугацаа нь дууссан flag ажиллаж байх ч консолын
-тохиргооны дэлгэцэд анхааруулга болж гарна.
-
-Модулийн kill switch нь нэршлийн журам: `module.<app id>.disabled` нэртэй
-flag асаахад тэр модулийн бүх route 503 буцаана. Go талд
-`flags.Enabled(ctx, key)`.
-
-## 4ж. Засварын горим ба зарлал
-
-Засварын горим нь платформ даяар (`platform.maintenance` тохиргоо) эсвэл
-тенант тус бүрээр. Утга нь нэг: **харж болно, өөрчилж болохгүй**. Унших
-хүсэлт бүр хэвийн, бичих хүсэлт 503 + `Retry-After`. Гарах (`logout`) нь
-үргэлж нээлттэй — гарч чадахгүй горим бол хэн ч дахин асаахгүй горим.
-
-Зарлал нь `/api/v1/auth/me`-ийн `notices`-оор ирж, бүрхүүлийн дээд талд
-banner болно. Хугацаатай тул өөрөө алга болно.
-
-## 4з. Ажиглалтын тойм ба үйл ажиллагаа (CP-4)
-
-Консолын **нүүр хуудас** нь платформын эрүүл мэнд: API-ийн rps/алдаа/p95,
-гадаад системүүдийн гэрэл, идэвхтэй дохио, дэд бүтцийн хэмжүүр, арын
-ажлуудын төлөв, асуудалтай байгууллагууд, нөөцлөлт, каталог, ажиллаж буй
-хувилбар. Байгууллагуудын жагсаалт `/cp/tenants` руу нүүсэн.
-
-**Grafana-г орлохгүй.** Хэсэг бүр гүнзгий харагдац руу линктэй; шинжилгээ
-тэнд хийгдэнэ.
-
-Тохируулга (заавал биш — байхгүй бол дэлгэц "тохируулаагүй" гэж хэлнэ):
-
-```
-PROMETHEUS_URL=http://gerege_nexus_prometheus:9090
-ALERTMANAGER_URL=http://gerege_nexus_alertmanager:9093
-GRAFANA_URL=https://nexus.gerege.mn/grafana
-```
-
-**Контейнерийн нэрээр**, хостын loopback-аар биш. Мониторингийн стекийн портууд
-нь `127.0.0.1`-д л нийтлэгддэг тул контейнер дотроос host gateway (172.17.0.1)
-рүү хандахад хүрэхгүй — production дээр яг үүнийг туршиж үзсэн. Prometheus нь
-API-г scrape хийхийн тулд платформын сүлжээнд аль хэдийн нэгдсэн байсан;
-Alertmanager-ыг мөн адил нэгтгэв (`deploy/docker-compose.monitoring.yml`),
-чиглэл нь эсрэг — консол түүнийг уншина. Шинээр нийтлэгдсэн порт байхгүй.
-
-`docker-compose.prod.yml` дотор backend-д `extra_hosts:
-host.docker.internal:host-gateway` мөр үлдсэн: өөр байрлалд байрлуулсан
-мониторингийн стектэй суулгацад тэр зам хэрэг болно.
-
-**Тенант бүрийн алдааны түвшин** нь Prometheus-аас БИШ, `audit_events`-ээс
-уншигдана. Учир нь Үе шат 1-д гаргасан шийдвэр: хэмжүүрт тенантын label
-хэзээ ч оруулахгүй (cardinality). Тэр шийдвэрийн үнэ нь энэ асуултыг DB-ээс
-хариулах явдал — гэхдээ хариулт нь илүү ч байж мэднэ: оператор "хэний ажил
-бүтэхгүй байна" гэдгийг мэдэхийг хүсдэг бөгөөд audit нь хүсэлт биш үйлдлийг
-бүртгэдэг.
-
-### Deploy товч
-
-Токен нь GitHub-ийн repository secret-д **`DEPLOY_DISPATCH_TOKEN`** нэрээр
-хадгалагдана (GitHub нь `GITHUB_`-ээр эхэлсэн secret үүсгэхийг зөвшөөрдөггүй),
-серверт `GITHUB_DEPLOY_TOKEN` болж очно. Fine-grained, зөвхөн энэ workflow-д
-`actions: write` эрхтэй байх ёстой.
-
-GitHub Actions-ийн deploy workflow-г `workflow_dispatch`-аар өдөөнө. Серверт
-**юу ч гүйцэтгэхгүй**, env хөндөхгүй, SSH хийхгүй. Токен нь зөвхөн тэр
-workflow-д эрхтэй fine-grained байх ёстой. Superadmin + step-up. Явцыг
-GitHub дээр хараарай — консол нь өөр хүний API-г минутаар poll хийхгүй.
-
-### Нөөцлөлт
-
-CP-4 хүртэл нөөцлөлт **байгаагүй**. Одоо `deploy/scripts/backup.sh` нэмэгдсэн:
+Кодын бүрэн CI нь `.github/workflows/ci.yml`-д canonical. Орон нутагт
+control-plane-ийн өөрчлөлтөд хамгийн багадаа:
 
 ```bash
-sudo cp deploy/scripts/backup.sh /opt/gerege-nexus/deploy/scripts/
-# cron: өдөр бүр 03:15
-15 3 * * * /opt/gerege-nexus/deploy/scripts/backup.sh >> /var/log/nexus-backup.log 2>&1
+cd backend
+go test ./internal/platform/... ./internal/kernel/security/... ./pkg/platform/...
+
+cd ../frontend
+npm run test
+npx tsc --noEmit
+npm run lint
+npm run build
+npm run host:smoke
+
+cd ../deploy/scripts
+python3 -m unittest test_render_cp_allowlist.py
 ```
 
-Скрипт нь `pg_dump` авч, хуучныг цэвэрлэж, үр дүнг `platform_backups`
-хүснэгтэд бичнэ — консол тэр мөрийг уншина. Амжилтгүй болсон ч мөр бичигдэнэ:
-cron-ий чимээгүй бүтэлгүйтэл нь сэргээх өдрөө л илэрдэг.
-
-**Сэргээлтийн туршилтыг гараар бүртгэнэ** (консол дээр товч). Туршаагүй
-нөөцлөлт бол нөөцлөлт биш; түүнийг мэдэх цорын ганц арга нь хэн нэгэн хэлэх
-явдал.
-
-Энэ скрипт нь хангалттай гэсэн амлалт биш: нэг хостын дискэн дээрх нөөцлөлт
-тэр хостыг алдвал хамт алга болно. Өөр байршил руу хуулах (S3, rclone) нь
-дараагийн алхам — гэхдээ байхгүйгээс энэ дээр нь бүтээх зүйл байсан нь дээр.
-
-## 4и. Хэрэглээний хэмжилт (CP-5)
-
-Тенант тус бүрийн хэрэглээ өдөрт нэг мөрөөр `usage_events`-д тоологдоно.
-Тоолол нь **шөнө бүр 01:10-д** ажиллаж, өчигдрийн болон өнөөдрийн дүнг
-бичнэ (upsert тул давхардахгүй).
-
-| Хэмжигдэхүүн | Хаанаас | Нийт гэдэг нь |
-| --- | --- | --- |
-| `active_users` | `sessions.last_seen_at` | Тухайн хугацааны **дээд** утга |
-| `actions` | `audit_events` | Нийлбэр |
-| `ai_calls` | `audit_events` (`ai.*`) | Нийлбэр |
-| `reports_sent` | `audit_events` (`reports.*`) | Нийлбэр |
-| `storage_mb` | `esign_documents`-ийн PDF-үүд | **Сүүлийн хэмжилт** |
-
-Prometheus-аас БИШ гэдэг нь санамсаргүй биш: Үе шат 1-д хэмжүүрт тенантын
-label оруулахгүй гэж шийдсэн. Тэр шийдвэрийн үнэ нь SQL-ээр тоолох явдал —
-ашиг нь хүсэлт биш **үйлдлийг** тоолж байгаа явдал, төлбөрийн суурь болох
-ёстой зүйл нь тэр.
-
-Дээд утга ба сүүлийн хэмжилтийг нийлбэр болгож болохгүй: өдөр тутмын идэвхтэй
-хэрэглэгчийг 30 хоногоор нэмбэл нэг хүнийг 30 удаа тоолно, хадгалалтыг
-нэмбэл хэзээ ч буурдаггүй утгагүй тоо гарна.
-
-**Консол хэрэглээг уншина, бичиж чадахгүй.** `usage_events`-д операторын
-role-д зөвхөн SELECT олгосон — төлбөрийн маргаанд хамгийн түрүүнд асуугдах
-зүйл нь энэ бөгөөд хариулт нь амлалт биш GRANT байх ёстой.
-
-CP-2-ын AI-ийн сарын квот одоо хэрэгжинэ: `aiQuota` middleware нь сарын
-эхнээс хойшх `ai_calls`-ыг уншиж, хатуу горимд 429 буцаана. Хадгалалтын квот
-нь хэмжигдэж, харагдаж байгаа ч хараахан татгалзуулахгүй — татгалзуулах бол
-файл хуулах зам бүр дээр шалгалт хэрэгтэй бөгөөд дэлгэц үүнийг нуухгүй
-хэлнэ.
-
-- **Бичих үйлдэл бүр audit-тай.** `Service.Do` нь үйлдэл ба `operator_audit`-ын
-  мөрийг **нэг transaction**-д бичнэ. Түүнээс гадуур бичсэн handler-ийн
-  хариуг `RequireAudit` буцаалгүй 500 өгнө — "бүртгэгдээгүй бол болоогүй".
-- **`operator_audit` нь append-only.** UPDATE/DELETE-ийг DB-ийн trigger
-  чангаар татгалзана (эзэн role ч гэсэн). Тестийн өгөгдөл ч устахгүй.
-- **Консол бичих эрхгүй.** `gerege_nexus_operator` role нь тенантын
-  хүснэгтүүдэд зөвхөн SELECT-тэй, нэрлэсэн жагсаалтаар. Шинэ хүснэгт
-  автоматаар нэмэгдэхгүй.
-- **Нэг код нэг удаа.** TOTP-ийн цагийн алхам хадгалагдаж, буурах/давтагдах
-  кодыг татгалзана.
-- **Step-up** — аюултай үйлдлийн өмнө 5 минутын дотор код дахин асуугдана.
-  CP-1 дээр ашиглагдах үйлдэл байхгүй ч механизм бэлэн.
-
-## 6. Хэмжүүр ба сэрэмжлүүлэг
-
-`cp_login_attempts_total{result}` — `success`, `unknown`, `bad_password`,
-`bad_code`, `locked`, `disabled`, `no_second_factor`, `step_up`,
-`bad_step_up`.
-
-Консолын нэвтрэлт долоо хоногт хэдхэн удаа болдог тул нэг цагт олон
-амжилтгүй оролдлого нь шуугиан биш — хэн нэгэн оролдож байна гэсэн үг.
-Alert дүрмийг [RUNBOOKS.md](RUNBOOKS.md)-оос үз.
-
-## 7. Хөгжүүлэлт дээр
-
-Хөгжүүлэлт дээр хоёр урсгалыг production-той адил тусдаа hostname-аар нээнэ:
-
-- тенант: `http://nexus.localhost:3000`;
-- оператор: `http://cp.localhost:3000` (`/` нь `/cp` руу 308 шилжинэ).
-
-`*.localhost` нь орчин үеийн хөтөч дээр `/etc/hosts`-гүйгээр loopback руу
-шийдэгдэнэ. `.env.example` болон `docker-compose.yml` нь
-`CONTROL_PLANE_HOST=cp.localhost`, хоёр Origin, хоёр API address-ийг бэлэн
-тавьсан. Ингэснээр HostGate, host-only cookie, CSRF Origin гурвыг production
-хүртэл хүлээлгүй өдөр тутам шалгана. Оператор бүртгэлээ дээрхтэй ижил тушаалаар
-(`go run ./cmd/operator-bootstrap ...`) үүсгэнэ.
-
-Тест:
+`TEST_DATABASE_URL` бүхий migrated PostgreSQL дээр schema/grant/RLS
+integration test-ийг давхар ажиллуул:
 
 ```bash
-cd backend && DATABASE_URL=<dsn> go test ./internal/platform/controlplane/...
+cd backend
+TEST_DATABASE_URL="$TEST_DATABASE_URL" go test ./db/migrations/...
 ```
 
-Өгөгдлийн сангүй бол DB-ийн тестүүд алгасагдана — role, trigger, replay
-хамгаалалтыг бодитоор шалгах тул CI дээр заавал ажиллана.
+Production deploy нь successful `main` CI-ийн `workflow_run`-аас эхэлж,
+health/ready, OIDC, control-plane root redirect, canonical API host boundary,
+legacy redirect-ийг smoke test хийнэ. Allowlist-аас гаднах хаяг nginx-ээс
+`403` авах нь зөв; allowlist доторх зөв хост auth-гүй API нь аппын түвшний
+`401` авах ёстой.
+
+## 9. Түүхэн баримт
+
+[CONTROL_PLANE_PLAN.md](CONTROL_PLANE_PLAN.md) нь хэрэгжүүлэх үеийн ажлын
+төлөвлөгөө бөгөөд хуучин `/cp/api` нэр, CP үе шатны тайлбар агуулж болно.
+Одоогийн operational contract-д энэ файл, route golden file, migration test,
+frontend host test-ийг эх сурвалж болгоно.
