@@ -39,20 +39,22 @@ func tenantWithMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, token
 	slug := fmt.Sprintf("susp-%d", time.Now().UnixNano())
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).Scan(&tenantID); err != nil {
+		`INSERT INTO platform.tenants (slug, name) VALUES ($1, $1) RETURNING id::text`, slug).Scan(&tenantID); err != nil {
 		t.Fatalf("create the organisation: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id=$1::uuid`, tenantID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id=$1::uuid`, tenantID)
+	})
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, name) VALUES ($1, 'x', 'Member') RETURNING id::text`,
+		`INSERT INTO platform.users (email, password_hash, name) VALUES ($1, 'x', 'Member') RETURNING id::text`,
 		slug+"@identity.invalid").Scan(&userID); err != nil {
 		t.Fatalf("create the person: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1::uuid`, userID) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id=$1::uuid`, userID) })
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`, tenantID, userID); err != nil {
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1::uuid, $2::uuid)`, tenantID, userID); err != nil {
 		t.Fatalf("add the membership: %v", err)
 	}
 
@@ -61,7 +63,7 @@ func tenantWithMember(t *testing.T, pool *pgxpool.Pool) (tenantID, userID, token
 		t.Fatalf("mint a token: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, expires_at)
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, expires_at)
 		 VALUES ($1, $2::uuid, $3::uuid, NOW() + INTERVAL '1 hour')`,
 		HashSessionToken(token), userID, tenantID); err != nil {
 		t.Fatalf("create the session: %v", err)
@@ -90,7 +92,7 @@ func TestASuspendedOrganisationIsRefusedByEveryRoute(t *testing.T) {
 	}
 
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE tenants SET suspended_at = NOW(), suspension_reason = 'unpaid' WHERE id = $1::uuid`,
+		`UPDATE platform.tenants SET suspended_at = NOW(), suspension_reason = 'unpaid' WHERE id = $1::uuid`,
 		tenantID); err != nil {
 		t.Fatalf("suspend: %v", err)
 	}
@@ -122,7 +124,7 @@ func TestSigningInToASuspendedOrganisationIsRefused(t *testing.T) {
 	tenantID, userID, _ := tenantWithMember(t, pool)
 
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE tenants SET suspended_at = NOW() WHERE id = $1::uuid`, tenantID); err != nil {
+		`UPDATE platform.tenants SET suspended_at = NOW() WHERE id = $1::uuid`, tenantID); err != nil {
 		t.Fatalf("suspend: %v", err)
 	}
 

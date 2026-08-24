@@ -33,22 +33,22 @@ func seedMember(t *testing.T, pool *pgxpool.Pool) (userID, tenantID string) {
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO tenants (name, slug) VALUES ($1,$1) RETURNING id::text`,
+		`INSERT INTO platform.tenants (name, slug) VALUES ($1,$1) RETURNING id::text`,
 		"sesstest-"+suffix).Scan(&tenantID); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, name) VALUES ($1,'x','t') RETURNING id::text`,
+		`INSERT INTO platform.users (email, password_hash, name) VALUES ($1,'x','t') RETURNING id::text`,
 		"sesstest-"+suffix+"@example.mn").Scan(&userID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO memberships (tenant_id, user_id) VALUES ($1,$2)`, tenantID, userID); err != nil {
+		`INSERT INTO tenant.memberships (tenant_id, user_id) VALUES ($1,$2)`, tenantID, userID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id=$1`, tenantID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, userID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.tenants WHERE id=$1`, tenantID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM platform.users WHERE id=$1`, userID)
 	})
 	return userID, tenantID
 }
@@ -73,7 +73,7 @@ func TestASessionLeftAloneStopsWorking(t *testing.T) {
 
 	// Idle for longer than the timeout.
 	if _, err := pool.Exec(ctx,
-		`UPDATE sessions SET last_seen_at = NOW() - INTERVAL '31 minutes' WHERE user_id=$1`,
+		`UPDATE tenant.sessions SET last_seen_at = NOW() - INTERVAL '31 minutes' WHERE user_id=$1`,
 		userID); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestASessionLeftAloneStopsWorking(t *testing.T) {
 	// The absolute lifetime has not run out, so this really was the idle rule.
 	var expiresInFuture bool
 	if err := pool.QueryRow(ctx,
-		`SELECT expires_at > NOW() FROM sessions WHERE user_id=$1`, userID).Scan(&expiresInFuture); err != nil {
+		`SELECT expires_at > NOW() FROM tenant.sessions WHERE user_id=$1`, userID).Scan(&expiresInFuture); err != nil {
 		t.Fatal(err)
 	}
 	if !expiresInFuture {
@@ -108,7 +108,7 @@ func TestUsingASessionKeepsItAlive(t *testing.T) {
 
 	// Idle for longer than the touch interval but well inside the timeout.
 	if _, err := pool.Exec(ctx,
-		`UPDATE sessions SET last_seen_at = NOW() - INTERVAL '20 minutes' WHERE user_id=$1`,
+		`UPDATE tenant.sessions SET last_seen_at = NOW() - INTERVAL '20 minutes' WHERE user_id=$1`,
 		userID); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestUsingASessionKeepsItAlive(t *testing.T) {
 
 	var idleSeconds float64
 	if err := pool.QueryRow(ctx,
-		`SELECT EXTRACT(EPOCH FROM (NOW() - last_seen_at)) FROM sessions WHERE user_id=$1`,
+		`SELECT EXTRACT(EPOCH FROM (NOW() - last_seen_at)) FROM tenant.sessions WHERE user_id=$1`,
 		userID).Scan(&idleSeconds); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestResolvingDoesNotWriteOnEveryRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	var first time.Time
-	if err := pool.QueryRow(ctx, `SELECT last_seen_at FROM sessions WHERE user_id=$1`, userID).Scan(&first); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT last_seen_at FROM tenant.sessions WHERE user_id=$1`, userID).Scan(&first); err != nil {
 		t.Fatal(err)
 	}
 	for range 5 {
@@ -149,7 +149,7 @@ func TestResolvingDoesNotWriteOnEveryRequest(t *testing.T) {
 		}
 	}
 	var after time.Time
-	if err := pool.QueryRow(ctx, `SELECT last_seen_at FROM sessions WHERE user_id=$1`, userID).Scan(&after); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT last_seen_at FROM tenant.sessions WHERE user_id=$1`, userID).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if !after.Equal(first) {
@@ -171,7 +171,7 @@ func TestTheIdleTimeoutCanBeTurnedOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx,
-		`UPDATE sessions SET last_seen_at = NOW() - INTERVAL '30 days' WHERE user_id=$1`,
+		`UPDATE tenant.sessions SET last_seen_at = NOW() - INTERVAL '30 days' WHERE user_id=$1`,
 		userID); err != nil {
 		t.Fatal(err)
 	}

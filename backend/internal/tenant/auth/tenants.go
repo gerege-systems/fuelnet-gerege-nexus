@@ -36,7 +36,7 @@ var ErrNoOrganisation = errors.New("this account does not belong to any organisa
 func (h *Handlers) FirstTenantFor(ctx context.Context, userID string) (string, error) {
 	var tenantID string
 	err := h.db.QueryRow(ctx,
-		`SELECT tenant_id::text FROM memberships WHERE user_id = $1
+		`SELECT tenant_id::text FROM tenant.memberships WHERE user_id = $1
 		  ORDER BY created_at, tenant_id LIMIT 1`, userID).Scan(&tenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNoOrganisation

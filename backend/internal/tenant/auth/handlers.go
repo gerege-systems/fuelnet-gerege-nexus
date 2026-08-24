@@ -70,14 +70,14 @@ func (h *Handlers) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	err := h.db.QueryRow(r.Context(),
 		`SELECT u.id, u.password_hash, u.name,
 		        EXISTS (
-		            SELECT 1 FROM membership_roles mr
-		            JOIN roles r ON r.id=mr.role_id
+		            SELECT 1 FROM tenant.membership_roles mr
+		            JOIN tenant.roles r ON r.id=mr.role_id
 		            WHERE mr.membership_id=m.id AND r.tenant_id=m.tenant_id
 		              AND r.code='admin' AND r.active
 		        ) AS is_admin,
 		        m.tenant_id, u.locked_until
-		 FROM users u
-		 JOIN memberships m ON m.user_id = u.id
+		 FROM platform.users u
+		 JOIN tenant.memberships m ON m.user_id = u.id
 		 WHERE lower(u.email) = $1
 		 ORDER BY m.created_at, m.tenant_id
 		 LIMIT 1`, req.Email).Scan(&userID, &passwordHash, &name, &isAdmin, &tenantID, &lockedUntil)
@@ -99,7 +99,7 @@ func (h *Handlers) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
-	_, _ = h.db.Exec(r.Context(), `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
+	_, _ = h.db.Exec(r.Context(), `UPDATE platform.users SET failed_login_attempts=0, locked_until=NULL WHERE id=$1`, userID)
 
 	token, expiresAt, err := h.IssueSession(r, userID, tenantID, "password")
 	if err != nil {
@@ -140,13 +140,13 @@ func (h *Handlers) HandleLogin(w http.ResponseWriter, r *http.Request) {
 // checks that before calling, so a live lockout is never extended by attempts
 // made during it.
 const loginFailureStatement = `
-	UPDATE users u SET
+	UPDATE platform.users u SET
 	   failed_login_attempts = next.count,
 	   locked_until = CASE WHEN next.count >= $2 THEN NOW() + $3::interval END
 	  FROM (
 	      SELECT CASE WHEN locked_until IS NOT NULL AND locked_until <= NOW()
 	                  THEN 1 ELSE failed_login_attempts + 1 END AS count
-	        FROM users WHERE id = $1
+	        FROM platform.users WHERE id = $1
 	  ) AS next
 	 WHERE u.id = $1`
 
@@ -498,7 +498,7 @@ func (h *Handlers) LinkEIDIdentity(ctx context.Context, userID string, identity 
 		claims = []byte("{}")
 	}
 	if _, err := h.db.Exec(ctx,
-		`INSERT INTO user_eid_identities
+		`INSERT INTO platform.user_eid_identities
 		     (user_id, civil_id, reg_number, person_etsi, given_name, surname, claims, last_seen_at)
 		 VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, NULLIF($5,''), NULLIF($6,''), $7, NOW())
 		 ON CONFLICT (user_id) DO UPDATE SET
@@ -533,7 +533,7 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 	// or not they currently belong to an organisation, and letting the
 	// membership decide made a linked identity read as an unknown one.
 	err = h.db.QueryRow(ctx,
-		`SELECT user_id::text FROM user_eid_identities WHERE person_etsi=$1`, personEtsi).Scan(&userID)
+		`SELECT user_id::text FROM platform.user_eid_identities WHERE person_etsi=$1`, personEtsi).Scan(&userID)
 	if err == nil {
 		tenantID, err = h.FirstTenantFor(ctx, userID)
 		if err != nil {
@@ -551,7 +551,7 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 	digest := eidLinkingDigest(linkingKey, subject)
 	syntheticEmail := "eid+" + digest[:32] + "@identity.invalid"
 	if err = h.db.QueryRow(ctx,
-		`SELECT u.id::text, m.tenant_id::text FROM users u JOIN memberships m ON m.user_id=u.id WHERE u.email=$1
+		`SELECT u.id::text, m.tenant_id::text FROM platform.users u JOIN tenant.memberships m ON m.user_id=u.id WHERE u.email=$1
 		 ORDER BY m.created_at, m.tenant_id LIMIT 1`,
 		syntheticEmail).Scan(&userID, &tenantID); err == nil {
 		return userID, tenantID, nil
@@ -570,7 +570,7 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 	if tenantSlug == "" {
 		return "", "", SignInError{"eID identity is verified but account provisioning is disabled"}
 	}
-	if err = h.db.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug=$1`, tenantSlug).Scan(&tenantID); err != nil {
+	if err = h.db.QueryRow(ctx, `SELECT id::text FROM platform.tenants WHERE slug=$1`, tenantSlug).Scan(&tenantID); err != nil {
 		return "", "", fmt.Errorf("eID provisioning tenant %q is unavailable: %w", tenantSlug, err)
 	}
 	name := strings.TrimSpace(identity.LastName + " " + identity.FirstName)
@@ -589,7 +589,7 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = tx.QueryRow(ctx,
-		`INSERT INTO users(email,password_hash,name,is_admin) VALUES($1,$2,$3,FALSE)
+		`INSERT INTO platform.users(email,password_hash,name,is_admin) VALUES($1,$2,$3,FALSE)
 		 ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name RETURNING id::text`,
 		syntheticEmail, passwordHash, name).Scan(&userID); err != nil {
 		return "", "", err
@@ -600,7 +600,7 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 	if err = h.CheckUserQuota(ctx, tenantID); err != nil {
 		return "", "", SignInError{"Энэ байгууллага хэрэглэгчийн тооны хязгаартаа хүрсэн байна"}
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO memberships(tenant_id,user_id) VALUES($1,$2) ON CONFLICT(tenant_id,user_id) DO NOTHING`, tenantID, userID); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO tenant.memberships(tenant_id,user_id) VALUES($1,$2) ON CONFLICT(tenant_id,user_id) DO NOTHING`, tenantID, userID); err != nil {
 		return "", "", err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -618,8 +618,8 @@ func (h *Handlers) HandleMe(w http.ResponseWriter, r *http.Request) {
 
 	var name, email string
 	var tenantName string
-	_ = h.db.QueryRow(r.Context(), `SELECT name, email FROM users WHERE id = $1`, claims.UserID).Scan(&name, &email)
-	_ = h.db.QueryRow(r.Context(), `SELECT name FROM tenants WHERE id = $1`, claims.TenantID).Scan(&tenantName)
+	_ = h.db.QueryRow(r.Context(), `SELECT name, email FROM platform.users WHERE id = $1`, claims.UserID).Scan(&name, &email)
+	_ = h.db.QueryRow(r.Context(), `SELECT name FROM platform.tenants WHERE id = $1`, claims.TenantID).Scan(&tenantName)
 
 	// The effective grant of every role the member holds, so a screen can hide
 	// what the caller may not do. Administrators bypass the check, so their

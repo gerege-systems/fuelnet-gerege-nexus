@@ -150,7 +150,7 @@ func (s *SessionStore) Create(ctx context.Context, userID, tenantID, authMethod,
 	}
 
 	_, err = s.db.Exec(ctx,
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address, expires_at)
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address, expires_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		hashToken(token), userID, tenantID, authMethod, userAgent, ip, expiresAt)
 	if err != nil {
@@ -182,13 +182,13 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 	var claims UserClaims
 	err := s.db.QueryRow(ctx,
 		`WITH live AS (
-		    SELECT id FROM sessions
+		    SELECT id FROM tenant.sessions
 		     WHERE token_hash = $1
 		       AND revoked_at IS NULL
 		       AND expires_at > NOW()
 		       AND ($2::timestamptz IS NULL OR last_seen_at > $2)
 		), touched AS (
-		    UPDATE sessions SET last_seen_at = NOW()
+		    UPDATE tenant.sessions SET last_seen_at = NOW()
 		     WHERE id IN (SELECT id FROM live)
 		       AND last_seen_at < NOW() - $3::interval
 		)
@@ -196,16 +196,16 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (UserClaims, e
 		        ARRAY(SELECT a::text FROM unnest(s.allowed_tenant_ids) a) AS allowed,
 		        COALESCE(s.impersonated_by::text, '') AS impersonated_by,
 		        EXISTS (
-		            SELECT 1 FROM memberships m
-		            JOIN membership_roles mr ON mr.membership_id=m.id
-		            JOIN roles r ON r.id=mr.role_id
+		            SELECT 1 FROM tenant.memberships m
+		            JOIN tenant.membership_roles mr ON mr.membership_id=m.id
+		            JOIN tenant.roles r ON r.id=mr.role_id
 		            WHERE m.tenant_id=s.tenant_id AND m.user_id=s.user_id
 		              AND r.tenant_id=s.tenant_id AND r.code='admin' AND r.active
 		        ) AS is_admin
-		   FROM sessions s
+		   FROM tenant.sessions s
 		   JOIN live ON live.id = s.id
-		   JOIN users u ON u.id = s.user_id
-		   JOIN memberships sm ON sm.tenant_id=s.tenant_id AND sm.user_id=s.user_id`,
+		   JOIN platform.users u ON u.id = s.user_id
+		   JOIN tenant.memberships sm ON sm.tenant_id=s.tenant_id AND sm.user_id=s.user_id`,
 		hashToken(token), nullableTime(idleCutoff), touchInterval.String()).
 		Scan(&claims.UserID, &claims.TenantID, &claims.Email, &claims.AllowedTenantIDs,
 			&claims.ImpersonatedBy, &claims.IsAdmin)
@@ -227,7 +227,7 @@ func (s *SessionStore) Revoke(ctx context.Context, token string) error {
 		return nil
 	}
 	_, err := s.db.Exec(ctx,
-		`UPDATE sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
+		`UPDATE tenant.sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
 		hashToken(token))
 	return err
 }
@@ -248,8 +248,8 @@ type TenantOption struct {
 func (s *SessionStore) TenantsForUser(ctx context.Context, userID string) ([]TenantOption, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT t.id::text, t.name, t.slug
-		   FROM memberships m
-		   JOIN tenants t ON t.id = m.tenant_id
+		   FROM tenant.memberships m
+		   JOIN platform.tenants t ON t.id = m.tenant_id
 		  WHERE m.user_id = $1
 		  ORDER BY t.name, t.id`, userID)
 	if err != nil {
@@ -297,7 +297,7 @@ func (s *SessionStore) SwitchTenant(ctx context.Context, token, tenantID string)
 
 	var userID string
 	err = tx.QueryRow(ctx,
-		`SELECT user_id::text FROM sessions
+		`SELECT user_id::text FROM tenant.sessions
 		  WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
 		hashToken(token)).Scan(&userID)
 	if err != nil {
@@ -309,7 +309,7 @@ func (s *SessionStore) SwitchTenant(ctx context.Context, token, tenantID string)
 
 	var member bool
 	if err := tx.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1 AND tenant_id = $2)`,
+		`SELECT EXISTS (SELECT 1 FROM tenant.memberships WHERE user_id = $1 AND tenant_id = $2)`,
 		userID, tenantID).Scan(&member); err != nil {
 		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
 	}
@@ -326,15 +326,15 @@ func (s *SessionStore) SwitchTenant(ctx context.Context, token, tenantID string)
 	// extend a session indefinitely without anybody proving who they are again.
 	var expiresAt time.Time
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address, expires_at)
+		`INSERT INTO tenant.sessions (token_hash, user_id, tenant_id, auth_method, user_agent, ip_address, expires_at)
 		 SELECT $2, user_id, $3, auth_method, user_agent, ip_address, expires_at
-		   FROM sessions WHERE token_hash = $1
+		   FROM tenant.sessions WHERE token_hash = $1
 		 RETURNING expires_at`,
 		hashToken(token), hashToken(next), tenantID).Scan(&expiresAt); err != nil {
 		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
-		`UPDATE sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
+		`UPDATE tenant.sessions SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL`,
 		hashToken(token)); err != nil {
 		return "", time.Time{}, fmt.Errorf("switch tenant: %w", err)
 	}
@@ -367,7 +367,7 @@ func (s *SessionStore) SetActiveTenants(ctx context.Context, token string, tenan
 
 	var current string
 	if err := s.db.QueryRow(ctx,
-		`SELECT tenant_id::text FROM sessions
+		`SELECT tenant_id::text FROM tenant.sessions
 		  WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
 		hashToken(token)).Scan(&current); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -392,8 +392,8 @@ func (s *SessionStore) SetActiveTenants(ctx context.Context, token string, tenan
 	// stale tab that still lists an organisation somebody has left narrows
 	// quietly instead of failing.
 	rows, err := s.db.Query(ctx,
-		`SELECT m.tenant_id::text FROM memberships m
-		  JOIN sessions s ON s.token_hash = $1 AND s.user_id = m.user_id
+		`SELECT m.tenant_id::text FROM tenant.memberships m
+		  JOIN tenant.sessions s ON s.token_hash = $1 AND s.user_id = m.user_id
 		 WHERE m.tenant_id = ANY($2::uuid[]) AND m.active`,
 		hashToken(token), candidates)
 	if err != nil {
@@ -415,7 +415,7 @@ func (s *SessionStore) SetActiveTenants(ctx context.Context, token string, tenan
 	sort.Strings(allowed)
 
 	if _, err := s.db.Exec(ctx,
-		`UPDATE sessions SET allowed_tenant_ids = $2::uuid[] WHERE token_hash = $1`,
+		`UPDATE tenant.sessions SET allowed_tenant_ids = $2::uuid[] WHERE token_hash = $1`,
 		hashToken(token), allowed); err != nil {
 		return nil, fmt.Errorf("save the active organisations: %w", err)
 	}
@@ -430,7 +430,7 @@ func (s *SessionStore) SetActiveTenants(ctx context.Context, token string, tenan
 // the browser it was pressed in signed in is not what it says.
 func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID string) (int64, error) {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE sessions SET revoked_at = NOW()
+		`UPDATE tenant.sessions SET revoked_at = NOW()
 		  WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`, userID)
 	if err != nil {
 		return 0, fmt.Errorf("revoke every session: %w", err)
@@ -455,7 +455,7 @@ func nullableTime(t time.Time) any {
 // is still there.
 func (s *SessionStore) DeleteExpired(ctx context.Context) (int64, error) {
 	tag, err := s.db.Exec(ctx,
-		`DELETE FROM sessions WHERE expires_at < NOW() - INTERVAL '7 days'`)
+		`DELETE FROM tenant.sessions WHERE expires_at < NOW() - INTERVAL '7 days'`)
 	if err != nil {
 		return 0, err
 	}
