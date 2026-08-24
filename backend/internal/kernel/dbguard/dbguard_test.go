@@ -14,7 +14,7 @@ import (
 )
 
 // A guard that has not been probed must not touch the connection at all. A
-// deployment whose migrations have not reached 00029 keeps working exactly as
+// deployment whose migrations have not reached 00079 keeps working exactly as
 // it did, on the application filter alone.
 func TestDormantGuardLeavesConnectionsAlone(t *testing.T) {
 	cfg, err := pgxpool.ParseConfig("postgres://u:p@127.0.0.1:1/none")
@@ -61,7 +61,7 @@ func openGuardedPool(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	if !guard.Enabled() {
-		t.Skip("the database is not carrying the tenant policies; run migrations to 00029")
+		t.Skip("the database is not carrying the tenant policies; run migrations to 00079")
 	}
 	return pool
 }
@@ -79,7 +79,7 @@ func probeTable(t *testing.T, pool *pgxpool.Pool) string {
 	ctx := context.Background()
 	name := "dbguard_probe"
 
-	// The login role owns it, and the policy names the app role the guard
+	// The login role owns it, and the policy names the tenant role the guard
 	// switches to — the same arrangement every platform table has.
 	for _, statement := range []string{
 		`CREATE TABLE IF NOT EXISTS ` + name + ` (
@@ -89,12 +89,12 @@ func probeTable(t *testing.T, pool *pgxpool.Pool) string {
 		`ALTER TABLE ` + name + ` ENABLE ROW LEVEL SECURITY`,
 		`ALTER TABLE ` + name + ` FORCE ROW LEVEL SECURITY`,
 		`DROP POLICY IF EXISTS tenant_isolation ON ` + name,
-		`CREATE POLICY tenant_isolation ON ` + name + ` TO ` + dbguard.AppRole + `
+		`CREATE POLICY tenant_isolation ON ` + name + ` TO ` + dbguard.TenantRole + `
 			USING (tenant_id IS NULL OR tenant_id = ANY (COALESCE(
 				NULLIF(current_setting('app.allowed_tenants', true), '')::uuid[],
 				ARRAY[NULLIF(current_setting('app.current_tenant', true), '')::uuid])))
 			WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
-		`GRANT SELECT, INSERT, UPDATE, DELETE ON ` + name + ` TO ` + dbguard.AppRole,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ` + name + ` TO ` + dbguard.TenantRole,
 	} {
 		if _, err := pool.Exec(ctx, statement); err != nil {
 			t.Fatalf("prepare the probe table: %v", err)

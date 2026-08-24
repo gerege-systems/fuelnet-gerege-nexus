@@ -12,7 +12,7 @@
 // both which physical connection is about to be used and whose request is about
 // to use it, so it is where the binding is made.
 //
-//	tenant in context     → SET ROLE gerege_nexus_app, app.current_tenant = <id>
+//	tenant in context     → SET ROLE gerege_nexus_tenant, app.current_tenant = <id>
 //	no tenant in context  → SET ROLE NONE (the login role, not subject to the policies)
 //
 // The second case is not a gap, it is the platform path, and it is the reason
@@ -36,9 +36,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AppRole is the unprivileged role the tenant-scoped policies are written for.
-// It is created by migration 00029 and owns nothing.
-const AppRole = "gerege_nexus_app"
+// TenantRole is the unprivileged role the tenant-scoped policies are written
+// for. Migration 00029 creates it as gerege_nexus_app and migration 00079 gives
+// it the precise name below. "App" had come to mean three unrelated things: a
+// database request role, a module somebody installs, and the platform binary.
+// "Tenant" names only whose behalf the query runs on, and pairs with
+// OperatorRole without that ambiguity. The role owns nothing.
+const TenantRole = "gerege_nexus_tenant"
 
 // OperatorRole is what the control plane's own queries run as. Migration 00049
 // creates it with SELECT on a hand-written list of tables and read-only
@@ -104,8 +108,8 @@ func allowedLiteral(ids []string) string {
 type Guard struct {
 	enabled atomic.Bool
 	// operatorReady is the same idea for OperatorRole, tracked apart because
-	// the two arrive in different migrations. A deployment that has 00029 but
-	// not 00049 serves tenants normally and has no control plane at all — which
+	// the two originally arrived in different migrations. A deployment that has
+	// 00029 but not 00049 serves tenants normally and has no control plane at all — which
 	// is the honest answer, since the console's tables are not there either.
 	operatorReady atomic.Bool
 }
@@ -156,7 +160,7 @@ func (g *Guard) Install(cfg *pgxpool.Config) {
 			}
 			role = OperatorRole
 		case idErr == nil && id != "":
-			role, tenantID = AppRole, id
+			role, tenantID = TenantRole, id
 			// Only ever widened by the session, and only past the same
 			// membership check that produced the acting tenant.
 			allowed = allowedLiteral(nexus.AllowedTenants(ctx))
@@ -182,7 +186,7 @@ func (g *Guard) Enabled() bool { return g.enabled.Load() }
 // Probe checks that the database can enforce what the guard assumes, and turns
 // the guard on if it can.
 //
-// A deployment whose migrations have not reached 00029 is a normal state during
+// A deployment whose migrations have not reached 00079 is a normal state during
 // a rollout, and it is left running with the application-level filtering it has
 // always had rather than being taken down. It is reported at WARN because a
 // deployment that stays in that state is running with one layer, not two.
@@ -191,8 +195,8 @@ func (g *Guard) Probe(ctx context.Context, pool *pgxpool.Pool) error {
 	err := pool.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1),
 		       EXISTS (SELECT 1 FROM pg_policies
-		                WHERE schemaname = 'public' AND policyname = 'tenant_isolation')`,
-		AppRole).Scan(&roleExists, &policiesExist)
+		                WHERE schemaname = 'tenant' AND policyname = 'tenant_isolation')`,
+		TenantRole).Scan(&roleExists, &policiesExist)
 	if err != nil {
 		return fmt.Errorf("dbguard: could not inspect the database: %w", err)
 	}
@@ -200,7 +204,7 @@ func (g *Guard) Probe(ctx context.Context, pool *pgxpool.Pool) error {
 		slog.Warn("dbguard: row-level tenant isolation is not installed; "+
 			"the application filter is the only layer",
 			"role_present", roleExists, "policies_present", policiesExist,
-			"remedy", "run the database migrations up to 00029_tenant_rls")
+			"remedy", "run the database migrations up to 00079_two_schemas")
 		return nil
 	}
 
@@ -217,16 +221,16 @@ func (g *Guard) Probe(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("dbguard: could not take a connection to verify the role: %w", err)
 	}
 	defer conn.Release()
-	if _, err := conn.Exec(ctx, bindStatement, AppRole, "", ""); err != nil {
+	if _, err := conn.Exec(ctx, bindStatement, TenantRole, "", ""); err != nil {
 		return fmt.Errorf("dbguard: cannot assume %s (grant it to the login role in DATABASE_URL): %w",
-			AppRole, err)
+			TenantRole, err)
 	}
 	if _, err := conn.Exec(ctx, bindStatement, "none", "", ""); err != nil {
 		return fmt.Errorf("dbguard: cannot return to the login role: %w", err)
 	}
 
 	g.enabled.Store(true)
-	slog.Info("dbguard: row-level tenant isolation is active", "role", AppRole)
+	slog.Info("dbguard: row-level tenant isolation is active", "role", TenantRole)
 
 	g.probeOperator(ctx, conn)
 	return nil

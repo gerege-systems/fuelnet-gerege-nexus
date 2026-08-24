@@ -19,7 +19,7 @@
 // the deployment and the monitoring for a console two people use — but they
 // share nothing else:
 //
-//	tenant user   → users / sessions      → gerege_nexus_app, one organisation
+//	tenant user   → users / sessions      → gerege_nexus_tenant, one organisation
 //	operator      → operator_accounts /
 //	                operator_sessions     → gerege_nexus_operator, read-only
 //

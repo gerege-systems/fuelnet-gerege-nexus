@@ -112,10 +112,13 @@ var safeSlug = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 // versionTable is where a module's applied versions are recorded.
 //
-// goose_db_version_<slug>, where the slug is the last segment of the app id —
-// io.gerege.nexus.urtuu becomes goose_db_version_urtuu. The convention is
-// cmd/migrate's, written there when MIGRATIONS_TABLE was added; this is the
-// first caller to use it for a module rather than for a whole distribution.
+// public.goose_db_version_<slug>, where the slug is the last segment of the app
+// id — io.gerege.nexus.urtuu becomes public.goose_db_version_urtuu. The
+// explicit schema matters after migration 00079 puts tenant first in the
+// search_path: a module's tables belong in tenant, but migration history is the
+// deployment's bookkeeping and stays beside public.goose_db_version. Without
+// the qualifier an existing history would remain in public while a fresh
+// deployment silently created a second one in tenant.
 func versionTable(appID string) (string, error) {
 	slug := appID
 	if idx := strings.LastIndex(appID, "."); idx >= 0 {
@@ -125,5 +128,5 @@ func versionTable(appID string) (string, error) {
 	if !safeSlug.MatchString(slug) {
 		return "", fmt.Errorf("app id %q does not yield a usable migration table name", appID)
 	}
-	return "goose_db_version_" + slug, nil
+	return "public.goose_db_version_" + slug, nil
 }

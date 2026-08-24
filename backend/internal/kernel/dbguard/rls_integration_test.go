@@ -23,11 +23,11 @@ func TestEveryTenantTableHasForcedRLS(t *testing.T) {
 	defer pool.Close()
 	rows, err := pool.Query(context.Background(), `
 		SELECT c.table_name, cls.relrowsecurity, cls.relforcerowsecurity,
-		       EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname='public' AND p.tablename=c.table_name AND p.policyname='tenant_isolation')
+		       EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname=c.table_schema AND p.tablename=c.table_name AND p.policyname='tenant_isolation')
 		FROM information_schema.columns c
 		JOIN pg_class cls ON cls.relname=c.table_name
-		JOIN pg_namespace n ON n.oid=cls.relnamespace AND n.nspname='public'
-		WHERE c.table_schema='public' AND c.column_name='tenant_id'`)
+		JOIN pg_namespace n ON n.oid=cls.relnamespace AND n.nspname=c.table_schema
+		WHERE c.table_schema IN ('tenant', 'platform') AND c.column_name='tenant_id'`)
 	if err != nil {
 		t.Fatal(err)
 	}

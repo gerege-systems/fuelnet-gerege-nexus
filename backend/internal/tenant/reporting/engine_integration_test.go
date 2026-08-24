@@ -83,12 +83,12 @@ func probeTable(t *testing.T, pool *pgxpool.Pool) {
 		`ALTER TABLE reporting_probe ENABLE ROW LEVEL SECURITY`,
 		`ALTER TABLE reporting_probe FORCE ROW LEVEL SECURITY`,
 		`DROP POLICY IF EXISTS tenant_isolation ON reporting_probe`,
-		`CREATE POLICY tenant_isolation ON reporting_probe TO gerege_nexus_app
+		`CREATE POLICY tenant_isolation ON reporting_probe TO gerege_nexus_tenant
 			USING (tenant_id IS NULL OR tenant_id = ANY (COALESCE(
 				NULLIF(current_setting('app.allowed_tenants', true), '')::uuid[],
 				ARRAY[NULLIF(current_setting('app.current_tenant', true), '')::uuid])))
 			WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
-		`GRANT SELECT, INSERT, UPDATE, DELETE ON reporting_probe TO gerege_nexus_app`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON reporting_probe TO gerege_nexus_tenant`,
 	} {
 		if _, err := pool.Exec(ctx, statement); err != nil {
 			t.Fatalf("prepare the probe table: %v", err)

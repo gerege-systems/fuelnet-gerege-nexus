@@ -54,27 +54,30 @@ DROP TABLE brought_its_own;
 	})
 	t.Cleanup(func() {
 		nexus.Migrations(appID, nil)
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS brought_its_own`)
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS goose_db_version_brought_its_own`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS tenant.brought_its_own`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS public.goose_db_version_brought_its_own`)
 	})
 	// A previous failed run must not decide this one.
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS brought_its_own`)
-	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS goose_db_version_brought_its_own`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS tenant.brought_its_own`)
+	_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS public.goose_db_version_brought_its_own`)
 
 	installer := NewAppInstaller(pool, nil, "1.0.0")
 	if err := installer.runModuleMigrations(ctx, appID); err != nil {
 		t.Fatalf("run the module's migrations: %v", err)
 	}
 
-	for _, table := range []string{"brought_its_own", "goose_db_version_brought_its_own"} {
+	for _, table := range []struct{ schema, name string }{
+		{"tenant", "brought_its_own"},
+		{"public", "goose_db_version_brought_its_own"},
+	} {
 		var exists bool
 		if err := pool.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = $1)`,
-			table).Scan(&exists); err != nil {
-			t.Fatalf("look for %s: %v", table, err)
+			`SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = $1 AND tablename = $2)`,
+			table.schema, table.name).Scan(&exists); err != nil {
+			t.Fatalf("look for %s.%s: %v", table.schema, table.name, err)
 		}
 		if !exists {
-			t.Errorf("%s was not created", table)
+			t.Errorf("%s.%s was not created", table.schema, table.name)
 		}
 	}
 
@@ -92,6 +95,57 @@ DROP TABLE brought_its_own;
 	// by a second tenant reaches this code a second time.
 	if err := installer.runModuleMigrations(ctx, appID); err != nil {
 		t.Errorf("running a module's migrations twice failed: %v", err)
+	}
+}
+
+// The canary is a real downstream-shaped module, not a migration assembled by
+// this package's test. Its unqualified CREATE TABLE is the compatibility
+// promise of the schema split: existing modules do not have to rewrite their
+// SQL to land in the tenant plane. Only goose's bookkeeping is forced back to
+// public by versionTable.
+func TestCanaryModuleTableLandsInTenantSchema(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set TEST_DATABASE_URL to a migrated test database to run the module migration tests")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	const appID = "io.example.canary"
+	cleanup := func() {
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS tenant.canary_quotes`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS public.goose_db_version_canary`)
+	}
+	cleanup()
+	nexus.Migrations(appID, os.DirFS("../../../testdata/canary/migrations"))
+	t.Cleanup(func() {
+		nexus.Migrations(appID, nil)
+		cleanup()
+	})
+
+	installer := NewAppInstaller(pool, nil, "1.0.0")
+	if err := installer.runModuleMigrations(ctx, appID); err != nil {
+		t.Fatalf("run the canary migrations: %v", err)
+	}
+
+	for _, table := range []struct{ schema, name string }{
+		{"tenant", "canary_quotes"},
+		{"public", "goose_db_version_canary"},
+	} {
+		var exists bool
+		if err := pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_tables WHERE schemaname = $1 AND tablename = $2
+			)`, table.schema, table.name).Scan(&exists); err != nil {
+			t.Fatal(err)
+		}
+		if !exists {
+			t.Errorf("the canary did not create %s.%s", table.schema, table.name)
+		}
 	}
 }
 
@@ -126,8 +180,8 @@ DROP TABLE arrived_late;
 `)},
 	})
 	drop := func() {
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS arrived_late`)
-		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS goose_db_version_arrived_late`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS tenant.arrived_late`)
+		_, _ = pool.Exec(ctx, `DROP TABLE IF EXISTS public.goose_db_version_arrived_late`)
 	}
 	t.Cleanup(func() {
 		// The module stays in the registry — nexus has no unregister — but
@@ -145,7 +199,7 @@ DROP TABLE arrived_late;
 
 	var exists bool
 	if err := pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'arrived_late')`,
+		`SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'tenant' AND tablename = 'arrived_late')`,
 	).Scan(&exists); err != nil {
 		t.Fatalf("look for the table: %v", err)
 	}
@@ -198,7 +252,7 @@ func TestAnAppIDThatCannotNameATableIsRefused(t *testing.T) {
 		}
 	}
 	got, err := versionTable("io.gerege.nexus.sso-clients")
-	if err != nil || got != "goose_db_version_sso_clients" {
-		t.Errorf("versionTable = %q, %v; want goose_db_version_sso_clients", got, err)
+	if err != nil || got != "public.goose_db_version_sso_clients" {
+		t.Errorf("versionTable = %q, %v; want public.goose_db_version_sso_clients", got, err)
 	}
 }

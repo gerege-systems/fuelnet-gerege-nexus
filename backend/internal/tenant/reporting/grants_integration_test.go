@@ -108,9 +108,9 @@ func newSharingFixture(t *testing.T) sharingFixture {
 	for _, statement := range []string{
 		`ALTER TABLE reporting_test_trips ENABLE ROW LEVEL SECURITY`,
 		`ALTER TABLE reporting_test_trips FORCE ROW LEVEL SECURITY`,
-		`GRANT SELECT, INSERT ON reporting_test_trips TO gerege_nexus_app`,
+		`GRANT SELECT, INSERT ON reporting_test_trips TO gerege_nexus_tenant`,
 		`DROP POLICY IF EXISTS tenant_isolation ON reporting_test_trips`,
-		`CREATE POLICY tenant_isolation ON reporting_test_trips TO gerege_nexus_app
+		`CREATE POLICY tenant_isolation ON reporting_test_trips TO gerege_nexus_tenant
 		     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
 		     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
 	} {

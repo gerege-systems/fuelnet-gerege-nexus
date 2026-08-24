@@ -116,7 +116,7 @@ func (s *Service) exportableTables(ctx context.Context) ([]string, error) {
 		   FROM information_schema.columns c
 		   JOIN information_schema.tables t
 		     ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-		  WHERE c.table_schema = 'public'
+		  WHERE c.table_schema = 'tenant'
 		    AND c.column_name = 'tenant_id'
 		    AND t.table_type = 'BASE TABLE'
 		  ORDER BY c.table_name`)
@@ -143,7 +143,7 @@ func (s *Service) exportableTables(ctx context.Context) ([]string, error) {
 // exists — never from a request. Quoted with %q so a table whose name needs
 // quoting still parses. The tenant id stays a parameter.
 func (s *Service) exportTable(ctx context.Context, table, tenantID string) ([]map[string]any, bool, error) {
-	query := fmt.Sprintf(`SELECT * FROM public.%q WHERE tenant_id = $1::uuid LIMIT $2`, table)
+	query := fmt.Sprintf(`SELECT * FROM tenant.%q WHERE tenant_id = $1::uuid LIMIT $2`, table)
 	rows, err := s.db.Query(ctx, query, tenantID, exportRowCap+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("control plane: export %s: %w", table, err)

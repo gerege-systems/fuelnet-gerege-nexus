@@ -141,12 +141,12 @@ func appTable(t *testing.T, pool *pgxpool.Pool) {
 		`ALTER TABLE default_app_probe ENABLE ROW LEVEL SECURITY`,
 		`ALTER TABLE default_app_probe FORCE ROW LEVEL SECURITY`,
 		`DROP POLICY IF EXISTS tenant_isolation ON default_app_probe`,
-		`CREATE POLICY tenant_isolation ON default_app_probe TO gerege_nexus_app
+		`CREATE POLICY tenant_isolation ON default_app_probe TO gerege_nexus_tenant
 			USING (tenant_id IS NULL OR tenant_id = ANY (COALESCE(
 				NULLIF(current_setting('app.allowed_tenants', true), '')::uuid[],
 				ARRAY[NULLIF(current_setting('app.current_tenant', true), '')::uuid])))
 			WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)`,
-		`GRANT SELECT, INSERT, UPDATE, DELETE ON default_app_probe TO gerege_nexus_app`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON default_app_probe TO gerege_nexus_tenant`,
 	} {
 		if _, err := tx.Exec(ctx, statement); err != nil {
 			t.Fatalf("prepare the fixture table: %v", err)
