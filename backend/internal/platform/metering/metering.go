@@ -35,33 +35,15 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/usage"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// The metrics, as a closed list. A name that is not here is never written, so
-// the console and the quota checks can rely on what they find.
-const (
-	// ActiveUsers is how many distinct people used the organisation that day.
-	ActiveUsers = "active_users"
-	// Actions is every act recorded in the organisation's audit trail — the
-	// closest honest answer to "how much did they use the platform".
-	//
-	// Deliberately not called api_calls: it does not count requests, it counts
-	// the things worth recording, and naming it after what it is avoids an
-	// invoice line nobody can reconcile.
-	Actions = "actions"
-	// AICalls is copilot, chat, transcription, speech and translation.
-	AICalls = "ai_calls"
-	// ReportsSent is scheduled reports delivered.
-	ReportsSent = "reports_sent"
-	// StorageMB is what the organisation is keeping — the signed documents and
-	// the files behind them, which is where the bytes on this platform are.
-	StorageMB = "storage_mb"
-)
-
 // Metrics is the list, in the order the console shows them.
-func Metrics() []string { return []string{ActiveUsers, Actions, AICalls, ReportsSent, StorageMB} }
+func Metrics() []string {
+	return []string{usage.ActiveUsers, usage.Actions, usage.AICalls, usage.ReportsSent, usage.StorageMB}
+}
 
 // Collector writes the daily rows.
 type Collector struct{ db *pgxpool.Pool }
@@ -149,26 +131,26 @@ var queries = map[string]string{
 	// created_at: a person who signed in on Monday and worked through Friday
 	// is active every one of those days, which is what an "active user" means
 	// to whoever is paying for one.
-	ActiveUsers: `
+	usage.ActiveUsers: `
 		SELECT tenant_id, count(DISTINCT user_id)
 		  FROM sessions
 		 WHERE last_seen_at::date = $1::timestamptz::date
 		 GROUP BY tenant_id`,
 
-	Actions: `
+	usage.Actions: `
 		SELECT tenant_id, count(*)
 		  FROM audit_events
 		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		 GROUP BY tenant_id`,
 
-	AICalls: `
+	usage.AICalls: `
 		SELECT tenant_id, count(*)
 		  FROM audit_events
 		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
 		   AND action LIKE 'ai.%'
 		 GROUP BY tenant_id`,
 
-	ReportsSent: `
+	usage.ReportsSent: `
 		SELECT tenant_id, count(*)
 		  FROM audit_events
 		 WHERE created_at::date = $1::timestamptz::date AND tenant_id IS NOT NULL
@@ -183,7 +165,7 @@ var queries = map[string]string{
 	// is a column the upload already wrote (esign_documents.byte_size), so
 	// this is a sum over a number rather than over the blobs themselves —
 	// which matters on a table whose rows are megabytes each.
-	StorageMB: `
+	usage.StorageMB: `
 		SELECT tenant_id, ceil(sum(byte_size) / 1048576.0)::bigint
 		  FROM esign_documents
 		 GROUP BY tenant_id`,
@@ -212,22 +194,4 @@ func (c *Collector) collect(ctx context.Context, metric, query string, day time.
 		DO UPDATE SET value = EXCLUDED.value, recorded_at = NOW()`, query),
 		day, metric)
 	return err
-}
-
-// MonthToDate is what a monthly quota is checked against.
-//
-// The current month, from the first to today, for one organisation and one
-// metric. Today's own row is included and is rewritten by every collection, so
-// a limit is enforced against numbers that are hours old at worst — which is
-// the right trade for a check that runs on the request path.
-func MonthToDate(ctx context.Context, db *pgxpool.Pool, tenantID, metric string) (int64, error) {
-	var total int64
-	if err := db.QueryRow(ctx,
-		`SELECT COALESCE(sum(value), 0) FROM usage_events
-		  WHERE tenant_id = $1::uuid AND metric = $2
-		    AND day >= date_trunc('month', CURRENT_DATE)`,
-		tenantID, metric).Scan(&total); err != nil {
-		return 0, fmt.Errorf("metering: read the month's %s: %w", metric, err)
-	}
-	return total, nil
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 

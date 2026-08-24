@@ -4,7 +4,7 @@
  * Distributed under the Apache 2.0 License.
  */
 
-package menu_test
+package appcatalog_test
 
 import (
 	"path/filepath"

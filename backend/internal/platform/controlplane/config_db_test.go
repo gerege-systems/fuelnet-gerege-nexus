@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

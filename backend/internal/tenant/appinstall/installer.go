@@ -12,7 +12,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/google/uuid"
@@ -114,7 +114,7 @@ func (ai *AppInstaller) GetCatalog() []catalog.CatalogApp {
 // DEPRECATED: the fallback, not the method — remove in vNEXT with appcatalog's
 // rename table.
 func (ai *AppInstaller) GetAppBySlug(slug string) (catalog.CatalogApp, bool) {
-	current := appcatalog.ResolveAppSlug(slug)
+	current := appid.ResolveAppSlug(slug)
 	for _, app := range ai.GetCatalog() {
 		if app.Slug == current {
 			return app, true
@@ -129,7 +129,7 @@ func (ai *AppInstaller) GetAppBySlug(slug string) (catalog.CatalogApp, bool) {
 //
 // DEPRECATED: the fallback, not the method — remove in vNEXT.
 func (ai *AppInstaller) GetAppByID(id string) (catalog.CatalogApp, bool) {
-	current := appcatalog.ResolveAppID(id)
+	current := appid.ResolveAppID(id)
 	for _, app := range ai.GetCatalog() {
 		if app.ID == current {
 			return app, true

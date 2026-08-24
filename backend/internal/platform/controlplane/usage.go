@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	usagemetric "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/usage"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 )
 
@@ -102,7 +103,7 @@ func (s *Service) UsageFor(ctx context.Context, tenantID string) (Usage, error) 
 			series.Points = []UsagePoint{}
 		}
 		switch metric {
-		case metering.StorageMB:
+		case usagemetric.StorageMB:
 			// Measured rather than accumulated: the total is the last reading.
 			if len(series.Points) > 0 {
 				series.Total = series.Points[len(series.Points)-1].Value
@@ -113,14 +114,14 @@ func (s *Service) UsageFor(ctx context.Context, tenantID string) (Usage, error) 
 			// screen says so rather than implying an enforcement that is not
 			// there.
 			series.Enforced = false
-		case metering.AICalls:
+		case usagemetric.AICalls:
 			for _, point := range series.Points {
 				series.Total += point.Value
 			}
 			series.MonthToDate = monthToDate(series.Points)
 			series.Limit = quota.MaxAICallsMonthly
 			series.Enforced = quota.Enforcement == EnforcementHard
-		case metering.ActiveUsers:
+		case usagemetric.ActiveUsers:
 			// The peak rather than the sum: "how many people did they have"
 			// is a maximum, and adding daily active users together would
 			// count the same person thirty times.

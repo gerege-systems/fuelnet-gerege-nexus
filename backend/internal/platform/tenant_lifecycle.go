@@ -19,7 +19,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/memo"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/usage"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -228,7 +228,7 @@ func aiQuota(db *pgxpool.Pool) func(http.Handler) http.Handler {
 				return
 			}
 
-			used, err := metering.MonthToDate(r.Context(), db, tenantID, metering.AICalls)
+			used, err := usage.MonthToDate(r.Context(), db, tenantID, usage.AICalls)
 			if err != nil {
 				slog.Warn("could not read the month's AI usage", "tenant_id", tenantID, "error", err)
 				next.ServeHTTP(w, r)

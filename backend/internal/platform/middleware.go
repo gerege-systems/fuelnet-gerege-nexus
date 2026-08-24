@@ -14,7 +14,7 @@ import (
 	"net/http"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"

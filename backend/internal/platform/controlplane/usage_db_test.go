@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	usagemetric "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/usage"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
@@ -48,14 +49,14 @@ func TestUsageIsCountedFromTheDatabase(t *testing.T) {
 	for _, series := range usage.Series {
 		got[series.Metric] = series.Total
 	}
-	if got[metering.Actions] != 2 {
-		t.Fatalf("actions counted %d, want 2", got[metering.Actions])
+	if got[usagemetric.Actions] != 2 {
+		t.Fatalf("actions counted %d, want 2", got[usagemetric.Actions])
 	}
-	if got[metering.AICalls] != 1 {
-		t.Fatalf("AI calls counted %d, want 1", got[metering.AICalls])
+	if got[usagemetric.AICalls] != 1 {
+		t.Fatalf("AI calls counted %d, want 1", got[usagemetric.AICalls])
 	}
-	if got[metering.ActiveUsers] != 1 {
-		t.Fatalf("active users counted %d, want 1", got[metering.ActiveUsers])
+	if got[usagemetric.ActiveUsers] != 1 {
+		t.Fatalf("active users counted %d, want 1", got[usagemetric.ActiveUsers])
 	}
 	if usage.Collected == nil {
 		t.Fatal("the collection time is missing, so the screen cannot tell empty from uncounted")
@@ -69,7 +70,7 @@ func TestUsageIsCountedFromTheDatabase(t *testing.T) {
 		t.Fatalf("read the usage: %v", err)
 	}
 	for _, series := range usage.Series {
-		if series.Metric == metering.Actions && series.Total != 2 {
+		if series.Metric == usagemetric.Actions && series.Total != 2 {
 			t.Fatalf("a second collection made it %d", series.Total)
 		}
 	}
@@ -89,8 +90,8 @@ func TestTheMetricsThatAreNotSumsAreNotSummed(t *testing.T) {
 		"2026-08-03": {4, 90},
 	} {
 		for metric, value := range map[string]int64{
-			metering.ActiveUsers: values[0],
-			metering.StorageMB:   values[1],
+			usagemetric.ActiveUsers: values[0],
+			usagemetric.StorageMB:   values[1],
 		} {
 			if _, err := pool.Exec(ctx,
 				`INSERT INTO usage_events (tenant_id, day, metric, value)
@@ -108,11 +109,11 @@ func TestTheMetricsThatAreNotSumsAreNotSummed(t *testing.T) {
 	}
 	for _, series := range usage.Series {
 		switch series.Metric {
-		case metering.ActiveUsers:
+		case usagemetric.ActiveUsers:
 			if series.Total != 5 {
 				t.Fatalf("active users totalled %d, want the peak of 5", series.Total)
 			}
-		case metering.StorageMB:
+		case usagemetric.StorageMB:
 			// The last day in the window, which is the third of August here.
 			if series.Total != 90 {
 				t.Fatalf("storage totalled %d, want the last reading of 90", series.Total)
@@ -228,7 +229,7 @@ func TestUsageBelongsToADayOnThePlatformsClock(t *testing.T) {
 	var value int64
 	if err := pool.QueryRow(ctx,
 		`SELECT day, value FROM usage_events WHERE tenant_id = $1::uuid AND metric = $2`,
-		tenantID, metering.Actions).Scan(&day, &value); err != nil {
+		tenantID, usagemetric.Actions).Scan(&day, &value); err != nil {
 		t.Fatalf("the collection wrote nothing; it counted the caller's day rather than the platform's: %v", err)
 	}
 	if got, want := day.Format("2006-01-02"), here.Format("2006-01-02"); got != want {
