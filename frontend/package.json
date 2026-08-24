@@ -11,6 +11,7 @@
     "i18n:translate": "node scripts/i18n-translate.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
     "pwa:check": "node scripts/pwa-check.mjs",
+    "host:check": "node scripts/check-control-plane-host.mjs",
     "i18n:export-native": "node scripts/export-native-auth-i18n.mjs",
     "i18n:snapshot": "node scripts/i18n-snapshot.mjs",
     "icons:export": "node scripts/export-lucide-icons.mjs",

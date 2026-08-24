@@ -381,9 +381,17 @@ Alert дүрмийг [RUNBOOKS.md](RUNBOOKS.md)-оос үз.
 
 ## 7. Хөгжүүлэлт дээр
 
-`CONTROL_PLANE_HOST` тохируулаагүй, `ENVIRONMENT` нь production биш үед
-консол `http://localhost:3000/cp` дээр нээлттэй байна. Оператор бүртгэлээ
-дээрхтэй ижил тушаалаар (`go run ./cmd/operator-bootstrap ...`) үүсгэнэ.
+Хөгжүүлэлт дээр хоёр урсгалыг production-той адил тусдаа hostname-аар нээнэ:
+
+- тенант: `http://nexus.localhost:3000`;
+- оператор: `http://cp.localhost:3000` (`/` нь `/cp` руу 308 шилжинэ).
+
+`*.localhost` нь орчин үеийн хөтөч дээр `/etc/hosts`-гүйгээр loopback руу
+шийдэгдэнэ. `.env.example` болон `docker-compose.yml` нь
+`CONTROL_PLANE_HOST=cp.localhost`, хоёр Origin, хоёр API address-ийг бэлэн
+тавьсан. Ингэснээр HostGate, host-only cookie, CSRF Origin гурвыг production
+хүртэл хүлээлгүй өдөр тутам шалгана. Оператор бүртгэлээ дээрхтэй ижил тушаалаар
+(`go run ./cmd/operator-bootstrap ...`) үүсгэнэ.
 
 Тест:
 

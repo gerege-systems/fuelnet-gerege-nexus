@@ -281,22 +281,32 @@ ALTER TABLE public.sessions          SET SCHEMA tenant;
 ALTER TABLE public.operator_accounts SET SCHEMA platform;
 -- … 66 мөр
 
--- Хилийг өгөгдлийн сан өөрөө барина:
-GRANT  USAGE ON SCHEMA tenant    TO gerege_nexus_tenant;
-REVOKE USAGE ON SCHEMA platform FROM gerege_nexus_tenant;   -- ← энэ мөр л гол нь
-GRANT  USAGE ON SCHEMA platform  TO gerege_nexus_operator;
+-- Schema USAGE нь нэр resolve хийх эрх; хүснэгт нээх эрх биш:
+GRANT USAGE ON SCHEMA tenant, platform TO gerege_nexus_tenant;
+GRANT USAGE ON SCHEMA platform, tenant TO gerege_nexus_operator;
 
 -- Хилийн таван ширээ, нэрлэсэн байдлаар:
 GRANT SELECT ON platform.announcements, platform.feature_flag_overrides,
                 platform.operator_impersonations, platform.tenant_quotas,
                 platform.usage_events
    TO gerege_nexus_tenant;
+
+-- Default grant зөвхөн tenant schema-д байна. Platform-д ийм grant байхгүй:
+ALTER DEFAULT PRIVILEGES IN SCHEMA tenant
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO gerege_nexus_tenant;
 ```
 
-Тэгвэл тенантын handler `platform.operator_audit`-аас уншихыг оролдвол
+`platform` schema-гийн `USAGE`-ийг тенант role-д өгөх шаардлагатай: дээрх
+хилийн таван хүснэгтийн нэрийг resolve хийхгүй бол нэрлэсэн `SELECT` grant ч
+ажиллахгүй. `USAGE` өөрөө мөр, хүснэгт нээдэггүй. **Бодит хил нь хүснэгтийн
+түвшний grant** — зөвхөн таван хүснэгтийг нэрлэж нээнэ, `operator_audit` болон
+дараа нь шинээр үүсэх platform хүснэгтүүд хаалттай үлдэнэ. Үүнийг
+`schema_split_test.go` бодит role-оор query хийж болон шинэ probe хүснэгт үүсгэж
+батална.
+
+Тиймээс тенантын handler `platform.operator_audit`-аас уншихыг оролдвол
 **өгөгдлийн сан татгалзана** — код review хийсэн хүнээс биш. Энэ нь `dbguard`-
-ийн одоогийн загвартай яг нийцнэ: тэр аль хэдийн role сольдог, зөвхөн тэр
-role-уудад заагласан зүйл байхгүй байсан.
+ийн одоогийн загвартай яг нийцнэ.
 
 **Role-ын нэр.** Дээрх SQL-д `gerege_nexus_app` → **`gerege_nexus_tenant`**
 болов. §1.9-ийн шалтгаанаар: «app» гурван зүйл заадаг, «tenant» нэгийг заана,
@@ -307,15 +317,20 @@ role-уудад заагласан зүйл байхгүй байсан.
 **Одоо байгаа query бүтэн үлдэх арга** — `search_path`:
 
 ```sql
-ALTER ROLE gerege_nexus_tenant   SET search_path = tenant, platform, public;
-ALTER ROLE gerege_nexus_operator SET search_path = platform, tenant, public;
+ALTER ROLE gerege_nexus_tenant   SET search_path = tenant, platform;
+ALTER ROLE gerege_nexus_operator SET search_path = platform, tenant;
+DO $$ BEGIN
+  EXECUTE format('ALTER DATABASE %I SET search_path = tenant, platform',
+                 current_database());
+END $$;
 ```
 
 `SELECT … FROM sessions` гэсэн query нэг ч тэмдэгт өөрчлөгдөхгүй ажиллана.
 Дараа нь тайван, багц багцаар нь `tenant.sessions` болгож бүрэн нэрлэнэ. Өөр
 репо дахь модулиуд `nexus.Migrations`-аар өөрсдийн хүснэгтээ үүсгэдэг —
 `search_path`-ийн эхэнд `tenant` байгаа тул шинэ хүснэгт нь автоматаар зөв
-schema-д унана; тэдэнд ямар ч өөрчлөлт хэрэггүй.
+schema-д унана; тэдэнд ямар ч өөрчлөлт хэрэггүй. Login role нь `SET ROLE NONE`
+үед role-ын тохиргоог өвлөхгүй тул database-ийн default замыг мөн тавина.
 
 **Хэрэв угтварыг илүүд үзвэл** (Хувилбар Б): `tn_*` ба `pf_*`. Зардал нь
 өндөр — 66 `RENAME`, кодод байгаа бүх SQL мөр, plus нэг хувилбарын турш хуучин

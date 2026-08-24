@@ -260,7 +260,10 @@ cd backend
 go mod download
 DATABASE_URL="postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable" \
   go run ./cmd/migrate up
-go run ./cmd/api
+PUBLIC_ORIGIN=http://nexus.localhost:3000 \
+ALLOWED_ORIGINS=http://nexus.localhost:3000,http://cp.localhost:3000 \
+CONTROL_PLANE_HOST=cp.localhost \
+  go run ./cmd/api
 ```
 
 **Frontend:**
@@ -268,10 +271,16 @@ go run ./cmd/api
 ```bash
 cd frontend
 npm ci
-npm run dev
+CONTROL_PLANE_HOST=cp.localhost \
+NEXT_PUBLIC_API_URL=http://nexus.localhost:8080/api/v1 \
+NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
+  npm run dev
 ```
 
-Вэб хөтөч дээрээ [http://localhost:3000](http://localhost:3000) хаягаар орно уу.
+Вэб хөтөч дээр тенантын урсгалыг
+[http://nexus.localhost:3000](http://nexus.localhost:3000), операторын консолыг
+[http://cp.localhost:3000](http://cp.localhost:3000) хаягаар нээнэ. `localhost`-
+ын дэд домэйнүүд loopback руу шийдэгдэх тул `/etc/hosts` өөрчлөхгүй.
 
 ### Туршилтын нэвтрэх эрх
 
@@ -330,9 +339,9 @@ npm run dev
 | `PORT` | `8080` | API сонсох порт |
 | `ENVIRONMENT` | `development` | `production` үед аюулгүй байдлын хатуу горим |
 | `APP_CATALOG_PATH` | `catalog/apps.json` | Апп сторын каталогийн зам |
-| `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS зөвшөөрөгдсөн эх сурвалж |
+| `ALLOWED_ORIGINS` | `nexus.localhost`, `cp.localhost` | Хоёр browser урсгалын CORS зөвшөөрөгдсөн эх сурвалж |
 | `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
-| `CONTROL_PLANE_HOST` | — | Операторын консолын хост. Production дээр хоосон бол консол огт байхгүй ([`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)) |
+| `CONTROL_PLANE_HOST` | `cp.localhost` | Операторын консолын хост. Production дээр хоосон бол консол огт байхгүй ([`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)) |
 | `PROMETHEUS_URL` / `ALERTMANAGER_URL` / `GRAFANA_URL` | — | Консолын нүүр хуудсанд хэмжүүр, дохио, гүнзгий линк. Хоосон бол тэр хэсэг "тохируулаагүй" гэж харагдана |
 | `GITHUB_DEPLOY_TOKEN` / `GITHUB_REPOSITORY` | — | Консолын deploy товч. Токен нь зөвхөн deploy workflow-д эрхтэй fine-grained байх ёстой |
 | `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх. Платформ хаалттай (private) горимтой бол зөрчилдөх тул boot дээр анхааруулна |

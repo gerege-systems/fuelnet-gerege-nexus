@@ -355,6 +355,8 @@ jobs:
       # keeps the core client from filling up again.
       - name: Check the core API client owns only core paths
         run: npm run api:check
+      - name: Check the control-plane host serves no tenant screen
+        run: npm run host:check
       # The native shells' home screens and the installed app's launcher
       # shortcuts are plain data, so nothing else checks them. Fourteen of
       # twenty-six tiles were left pointing at deleted pages once and the build

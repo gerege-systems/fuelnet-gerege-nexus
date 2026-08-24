@@ -23,6 +23,7 @@ import {
   LifeBuoy,
   LogOut,
   Megaphone,
+  ScrollText,
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
@@ -143,6 +144,10 @@ export default function Console({ children }: { children: React.ReactNode }) {
               <MenuGroup title={t("cp.group.platform")}>
                 <ConsoleLink href="/cp/config" icon={<SlidersHorizontal className="w-5 h-5" />} label={t("cp.section.config")} />
                 <ConsoleLink href="/cp/announcements" icon={<Megaphone className="w-5 h-5" />} label={t("cp.section.announcements")} />
+              </MenuGroup>
+
+              <MenuGroup title={t("cp.group.investigation")}>
+                <ConsoleLink href="/cp/audit" icon={<ScrollText className="w-5 h-5" />} label={t("cp.section.audit")} />
               </MenuGroup>
             </nav>
           </aside>

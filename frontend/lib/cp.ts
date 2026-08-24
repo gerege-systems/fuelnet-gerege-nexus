@@ -13,7 +13,10 @@
  * device lines — would be a way to get it wrong.
  */
 
-const BASE = "/api/platform/v1";
+// Production stays same-origin. Development deliberately uses two hostnames
+// and two ports, so the optional value lets cp.localhost:3000 call the API at
+// cp.localhost:8080 without weakening either host gate.
+const BASE = process.env.NEXT_PUBLIC_CONTROL_PLANE_API_URL || "/api/platform/v1";
 
 export type OperatorRole = "superadmin" | "operator" | "support" | "auditor";
 

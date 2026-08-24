@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { controlPlaneHostDecision } from "@/lib/controlPlaneHost.mjs";
 import { DEVICE_LINE_HEADER, deviceLineFromHost, lineHomePath } from "@/lib/deviceLine";
 
 /**
@@ -47,6 +48,34 @@ import { DEVICE_LINE_HEADER, deviceLineFromHost, lineHomePath } from "@/lib/devi
 const MOVED: Record<string, string> = {};
 
 export function proxy(request: NextRequest) {
+  const controlPlane = controlPlaneHostDecision(
+    request.headers.get("host"),
+    process.env.CONTROL_PLANE_HOST,
+    request.nextUrl.pathname,
+  );
+
+  if (controlPlane === "redirect") {
+    const target = request.nextUrl.clone();
+    target.pathname = "/cp";
+    target.search = "";
+    const response = NextResponse.redirect(target, 308);
+    response.headers.set("Vary", "Host");
+    return response;
+  }
+
+  if (controlPlane === "not-found") {
+    return new NextResponse(null, {
+      status: 404,
+      headers: { "Cache-Control": "no-store", Vary: "Host" },
+    });
+  }
+
+  if (controlPlane === "allow") {
+    const response = NextResponse.next();
+    response.headers.set("Vary", "Host");
+    return response;
+  }
+
   const moved = MOVED[request.nextUrl.pathname];
   if (moved) {
     const target = request.nextUrl.clone();

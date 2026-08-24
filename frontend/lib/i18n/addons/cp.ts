@@ -45,11 +45,15 @@ export const cp = {
   "cp.field.reason": { mn: "Шалтгаан", en: "Reason" },
   "cp.field.when": { mn: "Хэзээ", en: "When" },
   "cp.field.resource": { mn: "Обьект", en: "Resource" },
+  "cp.field.target_type": { mn: "Объектын төрөл", en: "Target type" },
+  "cp.field.target_id": { mn: "Объектын ID", en: "Target ID" },
 
   "cp.action.sign_in": { mn: "Нэвтрэх", en: "Sign in" },
   "cp.action.sign_out": { mn: "Гарах", en: "Sign out" },
   "cp.action.back": { mn: "Жагсаалт руу", en: "Back to the list" },
   "cp.action.search": { mn: "Хайх", en: "Search" },
+  "cp.action.clear": { mn: "Цэвэрлэх", en: "Clear" },
+  "cp.action.refresh": { mn: "Шинэчлэх", en: "Refresh" },
 
   "cp.section.tenants": { mn: "Байгууллагууд", en: "Organisations" },
   "cp.section.apps": { mn: "Суусан аппууд", en: "Installed apps" },
@@ -57,6 +61,16 @@ export const cp = {
   "cp.section.activity": { mn: "Сүүлийн идэвх", en: "Recent activity" },
   "cp.section.operator_actions": { mn: "Операторын үйлдэл", en: "Operator actions" },
   "cp.section.audit": { mn: "Операторын бүртгэл", en: "Operator audit" },
+  "cp.audit.append_only": { mn: "Өөрчлөгдөшгүй мөр", en: "Append-only ledger" },
+  "cp.audit.hint": {
+    mn: "Операторын бичих үйлдэл бүр хэн, юунд, ямар шалтгаанаар хүрснийг шинэ мөр болгон үлдээнэ.",
+    en: "Every operator write leaves a new row saying who acted, what it touched, and why.",
+  },
+  "cp.audit.filter": { mn: "Бүртгэлийг нарийсгах", en: "Narrow the ledger" },
+  "cp.audit.empty": { mn: "Энэ нөхцөлд таарах бүртгэл алга.", en: "Nothing matches these filters." },
+  "cp.audit.change": { mn: "Өмнөх ба дараах утга", en: "Before and after" },
+  "cp.audit.before": { mn: "Өмнө", en: "Before" },
+  "cp.audit.after": { mn: "Дараа", en: "After" },
 
   "cp.role.superadmin": { mn: "Ерөнхий админ", en: "Superadmin" },
   "cp.role.operator": { mn: "Оператор", en: "Operator" },
@@ -269,4 +283,5 @@ export const cp = {
   "cp.group.watch": { mn: "Ажиглалт", en: "Watch" },
   "cp.group.organisations": { mn: "Байгууллага", en: "Organisations" },
   "cp.group.platform": { mn: "Платформ", en: "Platform" },
+  "cp.group.investigation": { mn: "Мөрдлөг", en: "Investigation" },
 };

@@ -184,6 +184,47 @@ func TestTenantRoleReadsTheBoundaryButNotOperatorAudit(t *testing.T) {
 	}
 }
 
+// USAGE lets the tenant role resolve the five named boundary tables; it must
+// not turn into an inheritance rule for the rest of the schema. In particular,
+// a later migration that creates a platform table without thinking about this
+// boundary must leave it closed by default.
+func TestNewPlatformTableIsClosedToTenantRole(t *testing.T) {
+	pool := schemaPool(t)
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const table = "platform.tenant_role_default_privilege_probe"
+	if _, err := tx.Exec(ctx, `CREATE TABLE `+table+` (id integer)`); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, privilege := range []string{
+		"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER",
+	} {
+		var allowed bool
+		if err := tx.QueryRow(ctx, `SELECT has_table_privilege($1, $2, $3)`,
+			tenantRole, table, privilege).Scan(&allowed); err != nil {
+			t.Fatal(err)
+		}
+		if allowed {
+			t.Errorf("a newly created platform table grants %s to %s", privilege, tenantRole)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE gerege_nexus_tenant`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM `+table); err == nil {
+		t.Fatal("the tenant role read a newly created platform table")
+	} else if !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("the new platform table was refused for an unexpected reason: %v", err)
+	}
+}
+
 func TestLoginPathSearchesBothPlanes(t *testing.T) {
 	pool := schemaPool(t)
 	var path string
