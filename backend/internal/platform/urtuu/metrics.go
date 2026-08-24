@@ -6,12 +6,12 @@
  * What the channel exports to Prometheus.
  *
  * No tenant label on any of it — the rule this platform set in its first
- * monitoring phase and has kept (see internal/platform/observability/business.go
+ * monitoring phase and has kept (see internal/kernel/telemetry/business.go
  * for the argument). A label whose values are organisations is a series count
  * that only grows, and the per-organisation view is a reporting question
  * answered from the database, where a row can be deleted.
  *
- * These live here rather than in observability/business.go for the reason
+ * These live here rather than in telemetry/business.go for the reason
  * written there about invoices: a metric named after a domain belongs to the
  * code that knows when the thing happened. A deployment that does not run
  * Өртөө exports nothing rather than a permanent zero.

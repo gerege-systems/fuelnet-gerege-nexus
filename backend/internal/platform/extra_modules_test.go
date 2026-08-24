@@ -14,7 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 

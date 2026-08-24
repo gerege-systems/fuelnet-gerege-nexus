@@ -3,12 +3,12 @@ package controlplane
 import (
 	"context"
 	"fmt"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"testing"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -217,5 +217,5 @@ func TestAFlagCanBeAimedAtOneOrganisation(t *testing.T) {
 
 // tenantContext is what the request middleware would have built.
 func tenantContext(tenantID string) context.Context {
-	return tenant.WithTenantID(context.Background(), tenantID)
+	return nexus.WithTenantID(context.Background(), tenantID)
 }

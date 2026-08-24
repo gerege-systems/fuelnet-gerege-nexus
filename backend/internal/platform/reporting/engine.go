@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/jackc/pgx/v5"
 )
@@ -68,7 +67,7 @@ func (e *Engine) Run(ctx context.Context, tenantID string, report Report, params
 	// context sends a cancel request the server may take its time acting on,
 	// and a report that has already been abandoned should not still be burning
 	// a CPU on the machine serving everybody else.
-	runCtx, cancel := context.WithTimeout(tenant.WithTenantID(ctx, tenantID),
+	runCtx, cancel := context.WithTimeout(nexus.WithTenantID(ctx, tenantID),
 		statementTimeout+timeoutGrace)
 	defer cancel()
 
@@ -104,7 +103,7 @@ func (e *Engine) Run(ctx context.Context, tenantID string, report Report, params
 // That looks redundant beside the row-level policy that would filter the rows
 // anyway, and it is not: the application filter has always been the primary
 // control here and the policy is the layer underneath it (see
-// internal/platform/dbguard). Taking it from the context rather than from a
+// internal/kernel/dbguard). Taking it from the context rather than from a
 // parameter is what makes a consolidated run possible without a report knowing
 // it is in one.
 func TenantOf(ctx context.Context) string { return nexus.TenantOf(ctx) }

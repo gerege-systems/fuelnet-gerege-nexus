@@ -8,7 +8,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 )
 
 // The shipped catalog must be able to answer in every language the API claims

@@ -2,10 +2,9 @@ package flags
 
 import (
 	"context"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"testing"
 	"time"
-
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
 // storeWith builds a store around flags held in memory, so the evaluation
@@ -23,7 +22,7 @@ func storeWith(list ...Flag) *Store {
 }
 
 func ctxFor(tenantID string) context.Context {
-	return tenant.WithTenantID(context.Background(), tenantID)
+	return nexus.WithTenantID(context.Background(), tenantID)
 }
 
 // A flag nobody declared is off. The alternative — unknown means on — would

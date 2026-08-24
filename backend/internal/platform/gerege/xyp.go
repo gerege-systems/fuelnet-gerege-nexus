@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
 type CitizenInfo struct {
@@ -122,7 +122,7 @@ func (s *GeregeService) lookup(ctx context.Context, path string, request, out an
 // fails immediately, which is the truth an operator needs and would otherwise
 // have to read from a handler's error rate.
 func (s *GeregeService) GetCitizenInfo(ctx context.Context, regNumber string) (*CitizenInfo, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemXYP, "citizen_query",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemXYP, "citizen_query",
 		func(ctx context.Context) (*CitizenInfo, error) { return s.getCitizenInfo(ctx, regNumber) })
 }
 
@@ -184,7 +184,7 @@ func (s *GeregeService) getCitizenInfo(ctx context.Context, regNumber string) (*
 
 // GetCompanyInfo queries legal entity data from ХУР (xyp.gerege.mn)
 func (s *GeregeService) GetCompanyInfo(ctx context.Context, companyReg string) (*CompanyInfo, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemXYP, "company_query",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemXYP, "company_query",
 		func(ctx context.Context) (*CompanyInfo, error) { return s.getCompanyInfo(ctx, companyReg) })
 }
 

@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	contract "github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 	"github.com/go-chi/chi/v5"

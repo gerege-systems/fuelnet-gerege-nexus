@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 )
 
 // CookieSpec names a cookie and the path it is confined to.

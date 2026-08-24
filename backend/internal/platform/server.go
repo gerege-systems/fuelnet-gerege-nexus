@@ -23,13 +23,18 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/memo"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/resilience"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appinstaller"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/directory"
@@ -39,15 +44,10 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/esign"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/gerege"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/integration"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/resilience"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoprovider"
@@ -265,7 +265,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 	// app now, so without this the app would be enforcing a number nobody sold
 	// — or nothing at all.
 	nexus.Provide[nexus.Quota](quotaRail{db: db})
-	nexus.Provide[nexus.SignatureCounter](observability.AsSignatureCounter())
+	nexus.Provide[nexus.SignatureCounter](telemetry.AsSignatureCounter())
 	// The report engine, as six methods rather than as fifteen package
 	// functions. See pkg/nexus/reportengine.go for why the three-step ones are
 	// one call.
@@ -893,14 +893,14 @@ func (s *Server) setupRoutes() {
 	r.Use(chimiddleware.RequestID)
 	// Before the logger, so a log line can name the trace it belongs to. It is
 	// a no-op wrapper when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
-	r.Use(observability.TracingMiddleware)
-	r.Use(observability.RequestLogger)
+	r.Use(telemetry.TracingMiddleware)
+	r.Use(telemetry.RequestLogger)
 	// Not chi's Recoverer: that one prints a stack trace to stdout and nothing
 	// else. This one logs it with the request id and the tenant, and reports it
 	// to GlitchTip when SENTRY_DSN is set.
-	r.Use(observability.RecoveryMiddleware)
+	r.Use(telemetry.RecoveryMiddleware)
 	r.Use(resilience.NewLoadShedder(1000).Middleware)
-	r.Use(observability.MetricsMiddleware)
+	r.Use(telemetry.MetricsMiddleware)
 	r.Use(security.HeadersMiddleware)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   security.SafeCORSOrigins(),
@@ -928,7 +928,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Prometheus Metrics Endpoint
-	r.Handle("/metrics", observability.MetricsHandler())
+	r.Handle("/metrics", telemetry.MetricsHandler())
 
 	// The operator console (docs/CONTROL_PLANE_PLAN.md).
 	//

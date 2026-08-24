@@ -17,13 +17,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dan"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 )
 
 func (s *Server) handleEIDStart(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +155,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "E-ID verification failed: " + err.Error()
 		}
-		observability.RecordLogin(observability.LoginEID, false)
+		telemetry.RecordLogin(telemetry.LoginEID, false)
 		httpx.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
@@ -174,7 +174,7 @@ func (s *Server) handleEIDLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
 
-	observability.RecordLogin(observability.LoginEID, true)
+	telemetry.RecordLogin(telemetry.LoginEID, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.eid_login_success", "eid", map[string]any{
 		"reg_number": identity.RegNumber,
 		"civil_id":   identity.CivilID,
@@ -223,7 +223,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "dan.gerege.mn verification failed: " + err.Error()
 		}
-		observability.RecordLogin(observability.LoginDAN, false)
+		telemetry.RecordLogin(telemetry.LoginDAN, false)
 		httpx.Error(w, http.StatusUnauthorized, msg)
 		return
 	}
@@ -246,7 +246,7 @@ func (s *Server) handleDANLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetSessionCookie(w, token, expiresAt)
 
-	observability.RecordLogin(observability.LoginDAN, true)
+	telemetry.RecordLogin(telemetry.LoginDAN, true)
 	audit.Record(r.Context(), tenantID, userID, "auth.dan_gerege_login_success", "dan", map[string]any{
 		"reg_number":  profile.RegNumber,
 		"dan_session": profile.DANSessionID,

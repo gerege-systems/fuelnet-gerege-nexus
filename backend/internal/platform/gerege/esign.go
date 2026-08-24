@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
 // EsignCertRequest is the payload for validating a citizen's digital signature
@@ -117,7 +117,7 @@ func NewEsignService() *EsignService {
 // CheckCertificate validates a digital signature certificate via the eSign login
 // service and verifies the certificate UID matches the supplied civil ID.
 func (s *EsignService) CheckCertificate(ctx context.Context, req EsignCertRequest) (*EsignCertResponse, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemESign, "check_certificate",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemESign, "check_certificate",
 		func(ctx context.Context) (*EsignCertResponse, error) { return s.checkCertificate(ctx, req) })
 }
 
@@ -151,7 +151,7 @@ func (s *EsignService) checkCertificate(ctx context.Context, req EsignCertReques
 // SignPDF submits a base64 PDF to the eSign HSM for PKCS#7 digital signing and
 // returns the signed PDF as base64.
 func (s *EsignService) SignPDF(ctx context.Context, req EsignDocSignRequest) (string, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemESign, "sign_pdf",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemESign, "sign_pdf",
 		func(ctx context.Context) (string, error) { return s.signPDF(ctx, req) })
 }
 

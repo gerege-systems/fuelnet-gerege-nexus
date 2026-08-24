@@ -7,14 +7,14 @@ import (
 	"encoding/base32"
 	"encoding/hex"
 	"errors"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -164,7 +164,7 @@ func (s *Server) deviceMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), deviceContextKey{}, claims)
-		ctx = tenant.WithTenantID(ctx, claims.TenantID)
+		ctx = nexus.WithTenantID(ctx, claims.TenantID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -199,7 +199,7 @@ func (s *Server) handleRotateDeviceToken(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -225,7 +225,7 @@ func (s *Server) handleUpdateDeviceStatus(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}

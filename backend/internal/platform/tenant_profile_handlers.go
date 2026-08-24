@@ -27,13 +27,13 @@ package platform
 import (
 	"encoding/json"
 	"errors"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -83,7 +83,7 @@ const tenantProfileColumns = `SELECT t.id::text, t.slug, t.name,
 // require the organisation app's read permission, which every role held anyway
 // — and the name it returns is already on the sidebar of every screen.
 func (s *Server) handleGetTenantProfile(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -112,7 +112,7 @@ func (s *Server) handleGetTenantProfile(w http.ResponseWriter, r *http.Request) 
 // are what the XYP rail checks a registration number against, and this is now a
 // platform setting rather than a screen inside an app somebody chose to install.
 func (s *Server) handleUpdateTenantProfile(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -260,7 +260,7 @@ func (s *Server) resolveParentTenant(w http.ResponseWriter, r *http.Request, ten
 	// these two reads — the same thing the tenant switcher does, and for the
 	// same reason: under this tenant's policies, another tenant's rows are not
 	// visible at all, and the answer would always be "no such organisation".
-	ctx := tenant.Without(r.Context())
+	ctx := nexus.WithoutTenant(r.Context())
 
 	var member bool
 	if err := s.db.QueryRow(ctx,
@@ -323,7 +323,7 @@ type Preferences struct {
 }
 
 func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}

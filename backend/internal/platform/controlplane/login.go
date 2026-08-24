@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -162,9 +162,9 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// question after the page — "was that us?" — is already answered.
 		slog.Error("BREAK GLASS: the emergency operator account was used",
 			"operator_email", acct.email, "ip", clientIPFrom(ctx))
-		observability.RecordControlPlaneLogin("break_glass")
+		telemetry.RecordControlPlaneLogin("break_glass")
 	}
-	observability.RecordControlPlaneLogin("success")
+	telemetry.RecordControlPlaneLogin("success")
 	SetSessionCookie(w, token, expiresAt)
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"operator":   sess.Operator,
@@ -233,7 +233,7 @@ func (s *Service) failLogin(ctx context.Context, w http.ResponseWriter, result s
 // attribute an unknown address to, and an audit table that accepts rows for
 // accounts that do not exist is one an attacker can write to.
 func (s *Service) denyLogin(ctx context.Context, w http.ResponseWriter, result string, acct account, known bool) {
-	observability.RecordControlPlaneLogin(result)
+	telemetry.RecordControlPlaneLogin(result)
 	if known {
 		sess := Session{Operator: Operator{ID: acct.id, Email: acct.email, Name: acct.name, Role: acct.role}}
 		// The caller may have hung up; the record of their attempt outlives
@@ -301,7 +301,7 @@ func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 	}
 	step, ok := verifyTOTP(acct.totpSecret, req.Code, time.Now())
 	if !found || !ok || step <= acct.totpLastStep {
-		observability.RecordControlPlaneLogin("bad_step_up")
+		telemetry.RecordControlPlaneLogin("bad_step_up")
 		httpx.Error(w, http.StatusUnauthorized, "that code was not right")
 		return
 	}
@@ -323,7 +323,7 @@ func (s *Service) HandleStepUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	observability.RecordControlPlaneLogin("step_up")
+	telemetry.RecordControlPlaneLogin("step_up")
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"stepped_up_until": time.Now().Add(StepUpWindow),
 	})

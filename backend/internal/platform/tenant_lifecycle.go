@@ -12,14 +12,14 @@ package platform
 import (
 	"context"
 	"errors"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/memo"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -203,7 +203,7 @@ func (q quotaRail) Gate(kind string) func(http.Handler) http.Handler {
 func aiQuota(db *pgxpool.Pool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tenantID, err := tenant.FromContext(r.Context())
+			tenantID, err := nexus.TenantID(r.Context())
 			if err != nil {
 				next.ServeHTTP(w, r)
 				return

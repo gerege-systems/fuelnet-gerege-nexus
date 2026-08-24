@@ -23,8 +23,8 @@ import (
 	"time"
 
 	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
 // PollWindow is how long the relying party holds a session poll open before it
@@ -157,7 +157,7 @@ func valueOr(value, fallback string) string {
 
 // StartDeviceLink starts the same QR/App2App contract used by Gerege Platform.
 func (s *EIDService) StartDeviceLink(ctx context.Context, callbackURL string) (*StartResult, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_device_link",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemEID, "start_device_link",
 		func(ctx context.Context) (*StartResult, error) { return s.startDeviceLink(ctx, callbackURL) })
 }
 
@@ -174,7 +174,7 @@ func (s *EIDService) startDeviceLink(ctx context.Context, callbackURL string) (*
 
 // StartByNationalID pushes an approval request to the citizen's eID Mongolia app.
 func (s *EIDService) StartByNationalID(ctx context.Context, nationalID, callbackURL string) (*StartResult, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_by_national_id",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemEID, "start_by_national_id",
 		func(ctx context.Context) (*StartResult, error) {
 			return s.startByNationalID(ctx, nationalID, callbackURL)
 		})
@@ -205,7 +205,7 @@ func (s *EIDService) startByNationalID(ctx context.Context, nationalID, callback
 // id, verification code, polling — is the sign-in flow's, which is why callers
 // finish with Poll.
 func (s *EIDService) StartSignature(ctx context.Context, nationalID, displayText, callbackURL string) (*StartResult, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemEID, "start_signature",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemEID, "start_signature",
 		func(ctx context.Context) (*StartResult, error) {
 			return s.startSignature(ctx, nationalID, displayText, callbackURL)
 		})
@@ -265,7 +265,7 @@ func (s *EIDService) startMock(nationalID string, deviceLink bool) *StartResult 
 // minutes: a p99 of ninety seconds on operation="poll" is a normal sign-in, not
 // an incident.
 func (s *EIDService) Poll(ctx context.Context, sessionID string) (*PollResult, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemEID, "poll",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemEID, "poll",
 		func(ctx context.Context) (*PollResult, error) { return s.poll(ctx, sessionID) })
 }
 
@@ -317,7 +317,7 @@ func (s *EIDService) GetAuthorizeURL(redirectURI, state string) string {
 
 // ExchangeCode exchanges OAuth2 authorization code for E-ID Identity profile
 func (s *EIDService) ExchangeCode(ctx context.Context, code, redirectURI string) (*EIDIdentity, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemEID, "exchange_code",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemEID, "exchange_code",
 		func(ctx context.Context) (*EIDIdentity, error) { return s.exchangeCode(ctx, code, redirectURI) })
 }
 

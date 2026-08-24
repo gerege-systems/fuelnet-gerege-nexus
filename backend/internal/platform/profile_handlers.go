@@ -24,13 +24,13 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
 // linkedIdentity is one way the person can prove who they are.
@@ -80,7 +80,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	// The organisations this person belongs to. Crosses tenants by definition,
 	// so it runs on the platform path — under the caller's own policies a
 	// membership elsewhere is not visible, and the list would be one long.
-	memberships, err := s.sessions.TenantsForUser(tenant.Without(ctx), claims.UserID)
+	memberships, err := s.sessions.TenantsForUser(nexus.WithoutTenant(ctx), claims.UserID)
 	if err != nil {
 		slog.Warn("could not list a person's organisations", "error", err)
 		memberships = nil

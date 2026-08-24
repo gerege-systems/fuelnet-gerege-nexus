@@ -238,7 +238,7 @@ func UserFromContext(ctx context.Context) (UserClaims, error) {
 //
 // Every query is tenant-scoped by row-level security, decided from the tenant
 // on the connection rather than from anything the module passes — see
-// internal/platform/dbguard. A module that forgets a WHERE tenant_id still
+// internal/kernel/dbguard. A module that forgets a WHERE tenant_id still
 // cannot read another organisation's rows.
 type DB interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)

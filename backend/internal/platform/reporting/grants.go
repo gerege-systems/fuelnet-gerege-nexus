@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -106,7 +105,7 @@ type Grant struct {
 // and nowhere else: the query is fixed, the grantee is not taken from a
 // request, and what comes back is only the grants naming them.
 func ActiveGrants(ctx context.Context, db Queryer, granteeTenantID, reportKey string) ([]Grant, error) {
-	rows, err := db.Query(tenant.Without(ctx), `
+	rows, err := db.Query(nexus.WithoutTenant(ctx), `
 		SELECT g.id, g.grantor_tenant_id, t.name, g.scope, g.counterparty_ref
 		  FROM report_grants g
 		  JOIN tenants t ON t.id = g.grantor_tenant_id
@@ -277,7 +276,7 @@ func (e *Engine) auditBothSides(ctx context.Context, grant Grant, granteeTenantI
 	granteeDetails := cloneDetails(details)
 	granteeDetails["grantor_tenant_id"] = grant.GrantorTenantID
 	granteeDetails["grantor_name"] = grant.GrantorName
-	audit.Record(tenant.WithTenantID(ctx, granteeTenantID), granteeTenantID, actorUserID,
+	audit.Record(nexus.WithTenantID(ctx, granteeTenantID), granteeTenantID, actorUserID,
 		"reports.consolidated_read", reportKey, granteeDetails)
 
 	// The owner's side: "this organisation read ours". The actor is not named
@@ -286,7 +285,7 @@ func (e *Engine) auditBothSides(ctx context.Context, grant Grant, granteeTenantI
 	// cannot look up.
 	grantorDetails := cloneDetails(details)
 	grantorDetails["grantee_tenant_id"] = granteeTenantID
-	audit.Record(tenant.WithTenantID(ctx, grant.GrantorTenantID), grant.GrantorTenantID, "",
+	audit.Record(nexus.WithTenantID(ctx, grant.GrantorTenantID), grant.GrantorTenantID, "",
 		"reports.data_shared", reportKey, grantorDetails)
 }
 
@@ -328,7 +327,7 @@ type GrantRow struct {
 // where it is the grantee, and nothing else. The `WHERE` below repeats it, for
 // the same reason every query in this codebase repeats its tenant clause.
 func ListGrants(ctx context.Context, db Queryer, tenantID string) ([]GrantRow, error) {
-	rows, err := db.Query(tenant.WithTenantID(ctx, tenantID), `
+	rows, err := db.Query(nexus.WithTenantID(ctx, tenantID), `
 		SELECT g.id, g.report_key,
 		       g.grantor_tenant_id, grantor.name,
 		       g.grantee_tenant_id, grantee.name,

@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"os"
@@ -23,16 +24,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/eidmongolia"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/ssoclient"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/time/rate"
@@ -100,7 +100,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			s.recordLoginFailure(r.Context(), userID)
 		}
 		audit.Record(r.Context(), "unknown", "anonymous", "auth.login_failed", "user", map[string]any{"email": req.Email})
-		observability.RecordLogin(observability.LoginPassword, false)
+		telemetry.RecordLogin(telemetry.LoginPassword, false)
 		httpx.Error(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
@@ -114,7 +114,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	auth.SetSessionCookie(w, token, expiresAt)
 
 	audit.Record(r.Context(), tenantID, userID, "auth.login_success", "user", map[string]any{"email": req.Email})
-	observability.RecordLogin(observability.LoginPassword, true)
+	telemetry.RecordLogin(telemetry.LoginPassword, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -212,7 +212,7 @@ func (s *Server) handleTenants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	options, err := s.sessions.TenantsForUser(tenant.Without(r.Context()), claims.UserID)
+	options, err := s.sessions.TenantsForUser(nexus.WithoutTenant(r.Context()), claims.UserID)
 	if err != nil {
 		slog.Error("failed to list the tenants a user belongs to", "user_id", claims.UserID, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to list tenants")
@@ -306,7 +306,7 @@ func (s *Server) handleSwitchTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := s.sessions.SwitchTenant(tenant.Without(r.Context()), auth.TokenFromRequest(r), req.TenantID)
+	token, expiresAt, err := s.sessions.SwitchTenant(nexus.WithoutTenant(r.Context()), auth.TokenFromRequest(r), req.TenantID)
 	switch {
 	case errors.Is(err, auth.ErrNotAMember):
 		// Not 404: whether that tenant exists is not this caller's business.

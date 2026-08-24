@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/urtuu"
 )

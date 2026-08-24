@@ -19,7 +19,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/quota"
 	"github.com/jackc/pgx/v5"
 )
@@ -175,7 +175,7 @@ func (s *store) documentForSigning(ctx context.Context, tenantID, id string) ([]
 // counts as finished.
 func (s *store) markSigned(ctx context.Context, tenantID, id string, in signedDocument) error {
 	err := s.writeSigned(ctx, tenantID, id, in)
-	observability.RecordDocumentSigned(in.Provider, err == nil)
+	telemetry.RecordDocumentSigned(in.Provider, err == nil)
 	return err
 }
 

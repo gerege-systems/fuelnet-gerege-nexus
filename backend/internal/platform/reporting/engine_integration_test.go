@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/dbguard"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/reporting"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

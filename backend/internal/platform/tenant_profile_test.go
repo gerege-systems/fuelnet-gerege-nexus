@@ -18,6 +18,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -88,7 +88,7 @@ func newProfileFixture(t *testing.T) *profileFixture {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := tenant.WithTenantID(r.Context(), f.tenantID)
+			ctx := nexus.WithTenantID(r.Context(), f.tenantID)
 			ctx = auth.WithUserContext(ctx, auth.UserClaims{UserID: f.userID, TenantID: f.tenantID, IsAdmin: true})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

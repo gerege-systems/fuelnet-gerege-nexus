@@ -12,11 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
 )
@@ -36,9 +35,9 @@ func NewService(db nexus.DB) *Service {
 }
 
 func (s *Service) HandleAICopilot(w http.ResponseWriter, r *http.Request) {
-	observability.RecordAIRequest("copilot")
+	telemetry.RecordAIRequest("copilot")
 	s.recordAIUse(r, "copilot")
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -65,9 +64,9 @@ func (s *Service) HandleAICopilot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAIChat(w http.ResponseWriter, r *http.Request) {
-	observability.RecordAIRequest("chat")
+	telemetry.RecordAIRequest("chat")
 	s.recordAIUse(r, "chat")
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -86,7 +85,7 @@ func (s *Service) HandleAIChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAISTT(w http.ResponseWriter, r *http.Request) {
-	observability.RecordAIRequest("stt")
+	telemetry.RecordAIRequest("stt")
 	s.recordAIUse(r, "stt")
 	var req struct {
 		Audio Audio `json:"audio"`
@@ -104,7 +103,7 @@ func (s *Service) HandleAISTT(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAITTS(w http.ResponseWriter, r *http.Request) {
-	observability.RecordAIRequest("tts")
+	telemetry.RecordAIRequest("tts")
 	s.recordAIUse(r, "tts")
 	var req struct {
 		Text string `json:"text"`
@@ -122,7 +121,7 @@ func (s *Service) HandleAITTS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAITranslate(w http.ResponseWriter, r *http.Request) {
-	observability.RecordAIRequest("translate")
+	telemetry.RecordAIRequest("translate")
 	s.recordAIUse(r, "translate")
 	var req struct {
 		Text   string `json:"text"`
@@ -157,7 +156,7 @@ func (s *Service) HandleAITranslate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAIListPrompts(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -185,7 +184,7 @@ func (s *Service) HandleAIListPrompts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -211,7 +210,7 @@ func (s *Service) HandleAIUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleAIListKnowledge(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -239,7 +238,7 @@ func (s *Service) HandleAIListKnowledge(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Service) HandleAICreateKnowledge(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -264,9 +263,9 @@ func (s *Service) HandleAICreateKnowledge(w http.ResponseWriter, r *http.Request
 func aiStatus(error) int { return http.StatusBadGateway }
 
 func (s *Service) HandleAIForecast(w http.ResponseWriter, r *http.Request) {
-	observability.RecordAIRequest("forecast")
+	telemetry.RecordAIRequest("forecast")
 	s.recordAIUse(r, "forecast")
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}

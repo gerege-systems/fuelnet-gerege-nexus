@@ -27,13 +27,13 @@ package flags
 
 import (
 	"context"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"hash/fnv"
 	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -100,7 +100,7 @@ func Enabled(ctx context.Context, key string) bool {
 	if Default == nil {
 		return false
 	}
-	tenantID, _ := tenant.FromContext(ctx)
+	tenantID, _ := nexus.TenantID(ctx)
 	return Default.enabled(key, tenantID)
 }
 

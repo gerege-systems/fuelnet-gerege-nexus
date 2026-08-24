@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,15 +15,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/settings"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// SessionCookieName is the cookie carrying the opaque session token.
-const SessionCookieName = "session_token"
+// SessionCookieName is the cookie carrying the opaque session token. The name
+// itself is declared in kernel/security, beside the console's, because that is
+// where the CSRF middleware decides which cookies carry ambient authority —
+// and a kernel package cannot import a plane to ask.
+const SessionCookieName = security.TenantSessionCookie
 
 // DefaultSessionTTL bounds how long a single login stays valid.
 const DefaultSessionTTL = 12 * time.Hour
@@ -358,7 +362,7 @@ func (s *SessionStore) SetActiveTenants(ctx context.Context, token string, tenan
 	// Crossing tenants is the point, so this runs on the platform path: under
 	// the caller's own policies, memberships in another organisation are not
 	// visible and every id would look like one they do not hold.
-	ctx = tenant.Without(ctx)
+	ctx = nexus.WithoutTenant(ctx)
 
 	var current string
 	if err := s.db.QueryRow(ctx,

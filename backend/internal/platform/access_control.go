@@ -3,14 +3,14 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -45,7 +45,7 @@ type accessMember struct {
 }
 
 func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -135,7 +135,7 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateRole(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := tenant.FromContext(r.Context())
+	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	var req struct {
 		Code        string `json:"code"`
@@ -164,7 +164,7 @@ func (s *Server) handleCreateRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateRole(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := tenant.FromContext(r.Context())
+	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	var req struct {
@@ -197,7 +197,7 @@ func (s *Server) handleUpdateRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteRole(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := tenant.FromContext(r.Context())
+	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	var system bool
@@ -219,7 +219,7 @@ func (s *Server) handleDeleteRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetRolePermissions(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := tenant.FromContext(r.Context())
+	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	var req struct {
@@ -281,7 +281,7 @@ func (s *Server) handleSetRolePermissions(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleSetMembershipRoles(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := tenant.FromContext(r.Context())
+	tenantID, _ := nexus.TenantID(r.Context())
 	claims, _ := auth.UserFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	var req struct {
@@ -391,7 +391,7 @@ func collectStrings(ctx context.Context, q querier, sql string, args ...any) ([]
 // invalidate would be a role edit that takes half a minute to bite, and the
 // administrator would be looking at a screen that says it already has.
 func (s *Server) recordAccessChange(r *http.Request, actor, action, resource, resourceID string, before, after any) {
-	tenantID, _ := tenant.FromContext(r.Context())
+	tenantID, _ := nexus.TenantID(r.Context())
 	s.forgetGrants(tenantID)
 	beforeJSON, _ := json.Marshal(before)
 	afterJSON, _ := json.Marshal(after)

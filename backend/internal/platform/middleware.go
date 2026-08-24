@@ -13,12 +13,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/rbac"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -61,11 +60,11 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			// one somebody writes next.
 			ctx = audit.MarkImpersonated(ctx, claims.ImpersonatedBy)
 		}
-		ctx = tenant.WithTenantID(ctx, claims.TenantID)
+		ctx = nexus.WithTenantID(ctx, claims.TenantID)
 		// The organisations this session reads across, straight from the
 		// session row. dbguard turns it into the policy's array; almost every
 		// session carries none and behaves exactly as it always has.
-		ctx = tenant.WithAllowed(ctx, claims.AllowedTenantIDs)
+		ctx = nexus.WithAllowedTenants(ctx, claims.AllowedTenantIDs)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -91,7 +90,7 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 func (s *Server) appGateMiddleware(appID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return s.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tenantID, ok := tenant.Require(w, r)
+			tenantID, ok := nexus.RequireTenant(w, r)
 			if !ok {
 				return
 			}

@@ -19,7 +19,7 @@ import (
 // menu label, a catalogue description and a report title all arrive already in
 // the caller's language. A module that renders any of those needs to know which
 // language was asked for, which is why this is here rather than in
-// internal/platform/config, where it was.
+// internal/kernel/config, where it was.
 //
 // docs/TRANSLATION_GUIDE.md is the policy: Mongolian plus the six official
 // languages of the United Nations. Growing the list is a decision — every entry
@@ -36,7 +36,7 @@ var SupportedLocales = []string{"mn", "ar", "zh", "en", "fr", "ru", "es"}
 // to the next candidate and finally to the default, which is what a caller
 // asking for Portuguese should get — a page in Mongolian, not a 400.
 //
-// Published here because a module cannot reach internal/platform/config, and a
+// Published here because a module cannot reach internal/kernel/config, and a
 // module that renders a title per locale has no other way to learn which locale
 // that is. It was the last reason internal/apps/reports imported the platform.
 func LocaleFromRequest(r *http.Request) string {

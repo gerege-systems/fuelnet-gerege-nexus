@@ -12,19 +12,19 @@ package platform
 import (
 	"errors"
 	"fmt"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"html"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/audit"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/emailverify"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
 )
 
 // Email verification.
@@ -78,7 +78,7 @@ type verifySendRequest struct {
 // — it holds its own key with the verification service and calls that service
 // directly, which is why this platform no longer issues keys.
 func (s *Server) handleVerifySend(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}
@@ -161,7 +161,7 @@ h1{font-size:20px;margin:0 0 12px}p{color:#475569;font-size:14px;line-height:1.6
 // handleEmailVerifyOverview is the settings screen in one request: what has
 // been asked for, and whether the service that sends it is reachable.
 func (s *Server) handleEmailVerifyOverview(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}

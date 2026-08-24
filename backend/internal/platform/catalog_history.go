@@ -8,16 +8,16 @@ package platform
 
 import (
 	"encoding/json"
+	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"net/http"
 	"sort"
 	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenant"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -71,7 +71,7 @@ type historyEntry struct {
 // administrative one: "what changed in the app I use" is a question the people
 // using it ask, and the answer names no one outside their own organisation.
 func (s *Server) handleAppHistory(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := tenant.Require(w, r)
+	tenantID, ok := nexus.RequireTenant(w, r)
 	if !ok {
 		return
 	}

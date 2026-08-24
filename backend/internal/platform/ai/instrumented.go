@@ -12,7 +12,7 @@ import (
 	"context"
 
 	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
 // observed wraps a generator so every model call lands in
@@ -36,6 +36,6 @@ func observe(inner generator, operation string) generator {
 }
 
 func (o *observed) GenerateContent(ctx context.Context, req gemini.Request) (gemini.Response, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemGemini, o.operation,
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemGemini, o.operation,
 		func(ctx context.Context) (gemini.Response, error) { return o.inner.GenerateContent(ctx, req) })
 }

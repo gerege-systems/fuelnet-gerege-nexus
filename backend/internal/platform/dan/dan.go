@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
 type DANProfile struct {
@@ -67,7 +67,7 @@ var ErrUnavailable = errors.New("dan.gerege.mn is not available")
 
 // VerifyDANToken verifies an active SSO session token issued by dan.gerege.mn
 func (s *DANService) VerifyDANToken(ctx context.Context, danToken string) (*DANProfile, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemDAN, "verify_token",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemDAN, "verify_token",
 		func(context.Context) (*DANProfile, error) { return s.verifyDANToken(danToken) })
 }
 
@@ -103,7 +103,7 @@ func (s *DANService) verifyDANToken(danToken string) (*DANProfile, error) {
 
 // AuthenticateDANCitizen authenticates Mongolian citizen via dan.gerege.mn OTP/PKI gateway
 func (s *DANService) AuthenticateDANCitizen(ctx context.Context, regNumber, otpCode string) (*DANProfile, error) {
-	return observability.ObserveExternalValue(ctx, observability.SystemDAN, "authenticate",
+	return telemetry.ObserveExternalValue(ctx, telemetry.SystemDAN, "authenticate",
 		func(context.Context) (*DANProfile, error) { return s.authenticateDANCitizen(regNumber, otpCode) })
 }
 

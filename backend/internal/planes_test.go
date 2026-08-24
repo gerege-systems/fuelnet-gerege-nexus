@@ -158,7 +158,7 @@ var plannedPlatformPackages = map[string]string{
 
 // The floor. These own no table and answer to neither plane, which is what
 // makes them safe for both to import — and why the third rule below matters
-// more than it looks: internal/platform/security already imports
+// more than it looks: internal/kernel/security already imports
 // internal/platform/auth, and auth is the tenant plane's.
 var plannedKernelPackages = map[string]string{
 	"async":      "kernel/async",
@@ -201,7 +201,7 @@ func TestPlatformDoesNotImportTenant(t *testing.T) {
 
 // The kernel is a floor, not a third plane.
 //
-// It is the rule with something already against it: internal/platform/security
+// It is the rule with something already against it: internal/kernel/security
 // imports internal/platform/auth today, and auth is the tenant plane's. That
 // import is what this test exists to make visible before the directories are
 // named — after the move it would be a kernel package that quietly belongs to
@@ -326,6 +326,9 @@ func TestCountTodaysCrossPlaneImports(t *testing.T) {
 		if strings.HasSuffix(name, ".go") {
 			continue // a file in the root package, counted below
 		}
+		if !holdsGoFiles(filepath.Join("platform", name)) {
+			continue // already moved out
+		}
 		seen := map[string]bool{}
 		for _, imported := range directImports(t, modulePrefix+"/internal/platform/"+name) {
 			dep, ok := strings.CutPrefix(imported, modulePrefix+"/internal/platform/")
@@ -401,7 +404,7 @@ func planePackages(t *testing.T, plane string) []string {
 		if err != nil {
 			return err //nolint:wrapcheck // walk errors are reported as they are
 		}
-		if !entry.IsDir() || strings.Contains(filepath.ToSlash(path), "/testdata") {
+		if !entry.IsDir() || strings.Contains(filepath.ToSlash(path), "/testdata") || !holdsGoFiles(path) {
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)
@@ -439,6 +442,22 @@ func directImports(t *testing.T, importPath string) []string {
 		t.Fatalf("resolve %s: %v", importPath, err)
 	}
 	return append(append([]string{}, pkg.Imports...), append(pkg.TestImports, pkg.XTestImports...)...)
+}
+
+// holdsGoFiles reports whether a directory is a package at all. A directory
+// that has been emptied by the move — or one that only ever held others — is
+// not something to resolve an import path for.
+func holdsGoFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") {
+			return true
+		}
+	}
+	return false
 }
 
 func short(importPath string) string { return strings.TrimPrefix(importPath, modulePrefix+"/") }

@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -321,7 +321,7 @@ func (m *Manager) deliver(ctx context.Context, tenantID string, t dispatchTarget
 			// The name is a constant, not the subscriber's URL: that is a value
 			// a tenant types in, and a Prometheus label taken from one is
 			// unbounded cardinality driven by user input.
-			observability.RecordRetry("integration_delivery")
+			telemetry.RecordRetry("integration_delivery")
 			select {
 			case <-time.After(deliveryBackoff[attempt-1]):
 			case <-ctx.Done():

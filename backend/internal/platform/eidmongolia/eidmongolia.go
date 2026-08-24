@@ -36,7 +36,7 @@ import (
 
 	signuc "github.com/gerege-systems/open-gerege-core/core/business/usecases/sign"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 )
 
 // Session states, as the shared usecase reports them. The browser polls for

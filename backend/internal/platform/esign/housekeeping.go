@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/async"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
 )
 
 // sweepInterval is how often abandoned ceremonies are closed.

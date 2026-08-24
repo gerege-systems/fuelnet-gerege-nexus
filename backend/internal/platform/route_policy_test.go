@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
