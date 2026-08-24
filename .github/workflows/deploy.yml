@@ -194,7 +194,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER || 'deploy' }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "docker-compose.prod.yml,deploy/nginx/snippets/nexus-oauth.conf"
+          source: "docker-compose.prod.yml,deploy/nginx/snippets/nexus-oauth.conf,deploy/nginx/snippets/cp-api.conf"
           target: /opt/open-gerege-nexus
 
       - name: Pull images, migrate and restart
@@ -503,3 +503,75 @@ jobs:
             # served by the registry module, which left with the App Store, so
             # this deployment answers 404 for it — correctly. The check outlived
             # the thing it was checking and turned a good rollout red.
+
+      - name: Route the control-plane API to the backend
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          CONTROL_PLANE_HOST: ${{ vars.CONTROL_PLANE_HOST }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'nexus.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: CONTROL_PLANE_HOST
+          script: |
+            set -euo pipefail
+            if [ -z "$CONTROL_PLANE_HOST" ]; then
+              echo "No control-plane hostname configured; no control-plane vhost to patch."
+              exit 0
+            fi
+            if ! sudo -n true 2>/dev/null; then
+              echo "::error::Passwordless sudo is required to publish the versioned control-plane API route."
+              exit 1
+            fi
+
+            LIVE=$(sudo grep -rl "server_name $CONTROL_PLANE_HOST" /etc/nginx/sites-available /etc/nginx/conf.d 2>/dev/null | head -1)
+            if [ -z "$LIVE" ]; then
+              echo "::error::Could not find the $CONTROL_PLANE_HOST vhost."
+              exit 1
+            fi
+
+            sudo install -d /etc/nginx/snippets
+            sudo cp /opt/open-gerege-nexus/deploy/nginx/snippets/cp-api.conf /etc/nginx/snippets/cp-api.conf
+
+            if sudo grep -qE 'location[[:space:]]+/api/platform/v1/|snippets/cp-api.conf' "$LIVE"; then
+              echo "versioned control-plane route already published; refreshing its snippet only"
+            else
+              BACKUP="${LIVE}.bak.$(date +%s)"
+              sudo cp "$LIVE" "$BACKUP"
+              sudo awk 'BEGIN{done=0} {print} /^[[:space:]]*listen[[:space:]]+443/ && !done {print "    include snippets/cp-api.conf;"; done=1}' \
+                "$LIVE" | sudo tee "${LIVE}.new" >/dev/null
+
+              if ! grep -q 'snippets/cp-api.conf' "${LIVE}.new"; then
+                echo "::error::no TLS listen directive in $LIVE; the control-plane include was not added"
+                sudo rm -f "${LIVE}.new"
+                exit 1
+              fi
+              sudo mv "${LIVE}.new" "$LIVE"
+              if ! sudo nginx -t; then
+                echo "::error::nginx rejected the control-plane route; restoring $BACKUP"
+                sudo cp "$BACKUP" "$LIVE"
+                sudo nginx -t && sudo systemctl reload nginx
+                exit 1
+              fi
+            fi
+
+            sudo nginx -t && sudo systemctl reload nginx
+
+            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Host: $CONTROL_PLANE_HOST" http://127.0.0.1:8082/api/platform/v1/health)
+            case "$STATUS" in
+              200|401|403) echo "versioned control-plane API reached the backend ($STATUS)" ;;
+              *) echo "::error::versioned control-plane API answered $STATUS through the backend"; exit 1 ;;
+            esac
+
+            LEGACY=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' \
+              -H "Host: $CONTROL_PLANE_HOST" http://127.0.0.1:8082/cp/api/health)
+            case "$LEGACY" in
+              "308 http://$CONTROL_PLANE_HOST/api/platform/v1/health"|\
+              "308 https://$CONTROL_PLANE_HOST/api/platform/v1/health")
+                echo "legacy control-plane API returns its guarded 308"
+                ;;
+              *) echo "::error::legacy control-plane API did not return the expected 308: $LEGACY"; exit 1 ;;
+            esac
