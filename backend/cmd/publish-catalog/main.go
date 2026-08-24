@@ -12,14 +12,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appcatalog"
 )
 
 // What this is for.
@@ -61,7 +61,7 @@ func main() {
 	// the chronicle entry, which LoadFile folds into the manifest. A pipeline
 	// that assembled its own payload could submit something the platform
 	// itself would reject on arrival.
-	apps, err := appcatalog.LoadFile(*catalogPath, platform.PlatformVersion)
+	apps, err := appcatalog.LoadFile(*catalogPath, config.PlatformVersion)
 	if err != nil {
 		fail("could not load %s: %v", *catalogPath, err)
 	}

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -302,7 +302,7 @@ func (s *Service) issueCredentialGrant(ctx context.Context, tx pgx.Tx, userID, p
 
 // deliverCredentialLink asks the verification service for a mail.
 func (s *Service) deliverCredentialLink(ctx context.Context, tenantID, email, purpose, token string) error {
-	if s.mail == nil || !emailverify.Configured() {
+	if s.mail == nil || !mailrail.Configured() {
 		return ErrMailNotConfigured
 	}
 	// The context loses its cancellation: an operator who closed the tab must
@@ -310,7 +310,7 @@ func (s *Service) deliverCredentialLink(ctx context.Context, tenantID, email, pu
 	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 	defer cancel()
 
-	_, err := s.mail.Send(sendCtx, tenantID, emailverify.Request{
+	_, err := s.mail.Send(sendCtx, tenantID, mailrail.Request{
 		Email:       email,
 		Source:      "control-plane",
 		Purpose:     purpose,
@@ -329,7 +329,7 @@ func (s *Service) deliverCredentialLink(ctx context.Context, tenantID, email, pu
 // allowlist that the person receiving this mail is not inside. They set their
 // password on the platform, where they will then use it.
 func CredentialLinkURL(token string) string {
-	return emailverify.PublicOrigin() + "/login/set-password?token=" + token
+	return mailrail.PublicOrigin() + "/login/set-password?token=" + token
 }
 
 // invite is the first administrator's copy of the above, called by

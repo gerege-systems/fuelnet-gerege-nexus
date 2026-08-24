@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -152,7 +152,7 @@ func (s *Service) BeginImpersonation(ctx context.Context, sess Session, tenantID
 		return "", err
 	}
 
-	return emailverify.PublicOrigin() + "/impersonate?token=" + handover, nil
+	return mailrail.PublicOrigin() + "/impersonate?token=" + handover, nil
 }
 
 // ListImpersonations shows an organisation who has been inside it.

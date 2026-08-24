@@ -43,8 +43,8 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/emailverify"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -61,7 +61,7 @@ type Installer interface {
 // Mailer is the platform's one rail for sending somebody a link. It is
 // satisfied by *emailverify.Service.
 type Mailer interface {
-	Send(ctx context.Context, tenantID string, req emailverify.Request) (*emailverify.Verification, error)
+	Send(ctx context.Context, tenantID string, req mailrail.Request) (*mailrail.Verification, error)
 }
 
 // Deps are the platform's own services the console borrows. All may be nil:

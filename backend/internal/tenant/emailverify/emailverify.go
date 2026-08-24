@@ -31,6 +31,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -89,14 +90,23 @@ const (
 	upstreamTimeout = 10 * time.Second
 )
 
-// Status mirrors the CHECK constraint on email_verifications.
-type Status string
+// The shape of a request and its answer is in internal/kernel/mail: the
+// console asks for the same thing from the other plane, and one struct
+// described twice is two structs the first time somebody edits one.
+type (
+	Status       = mailrail.Status
+	Verification = mailrail.Verification
+	Request      = mailrail.Request
+)
 
 const (
-	StatusPending  Status = "PENDING"
-	StatusVerified Status = "VERIFIED"
-	StatusExpired  Status = "EXPIRED"
+	StatusPending  = mailrail.StatusPending
+	StatusVerified = mailrail.StatusVerified
+	StatusExpired  = mailrail.StatusExpired
 )
+
+// PublicOrigin is where a recipient's browser comes back to.
+func PublicOrigin() string { return mailrail.PublicOrigin() }
 
 var (
 	// ErrNotConfigured means no key was supplied, so nothing can be sent. It is
@@ -141,46 +151,6 @@ type RateLimitedError struct {
 }
 
 func (e *RateLimitedError) Error() string { return e.msg }
-
-// Verification is one link this platform asked for.
-//
-// It holds no token: the token is the provider's, and lives only in the mail.
-// What is stored here is a hash of the single-use reference *we* put in the
-// return address, which is how the click that comes back is matched to the
-// request that caused it.
-type Verification struct {
-	ID       string `json:"id"`
-	TenantID string `json:"tenant_id"`
-	// Source names who asked: an app module id, or "portal".
-	Source      string     `json:"source"`
-	Purpose     string     `json:"purpose,omitempty"`
-	Email       string     `json:"email"`
-	RedirectURL string     `json:"redirect_url,omitempty"`
-	Status      Status     `json:"status"`
-	ExpiresAt   time.Time  `json:"expires_at"`
-	VerifiedAt  *time.Time `json:"verified_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-}
-
-// Request is what a caller asks for. Every field except Email is optional.
-type Request struct {
-	Email string
-
-	// RedirectURL is where the person is sent once they have come back to this
-	// platform and the verification has been recorded. Empty means this
-	// platform answers the click with a page of its own.
-	RedirectURL string
-
-	// Purpose is the caller's own label — "signup", "contact_invite" — carried
-	// into the audit trail and back to the caller. It is not interpreted.
-	Purpose string
-
-	// Source names who asked. Empty is recorded as "platform".
-	Source string
-
-	// ClientIP is recorded for the audit trail. Empty is fine.
-	ClientIP string
-}
 
 // Stats is the Overview screen's header.
 type Stats struct {
@@ -243,24 +213,12 @@ func ProviderURL() string {
 func apiKey() string { return strings.TrimSpace(os.Getenv("EMAIL_VERIFY_API_KEY")) }
 
 // Configured reports whether this deployment can ask for mail at all.
-func Configured() bool { return apiKey() != "" }
-
-// PublicOrigin is the address a recipient's browser can reach.
-//
-// It is read from PUBLIC_ORIGIN rather than from the incoming request: the
-// return address is handed to somebody else's service and outlives the request,
-// and taking the host from a request would let a forged Host header point every
-// verification return at another server.
-func PublicOrigin() string {
-	origin := strings.TrimRight(strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")), "/")
-	if origin == "" {
-		origin = "http://localhost:8080"
-	}
-	return origin
-}
+// Configured reports whether a key was supplied. The answer is the mail
+// rail's configuration rather than this package's, so it is read from there.
+func Configured() bool { return mailrail.Configured() }
 
 // ReturnURL is where the provider sends people once they have confirmed.
-func ReturnURL() string { return PublicOrigin() + "/api/v1/verify/landed" }
+func ReturnURL() string { return mailrail.PublicOrigin() + "/api/v1/verify/landed" }
 
 // Send asks the provider for a link and records what was asked.
 //

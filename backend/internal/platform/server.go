@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -23,18 +24,18 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/async"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/memo"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/resilience"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/controlplane"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/access"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ai"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/appinstall"
@@ -60,21 +61,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 )
-
-// PlatformVersion is the semver the app-store manifests are validated against.
-//
-// It is a var rather than a const so a release build can stamp the version it
-// actually is:
-//
-//	go build -ldflags "-X github.com/gerege-systems/open-gerege-nexus/backend/internal/platform.PlatformVersion=1.2.0"
-//
-// A manifest names the platform it needs (`"platform": ">=1.1.0"`), and a store
-// that separates from this binary has to be told which platform is asking. A
-// constant would have every deployment claim 1.0.0 for ever, so every app would
-// look compatible with every instance. The default stays 1.0.0, which is what an
-// unstamped build has always reported; whatever is injected must be valid
-// semver, because manifest validation parses it.
-var PlatformVersion = "1.1.0"
 
 type Server struct {
 	db        *pgxpool.Pool
@@ -384,7 +370,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 
 	// Modules first, catalogue second: the catalogue is held against the module
 	// registry as it is loaded, and Bootstrap is what fills that registry.
-	catalogConfig := appcatalog.ConfigFromEnv(catalogPath, PlatformVersion)
+	catalogConfig := appcatalog.ConfigFromEnv(catalogPath, config.PlatformVersion)
 	catalogConfig.Verify = verifyCatalogVersions
 	catalogSource := appcatalog.NewProvider(catalogConfig)
 
@@ -401,7 +387,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 			"apps", len(catalog), "sync_interval", catalogSource.SyncInterval().String())
 	}
 
-	installer := appinstall.NewAppInstaller(db, catalog, PlatformVersion)
+	installer := appinstall.NewAppInstaller(db, catalog, config.PlatformVersion)
 
 	// Keep the apps table in step with the catalog file. A missing row makes
 	// installation fail on the app_installations foreign key, so this is a
@@ -546,7 +532,7 @@ func NewServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...Ex
 		Settings: s.settings, Flags: s.featureFlags,
 		Warnings: ConfigurationWarnings, CatalogStatus: s.catalogSyncStatus,
 		SyncCatalog:     s.syncCatalogFromRegistry,
-		PlatformVersion: PlatformVersion,
+		PlatformVersion: config.PlatformVersion,
 	})
 
 	s.setupRoutes()
@@ -916,7 +902,7 @@ func (s *Server) setupRoutes() {
 		// The platform version is part of the health answer because it is what
 		// an app store has to know about this instance: which manifests apply
 		// to it, and whether an operator's rollout actually landed.
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "platform_version": PlatformVersion})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "platform_version": config.PlatformVersion})
 	})
 	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.Ping(r.Context()); err != nil {

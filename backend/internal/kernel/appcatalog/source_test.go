@@ -15,7 +15,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appcatalog"
 )
 
 // A registry answer is a document plus a signature over it. These tests build

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appcatalog"
 )
 
 // catalogDir is the bundled catalogue, from this package's directory.

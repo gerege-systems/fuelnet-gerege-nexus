@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +26,7 @@ const exampleExternalManifest = "../../../catalog/manifests/example-external.jso
 // externalCatalogApp is the shipped example as the store would carry it.
 func externalCatalogApp(t *testing.T) catalog.CatalogApp {
 	t.Helper()
-	manifest, err := catalog.LoadManifest(filepath.FromSlash(exampleExternalManifest), PlatformVersion)
+	manifest, err := catalog.LoadManifest(filepath.FromSlash(exampleExternalManifest), config.PlatformVersion)
 	if err != nil {
 		t.Fatalf("load the example external manifest: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestTheShippedExternalManifestIsAcceptedAsOne(t *testing.T) {
 	}
 	// A catalogue carrying it has to pass the same validation every source goes
 	// through — including the one place that would refuse a Go module for it.
-	if err := catalog.ValidateCatalog([]catalog.CatalogApp{app}, PlatformVersion); err != nil {
+	if err := catalog.ValidateCatalog([]catalog.CatalogApp{app}, config.PlatformVersion); err != nil {
 		t.Fatalf("expected the example external app to be a valid catalog entry: %v", err)
 	}
 	// And no compiled module is expected of it. This is the check that made
@@ -72,7 +73,7 @@ func TestAnExternalAppMustLaunchOverHTTPS(t *testing.T) {
 			spec.LaunchURL = launchURL
 			manifest.External = &spec
 
-			err := catalog.ValidateManifest(manifest, PlatformVersion)
+			err := catalog.ValidateManifest(manifest, config.PlatformVersion)
 			if err == nil {
 				t.Fatalf("expected launch_url %q to be refused", launchURL)
 			}

@@ -144,7 +144,7 @@ func (s *Server) handleStoreOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"platform_version": PlatformVersion,
+		"platform_version": config.PlatformVersion,
 		"sync":             sync,
 		"apps":             rows,
 		"summary": map[string]int{

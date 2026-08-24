@@ -11,7 +11,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/appcatalog"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/appcatalog"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/catalog"
 )
 
