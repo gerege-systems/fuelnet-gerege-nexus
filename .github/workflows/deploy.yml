@@ -202,7 +202,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER || 'root' }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "docker-compose.prod.yml,deploy/nginx/snippets/nexus-oauth.conf,deploy/nginx/snippets/cp-api.conf,deploy/scripts/render_cp_allowlist.py"
+          source: "docker-compose.prod.yml,deploy/nginx/snippets/nexus-oauth.conf,deploy/nginx/snippets/cp-api.conf,deploy/scripts/render_cp_allowlist.py,ppt/index.html,ppt/nginx-ppt.conf.example"
           target: /opt/fuelnet-gerege-nexus
 
       - name: Pull images, migrate and restart
@@ -461,6 +461,48 @@ jobs:
             echo "::error::backend did not become healthy within 150s"
             docker compose -f /opt/fuelnet-gerege-nexus/docker-compose.prod.yml logs --tail=80 backend migrate
             exit 1
+
+      - name: Publish the FuelNet presentation
+        if: steps.guard.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.DEPLOY_HOST || 'fuelnet.gerege.mn' }}
+          username: ${{ secrets.DEPLOY_USER || 'root' }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            APP_DIR=/opt/fuelnet-gerege-nexus
+            PPT_HOST=ppt.fuelnet.gerege.mn
+            PPT_ROOT=/var/www/fuelnet-ppt
+            PPT_CONF=/etc/nginx/sites-available/ppt.fuelnet.gerege.mn
+
+            if ! sudo -n true 2>/dev/null; then
+              echo "::error::Passwordless sudo is required to publish the presentation."
+              exit 1
+            fi
+
+            # Install the complete file in one operation, so nginx never
+            # serves a half-copied slide deck during a rollout.
+            sudo install -d -o root -g root -m 0755 "$PPT_ROOT"
+            sudo install -o root -g root -m 0644 "$APP_DIR/ppt/index.html" "$PPT_ROOT/index.html"
+
+            # Certbot owns the TLS additions after bootstrap. Never overwrite
+            # that live vhost on later runs or HTTPS disappears until certbot
+            # is invoked again.
+            if ! sudo test -f "$PPT_CONF"; then
+              sudo install -o root -g root -m 0644 "$APP_DIR/ppt/nginx-ppt.conf.example" "$PPT_CONF"
+              sudo ln -sfn "$PPT_CONF" "/etc/nginx/sites-enabled/ppt.fuelnet.gerege.mn"
+              sudo nginx -t
+              sudo systemctl reload nginx
+              sudo certbot --nginx -d "$PPT_HOST" --redirect \
+                --non-interactive --agree-tos --register-unsafely-without-email
+            fi
+
+            sudo nginx -t
+            sudo systemctl reload nginx
+            curl -fsS "https://$PPT_HOST/" | grep -q '<title>FuelNet'
+            echo "FuelNet presentation is live at https://$PPT_HOST"
 
       - name: Route the OIDC endpoints to the API
         if: steps.guard.outputs.ready == 'true'
