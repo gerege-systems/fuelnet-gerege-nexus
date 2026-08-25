@@ -58,6 +58,18 @@ var publicRoutes = []string{
 	// the one case where it does not matter.
 	"/oauth2/logout",
 
+	// The first-run wizard. Nobody can hold a session on a deployment with no
+	// organisation, which is the only state in which any of these answer at
+	// all: /status reports the one bit somebody would learn by trying to sign
+	// in, and the three that act carry the setup token instead — 256 bits,
+	// minted in memory at boot, written once to the log, dropped the moment an
+	// organisation exists. Unarmed, they are 404 rather than 401, so a stranger
+	// is not told there is a token to guess. See internal/platform/setup.
+	"/api/v1/setup/status",
+	"/api/v1/setup/organisation",
+	"/api/v1/setup/person",
+	"/api/v1/setup/complete",
+
 	// Signing in, and the identity flows that precede a session by definition.
 	"/api/v1/auth/login",
 	"/api/v1/auth/logout",

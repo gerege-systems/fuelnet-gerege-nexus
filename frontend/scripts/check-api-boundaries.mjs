@@ -57,6 +57,9 @@ const CORE_PREFIXES = [
   "/ai",
   "/admin/ai",
   "/integrations",
+  // The first-run wizard. It is the platform by definition: it runs before
+  // there is an organisation for any app to belong to.
+  "/setup",
 ];
 
 const source = readFileSync(clientPath, "utf8");

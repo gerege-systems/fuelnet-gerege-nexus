@@ -66,6 +66,7 @@ GET /api/v1/oauth2/client-info
 GET /api/v1/oauth2/consent
 GET /api/v1/profile
 GET /api/v1/profile/preferences
+GET /api/v1/setup/status
 GET /api/v1/store/apps
 GET /api/v1/store/apps/{slug}
 GET /api/v1/store/apps/{slug}/history
@@ -152,6 +153,9 @@ POST /api/v1/integrations/{id}/disconnect
 POST /api/v1/oauth2/consent
 POST /api/v1/profile/identities/unlink
 POST /api/v1/push-tokens
+POST /api/v1/setup/complete
+POST /api/v1/setup/organisation
+POST /api/v1/setup/person
 POST /api/v1/store/apps/{slug}/auto-update
 POST /api/v1/store/apps/{slug}/disable
 POST /api/v1/store/apps/{slug}/enable

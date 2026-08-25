@@ -47,10 +47,16 @@ var ErrAlreadyProvisioned = errors.New("this deployment already has an organisat
 // FirstTenant is the organisation a fresh deployment is being given, and the
 // person who will run it.
 type FirstTenant struct {
-	Slug       string
-	Name       string
-	AdminEmail string
-	AdminName  string
+	Slug string
+	Name string
+	// LegalName and RegistrationNumber are the organisation as a register
+	// holds it, filled from the Gerege Core directory when the wizard was used
+	// and empty when somebody typed the name at a terminal. Both are optional:
+	// the profile row is only written when there is something to put in it.
+	LegalName          string
+	RegistrationNumber string
+	AdminEmail         string
+	AdminName          string
 	// Password is the administrator's, chosen at the terminal. Unlike
 	// CreateTenant's invitation there is nobody to send mail as yet, and no
 	// operator whose knowing it would matter — the person running this holds
@@ -116,7 +122,11 @@ func Bootstrap(ctx context.Context, db *pgxpool.Pool, p FirstTenant) (tenantID, 
 		return "", "", fmt.Errorf("an account already exists for %s", email)
 	}
 
-	tenantID, userID, err = bootstrapTx(ctx, tx, slug, name, email, strings.TrimSpace(p.AdminName), hash)
+	tenantID, userID, err = bootstrapTx(ctx, tx, first{
+		slug: slug, name: name, legalName: strings.TrimSpace(p.LegalName),
+		registrationNumber: strings.TrimSpace(p.RegistrationNumber),
+		email:              email, adminName: strings.TrimSpace(p.AdminName), passwordHash: hash,
+	})
 	if err != nil {
 		return "", "", err
 	}
@@ -130,14 +140,36 @@ func Bootstrap(ctx context.Context, db *pgxpool.Pool, p FirstTenant) (tenantID, 
 // there yet. Separate so a test can run the real statements — the trigger that
 // makes the role, the membership, the grant — inside a transaction it rolls
 // back, on a database that already has other organisations in it.
-func bootstrapTx(ctx context.Context, tx pgx.Tx, slug, name, email, adminName, passwordHash string) (string, string, error) {
+// first is bootstrapTx's arguments. A struct rather than seven strings in a
+// row, because six of them are strings and a transposed pair would compile.
+type first struct {
+	slug, name, legalName, registrationNumber string
+	email, adminName, passwordHash            string
+}
+
+func bootstrapTx(ctx context.Context, tx pgx.Tx, p first) (string, string, error) {
 	var tenantID string
 	if err := tx.QueryRow(ctx,
 		`INSERT INTO platform.tenants (slug, name) VALUES ($1, $2) RETURNING id::text`,
-		slug, name).Scan(&tenantID); err != nil {
+		p.slug, p.name).Scan(&tenantID); err != nil {
 		return "", "", fmt.Errorf("create the organisation: %w", err)
 	}
-	userID, err := ensureAdmin(ctx, tx, tenantID, email, adminName, passwordHash)
+	// An upsert, not an insert: migration 00034 puts an AFTER INSERT trigger on
+	// tenants that creates the profile row already, with the organisation's
+	// name as its legal name. A plain insert here collides with the row the
+	// database made a microsecond earlier.
+	if p.legalName != "" || p.registrationNumber != "" {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO tenant.tenant_profiles (tenant_id, legal_name, registration_number)
+			 VALUES ($1::uuid, $2, $3)
+			 ON CONFLICT (tenant_id) DO UPDATE
+			    SET legal_name = EXCLUDED.legal_name,
+			        registration_number = EXCLUDED.registration_number`,
+			tenantID, p.legalName, p.registrationNumber); err != nil {
+			return "", "", fmt.Errorf("write the organisation's details: %w", err)
+		}
+	}
+	userID, err := ensureAdmin(ctx, tx, tenantID, p.email, p.adminName, p.passwordHash)
 	if err != nil {
 		return "", "", err
 	}

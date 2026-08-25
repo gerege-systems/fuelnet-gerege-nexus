@@ -332,10 +332,27 @@ NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
 Шинэ deployment дээр **бүртгүүлэх дэлгэц байхгүй**, demo бүртгэл production
 дээр үүсэхгүй. Тэгэхээр миграц дуусаад контейнерууд асахад өгөгдлийн сан
 хоосон, `/ready` ногоон, нэвтрэх дэлгэц гарч ирдэг ч **хэн ч нэвтэрч чадахгүй**.
-Асах үед лог үүнийг хэлж, доорх командыг зааж өгнө:
+Асах үед лог үүнийг хэлж, хоёр замыг зааж өгнө.
+
+**1. Тохиргооны шидтэн (вэб).** Сервер асахдаа нэг удаагийн setup токен үүсгээд
+хаягийг нь лог руу бичнэ:
+
+```
+WARN this deployment has no organisation ... setup_url=https://.../setup?token=<токен>
+```
+
+Тэр хаягаар орвол гурван алхам: байгууллага -> админ -> нууц үг. Регистрийн
+дугаараар **Gerege Core**-оос байгууллагын нэр, албан ёсны нэр, админы нэр,
+и-мэйлийг татна (`GEREGE_CORE_TOKEN` тохируулсан үед). Токен нь зөвхөн санах
+ойд, дискэнд бичигдэхгүй, байгууллага үүссэн даруйд хүчингүй болно — сервер
+дахин асвал шинэ токен гарна.
+
+**2. Команд (терминал).** Консол ч, хөтөч ч хэрэггүй:
 
 ```bash
-docker exec -it gerege_nexus_backend /app/tenant-bootstrap   -org "Байгууллагын нэр" -slug baiguullaga   -email you@example.mn -name "Таны нэр"
+docker exec -it gerege_nexus_backend /app/tenant-bootstrap \
+  -org "Байгууллагын нэр" -slug baiguullaga \
+  -email you@example.mn -name "Таны нэр"
 ```
 
 Энэ нь эхний байгууллага, түүний админ хэрэглэгч, гишүүнчлэл, `admin` эрхийг
@@ -368,6 +385,7 @@ process list, container inspect-д үлдэнэ.
 | `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
 | `SSO_CLIENT_ISSUER` / `SSO_CLIENT_ID` | — | Тохируулбал энэ суулгац нэрлэсэн провайдерийн клиент болно: эндэх нэвтрэлт хаагдаж, гарах нь провайдер дээр дуусна |
 | `SSO_CLIENT_TENANT` | — | Провайдерийн баталгаажуулсан ч энд бүртгэлгүй хүнийг үүсгэх байгууллага. Хоосон бол үүсгэхгүй |
+| `GEREGE_CORE_TOKEN` / `GEREGE_CORE_URL` | — / `https://core.gerege.mn` | Тохиргооны шидтэн байгууллага, хүнийг регистрээр хайхад ашиглах Gerege Core-ийн токен. Хоосон бол шидтэн талбаруудыг гараар бөглүүлнэ |
 | `GEMINI_API_KEY` | — | AI chat, voice, TTS, орчуулгыг идэвхжүүлэх түлхүүр |
 | `GEMINI_MODEL` / `GEMINI_TTS_MODEL` | Gemini 2.5 Flash загварууд | Chat ба дууны model сонголт |
 | `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |

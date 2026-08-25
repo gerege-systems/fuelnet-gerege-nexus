@@ -1,0 +1,293 @@
+"use client";
+
+/**
+ * The first screen a deployment ever shows.
+ *
+ * Three steps, in the order the answers are actually available: which
+ * organisation this is, who runs it, and the password they will sign in with.
+ * The first two are filled from the Gerege Core register rather than typed —
+ * an organisation's name retyped by whoever installed the software is how a
+ * deployment ends up calling itself something the invoices do not.
+ *
+ * The token in the address bar is the whole of the authority here. It is held
+ * in React state and never stored: a token in localStorage would outlive the
+ * one act it authorises, on a shared machine, in a browser nobody clears.
+ */
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Building2, Loader2, Lock, Search, UserRound } from "lucide-react";
+
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { api, type SetupStatus } from "@/lib/api";
+import { useBrand } from "@/lib/brandContext";
+import { useI18n } from "@/lib/i18n";
+import { MIN_SETUP_PASSWORD } from "@/lib/setup";
+
+export default function SetupPage() {
+  const { t } = useI18n();
+  const brand = useBrand();
+
+  const [token, setToken] = useState("");
+  const [status, setStatus] = useState<SetupStatus | undefined>();
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const [regNo, setRegNo] = useState("");
+  const [name, setName] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [slug, setSlug] = useState("");
+
+  const [adminRegNo, setAdminRegNo] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+
+  useEffect(() => {
+    setToken(new URLSearchParams(location.search).get("token") || "");
+    // A failure here is not fatal: the wizard refuses on the server anyway, and
+    // a screen that renders nothing because one GET was slow is worse than one
+    // that shows the form and is told no.
+    void api.setupStatus().then(setStatus).catch(() => setStatus({ required: true, armed: true, core: false }));
+  }, []);
+
+  async function lookupOrganisation() {
+    setError("");
+    setBusy(true);
+    try {
+      const found = await api.setupFindOrganisation(token, regNo);
+      setName(found.name);
+      setLegalName(found.legal_name);
+      setSlug(found.suggested_slug);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function lookupPerson() {
+    setError("");
+    setBusy(true);
+    try {
+      const found = await api.setupFindPerson(token, adminRegNo);
+      setAdminName(found.name);
+      setAdminEmail(found.email);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finish(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (password !== again) {
+      setError(t("setup.message.password_mismatch"));
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.setupComplete(
+        token,
+        { name, slug, legal_name: legalName, registration_number: regNo },
+        { email: adminEmail, name: adminName },
+        password,
+      );
+      setStep(4);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (status && !status.required && step !== 4) {
+    return (
+      <Shell brand={brand}>
+        <h1 className="signin-card__title">{t("setup.view.title")}</h1>
+        <p className="signin-card__lede">{t("setup.message.not_required")}</p>
+        <Link className="signin-btn signin-btn--primary" href="/login">{t("setup.action.sign_in")}</Link>
+      </Shell>
+    );
+  }
+
+  if (step === 4) {
+    return (
+      <Shell brand={brand}>
+        <h1 className="signin-card__title">{name}</h1>
+        <p className="signin-card__lede">{t("setup.message.done")}</p>
+        <p className="signin-note">{t("setup.message.apps_next")}</p>
+        <Link className="signin-btn signin-btn--primary" href="/login">{t("setup.action.sign_in")}</Link>
+      </Shell>
+    );
+  }
+
+  // Armed is checked after required: a deployment that is already set up should
+  // read "already set up", not "the token is missing".
+  if (status && !status.armed) {
+    return (
+      <Shell brand={brand}>
+        <h1 className="signin-card__title">{t("setup.view.title")}</h1>
+        <p className="signin-alert">{t("setup.message.not_armed")}</p>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell brand={brand}>
+      <div>
+        <h1 className="signin-card__title">{t("setup.view.title")}</h1>
+        <p className="signin-card__lede">{t("setup.view.subtitle")}</p>
+      </div>
+
+      <ol className="setup-steps">
+        <li className={step === 1 ? "is-current" : step > 1 ? "is-done" : ""}>
+          <Building2 size={16} /> {t("setup.view.step_organisation")}
+        </li>
+        <li className={step === 2 ? "is-current" : step > 2 ? "is-done" : ""}>
+          <UserRound size={16} /> {t("setup.view.step_admin")}
+        </li>
+        <li className={step === 3 ? "is-current" : ""}>
+          <Lock size={16} /> {t("setup.view.step_password")}
+        </li>
+      </ol>
+
+      {status && !status.core && <p className="signin-note">{t("setup.message.core_off")}</p>}
+      {error && <p className="signin-alert">{error}</p>}
+
+      {step === 1 && (
+        <form
+          className="setup-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setStep(2);
+          }}
+        >
+          <label>
+            <span>{t("setup.field.registration_number")}</span>
+            <div className="setup-lookup">
+              <input value={regNo} onChange={(e) => setRegNo(e.target.value)} required />
+              <button type="button" onClick={lookupOrganisation} disabled={busy || !status?.core || !regNo}>
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                {t("setup.action.lookup")}
+              </button>
+            </div>
+          </label>
+          <label>
+            <span>{t("setup.field.organisation_name")}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <label>
+            <span>{t("setup.field.legal_name")}</span>
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} />
+          </label>
+          <label>
+            <span>{t("setup.field.slug")}</span>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]"
+              required
+            />
+            <small>{t("setup.message.slug_hint")}</small>
+          </label>
+          <button className="signin-btn signin-btn--primary" type="submit">{t("base.action.next")}</button>
+        </form>
+      )}
+
+      {step === 2 && (
+        <form
+          className="setup-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setStep(3);
+          }}
+        >
+          <label>
+            <span>{t("setup.field.person_registration_number")}</span>
+            <div className="setup-lookup">
+              <input value={adminRegNo} onChange={(e) => setAdminRegNo(e.target.value)} />
+              <button type="button" onClick={lookupPerson} disabled={busy || !status?.core || !adminRegNo}>
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                {t("setup.action.lookup")}
+              </button>
+            </div>
+          </label>
+          <label>
+            <span>{t("setup.field.admin_name")}</span>
+            <input value={adminName} onChange={(e) => setAdminName(e.target.value)} required />
+          </label>
+          <label>
+            <span>{t("base.field.email")}</span>
+            <input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required />
+          </label>
+          <div className="setup-actions">
+            <button type="button" className="signin-btn signin-btn--quiet" onClick={() => setStep(1)}>
+              {t("base.action.previous")}
+            </button>
+            <button className="signin-btn signin-btn--primary" type="submit">{t("base.action.next")}</button>
+          </div>
+        </form>
+      )}
+
+      {step === 3 && (
+        <form className="setup-form" onSubmit={finish}>
+          <label>
+            <span>{t("auth.field.password")}</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={MIN_SETUP_PASSWORD}
+              required
+            />
+            <small>{t("setup.message.password_rule")}</small>
+          </label>
+          <label>
+            <span>{t("setup.field.password_again")}</span>
+            <input
+              type="password"
+              value={again}
+              onChange={(e) => setAgain(e.target.value)}
+              minLength={MIN_SETUP_PASSWORD}
+              required
+            />
+          </label>
+          <div className="setup-actions">
+            <button type="button" className="signin-btn signin-btn--quiet" onClick={() => setStep(2)}>
+              {t("base.action.previous")}
+            </button>
+            <button className="signin-btn signin-btn--primary" type="submit" disabled={busy}>
+              {busy ? <Loader2 size={16} className="animate-spin" /> : null}
+              {t("setup.action.finish")}
+            </button>
+          </div>
+        </form>
+      )}
+    </Shell>
+  );
+}
+
+/** The sign-in screen's frame, because this is the same moment in the same
+    journey: somebody standing in front of a deployment they cannot get into. */
+function Shell({ brand, children }: { brand: { name: string; logoUrl: string }; children: React.ReactNode }) {
+  return (
+    <main className="signin-shell">
+      <header className="signin-shell__nav">
+        <span className="gp-brand">
+          <img src={brand.logoUrl} alt="" />
+          <span>{brand.name}</span>
+        </span>
+        <LanguageSwitcher />
+      </header>
+      <section className="signin-shell__body">
+        <div className="signin-card">{children}</div>
+      </section>
+    </main>
+  );
+}

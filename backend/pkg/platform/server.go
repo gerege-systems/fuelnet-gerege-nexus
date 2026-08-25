@@ -35,6 +35,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	core "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/setup"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -57,6 +58,11 @@ type server struct {
 	platform *core.Service
 	settings *settings.Store
 	flags    *flags.Store
+	// setup is the first-run wizard. It belongs to neither plane: it runs
+	// before there is an organisation for the tenant plane to act for, and it
+	// is not the console — a deployment with no console at all still has to be
+	// able to open its first organisation.
+	setup *setup.Service
 }
 
 // newServer builds what the planes share, then each plane, then the router.
@@ -123,18 +129,21 @@ func newServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...te
 	settingsStore.OnChange(func() { bus.Invalidate(settingsCacheName, "") })
 	flagsStore.OnChange(func() { bus.Invalidate(flagsCacheName, "") })
 
+	setupWizard := setup.New(db)
+
 	return &server{
-		router:   newRouter(db, tenantPlane, platformPlane),
+		router:   newRouter(db, tenantPlane, platformPlane, setupWizard),
 		tenant:   tenantPlane,
 		platform: platformPlane,
 		settings: settingsStore,
 		flags:    flagsStore,
+		setup:    setupWizard,
 	}, nil
 }
 
 // newRouter is the process's HTTP surface: what every request passes through,
 // the three routes that belong to no plane, and then the planes themselves.
-func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *core.Service) *chi.Mux {
+func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *core.Service, wizard *setup.Service) *chi.Mux {
 	r := chi.NewRouter()
 
 	// First, so everything below it — the access log, every slog line a handler
@@ -154,9 +163,15 @@ func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *cor
 	r.Use(telemetry.MetricsMiddleware)
 	r.Use(security.HeadersMiddleware)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   security.SafeCORSOrigins(),
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Tenant-ID"},
+		AllowedOrigins: security.SafeCORSOrigins(),
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		// X-Setup-Token is the first-run wizard's, and it has to be here for the
+		// same reason X-Tenant-ID is: a header the preflight does not name is a
+		// request the browser never sends. In production the browser app and
+		// the API share an origin and none of this is consulted; in
+		// development they are :3000 and :8080, which is exactly where a
+		// deployment is stood up for the first time.
+		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Tenant-ID", "X-Setup-Token"},
 		AllowCredentials: true,
 	}))
 	r.Use(security.CSRFMiddleware)
@@ -187,6 +202,10 @@ func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *cor
 	// against its history when the history is the only thing that changed.
 	platformPlane.Routes(r)
 	tenantPlane.Routes(r)
+	// Last, and unconditionally: the wizard answers 404 to everything until it
+	// is armed, so mounting it on a deployment that was set up years ago costs
+	// one route table entry and nothing else.
+	wizard.Routes(r)
 
 	return r
 }

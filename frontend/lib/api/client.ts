@@ -120,7 +120,72 @@ export type ConsentPrompt = {
   already_granted: string[] | null;
 };
 
+export interface SetupStatus {
+  /** True while the deployment has no organisation and nobody can sign in. */
+  required: boolean;
+  /** True when the wizard still holds the token minted at boot. */
+  armed: boolean;
+  /** True when GEREGE_CORE_TOKEN is set, so the register can be searched. */
+  core: boolean;
+}
+
+export interface SetupOrganisation {
+  core_id: number;
+  name: string;
+  legal_name: string;
+  registration_number: string;
+  suggested_slug: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
+export interface SetupPerson {
+  core_id: number;
+  name: string;
+  email: string;
+  phone: string;
+  registration_number: string;
+}
+
+/**
+ * The first-run wizard.
+ *
+ * Every call but the status carries the setup token from the address bar, which
+ * the platform wrote to its log at boot. The browser never stores it: a token
+ * in localStorage would outlive the one act it authorises.
+ */
+const setupHeaders = (token: string) => ({ "X-Setup-Token": token });
+
 export const coreApi = {
+  setupStatus: () => request<SetupStatus>("/setup/status"),
+
+  setupFindOrganisation: (token: string, registrationNumber: string) =>
+    request<SetupOrganisation>("/setup/organisation", {
+      method: "POST",
+      headers: setupHeaders(token),
+      body: JSON.stringify({ registration_number: registrationNumber }),
+    }),
+
+  setupFindPerson: (token: string, registrationNumber: string) =>
+    request<SetupPerson>("/setup/person", {
+      method: "POST",
+      headers: setupHeaders(token),
+      body: JSON.stringify({ registration_number: registrationNumber }),
+    }),
+
+  setupComplete: (
+    token: string,
+    organisation: { name: string; slug: string; legal_name: string; registration_number: string },
+    admin: { email: string; name: string },
+    password: string,
+  ) =>
+    request<{ tenant_id: string; slug: string }>("/setup/complete", {
+      method: "POST",
+      headers: setupHeaders(token),
+      body: JSON.stringify({ organisation, admin, password }),
+    }),
+
   login: (email: string, password: string) =>
     request<{ expires_at: string; user: any }>("/auth/login", {
       method: "POST",

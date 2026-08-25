@@ -16,6 +16,7 @@ import { emailverify } from "./addons/emailverify";
 import { ai } from "./addons/ai";
 import { integrations } from "./addons/integrations";
 import { modules } from "./addons/modules";
+import { setup } from "./addons/setup";
 import { website } from "./addons/website";
 
 /**
@@ -51,6 +52,7 @@ export const coreDictionary = {
   ...ai,
   ...integrations,
   ...modules,
+  ...setup,
   ...website,
 } as const;
 

@@ -34,8 +34,11 @@ func TestBootstrapMakesAnAdministratorWhoCanSignIn(t *testing.T) {
 	}
 	slug := "bootstrap-" + strings.ReplaceAll(t.Name(), "/", "-")
 	slug = strings.ToLower(slug)
-	tenantID, userID, err := bootstrapTx(ctx, tx, slug, "First Organisation",
-		"first@example.mn", "First Person", hash)
+	tenantID, userID, err := bootstrapTx(ctx, tx, first{
+		slug: slug, name: "First Organisation",
+		legalName: "First Organisation LLC", registrationNumber: "1234567",
+		email: "first@example.mn", adminName: "First Person", passwordHash: hash,
+	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -47,6 +50,19 @@ func TestBootstrapMakesAnAdministratorWhoCanSignIn(t *testing.T) {
 	}
 	if !security.CheckPasswordHash("a-long-enough-password", stored) {
 		t.Fatal("the administrator cannot sign in with the password that was chosen")
+	}
+
+	// The register details the wizard filled in. An AFTER INSERT trigger creates
+	// this row already, so what is being checked is that the upsert replaced its
+	// defaults rather than colliding with them.
+	var registration string
+	if err := tx.QueryRow(ctx,
+		`SELECT registration_number FROM tenant.tenant_profiles WHERE tenant_id = $1::uuid`,
+		tenantID).Scan(&registration); err != nil {
+		t.Fatalf("read the organisation's details: %v", err)
+	}
+	if registration != "1234567" {
+		t.Fatalf("the registration number is %q, not the one it was given", registration)
 	}
 
 	// Administration is the role on the membership, not users.is_admin. A
