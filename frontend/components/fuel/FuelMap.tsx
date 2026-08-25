@@ -24,7 +24,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import CitizenRail from "@/components/fuel/CitizenRail";
 import StationSheet from "@/components/fuel/StationSheet";
 // Named imports, not a default one: maplibre-gl ships ESM from v5 and its
 // module has no default export, so `import maplibregl from` builds against the
@@ -118,7 +117,6 @@ export default function FuelMap() {
   const container = useRef<HTMLDivElement | null>(null);
   const map = useRef<InstanceType<typeof MapLibreMap> | null>(null);
   const [count, setCount] = useState<number | null>(null);
-  const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tripCount, setTripCount] = useState(0);
   // The station whose panel is open. Held in React rather than drawn into a
@@ -150,7 +148,6 @@ export default function FuelMap() {
       source?.setData(toFeatureCollection(result.stations));
       stationsByID.current = new Map(result.stations.map((s) => [s.id, s]));
       setCount(result.count);
-      setTruncated(result.truncated);
       setError(null);
     } catch (err) {
       // A 429 is the rate limiter, not a fault: the map stays as it was and the
@@ -480,11 +477,24 @@ export default function FuelMap() {
     // left the canvas at the <canvas> element's own 300x150 default. An inline
     // value cannot be missing from a stylesheet, and `100vh` is behind it for
     // anything that does not know `dvh`.
-    <div className="relative w-full" style={{ height: "100dvh", minHeight: "100vh" }}>
+    <div className="absolute inset-0">
       <div ref={container} className="absolute inset-0" style={{ height: "100%" }} />
 
 
-      <CitizenRail stationCount={count} tripCount={tripCount} />
+      {/* A count, and nothing else.
+          The rail that stood here carried the entitlement, the voucher list and
+          the way in — a sidebar on a desktop and the entire screen on a phone,
+          which is where a driver actually opens this. The header above the map
+          already offers the way in, and the entitlement belongs where somebody
+          is deciding to spend it: the station panel. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-3">
+        <div className="pointer-events-auto mx-auto flex w-fit items-center gap-3 rounded-full bg-white/95 px-4 py-1.5 text-sm shadow-lg ring-1 ring-black/5 backdrop-blur">
+          <span className="font-medium text-slate-900">
+            {count === null ? "…" : `${count} ШТС`}
+          </span>
+          {tripCount > 0 ? <span className="text-slate-400">{tripCount} цистерн замд</span> : null}
+        </div>
+      </div>
 
       {error ? (
         <p className="pointer-events-auto absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700 ring-1 ring-red-200">

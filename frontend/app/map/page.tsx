@@ -7,19 +7,19 @@
 import type { Metadata } from "next";
 
 import FuelMap from "@/components/fuel/FuelMap";
+import FuelNetHeader from "@/components/fuelnet/FuelNetHeader";
 
 /**
  * Where to buy fuel — the citizen's map.
  *
- * A page of its own rather than the front page. `/` argues the platform's case
- * to somebody deciding whether to adopt it; this is for a person standing next
- * to a car who wants to know which forecourt has petrol, and the two audiences
- * do not want the same screen.
+ * The site's header above it and the map filling everything below. The header
+ * rather than the whole FuelNetShell, because the shell ends in a footer and a
+ * footer under a full-bleed map is a scroll nobody wants: the map is the page.
  *
- * It is on the public list in lib/publicPath.mjs, so Layout renders it without
- * the tenant chrome: no sidebar, no app rail, no organisation switcher. A
- * driver is not administering anything, and on a first visit holds no session
- * at all — the sign-in prompt inside the map is what offers one.
+ * It carries the way in, which is why the map itself no longer needs to. The
+ * panel that used to run down the left held the sign-in button, the entitlement
+ * and the voucher list; on a phone — where a driver actually opens this — it
+ * was the entire screen, with the map pushed off the side.
  */
 
 export const metadata: Metadata = {
@@ -29,5 +29,12 @@ export const metadata: Metadata = {
 };
 
 export default function FuelMapPage() {
-  return <FuelMap />;
+  return (
+    <div className="flex h-dvh flex-col">
+      <FuelNetHeader />
+      <div className="relative min-h-0 flex-1">
+        <FuelMap />
+      </div>
+    </div>
+  );
 }
