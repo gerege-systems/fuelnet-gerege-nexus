@@ -10,8 +10,8 @@
  *   GET  /esign/sign/{id}            poll until completed / rejected / expired
  *   GET  /esign/sign/{id}/download   stream the PAdES-signed PDF
  *
- * The ceremony itself belongs to the shared platform library
- * (internal/tenant/identity/eidmongolia over open-gerege-core): it talks to eID, holds
+ * The ceremony itself belongs to the platform's own signing packages
+ * (internal/tenant/identity/eidmongolia over internal/kernel/eidsign): it talks to eID, holds
  * the document, checks session ownership and produces the PAdES output. What
  * lives here is the part the library has no view of — which tenant, which
  * document, which batch, and the audit trail.
@@ -20,12 +20,15 @@
 package signing
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/eidsign"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
@@ -435,6 +438,28 @@ func (m *Rails) organizationsHandler(w http.ResponseWriter, r *http.Request) {
 // translateEIDError turns an upstream failure into something a citizen can act
 // on, without echoing an upstream body that may carry identifiers.
 func translateEIDError(err error) error {
+	// The library's own answers first, matched exactly. The text search below
+	// stays for what comes from eID itself — a status line, a message this
+	// platform did not write — where there is nothing to match on but words.
+	switch {
+	case errors.Is(err, eidsign.ErrNotRepresentative):
+		return forbidden("you are not registered as a representative of this organisation")
+	case errors.Is(err, eidsign.ErrSessionNotFound):
+		return &Error{
+			Code:    "SIGN_SESSION_NOT_FOUND",
+			Message: "that signature session does not exist",
+			Status:  http.StatusNotFound,
+		}
+	case errors.Is(err, eidsign.ErrRefused):
+		return forbidden("the citizen declined the signature on their phone")
+	case errors.Is(err, eidsign.ErrNotCompleted):
+		return &Error{
+			Code:    "SIGN_NOT_COMPLETE",
+			Message: "the signature is not finished yet",
+			Status:  http.StatusBadRequest,
+		}
+	}
+
 	msg := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(msg, "represent"):

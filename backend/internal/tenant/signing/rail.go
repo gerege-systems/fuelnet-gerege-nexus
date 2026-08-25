@@ -18,11 +18,11 @@ import (
 // signingRail is nexus.Signer over the eID Mongolia client.
 //
 // A wrapper rather than methods on the client itself, so that eidmongolia stays
-// what it is — an adapter over the shared core library — and does not grow a
-// second vocabulary. What crosses into the SDK is this deployment's answers in
-// the SDK's own types; open-gerege-core's types stop here, which is the point:
-// a distribution implementing a module against nexus.Signer must not have to
-// depend on the library this installation happens to sign with.
+// what it is — an adapter over the platform's signing packages — and does not
+// grow a second vocabulary. What crosses into the SDK is this deployment's
+// answers in the SDK's own types; eidsign's types stop here, which is the
+// point: a distribution implementing a module against nexus.Signer must not
+// have to depend on however this installation happens to sign.
 //
 // See docs/adr/0002-one-signing-rail.md.
 type signingRail struct{ eid *eidmongolia.Service }

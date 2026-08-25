@@ -29,7 +29,8 @@ import (
 
 // Both flows here start in the console, on another hostname, and finish here.
 // They have to: a cookie belongs to one host, and the person setting a password
-// is not inside the address allowlist the console lives behind.
+// is not an operator — they are a citizen with a link, reaching the tenant
+// plane on the address every tenant uses.
 //
 // Both are therefore unauthenticated endpoints that accept a token — which is
 // the shape that has to be got right. In both cases the token is

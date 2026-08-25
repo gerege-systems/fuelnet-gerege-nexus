@@ -1,6 +1,6 @@
 import unittest
 
-from render_cp_allowlist import parse_networks, render
+from render_cp_allowlist import is_open, parse_networks, render
 
 
 class ControlPlaneAllowlistTests(unittest.TestCase):
@@ -29,6 +29,21 @@ class ControlPlaneAllowlistTests(unittest.TestCase):
         for raw in ("0.0.0.0/0", "::/0"):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 parse_networks(raw)
+
+    def test_the_word_open_renders_a_snippet_with_no_deny(self) -> None:
+        # Said as a word, never as a prefix: 0.0.0.0/0 above is refused so that
+        # a typo cannot open the console, and this cannot be typed by accident.
+        for raw in ("open", " ANY ", "all", "none"):
+            with self.subTest(raw=raw):
+                self.assertTrue(is_open(raw))
+                output = render(raw)
+                self.assertNotIn("deny", output)
+                self.assertNotIn("allow", output)
+
+    def test_a_list_is_still_fail_closed(self) -> None:
+        output = render("203.0.113.10/32")
+        self.assertIn("allow 203.0.113.10/32;", output)
+        self.assertTrue(output.endswith("deny all;\n"))
 
 
 if __name__ == "__main__":

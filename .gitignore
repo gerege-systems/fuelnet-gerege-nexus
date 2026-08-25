@@ -59,3 +59,4 @@ native-apps/windows/**/obj/
 # Next.js build output for the store and console services
 services/*/.next/
 services/*/node_modules/
+__pycache__/

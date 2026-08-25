@@ -354,7 +354,11 @@ func (s *SSOProvider) HandleOIDCDiscovery(w http.ResponseWriter, r *http.Request
 		"scopes_supported":                      scopeNames(),
 		"claims_supported": []string{
 			"iss", "sub", "aud", "exp", "iat", "nonce", "auth_time",
-			"email", "email_verified", "name", "tenant_id",
+			"email", "email_verified", "name", "tenant_id", "tenant_slug",
+			// The citizen's number in the Gerege register, for an account that
+			// signed in with eID. Advertised so a relying party can discover it
+			// rather than finding it by accident in a token.
+			"ge_id",
 		},
 		"service_documentation": s.issuer + "/developer/apps",
 	})

@@ -25,14 +25,13 @@ func SessionFrom(ctx context.Context) (Session, bool) {
 // HostGate is the first thing every console request meets: the console answers
 // on its own hostname and nowhere else.
 //
-// This is defence in depth rather than the defence. The real boundary is nginx,
-// which serves cp.nexus.gerege.mn from a separate virtual host behind an
-// address allowlist (deploy/nginx/cp.nexus.gerege.mn.conf) — an attacker on the
-// public internet never reaches this code. What the gate adds is that a
-// misconfigured proxy, a hand-written location block, or somebody pointing the
-// public hostname at the same upstream cannot quietly expose the console: those
-// requests arrive with the wrong Host and get the same answer as a URL that
-// does not exist.
+// What it adds is that a misconfigured proxy, a hand-written location block, or
+// somebody pointing the public hostname at the same upstream cannot quietly
+// expose the console: those requests arrive with the wrong Host and get the
+// same answer as a URL that does not exist.
+//
+// The address list is checked here as well, and only while the platform is
+// private — see address.go for why that decision left nginx and came here.
 //
 // 404, not 403: a 403 would confirm that something is there. The console is not
 // a locked door on a public street, it is an address that is not on the map.
@@ -48,11 +47,15 @@ func SessionFrom(ctx context.Context) (Session, bool) {
 // every tenant already uses.
 func (c *Console) HostGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !c.hostAllowed(r) {
+		clientIP := security.ClientIP(r)
+		// The same answer for both refusals, and 404 for the same reason: a 403
+		// would tell somebody scanning that there is a console here and that
+		// their address is the only thing between them and it.
+		if !c.hostAllowed(r) || !c.addressAllowed(clientIP) {
 			httpx.Error(w, http.StatusNotFound, "not found")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(withClientIP(r.Context(), security.ClientIP(r))))
+		next.ServeHTTP(w, r.WithContext(withClientIP(r.Context(), clientIP)))
 	})
 }
 

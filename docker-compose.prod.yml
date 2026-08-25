@@ -212,6 +212,10 @@ services:
       # The hostname the operator console answers on. Empty means this
       # deployment has no console at all — see docs/CONTROL_PLANE.md.
       CONTROL_PLANE_HOST: ${CONTROL_PLANE_HOST:-}
+      # The addresses the console answers to *while the platform is private*.
+      # Empty, or the word "open", means no address restriction — which is what
+      # a public deployment wants. See internal/platform/operator/address.go.
+      CONTROL_PLANE_ALLOWED_CIDRS: ${CONTROL_PLANE_ALLOWED_CIDRS:-}
       # What the console's front page reads. All optional: without them the
       # page shows the parts that come from this platform's own database and
       # says the rest is not configured.
@@ -366,6 +370,10 @@ services:
       # them has a console whose pages and whose API disagree about where it
       # lives.
       CONTROL_PLANE_HOST: ${CONTROL_PLANE_HOST:-}
+      # The addresses the console answers to *while the platform is private*.
+      # Empty, or the word "open", means no address restriction — which is what
+      # a public deployment wants. See internal/platform/operator/address.go.
+      CONTROL_PLANE_ALLOWED_CIDRS: ${CONTROL_PLANE_ALLOWED_CIDRS:-}
       # The brand, read per request rather than baked in — see
       # frontend/lib/brand.ts. This is why the shell's HTML is rendered on
       # demand: an image that carries a name is an image one customer owns.

@@ -30,8 +30,9 @@ import (
 // were still reaching for their phone.
 const stateTTL = 30 * time.Minute
 
-// stateStore satisfies the cache interface open-gerege-core's signing usecase
-// expects. That interface is written for Redis, but the contract is only
+// stateStore satisfies the cache interface the signing package
+// (internal/kernel/eidsign) expects. That interface was written for Redis when
+// it lived in a shared library, but the contract is only
 // Set/Get of a string, and Postgres both satisfies it and survives a restart
 // mid-ceremony — which matters, because losing the state loses the PDF the
 // citizen has already approved on their phone.

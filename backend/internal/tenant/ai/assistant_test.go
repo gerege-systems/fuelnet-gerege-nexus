@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/gemini"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 

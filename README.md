@@ -379,6 +379,7 @@ process list, container inspect-д үлдэнэ.
 | `ALLOWED_ORIGINS` | `nexus.localhost`, `cp.localhost` | Хоёр browser урсгалын CORS зөвшөөрөгдсөн эх сурвалж |
 | `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
 | `CONTROL_PLANE_HOST` | `cp.localhost` | Операторын консолын хост. Production дээр хоосон бол консол огт байхгүй ([`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)) |
+| `CONTROL_PLANE_ALLOWED_CIDRS` | — | Консолд хүрэх хаягууд. **Зөвхөн платформ хаалттай (private) горимд** шалгагдана — нээлттэй үед хаягаар хязгаарлахгүй. Хоосон эсвэл `open` бол огт хязгаарлахгүй |
 | `PROMETHEUS_URL` / `ALERTMANAGER_URL` / `GRAFANA_URL` | — | Консолын нүүр хуудсанд хэмжүүр, дохио, гүнзгий линк. Хоосон бол тэр хэсэг "тохируулаагүй" гэж харагдана |
 | `GITHUB_DEPLOY_TOKEN` / `GITHUB_REPOSITORY` | — | Консолын deploy товч. Токен нь зөвхөн deploy workflow-д эрхтэй fine-grained байх ёстой |
 | `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх. Платформ хаалттай (private) горимтой бол зөрчилдөх тул boot дээр анхааруулна |

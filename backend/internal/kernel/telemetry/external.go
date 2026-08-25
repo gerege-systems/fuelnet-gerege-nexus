@@ -81,12 +81,12 @@ func ExternalSystem(name string) string {
 
 // ObserveExternal times one outbound call and records how it ended.
 //
-// It wraps the call rather than the HTTP transport underneath it. Three of the
-// six systems are reached through a client this repository does not own — the
-// eID relying-party client and the Gemini client both come from
-// open-gerege-core and keep their http.Client private — so a RoundTripper could
-// only have covered half of them, and the half it covered would have been
-// labelled by URL rather than by the operation the caller meant.
+// It wraps the call rather than the HTTP transport underneath it. That began as
+// a constraint — half the systems were reached through clients this repository
+// did not own, which kept their http.Client private — and outlived it: what
+// these measurements are for is the operation the caller meant, and a
+// RoundTripper can only see a URL. Two systems reached through one client would
+// then be one line on the chart.
 func ObserveExternal(ctx context.Context, system, operation string,
 	call func(context.Context) error) error {
 

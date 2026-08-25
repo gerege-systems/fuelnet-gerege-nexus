@@ -11,17 +11,18 @@ package ai
 import (
 	"context"
 
-	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/gemini"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
 // observed wraps a generator so every model call lands in
 // external_request_duration_seconds.
 //
-// A decorator on the interface rather than a transport on the client: the
-// Gemini client comes from open-gerege-core and keeps its http.Client private,
-// so there is nowhere to hang a RoundTripper. The interface was already here,
-// which is what makes this three lines instead of a fork.
+// A decorator on the interface rather than a transport on the client. That was
+// once forced — the client came from a library that kept its http.Client
+// private — and it is now a choice: what is being measured is a model call,
+// which is what this interface names. A RoundTripper would label the same work
+// by URL, and the two clients below share one.
 //
 // The operation distinguishes the two clients the copilot holds. They call the
 // same API with different models, and the TTS model is slower by a wide margin
