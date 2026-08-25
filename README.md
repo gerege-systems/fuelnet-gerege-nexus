@@ -1,3 +1,16 @@
+> **Nexus FuelNet — `fuelnet.gerege.mn`**
+>
+> Энэ репо бол [Gerege Nexus](https://github.com/gerege-systems/open-gerege-nexus)
+> платформын **форк**: шатахуун түгээх сүлжээнд зориулсан байрлуулалт.
+> Хожуулсан код нь цөмийнхтэй ижил — ялгаа нь брэнд, домэйн, гаргалтын урсгал:
+>
+> * `deploy/nginx/fuelnet.gerege.mn.conf` — энэ стекийн vhost
+> * `.github/workflows/deploy.yml` — 38.180.120.144 руу гаргадаг
+> * Нэвтрэлт нь `nexus.gerege.mn` (SSO_CLIENT_*), өөрөө хэн болохыг шийдэхгүй
+>
+> Цөмөөс өөрчлөлт татахдаа `git fetch upstream && git merge upstream/main`.
+> Дээрх гурваас өөр газар салангид явах бүр нэгдэх ажлыг л нэмнэ.
+
 # Gerege Nexus
 
 **Үйлчилгээ, үйл ажиллагаа, системийн нэгдсэн платформ**
