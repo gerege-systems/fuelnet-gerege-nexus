@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { Banner, LoadingBlock, Modal, TableCard, fieldClass } from "@/components/ui";
+import { Banner, LoadingBlock, Modal, TableCard, fieldClass, selectClass } from "@/components/ui";
 import { DocumentRecord, PENDING, RowActions, SignatureCell, SignatureDialog, SignatureHistoryButton, SignatureHistoryDialog, SignatureProgress, StatusBadge, useDocumentActions } from "@/components/documents/shared";
 import { FileText, Pencil, Plus } from "lucide-react";
 
@@ -260,7 +260,7 @@ export default function DocumentsPage() {
             filterRef.current = { ...filterRef.current, doc_type: e.target.value };
             loadSpan(PAGE, filterRef.current);
           }}
-          className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={selectClass}
         >
           <option value="">{t("documents.field.any_type")}</option>
           <option value="CONTRACT">{t("documents.category.legal_contract")}</option>
@@ -274,7 +274,7 @@ export default function DocumentsPage() {
             filterRef.current = { ...filterRef.current, status: e.target.value };
             loadSpan(PAGE, filterRef.current);
           }}
-          className="px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={selectClass}
         >
           <option value="">{t("documents.field.any_status")}</option>
           <option value="DRAFT">{t("documents.state.draft")}</option>
@@ -454,7 +454,7 @@ export default function DocumentsPage() {
               <select
                 value={form.doc_type}
                 onChange={(e) => setForm({ ...form, doc_type: e.target.value })}
-                className={fieldClass}
+                className={selectClass}
               >
                 <option value="CONTRACT">{t("documents.category.legal_contract")}</option>
                 <option value="REQUEST">{t("documents.category.official_request")}</option>

@@ -261,7 +261,7 @@ function Select({
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500"
+        className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 h-[38px]"
       >
         {options.map(([optionValue, optionLabel]) => (
           <option key={optionValue} value={optionValue}>

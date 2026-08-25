@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { Banner, LoadingBlock, PageHeader, TableCard, fieldClass, rowActionClass } from "@/components/ui";
+import { Banner, LoadingBlock, PageHeader, TableCard, fieldClass, rowActionClass, selectClass } from "@/components/ui";
 import { ActionMessage } from "@/components/documents/shared";
 import { Files, Plus, Save, Trash2, Wand2 } from "lucide-react";
 
@@ -238,7 +238,7 @@ export default function DocumentTemplatesPage() {
             <select
               value={form.doc_type}
               onChange={(e) => setForm({ ...form, doc_type: e.target.value })}
-              className={fieldClass}
+              className={selectClass}
             >
               {DOC_TYPES.map((type) => (
                 <option key={type} value={type}>
@@ -333,7 +333,7 @@ export default function DocumentTemplatesPage() {
                   value={tpl.doc_type}
                   disabled={!mayManage}
                   onChange={(e) => edit(tpl.id, { doc_type: e.target.value })}
-                  className="px-2 py-1.5 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:border-transparent disabled:bg-transparent"
+                  className="h-[30px] px-2 py-1.5 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 disabled:border-transparent disabled:bg-transparent"
                 >
                   {DOC_TYPES.map((type) => (
                     <option key={type} value={type}>

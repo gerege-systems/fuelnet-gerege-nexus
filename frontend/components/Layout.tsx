@@ -597,7 +597,23 @@ function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];
   // Decided once across the whole menu, not per link: the answer depends on
   // what the other entries claim.
   const here=currentPath(pathname,menus.map(item=>item.path||""));
-  return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
+  // Which group an entry belongs to. The server parents every entry a module
+  // declares under the app's "Modules" group — the "Settings" group used to be
+  // filled from the platform's own blueprint, and an app that has left the
+  // platform has none. The module still knows which of its screens are
+  // configuration, and says so in the entry's id: ".settings." re-parents it
+  // under the sibling Settings group, when that group exists.
+  const parentOf=(item:MenuItem)=>{
+    if(item.parent_id?.endsWith("_modules")&&item.id.includes(".settings.")){
+      const settings=item.parent_id.replace(/_modules$/,"_settings");
+      if(menus.some(m=>m.id===settings))return settings;
+    }
+    return item.parent_id;
+  };
+  const childrenOf=(rootId:string)=>menus.filter(item=>parentOf(item)===rootId&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order);
+  // A group with nothing in it is a heading over silence — the Settings group
+  // of every extracted app, until that app declares configuration screens.
+  return <>{roots.filter(root=>childrenOf(root.id).length>0).map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{childrenOf(root.id).map(item=>item.path
   ?<NavLink key={item.id} href={item.path} active={item.path===here} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>
   :<ExternalNavLink key={item.id} href={item.external_url!} icon={iconMap[item.icon]||<Package className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
 

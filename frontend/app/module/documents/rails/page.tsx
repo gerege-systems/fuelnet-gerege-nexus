@@ -75,7 +75,7 @@ export default function EsignPoliciesPage() {
                 value={policy.default_provider}
                 onChange={(event) => update({ default_provider: event.target.value as Policy["default_provider"] })}
                 disabled={policy.require_eid}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
+                className="w-full h-[38px] px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
               >
                 <option value="EID">eID Mongolia (PIN2)</option>
                 <option value="HSM">Gerege eSign HSM</option>
@@ -108,7 +108,7 @@ export default function EsignPoliciesPage() {
                 onChange={(event) =>
                   update({ min_certificate_level: event.target.value as Policy["min_certificate_level"] })
                 }
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full h-[38px] px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="ADVANCED">ADVANCED</option>
                 <option value="QUALIFIED">QUALIFIED</option>

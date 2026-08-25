@@ -247,7 +247,7 @@ export default function EidSignView({ onSigned }: { onSigned?: () => void }) {
                 value={orgEtsi}
                 onChange={(event) => setOrgEtsi(event.target.value)}
                 disabled={orgsLoading}
-                className="mt-1.5 w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
+                className="mt-1.5 w-full h-[38px] px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
               >
                 <option value="">{t("esign.field.sign_as_self")}</option>
                 {orgs.map((org) => (
