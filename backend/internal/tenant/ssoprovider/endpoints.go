@@ -713,12 +713,22 @@ func (s *SSOProvider) issueTokenSet(w http.ResponseWriter, r *http.Request, clie
 type userProfile struct {
 	Email string
 	Name  string
+	// GeID is the citizen's number in the Gerege register, for an account that
+	// signed in with eID. Zero for everybody else, and omitted from the claims
+	// rather than sent as a zero — a relying party must be able to tell "this
+	// person has no Gerege number" from "this person is number nought".
+	GeID int64
 }
 
 func (s *SSOProvider) loadUser(ctx context.Context, userID string) (userProfile, error) {
 	var p userProfile
-	err := s.store.db.QueryRow(ctx, `SELECT email, name FROM platform.users WHERE id = $1`, userID).
-		Scan(&p.Email, &p.Name)
+	var geID *int64
+	err := s.store.db.QueryRow(ctx,
+		`SELECT email, name, ge_id FROM platform.users WHERE id = $1`, userID).
+		Scan(&p.Email, &p.Name, &geID)
+	if geID != nil {
+		p.GeID = *geID
+	}
 	return p, err
 }
 
@@ -779,6 +789,14 @@ func (s *SSOProvider) mintIDToken(ctx context.Context, client *Client, tenantID,
 		if slices.Contains(scopes, "profile") {
 			claims["name"] = profile.Name
 		}
+		// Both, and deliberately both. The address of an eID account is derived
+		// from this number, so a relying party could parse one out of the
+		// other — and would then be parsing an address, which is the kind of
+		// thing that survives until the day the address form changes. The
+		// number is stated.
+		if profile.GeID != 0 {
+			claims["ge_id"] = profile.GeID
+		}
 	}
 
 	return signJWT(key.KID, key.Private, claims)
@@ -831,6 +849,9 @@ func (s *SSOProvider) HandleUserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if slices.Contains(token.Scopes, "profile") {
 		claims["name"] = profile.Name
+	}
+	if profile.GeID != 0 {
+		claims["ge_id"] = profile.GeID
 	}
 
 	w.Header().Set("Cache-Control", "no-store")

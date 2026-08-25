@@ -15,12 +15,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/geregecore"
 
 	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
@@ -64,6 +68,15 @@ type EIDIdentity struct {
 	// an approval happened, a certificate says whose key gave it.
 	CertificateSerial string `json:"certificate_serial,omitempty"`
 	CertificateIssuer string `json:"certificate_issuer,omitempty"`
+	// GeID is the citizen's number in the Gerege register (core.gerege.mn's
+	// `users.id`), which eID returns as `person.geID` on a completed session.
+	//
+	// It is what lets this platform line a person up with the rest of the
+	// ecosystem — wallet, POS, kiosk — by something stable rather than by a
+	// Cyrillic registration number. eID's own documentation is explicit that an
+	// RP must not require it: a citizen whose record predates the Core backfill
+	// has none, and the field is then absent rather than zero.
+	GeID int64 `json:"ge_id,omitempty"`
 }
 
 type Provider interface {
@@ -294,6 +307,7 @@ func (s *EIDService) poll(ctx context.Context, sessionID string) (*PollResult, e
 	if session.State == coreeid.StateComplete && session.Identity != nil {
 		id := session.Identity
 		result.Identity = &EIDIdentity{CivilID: id.CivilID, RegNumber: id.NationalID, FirstName: id.GivenName, LastName: id.Surname, AuthMethod: AuthMethodPKISignature, VerifiedStatus: true, AuthenticatedAt: time.Now()}
+		resolveGeID(ctx, result.Identity)
 		// The certificate is optional — a login does not stop when it cannot be
 		// parsed — but when it is there it is what an e-signature record anchors on.
 		if cert := id.Certificate; cert != nil {
@@ -433,6 +447,9 @@ func (s *EIDService) fetchUserInfo(ctx context.Context, accessToken string) (*EI
 		Family    string `json:"family_name"`
 		Email     string `json:"email"`
 		Phone     string `json:"phone_number"`
+		// Spelled as eID spells it. Absent for a citizen the Core register has
+		// not been matched to, which is an ordinary answer and not an error.
+		GeID int64 `json:"geID"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, err
@@ -445,6 +462,7 @@ func (s *EIDService) fetchUserInfo(ctx context.Context, accessToken string) (*EI
 		LastName:        raw.Family,
 		Email:           raw.Email,
 		Phone:           raw.Phone,
+		GeID:            raw.GeID,
 		AuthMethod:      AuthMethodPKISignature,
 		VerifiedStatus:  true,
 		AuthenticatedAt: time.Now(),
@@ -467,3 +485,44 @@ func (s *EIDService) Mode() string {
 
 // Endpoint is where a sign-in is started.
 func (s *EIDService) Endpoint() string { return s.authorizeURL }
+
+// resolveGeID fills in the citizen's Gerege number when the session did not
+// carry it.
+//
+// eID returns `person.geID` on a completed session, but the relying-party
+// client this platform uses to read that session — open-gerege-core's pkg/eid —
+// decodes the person block into a struct that has no field for it, so the
+// number is dropped a layer below this one. Until that release carries it, the
+// number is fetched from the register it comes from: geID *is*
+// core.gerege.mn's `users.id`, by the eID platform's own definition, and a
+// lookup by registration number returns the same value eID would have handed
+// over.
+//
+// Best effort on purpose. A deployment with no Core token, an unreachable
+// register, or a citizen the register does not know all end the same way — no
+// geID — and none of them is a reason to fail a sign-in that eID has already
+// approved.
+func resolveGeID(ctx context.Context, identity *EIDIdentity) {
+	if identity == nil || identity.GeID != 0 {
+		return
+	}
+	regNumber := strings.TrimSpace(identity.RegNumber)
+	if regNumber == "" {
+		return
+	}
+	client := geregecore.New(os.Getenv("GEREGE_CORE_URL"),
+		func() string { return credentials.Get(credentials.CoreAPIToken) })
+	if !client.Configured() {
+		return
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	person, err := client.FindPerson(lookupCtx, regNumber, "")
+	if err != nil {
+		if !errors.Is(err, geregecore.ErrNotFound) {
+			slog.Warn("could not resolve the citizen's Gerege number", "error", err)
+		}
+		return
+	}
+	identity.GeID = person.ID
+}

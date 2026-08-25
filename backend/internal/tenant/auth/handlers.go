@@ -514,6 +514,10 @@ func (h *Handlers) LinkEIDIdentity(ctx context.Context, userID string, identity 
 		slog.Warn("could not link the eID identity to the platform account",
 			"user_id", userID, "error", err)
 	}
+	// The Gerege number goes on the account itself, not only into the claims
+	// blob beside it: it is what the OIDC provider hands downstream and what a
+	// second sign-in finds this citizen by, and neither can read a JSON column.
+	h.rememberGeID(ctx, userID, identity)
 }
 
 // ResolveOrProvisionEIDUser links an eID subject to a stable, non-PII local
@@ -549,11 +553,43 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 		return "", "", errors.New("EID_RP_SECRET is unset, so no account-linking key is available")
 	}
 	digest := eidLinkingDigest(linkingKey, subject)
+	// The address this account is known by.
+	//
+	// It used to be `eid+<32 hex>@identity.invalid` — correct, unique, and
+	// meaningless to everybody who ever read it, including the relying parties
+	// this platform hands it to over OIDC. When eID gives us the citizen's
+	// Gerege number the address is that number instead, which is the same
+	// person written in a way somebody can recognise.
+	//
+	// The old form is still computed, because accounts created under it exist
+	// and are found by it below.
 	syntheticEmail := "eid+" + digest[:32] + "@identity.invalid"
+	email := syntheticEmail
+	if identity.GeID != 0 {
+		email = GeIDEmail(identity.GeID)
+	}
+
+	// By the Gerege number first: it is the identifier the ecosystem shares, so
+	// an account that already carries it is this citizen whatever address it
+	// was opened under.
+	if identity.GeID != 0 {
+		if err = h.db.QueryRow(ctx,
+			`SELECT u.id::text, m.tenant_id::text FROM platform.users u JOIN tenant.memberships m ON m.user_id=u.id
+			  WHERE u.ge_id=$1 ORDER BY m.created_at, m.tenant_id LIMIT 1`,
+			identity.GeID).Scan(&userID, &tenantID); err == nil {
+			return userID, tenantID, nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", err
+		}
+	}
+
+	// Then by either address. An account opened before the Gerege number
+	// existed keeps its row and is upgraded in place by rememberGeID, rather
+	// than being left behind as a second copy of the same citizen.
 	if err = h.db.QueryRow(ctx,
-		`SELECT u.id::text, m.tenant_id::text FROM platform.users u JOIN tenant.memberships m ON m.user_id=u.id WHERE u.email=$1
-		 ORDER BY m.created_at, m.tenant_id LIMIT 1`,
-		syntheticEmail).Scan(&userID, &tenantID); err == nil {
+		`SELECT u.id::text, m.tenant_id::text FROM platform.users u JOIN tenant.memberships m ON m.user_id=u.id
+		  WHERE u.email = ANY($1) ORDER BY m.created_at, m.tenant_id LIMIT 1`,
+		[]string{syntheticEmail, email}).Scan(&userID, &tenantID); err == nil {
 		return userID, tenantID, nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return "", "", err
@@ -589,9 +625,9 @@ func (h *Handlers) ResolveOrProvisionEIDUser(ctx context.Context, identity *eid.
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = tx.QueryRow(ctx,
-		`INSERT INTO platform.users(email,password_hash,name,is_admin) VALUES($1,$2,$3,FALSE)
+		`INSERT INTO platform.users(email,password_hash,name,is_admin,ge_id) VALUES($1,$2,$3,FALSE,NULLIF($4,0)::bigint)
 		 ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name RETURNING id::text`,
-		syntheticEmail, passwordHash, name).Scan(&userID); err != nil {
+		email, passwordHash, name, identity.GeID).Scan(&userID); err != nil {
 		return "", "", err
 	}
 	// See the same check in sso_client_handlers.go: provisioning somebody on
