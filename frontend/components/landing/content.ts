@@ -70,21 +70,12 @@ export const ARCHITECTURE: {icon: Icon; title: TranslationKey; body: Translation
 ];
 
 /**
- * The nine applications in the catalogue, in the order the catalogue lists
- * them. Written out rather than fetched: this section is part of the argument
- * the page makes, and a marketing claim that renders empty when an API is slow
- * is worse than one that cannot change without a deploy.
+ * The base distribution's compiled app. Keep this list in step with
+ * catalog/apps.json; downstream distributions replace or extend the landing
+ * copy for the modules they compile in.
  */
 export const APPLICATIONS: TranslationKey[] = [
-  "website.apps.core",
-  "website.apps.contacts",
-  "website.apps.products",
-  "website.apps.inventory",
-  "website.apps.billing",
-  "website.apps.documents",
-  "website.apps.gov",
-  "website.apps.esign",
-  "website.apps.developer",
+  "website.apps.sso_clients",
 ];
 
 /** What every application inherits from the core, whether or not it asks. */

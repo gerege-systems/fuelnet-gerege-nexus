@@ -1,282 +1,160 @@
 # Gerege Nexus
 
-**Үйлчилгээ, үйл ажиллагаа, системийн нэгдсэн платформ**
+**Олон байгууллагатай, модуль нэмж бүтээгдэхүүн болгох платформын цөм**
 
-**Gerege Nexus** нь төрийн болон хувийн хэвшлийн байгууллагын үйлчилгээ, үйл
-ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ юм. Cloud-native
-экосистемээс санаа авсан, өндөр бүтээмжтэй, Монгол Улсын цахим дэд бүтэц (ДАН,
-E-ID, ХУР / XYP)-тэй шууд холбогдох боломжтой, **монгол хэлийг үндсэн хэл
-болгосон** нээлттэй эхийн шийдэл.
+Gerege Nexus нь Go backend, Next.js web shell, PostgreSQL өгөгдлийн сан,
+операторын control plane болон native client-уудын суурь юм. Бизнес аппуудыг
+compile-time Go module хэлбэрээр distribution репо нэмдэг. Энэ үндсэн репо нь
+бүх салбарын бэлэн ERP багц биш.
 
-*Nexus* гэдэг нь холбох цэг — байгууллага, үйлчилгээ, ажлын урсгал, систем,
-хэрэглэгч, өгөгдөл нэг дор уулзах цэгийг хэлнэ. Платформ өөрөө нэг салбарт
-зориулагдаагүй: дээр нь ажиллах модулиуд л тухайн байгууллагын хэрэгцээг
-тодорхойлно.
-
-Нэг Go бинари дотор модулиуд компиллогдож, тенант бүрт аль апп
-идэвхтэйг PostgreSQL дээрх апп стор шийднэ — сүлжээний нэмэлт дуудлагагүй,
-микросервисийн нарийн төвөгтэй байдалгүйгээр модуль хуваарилалт хийнэ.
-
-**Хэлний бодлого: монгол хэл + НҮБ-ын албан ёсны 6 хэл** — араб, хятад, англи,
-франц, орос, испани. Нийт 7 хэл. Монгол хэл эх сурвалж; баримт бичиг долуулаа
-байдаг бол програм хангамж нь монгол, англи хоёроор ирж, үлдсэнийг нь
-**Тохиргоо → Харагдац** дотроос асаана. Дэлгэрэнгүйг
-[орчуулгын гарын авлага](docs/TRANSLATION_GUIDE.md)-аас үзнэ үү.
+> **Бодит хүрээ (2026-08-25):** [`catalog/apps.json`](catalog/apps.json)-д
+> зөвхөн `io.gerege.nexus.sso_clients` байна. Contacts, products, inventory,
+> billing, documents, government workflow зэрэг аппын migration history эсвэл
+> frontend translation энэ репод үлдсэн байж болох ч тэдгээрийн ажиллах module
+> энэ үндсэн бинарьд байхгүй. Тийм аппын маршрут энэ deployment дээр нээгдэхгүй.
 
 <p>
-  <img src="docs/assets/icons/flag-mn.png" width="18" height="18" alt=""> <b>Монгол</b>
+  <b>Монгол</b>
   &nbsp;·&nbsp;
-  <a href="docs/README_AR.md"><img src="docs/assets/icons/flag-ar.png" width="18" height="18" alt=""> العربية</a>
+  <a href="docs/README_AR.md">العربية</a>
   &nbsp;·&nbsp;
-  <a href="docs/README_ZH.md"><img src="docs/assets/icons/flag-zh.png" width="18" height="18" alt=""> 中文</a>
+  <a href="docs/README_ZH.md">中文</a>
   &nbsp;·&nbsp;
-  <a href="docs/README_EN.md"><img src="docs/assets/icons/flag-en.png" width="18" height="18" alt=""> English</a>
+  <a href="docs/README_EN.md">English</a>
   &nbsp;·&nbsp;
-  <a href="docs/README_FR.md"><img src="docs/assets/icons/flag-fr.png" width="18" height="18" alt=""> Français</a>
+  <a href="docs/README_FR.md">Français</a>
   &nbsp;·&nbsp;
-  <a href="docs/README_RU.md"><img src="docs/assets/icons/flag-ru.png" width="18" height="18" alt=""> Русский</a>
+  <a href="docs/README_RU.md">Русский</a>
   &nbsp;·&nbsp;
-  <a href="docs/README_ES.md"><img src="docs/assets/icons/flag-es.png" width="18" height="18" alt=""> Español</a>
+  <a href="docs/README_ES.md">Español</a>
 </p>
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8.svg)](https://go.dev)
-[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3.1-black.svg)](https://nextjs.org)
 [![CI](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/ci.yml)
-[![Security](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/security.yml/badge.svg)](https://github.com/gerege-systems/open-gerege-nexus/actions/workflows/security.yml)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Docs](https://img.shields.io/badge/Баримт-gerege--systems.github.io-0050b0.svg)](https://gerege-systems.github.io/open-gerege-nexus/)
 
-**Баримт бичиг:
-[gerege-systems.github.io/open-gerege-nexus](https://gerege-systems.github.io/open-gerege-nexus/)**
-— одоогийн баримтууд хайхад хялбар вэб хэлбэрээр; бүтээгдэхүүний тойм нь
-монгол болон НҮБ-ын албан ёсны зургаан хэлээр бий.
+## Энэ репо яг юу агуулдаг вэ
 
----
-
-
-## Хамаарах сервисүүд
-
-Апп стор нь тусдаа репод байрладаг бөгөөд энэ платформ түүнээс каталогоо
-**гарын үсэгтэйгээр** татдаг (`APP_CATALOG_URL`; тохируулаагүй бол
-`catalog/apps.json` файлаараа ажиллана):
-
-- [`appstore-gerege-mn`](https://gitlab.gerege.mn/gerege-line/gerege-core/appstore-gerege-mn)
-  — registry API ба нээлттэй storefront (appstore.gerege.mn)
-- [`developer-gerege-nexus`](https://gitlab.gerege.mn/gerege-line/gerege-core/developer-gerege-nexus)
-  — хөгжүүлэгчийн консол (developer.gerege.mn)
-
-## Агуулга
-
-- [Хөгжүүлэгчид](#хөгжүүлэгчид)
-- [Үндсэн боломжууд](#үндсэн-боломжууд)
-- [Бэлэн бизнес аппликейшнүүд](#бэлэн-бизнес-аппликейшнүүд)
-- [Төслийн бүтэц](#төслийн-бүтэц)
-- [Desktop бүрхүүлүүд](#desktop-бүрхүүлүүд)
-- [Ажиллуулах заавар](#ажиллуулах-заавар)
-- [Тохиргооны хувьсагчид](#тохиргооны-хувьсагчид)
-- [API-н тойм](#api-н-тойм)
-- [Тест ба чанарын хяналт](#тест-ба-чанарын-хяналт)
-- [Аюулгүй байдал](#аюулгүй-байдал)
-- [Баримт бичгийн индекс](#баримт-бичгийн-индекс)
-
----
-
-## Хөгжүүлэгчид
-
-| Оролцогч | Үүрэг |
+| Хэсэг | Одоогийн хэрэгжилт |
 | --- | --- |
-| **Gerege Systems Development Team** ([@gerege-systems](https://github.com/gerege-systems)) | Архитектур, платформын цөм |
-| **Gemini AI** | Код үүсгэлт, баримтжуулалт |
-| **Claude AI** | Код шинжилгээ, аюулгүй байдлын аудит |
+| Tenant plane | Нэвтрэлт, session, tenant membership, RBAC, profile, апп суулгалт/хаалт, integration, AI API, төхөөрөмж, email verification, SSO client/provider, Өртөөний суваг, reporting engine |
+| Platform plane | Тенантын lifecycle, операторын TOTP нэвтрэлт, audit, support, quota/metering, feature flag, runtime settings/credentials, announcement, backup/deploy удирдлага |
+| Built-in апп | `io.gerege.nexus.sso_clients` (`/sso-clients`, `/api/v1/sso-clients/*`) |
+| Web | Public landing, login/setup, profile, app store, settings, control plane, built-in SSO client UI |
+| Native | macOS, iOS/iPadOS, Windows, Android shell; Linux-д PWA |
+| Observability | `/health`, `/ready`, `/metrics`, structured log, optional OTLP/Sentry; тусдаа monitoring compose |
 
----
+Үндсэн платформын route, хүснэгт, service байлаа гээд хэрэглэгчид харагдах
+бизнес апп заавал байна гэсэн үг биш. Compile-time module нь
+[`pkg/nexus`](backend/pkg/nexus)-ийн гэрээг хэрэгжүүлж, binary-д бүртгэгдсэн,
+каталогт орсон, тухайн tenant-д суусан үед л module route ажиллана.
 
-## Үндсэн боломжууд
+### Энэ үндсэн бинарьд байхгүй зүйлс
 
-### 1. Өндөр бүтээмжтэй модуль монолит архитектур
+- Contacts, products, inventory, billing бизнес аппууд
+- Organisation & People-ийн хэлтэс/ажилтны апп (харин байгууллагын legal
+  profile `/organisation` дээр платформын хэсэг хэвээр)
+- Documents UI/module болон report UI
+- Government services workflow UI/module
+- Өртөөний task board (суваг ба peer/exchange API нь платформд үлдсэн)
+- Ерөнхий adaptive circuit breaker, singleflight, generic retry engine
 
-- **Compile-time Go апп модулиуд** — цөм зөвхөн `sso_clients` модулийг авч
-  явна. Бусад бүтээгдэхүүний distribution өөрийн модулиудыг нийтийн
-  `pkg/nexus` contract-аар эцсийн бинарид бүртгэж, процесс дотроо дуудна.
-- **Тенант бүрийн апп стор** — тенант тус бүрийн апп эрх, меню, RBAC тохиргоо
-  PostgreSQL (`app_installations`) дээр динамикаар удирдагдана.
-- **Хамаарал шийдвэрлэх хөдөлгүүр** — DAG (Directed Acyclic Graph) дээр
-  тулгуурласан рекурсив шийдвэрлэлт, мөчлөг илрүүлэлт, semver шалгалт.
-- **Каталог синк** — production `APP_CATALOG_URL`-аас гарын үсэгтэй каталог
-  татна; URL тохируулаагүй development/offline орчинд `catalog/apps.json`
-  fallback ашиглаж, metadata-г `platform.apps`-д синк хийнэ.
+Эдгээрийн зарим нь product distribution репо руу салсан. Түүхэн шийдвэр ба
+хуваарилалтыг [`docs/ECOSYSTEM_GIT_STRATEGY.md`](docs/ECOSYSTEM_GIT_STRATEGY.md),
+одоогийн архитектурыг
+[`docs/ARCHITECTURE_SPECIFICATION.md`](docs/ARCHITECTURE_SPECIFICATION.md)-ээс
+үзнэ үү.
 
-### 2. Cloud-native тэсвэрлэлт ба олон replica
+## Гол боломжууд
 
-| Модуль | Зориулалт |
-| --- | --- |
-| `internal/kernel/resilience/loadshedder.go` | Зэрэг ажиллах хүсэлт хязгаараас давахад `503` + `Retry-After` |
-| `internal/kernel/cache/bus.go` | Redis pub/sub-аар эрх, session, аппын кэшийн хүчингүй болголтыг replica бүрд түгээнэ |
-| `internal/kernel/memo/memo.go` | Эрхийн шийдвэрт зориулсан хугацаатай, prefix-ээр хүчингүй болдог process-local кэш |
-| `internal/kernel/async/async.go` | Background goroutine-ийн panic-ийг process унагахгүйгээр нэртэй лог болгоно |
+- Compile-time module SDK: route, permission, menu, dependency, migration,
+  report, AI tool болон capability гэрээнүүд.
+- Tenant бүрийн app installation ба RBAC gate. Суугаагүй/унтраасан module route
+  `403` буцаана.
+- Local catalog эсвэл Ed25519 гарын үсэгтэй remote catalog; cache fallback ба
+  manual/background sync.
+- Password, eID, ДАН, Google болон upstream OIDC нэвтрэлт; мөн OAuth2/OIDC
+  provider.
+- PostgreSQL-ийн `tenant` ба `platform` schema, RLS/role хамгаалалт.
+- Redis тохируулсан үед replica хооронд cache invalidation ба shared rate
+  limit; тохируулаагүй үед single-process fallback.
+- Зэрэг хүсэлтийн load shedding. Гадаад client бүр өөрийн timeout/retry
+  бодлоготой; байхгүй generic circuit breaker-ийг платформтой гэж үзэхгүй.
+- Gemini түлхүүртэй үед chat, speech-to-text, text-to-speech, translation.
+  Бизнес өгөгдлийн AI tool-ыг distribution module өөрөө бүртгэнэ; үндсэн
+  deployment inventory эсвэл billing тоо зохиож буцаахгүй.
+- E-ID, ДАН, ХУР client-ууд платформд бий. `production` орчинд mock нь
+  анхдагчаар унтарна; бодит service ашиглахын тулд тус тусын credential хэрэгтэй.
 
-### 3. Төрийн цахим дэд бүтцийн интеграци
+## Репогийн бүтэц
 
-- **ХУР — Төрийн мэдээлэл солилцооны систем**
-  (`internal/tenant/identity/gerege/xyp.go`):
-  иргэний бүртгэл (`WS100101`), хуулийн этгээдийн баталгаажуулалт (`WS100201`).
-  Клиент нь платформд үлдэж, хэрэглэгчид харагдах нүүр нь `apps/egov` —
-  лавлагаа, сувгийн төлөв, лавлагааны түүх гурван дэлгэц (`/egov`).
-- **Үндэсний E-ID ба ДАН** ([`developer.gerege.mn`](https://developer.gerege.mn),
-  [`eidmongolia.mn`](https://eidmongolia.mn)) — тоон гарын үсэг (PKI), нэг
-  удаагийн код (Mobile OTP), банкны суваг (Bank SSO), царай танилт (Biometric).
-- **Платформын өөрийн OAuth2 / OIDC provider**
-  (`/.well-known/openid-configuration`) — гуравдагч системд client credentials
-  урсгалаар токен олгоно.
-- **Мөн өөр провайдерийн SSO клиент болж чадна** (`SSO_CLIENT_ISSUER`) — өөр
-  Gerege Nexus суулгац ч байж болно. Хоёр хагас нь бие биеэсээ хамааралгүй:
-  аймгийн суулгац улсын нэгдсэн рүү дээшээ холбогдоод, өөрөө өөр дээрээ суусан
-  аппуудад identity өгсөөр байна. Клиент болсон үед эндэх нэвтрэлт хаагдаж,
-  гарах үед провайдер дээрээс гарч буцаж ирнэ —
-  [`docs/SSO_FEDERATION.md`](docs/SSO_FEDERATION.md).
-- **И-мэйл баталгаажуулалт** (`internal/tenant/emailverify`) — хаяг эзэмшлийг батлах
-  нэгдсэн урсгал, платформын бүх апп модуль Go дуудлагаар ашиглана. Захидлыг
-  хостинг үйлчилгээ (`enigma.mn`) илгээх тул платформ SMTP нууц үг, илгээгчийн
-  хаяг эзэмшихгүй. Хэрэглэгч буцаж ирэхэд баталгаажуулалт бүртгэгдэнэ — буцах
-  утга нэг л удаа ажиллана. Тохиргоо → И-мэйл баталгаажуулалт дотор харагдана.
-
-> **Анхаар.** E-ID / ДАН / ХУР-ын mock горим зөвхөн хөгжүүлэлтийн орчинд
-> ажиллана. `ENVIRONMENT=production` үед mock горим автоматаар унтарч,
-> хуурамч иргэний мэдээллээр нэвтрэх боломжгүй болно.
-
-### 4. AI Copilot ба бизнес аналитик
-
-- **AI туслах** (`internal/tenant/ai/copilot.go`) — тенантын өгөгдлийн сангийн бодит
-  төлөвт холбогдсон, зорилго ангилдаг харилцан яриа.
-- **Агуулахын эрэлт таамаг** (`internal/tenant/ai/handlers.go`) —
-  `/api/v1/ai/stock-forecast` нь distribution-аас бүртгэсэн `stock_forecast`
-  capability-г дуудна; тухайн суулгац capability өгөөгүй бол `404` буцаана.
-
----
-
-## Каталогоор түгээдэг бизнес аппликейшнүүд
-
-Доорх аппуудын ихэнх нь платформын цөмд код, хүснэгтээ хадгалахгүй. Distribution
-нь нийтийн `pkg/nexus` SDK-аар модулиа бүртгэж, өөрийн миграцаа авчирна; каталог
-нь тухайн суулгацад аль хувилбарыг санал болгохыг шийднэ.
-
-| # | Апп | ID | Зам | Тайлбар |
-| --- | --- | --- | --- | --- |
-| 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Хэлтэс нэгж, ажилтнуудын бүртгэл. Шинэ тенантад default-оор суух ч устгаж болно; байгууллагын хуулийн профайл нь апп биш, платформын хэсэг |
-| 2 | e-Government Link | `io.gerege.nexus.egov` | `/egov` | ХУР-ын иргэн/хуулийн этгээдийн лавлагаа, eID ба ДАН сувгийн төлөв, лавлагааны түүх. Default-оор суух ч устгаж болно |
-| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Харилцагчийн бүртгэл, ХУР авто-бөглөлт |
-| 4 | Products | `io.gerege.nexus.products` | `/products` | Бараа, үнэ, тенантад хамаарах SKU |
-| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Агуулах, үлдэгдэл, хөдөлгөөний бүртгэл |
-| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Нэхэмжлэх, 10% НӨАТ, e-Barimt баримт |
-| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Цахим баримт, гарын үсэг, батламжийн урсгал |
-| 8 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | Энэ платформоор дамжуулан нэвтрэх системүүдийн OAuth2 клиент бүртгэл |
-| 9 | State Services | `io.gerege.nexus.gov_services` | `/gov-services` | Тохируулж болох шийдвэрлэх урсгал, шилжүүлэлт, баталгаажуулалт, цаг захиалга |
-
-Апп бүр тенантад суулгагдаж идэвхжсэн үед л маршрутууд нээгдэнэ. Суулгаагүй апп
-руу хандвал `403 Forbidden` буцна.
-
----
-
-## Төслийн бүтэц
-
-```
+```text
 backend/
-  cmd/api/            HTTP API сервер (+ demo seeder)
-  cmd/migrate/        Goose миграцийн ажиллуулагч
-  db/migrations/      SQL миграцууд
-  internal/
-    kernel/           Хоёр урсгалын техникийн суурь; аль нэгийг импортлохгүй
-    tenant/           Нэг байгууллагын нэрийн өмнөөс ажиллах урсгал
-    platform/         Deployment-ийг бүхэлд нь удирдах операторын урсгал
-    apps/             Энэ distribution-д хамт ирдэг бизнес модулиуд
-  pkg/
-    nexus/            Гадаад модулийн нийтийн SDK ба гэрээнүүд
-    platform/         Хоёр урсгалыг нэг process/router болгон угсрах root
-frontend/             Next.js 16 (App Router) вэб клиент
-native-apps/          Swift, C# ба Kotlin native клиентүүд (Linux нь PWA)
-catalog/              Апп сторын каталог ба manifest-ууд
-deploy/               Production Dockerfile, Nginx тохиргоо
-docs/                 Баримт бичиг ба орчуулгууд
+  cmd/                  api, migrate, bootstrap, catalog хэрэгслүүд
+  db/migrations/        үндсэн PostgreSQL migration-ууд
+  internal/kernel/      хоёр plane-д нийтлэг доод түвшний механизм
+  internal/platform/    deployment/operator plane
+  internal/tenant/      байгууллагын нэрийн өмнөөс ажиллах plane
+  internal/apps/        үндсэн binary-д compile хийдэг аппууд (одоо SSO Clients)
+  pkg/nexus/            distribution module-ийн нийтийн SDK
+  pkg/platform/         distribution binary-г асаах нийтийн entry point
+frontend/               Next.js web shell ба control plane UI
+catalog/                үндсэн catalog, manifest, chronicle
+native-apps/            macOS, iOS/iPadOS, Windows, Android client
+deploy/                 image, compose, nginx, monitoring
+docs/                   одоогийн, түүхэн, proposal баримтуудын индекс
 ```
 
----
+## Ажиллуулах
 
-## Desktop бүрхүүлүүд
+### Урьдчилсан шаардлага
 
-Архитектур нь **Native Shell + Web Work Area**: native бүрхүүл нь session-ий
-мөчлөг, толгой хэсэг, цэс, tray, төхөөрөмжийн хандалтыг эзэмшинэ; вэб клиент нь бүрхүүл
-дотор ажиллахдаа өөрийн chrome-оо нуугаад зөвхөн **ажлын муж** болж
-рендерлэгдэнэ. Хөтчөөр орвол бүрхүүл байхгүй тул вэб клиент урьдын адил бүрэн
-аппликейшн хэвээрээ ажиллана.
+- Docker Compose, эсвэл
+- Go 1.26+, Node.js 20+, PostgreSQL 16+
 
-Бүрхүүл ба вэб клиентийн хооронд бичигдсэн гэрээ бий —
-[`docs/SHELL_CONTRACT.md`](docs/SHELL_CONTRACT.md) нь `window.GeregeShell`-ийн
-method, event, capability, хувилбарын дүрэм, аюулгүй байдлын шаардлагыг
-тодорхойлно. Вэб клиент бүрхүүлийн дотоод бүтцийг мэдэхгүй — зөвхөн гэрээг л
-мэднэ.
-
-Клиентүүд [`native-apps/`](native-apps) дотор гурван native сангаар
-хөгжинө: Swift (macOS/iOS/iPadOS), C# (Windows desktop/kiosk/POS), Kotlin
-(Android mobile/tablet/kiosk/POS). Linux desktop нь PWA хэвээр.
-
-Бүх native клиент нэвтрэлтийг өөрийн native UI-аар хийж, session cookie-г
-webview store-д тарина. `/login` нь browser/PWA горимд л ашиглагдана:
-
-```bash
-make run-mac        # macOS хөгжүүлэлтийн горим
-make build-mac      # Swift/AppKit компиляц
-```
-
-### Хөтчөөс суулгах (Linux болон бусад)
-
-Native клиентгүй платформ дээр вэб клиент нь PWA
-(`/manifest.webmanifest`) тул хөтчөөс шууд суулгаж болно: Chrome/Edge дээр
-хаягийн мөрний суулгах товч, Safari дээр **File → Add to Dock**. Суулгасан
-хувилбар нь dock эсвэл taskbar-т орж, өөрийн цонхоор нээгддэг — татаж авах
-файлгүй, дэлгүүргүй, вэбтэй яг ижил хуудсуудыг үзүүлнэ.
-
-Платформ бүрийн урьдчилсан шаардлага, runtime endpoint, enrollment, code
-signing болон auto-update сувгийн зааврыг
-[`native-apps/README.md`](native-apps/README.md)-ээс үзнэ үү.
-
-> Native CI нь macOS Swift ба Windows .NET build-ийг тус тусын runner дээр
-> шалгана. Installer нь signing identity оруулсны дараах release ажил.
-
----
-
-## Ажиллуулах заавар
-
-### Шаардлагатай програмууд
-
-- Go 1.26+
-- Node.js 20+
-- PostgreSQL 16+ (эсвэл Docker Compose)
-
-### 1. Docker Compose (хамгийн хялбар)
+### Docker Compose
 
 ```bash
 docker compose up -d
+docker compose ps
 ```
 
-Миграц нь тусдаа `migrate` service-ээр автоматаар ажиллаж дуусмагц API асна.
+Compose нь PostgreSQL, Redis, MinIO, нэг удаагийн migration, backend, frontend
+асаана. Дараах хаягуудыг ашиглана:
 
-### 2. Гараар ажиллуулах
+- Tenant web: <http://nexus.localhost:3000>
+- Control plane web: <http://cp.localhost:3000>
+- API health: <http://localhost:8080/health>
 
-**Backend:**
+Development demo account:
+
+| Талбар | Утга |
+| --- | --- |
+| И-мэйл | `admin@example.com` |
+| Нууц үг | `Password123!` |
+| Tenant | `Demo Corporation` (`demo`) |
+
+`SEED_DEMO_DATA` нь production-оос бусад орчинд анхдагчаар идэвхтэй.
+Production-д explicit `true` өгөөгүй бол demo account үүсэхгүй.
+
+### Гараар
+
+Эхлээд PostgreSQL (шаардвал Redis)-ийг асаагаад:
 
 ```bash
 cd backend
 go mod download
 DATABASE_URL="postgres://postgres:postgrespassword@localhost:5432/platform_db?sslmode=disable" \
   go run ./cmd/migrate up
+
 PUBLIC_ORIGIN=http://nexus.localhost:3000 \
 ALLOWED_ORIGINS=http://nexus.localhost:3000,http://cp.localhost:3000 \
 CONTROL_PLANE_HOST=cp.localhost \
   go run ./cmd/api
 ```
 
-**Frontend:**
+Өөр terminal-д:
 
 ```bash
 cd frontend
@@ -287,261 +165,64 @@ NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
   npm run dev
 ```
 
-Вэб хөтөч дээр тенантын урсгалыг
-[http://nexus.localhost:3000](http://nexus.localhost:3000), операторын консолыг
-[http://cp.localhost:3000](http://cp.localhost:3000) хаягаар нээнэ. `localhost`-
-ын дэд домэйнүүд loopback руу шийдэгдэх тул `/etc/hosts` өөрчлөхгүй.
+Production тохиргоог README-гээс таахгүй. Бүрэн хувьсагч ба аюулгүй default-ыг
+[`.env.example`](.env.example), production жишээг
+[`deploy/.env.prod.example`](deploy/.env.prod.example), анхны tenant/operator
+үүсгэх алхмыг [`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)-ээс дагана.
 
-### Туршилтын нэвтрэх эрх
+## API ба каталогийн бодит эх сурвалж
 
-| Талбар | Утга |
-| --- | --- |
-| И-мэйл | `admin@example.com` |
-| Нууц үг | `Password123!` |
-| Тенант | `Demo Corporation` (`slug: demo`) |
+README дахь API жагсаалт бүрэн contract биш. Кодтой хамт шалгагддаг эх
+сурвалжууд:
 
-Энэ бүртгэл зөвхөн хөгжүүлэлтийн орчинд үүснэ. Production дээр
-`SEED_DEMO_DATA=true` гэж тодорхой заагаагүй бол огт үүсэхгүй.
+- Platform route snapshot:
+  [`backend/pkg/platform/testdata/routes.txt`](backend/pkg/platform/testdata/routes.txt)
+- Module SDK public API snapshot:
+  [`backend/pkg/nexus/testdata/api.txt`](backend/pkg/nexus/testdata/api.txt)
+- Base catalog: [`catalog/apps.json`](catalog/apps.json)
+- Base app manifest:
+  [`catalog/manifests/sso-clients.json`](catalog/manifests/sso-clients.json)
+- Тохиргоо: [`.env.example`](.env.example)
 
----
+Үндсэн public endpoint-д `/health`, `/ready`, `/metrics`, auth, setup,
+OAuth2/OIDC, app store, device enrollment, email verification болон Өртөөний
+exchange орно. Tenant session шаарддаг route-ууд, control plane route-ууд,
+module route-ууд тус тусдаа хамгаалалттай.
 
-## Автомат deploy
-
-`main` салбарын **CI амжилттай дууссаны дараа**
-[`deploy.yml`](.github/workflows/deploy.yml) `workflow_run`-аар ажиллана:
-
-1. Backend ба frontend образыг GHCR руу угсарч илгээнэ (`:latest` ба `:<sha>`).
-2. `docker-compose.prod.yml`-ийг серверт хуулна.
-3. Серверт `.env`-ийг GitHub secret-ээс шинээр бичиж, образуудыг татна.
-4. Миграц бүрэн дуусмагц API ба frontend солигдоно.
-5. `/health` ба `/ready`, OIDC route, control-plane host/API boundary-г
-   сервер дотроос шалгаж, амжилтгүй бол rollout-ыг унагана.
-
-Гараар ажиллуулахдаа Actions → *Deploy to Production* → **Run workflow**
-(шаардвал тодорхой tag зааж болно).
-
-Шаардлагатай repository secrets:
-
-| Secret | Заавал | Тайлбар |
-| --- | --- | --- |
-| `DEPLOY_SSH_KEY` | Тийм | Deploy хэрэглэгчийн хувийн түлхүүр. Байхгүй бол rollout алгасана |
-| `POSTGRES_PASSWORD` | Тийм | Сервер дэх өгөгдлийн сангийн нууц үг |
-| `SSO_DEFAULT_CLIENT_SECRET` | Тийм | Production дээр OAuth2 client-д зайлшгүй |
-| `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_PORT` | Үгүй | Анхдагч: `nexus.gerege.mn` / `deploy` / `22` |
-| `PUBLIC_ORIGIN` | Үгүй | Анхдагч: `https://nexus.gerege.mn` |
-| `CONTROL_PLANE_ALLOWED_CIDRS` | CP асаалттай үед тийм | CP nginx allowlist. Invalid CIDR, host-bit зөрүү, `0.0.0.0/0`, `::/0`-ийг deploy татгалзана |
-
-Repository variable `CONTROL_PLANE_HOST` нь production консолын hostname-ийг
-өгнө. Хоосон бол backend ба frontend хоёулаа консолыг 404-өөр хаана.
-
-> Production домэйн нь `nexus.gerege.mn`. Өмнөх `openerp.gerege.mn` домэйныг
-> Gerege Nexus нэршилд шилжихэд орлуулсан. `PUBLIC_ORIGIN` нь CORS, OIDC issuer,
-> eID callback гурвыг нэг дор тодорхойлдог тул түүнийг өөрчлөхөд DNS, TLS
-> гэрчилгээ, issuer-т тулгуурласан client бүр хамт шилжинэ.
-
-Серверт зөвхөн Docker шаардлагатай — эх код ч, Go/Node ч хэрэггүй. Утгуудын
-жишээг [`deploy/.env.prod.example`](deploy/.env.prod.example)-ээс үзнэ үү.
-
-### Анхны байгууллага — шинэ deployment дээр эхлээд хийх зүйл
-
-Шинэ deployment дээр **бүртгүүлэх дэлгэц байхгүй**, demo бүртгэл production
-дээр үүсэхгүй. Тэгэхээр миграц дуусаад контейнерууд асахад өгөгдлийн сан
-хоосон, `/ready` ногоон, нэвтрэх дэлгэц гарч ирдэг ч **хэн ч нэвтэрч чадахгүй**.
-Асах үед лог үүнийг хэлж, хоёр замыг зааж өгнө.
-
-**1. Тохиргооны шидтэн (вэб).** Сервер асахдаа нэг удаагийн setup токен үүсгээд
-хаягийг нь лог руу бичнэ:
-
-```
-WARN this deployment has no organisation ... setup_url=https://.../setup?token=<токен>
-```
-
-Тэр хаягаар орвол гурван алхам: байгууллага -> админ -> нууц үг. Регистрийн
-дугаараар **Gerege Core**-оос байгууллагын нэр, албан ёсны нэр, админы нэр,
-и-мэйлийг татна (`GEREGE_CORE_TOKEN` тохируулсан үед). Токен нь зөвхөн санах
-ойд, дискэнд бичигдэхгүй, байгууллага үүссэн даруйд хүчингүй болно — сервер
-дахин асвал шинэ токен гарна.
-
-**2. Команд (терминал).** Консол ч, хөтөч ч хэрэггүй:
+## Тест
 
 ```bash
-docker exec -it gerege_nexus_backend /app/tenant-bootstrap \
-  -org "Байгууллагын нэр" -slug baiguullaga \
-  -email you@example.mn -name "Таны нэр"
+cd backend
+go test ./...
+go vet ./...
+
+cd ../frontend
+npm ci
+npm test
+npm run lint
+npm run build
 ```
 
-Энэ нь эхний байгууллага, түүний админ хэрэглэгч, гишүүнчлэл, `admin` эрхийг
-нэг transaction-д үүсгэнэ. Нууц үгийг TTY-ээс хоёр удаа асууна — flag эсвэл
-env-д бүү дамжуул (`docker exec -it`, `docker exec` биш): shell history,
-process list, container inspect-д үлдэнэ.
+CI нь үүн дээр migration-backed race test, API/route boundary, PWA, host,
+translation-gap report, Docker build, `govulncheck`, `gosec` болон native client
+build нэмнэ. Яг ажилладаг командуудыг [`.github/workflows/ci.yml`](.github/workflows/ci.yml),
+[`security.yml`](.github/workflows/security.yml),
+[`native-clients.yml`](.github/workflows/native-clients.yml)-ээс үзнэ үү.
 
-**Нэг л удаа ажиллана.** Байгууллага аль хэдийн байвал команд татгалзана —
-дараагийнхыг нь [control plane консолоос](docs/CONTROL_PLANE.md) үүсгэнэ.
-Аппуудыг админ нь нэвтрээд дэлгүүрээс суулгана.
+## Хэл ба баримтын статус
 
----
+UI-ийн эх мөр монгол, англи хэлтэй; араб, хятад, франц, орос, испани overlay
+бий. Дутуу overlay англи хэл рүү fallback хийдэг бөгөөд CI цоорхойг
+тайлагнадаг — бүх дэлгэц 100% орчуулагдсан гэж амлахгүй.
 
-## Тохиргооны хувьсагчид
+README долоон хэлтэй. Техникийн баримт бүр долоон орчуулгатай биш; файл бүрийн
+хэл ба статусыг [`docs/README.md`](docs/README.md)-д тэмдэглэсэн. `PLAN`,
+`PROPOSAL`, `PROMPT`, `WORKLOG` нэртэй файл нь одоогийн runtime contract биш.
+Ажиллуулах зааварт тэдгээрийг дангаар нь эх сурвалж болгож болохгүй.
 
-Бүрэн жагсаалтыг [`.env.example`](.env.example)-ээс үзнэ үү.
+## Аюулгүй байдал ба лиценз
 
-| Хувьсагч | Анхдагч | Тайлбар |
-| --- | --- | --- |
-| `DATABASE_URL` | localhost | PostgreSQL холболтын мөр |
-| `PORT` | `8080` | API сонсох порт |
-| `ENVIRONMENT` | `development` | `production` үед аюулгүй байдлын хатуу горим |
-| `APP_CATALOG_PATH` | `catalog/apps.json` | Апп сторын каталогийн зам |
-| `ALLOWED_ORIGINS` | `nexus.localhost`, `cp.localhost` | Хоёр browser урсгалын CORS зөвшөөрөгдсөн эх сурвалж |
-| `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`-д итгэх эсэх |
-| `CONTROL_PLANE_HOST` | `cp.localhost` | Операторын консолын хост. Production дээр хоосон бол консол огт байхгүй ([`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)) |
-| `CONTROL_PLANE_ALLOWED_CIDRS` | — | Консолд хүрэх хаягууд. **Зөвхөн платформ хаалттай (private) горимд** шалгагдана — нээлттэй үед хаягаар хязгаарлахгүй. Хоосон эсвэл `open` бол огт хязгаарлахгүй |
-| `PROMETHEUS_URL` / `ALERTMANAGER_URL` / `GRAFANA_URL` | — | Консолын нүүр хуудсанд хэмжүүр, дохио, гүнзгий линк. Хоосон бол тэр хэсэг "тохируулаагүй" гэж харагдана |
-| `GITHUB_DEPLOY_TOKEN` / `GITHUB_REPOSITORY` | — | Консолын deploy товч. Токен нь зөвхөн deploy workflow-д эрхтэй fine-grained байх ёстой |
-| `SEED_DEMO_DATA` | production-оос бусад үед идэвхтэй | Туршилтын бүртгэл үүсгэх. Платформ хаалттай (private) горимтой бол зөрчилдөх тул boot дээр анхааруулна |
-| `SSO_DEFAULT_CLIENT_SECRET` | — | Production дээр заавал шаардлагатай |
-| `SSO_CLIENT_ISSUER` / `SSO_CLIENT_ID` | — | Тохируулбал энэ суулгац нэрлэсэн провайдерийн клиент болно: эндэх нэвтрэлт хаагдаж, гарах нь провайдер дээр дуусна |
-| `SSO_CLIENT_TENANT` | — | Провайдерийн баталгаажуулсан ч энд бүртгэлгүй хүнийг үүсгэх байгууллага. Хоосон бол үүсгэхгүй |
-| `GEREGE_CORE_TOKEN` / `GEREGE_CORE_URL` | — / `https://core.gerege.mn` | Байгууллага, хүнийг регистрээр хайхад ашиглах Gerege Core-ийн токен. Консолоос ч тавьж болно (`core.api_token`). Хоосон бол талбаруудыг гараар бөглөнө |
-| `INTEGRATION_ENCRYPTION_KEY` | — | Консолд хадгалсан түлхүүрүүд болон холбогчийн эрхийг битүүмжлэх AES түлхүүр. Хоосон бол консолоос түлхүүр хадгалах боломжгүй — цэвэр текстээр хадгалахын оронд бичилт татгалзана |
-| `GEMINI_API_KEY` | — | AI chat, voice, TTS, орчуулгыг идэвхжүүлэх түлхүүр |
-| `GEMINI_MODEL` / `GEMINI_TTS_MODEL` | Gemini 2.5 Flash загварууд | Chat ба дууны model сонголт |
-| `EID_MOCK_MODE` / `DAN_MOCK_MODE` / `XYP_MOCK_MODE` | production-оос бусад үед идэвхтэй | Төрийн системийн mock горим |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Trace-ийг Tempo руу илгээх хаяг. Хоосон бол tracing бүрэн унтарсан |
-| `OTEL_TRACES_SAMPLER_ARG` | `0.1` | Trace-ийн хэдэн хувийг хадгалах (0-1) |
-| `SENTRY_DSN` | — | Алдааны бүртгэл (GlitchTip эсвэл Sentry). Хоосон бол унтарсан |
-| `REPORT_SMTP_URL` / `REPORT_MAIL_FROM` | — | Товлосон тайланг илгээх SMTP. Хоосон бол тайлан бэлтгэгдэнэ, илгээгдэхгүй |
+Эмзэг байдлыг public issue-д нийтлэхгүй; [`SECURITY.md`](SECURITY.md)-ийн
+private reporting журмыг ашиглана.
 
-### Консолоос тохируулах
-
-Дээрх хувьсагчдын нэг хэсэг нь одоо **удирдлагын консолын** `/cp/config` дэлгэцээс
-өөрчлөгддөг — сервер дахин ачаалахгүйгээр. Env хувьсагч нь хэвээрээ ажиллах бөгөөд
-консолоос өгсөн утга л түүнийг дардаг: консол огт нээгээгүй суулгац юу ч мэдэрэхгүй.
-
-| Дэлгэц | Юу | Тайлбар |
-| --- | --- | --- |
-| Тохиргоо | `ai.model`, `ai.tts_model`, `brand.name`, `catalog.sync_interval`, `observability.*`, `platform.access_mode`, `platform.maintenance*`, `session.idle_timeout` | Утга бүр хаанаас ирснийг (консол/env/анхдагч) харуулна, өөрчлөлт бүр шалтгаантай, түүхтэй, нэг товчоор буцаана |
-| Түлхүүрүүд | `ai.gemini_api_key`, `core.api_token`, `reports.smtp_url` | **Буцааж харагдахгүй.** Утга нь AES-256-GCM-ээр битүүмжлэгдэж хадгалагдана, дэлгэц зөвхөн эх сурвалж болон сүүлийн дөрвөн тэмдэгтийг харуулна. Бичихэд хоёр дахь хүчин зүйл дахин шаардана |
-
-Хаяг, нэр гэх мэт нууц бус утга нь тохиргооны хүснэгтэд, нууц утга нь тусдаа
-битүүмжилсэн хүснэгтэд байдаг. Энэ хоёрын хил нь код дээр барьцаалагдсан:
-`internal/kernel/settings` нь нууц мэт унших түлхүүрийг бүртгэхээс `panic`-даг.
-
----
-
-Мониторингийн стек нь **өөрийн орчинтой** — платформын `.env`-д хамаарахгүй.
-`GRAFANA_ADMIN_PASSWORD`, `MONITORING_DB_PASSWORD` болон дохиоллын сувгийн
-хувьсагчдыг [`deploy/.env.monitoring.example`](deploy/.env.monitoring.example)
-ба [`docs/MONITORING.md`](docs/MONITORING.md)-ээс үзнэ үү. Тусдаа байгаа
-шалтгаан нь стек өөрөө тусдаа: платформ түүнгүйгээр бүрэн ажиллана.
-
----
-
-## API-н тойм
-
-| Аргачлал | Зам | Тайлбар |
-| --- | --- | --- |
-| `GET` | `/health`, `/ready` | Амьд ба бэлэн байдлын шалгалт |
-| `GET` | `/metrics` | Prometheus хэмжүүрүүд |
-| `POST` | `/api/v1/auth/login` | И-мэйл/нууц үгээр нэвтрэх |
-| `POST` | `/api/v1/auth/eid/login` | Үндэсний E-ID-аар нэвтрэх |
-| `POST` | `/api/v1/auth/dan/login` | ДАН гарцаар нэвтрэх |
-| `POST` | `/api/v1/auth/logout` | Session-ийг цуцлах |
-| `GET` | `/api/v1/auth/tenants` | Хэрэглэгчийн харьяалагдах байгууллагууд |
-| `POST` | `/api/v1/auth/switch-tenant` | Session-ийг өөр байгууллага руу шилжүүлэх |
-| `GET` | `/api/v1/menus` | Тенантад идэвхтэй цэсүүд |
-| `GET` | `/api/v1/store/apps` | Апп сторын жагсаалт |
-| `POST` | `/api/v1/ai/chat`, `/stt`, `/tts`, `/translate` | Tenant-safe Gemini AI pipeline |
-| `GET/PUT` | `/api/v1/admin/ai/prompts/{key}` | AI prompt тохируулах (админ) |
-| `GET/POST` | `/api/v1/admin/ai/knowledge` | AI мэдлэгийн сан (админ) |
-| `POST` | `/api/v1/store/apps/{slug}/install` | Апп суулгах (админ) |
-| `POST` | `/api/v1/verify/send` | Хостинг үйлчилгээнээс баталгаажуулах холбоос хүсэх |
-| `GET` | `/api/v1/verify/landed` | Баталгаажуулсан хэрэглэгчийг хүлээн авах — нэг л удаа ажиллана |
-| `GET` | `/api/v1/admin/email-verification/overview` | Баталгаажуулалтын тойм ба үйлчилгээний төлөв (админ) |
-| `POST` | `/oauth2/token` | OAuth2 client credentials токен |
-| `GET` | `/oauth2/logout` | RP-initiated logout — session хааж, бүртгэлтэй хаяг руу буцаана |
-| `GET` | `/api/v1/auth/sso/config` | Энэ суулгац хэрхэн нэвтрүүлдэг — нэвтрэх дэлгэц уншина |
-| `GET` | `/api/v1/auth/sso/start` | Провайдер дээр нэвтрэлт эхлүүлнэ (PKCE, state, nonce) |
-| `GET` | `/api/v1/auth/sso/callback` | Провайдерээс буцаж ирэх цэг |
-| `POST` | `/api/platform/v1/session` | Операторын нууц үг + TOTP нэвтрэлт (`cp.` host дээр л) |
-| `GET` | `/api/platform/v1/audit` | Append-only операторын audit |
-| `GET` | `/api/platform/v1/health` | Control-plane эрүүл мэндийн тойм |
-
-Нэвтрэлтийн токен нь HttpOnly cookie эсвэл `Authorization: Bearer <token>`
-толгойгоор дамжина.
-
----
-
-## Тест ба чанарын хяналт
-
-```bash
-# Backend нэгж тестүүд (race detector-тэй)
-cd backend && go test -race ./...
-
-# Статик шинжилгээ
-cd backend && go vet ./... && golangci-lint run
-
-# Эмзэг байдлын шалгалт
-cd backend && govulncheck ./...
-
-# Frontend build
-cd frontend && npm run test && npx tsc --noEmit && npm run lint && npm run build
-
-# Built frontend-ийн hostname boundary smoke test
-cd frontend && npm run host:smoke
-
-# Нийтлэгдэх баримт ба дотоод холбоос
-cd docs/site && npm run check
-```
-
-CI нь push ба pull request бүр дээр lint, тест, frontend build, Docker образ
-угсралт, govulncheck ба gosec шалгалтыг ажиллуулна.
-
----
-
-## Аюулгүй байдал
-
-- Session токен нь 256 бит санамсаргүй утга бөгөөд өгөгдлийн санд зөвхөн
-  SHA-256 хэш нь хадгалагдана.
-- Нууц үг bcrypt-ээр хэшлэгдэнэ; нэвтрэх хүсэлтэд IP-д суурилсан хурдны
-  хязгаарлалт үйлчилнэ.
-- Апп суулгах, идэвхжүүлэх, интеграц бүртгэх үйлдэл тенантын админ эрх шаардана.
-- OAuth2 client танилт тогтмол хугацааны харьцуулалтаар (constant-time)
-  шалгагдана.
-
-Эмзэг байдал мэдээлэх журмыг [`SECURITY.md`](SECURITY.md)-ээс үзнэ үү.
-
----
-
-## Баримт бичгийн индекс
-
-| Баримт | Тайлбар |
-| --- | --- |
-| [Баримт бичгийн төв](docs/README.md) | Бүх баримтын индекс ба орчуулгууд |
-| [Архитектурын тодорхойлолт](docs/ARCHITECTURE_SPECIFICATION.md) | Платформын давхаргууд ба шийдвэрүүд |
-| [Цөмийн хилийн төлөвлөгөө](docs/CORE_BOUNDARY_PLAN.md) | Юу цөмд үлдэж, юу апп болж гарах вэ — хэмжилт ба үе шатууд |
-| [Модуль хөгжүүлэх заавар](docs/MODULE_AUTHORING_GUIDE.md) | Шинэ апп модуль бичих алхмууд |
-| [Bridge Contract v1](docs/SHELL_CONTRACT.md) | Native бүрхүүл ба вэб ажлын мужийн гэрээ |
-| [Хамтран ажиллах заавар](CONTRIBUTING.md) | Хувь нэмэр оруулах журам |
-| [Аюулгүй байдлын бодлого](SECURITY.md) | Эмзэг байдал мэдээлэх |
-| [Ёс зүйн дүрэм](CODE_OF_CONDUCT.md) | Хамт олны хэм хэмжээ |
-| [Өөрчлөлтийн түүх](CHANGELOG.md) | Хувилбар бүрийн өөрчлөлт |
-
----
-
-## Ашигласан ба санаа авсан төслүүд
-
-1. **[snykk/go-rest-boilerplate](https://github.com/snykk/go-rest-boilerplate)**
-   by **[@snykk](https://github.com/snykk)** — Go REST API суурь архитектур.
-2. **[Odoo](https://github.com/odoo/odoo)** — модуль апп стор ба хамаарал
-   шийдвэрлэх загвар.
-3. **[go-zero](https://github.com/zeromicro/go-zero)** — cloud-native
-   resilience хөдөлгүүр.
-
----
-
-## Лиценз
-
-Copyright (c) 2026 **Gerege Systems Development Team, Gerege Nomadica Foundation**. Apache 2.0 лицензээр тараагдана — [`LICENSE`](LICENSE)-ийг үзнэ үү.
-
-Тугны дүрсийг [Flaticon](https://www.flaticon.com/)-оос авсан
-([оруулсан хувь нэмэр](docs/assets/icons/ATTRIBUTION.md)).
+Apache License 2.0 — [`LICENSE`](LICENSE).

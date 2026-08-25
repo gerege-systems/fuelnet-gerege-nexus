@@ -34,9 +34,8 @@ export const website = {
     en: "{brand} is a modular platform that brings an organisation's services, operations, systems and data together. Modules compile into a single Go binary, and an app store decides which of them each tenant runs.",
   },
 
-  // Three numbers that hold still. A count of tests or contributors would drift
-  // out of true without anybody noticing; these change only when the platform
-  // itself does, and the sections below say the same numbers out loud.
+  // Three numbers that hold still. Keep the app count in step with the base
+  // catalogue; distributions can override it with BRAND_COPY.
   //
   // The figures are keys rather than literals so that a deployment counting
   // something else can say so: an identity provider shipping four modules does
@@ -44,8 +43,8 @@ export const website = {
   // correct is a number its landing page states wrongly. Same value in every
   // language — they are digits — but they go through `t()` so BRAND_COPY can
   // reach them like any other line.
-  "website.stat.apps_count": { mn: "9", en: "9" },
-  "website.stat.apps": { mn: "бэлэн бизнес апп", en: "applications included" },
+  "website.stat.apps_count": { mn: "1", en: "1" },
+  "website.stat.apps": { mn: "үндсэн репод багтсан апп", en: "app included in the base repository" },
   "website.stat.languages_count": { mn: "7", en: "7" },
   "website.stat.languages": { mn: "хэл — монгол + НҮБ-ын 6", en: "languages: Mongolian plus the UN six" },
   "website.stat.binary_count": { mn: "1", en: "1" },
@@ -137,21 +136,13 @@ export const website = {
     en: "The app catalogue is the single source of truth and is fetched signed. The list of apps is refreshed from it every time the system starts.",
   },
 
-  "website.apps.eyebrow": { mn: "БЭЛЭН АППЛИКЕЙШНҮҮД", en: "APPLICATIONS INCLUDED" },
-  "website.apps.title": { mn: "Эхний өдрөөс ажиллах есөн апп", en: "Nine applications, working on day one" },
+  "website.apps.eyebrow": { mn: "ҮНДСЭН DISTRIBUTION", en: "BASE DISTRIBUTION" },
+  "website.apps.title": { mn: "Нэг built-in апп, нэмэгдэх боломжтой платформ", en: "One built-in app, an extensible platform" },
   "website.apps.lede": {
-    mn: "Апп бүр байгууллагад суулгагдаж идэвхжсэн үед л нээгдэнэ. Хэрэггүйг нь унтраахад платформ багасахаас өөр юу ч болохгүй.",
-    en: "Each one opens only once an organisation installs and enables it. Turn off what you do not need and nothing breaks; the platform simply gets smaller.",
+    mn: "Энэ репогийн каталогт SSO клиент удирдах апп л байна. Бизнес аппуудыг тусдаа distribution репо компиллож, өөрийн каталогоор нэмдэг.",
+    en: "This repository's catalogue contains only SSO client management. Product distributions compile in business apps and publish their own catalogue.",
   },
-  "website.apps.core": { mn: "Байгууллага ба ажилтнууд", en: "Organisation and people" },
-  "website.apps.contacts": { mn: "Харилцагчид — төрийн бүртгэлээс авто-бөглөлт", en: "Contacts, auto-filled from the state registry" },
-  "website.apps.products": { mn: "Бараа ба үнийн бүртгэл", en: "Products and pricing" },
-  "website.apps.inventory": { mn: "Агуулах, үлдэгдэл, эрэлтийн таамаг", en: "Inventory, stock and demand forecasting" },
-  "website.apps.billing": { mn: "Нэхэмжлэх, НӨАТ, e-Barimt", en: "Invoicing, VAT and e-Barimt receipts" },
-  "website.apps.documents": { mn: "Цахим баримт ба батламжийн урсгал", en: "Digital documents and approval flows" },
-  "website.apps.gov": { mn: "Төрийн үйлчилгээний шийдвэрлэх урсгал", en: "State service request workflows" },
-  "website.apps.esign": { mn: "eID-ээр хуулийн хүчинтэй цахим гарын үсэг", en: "Legally valid electronic signatures through eID" },
-  "website.apps.developer": { mn: "Хөгжүүлэгчийн портал ба OAuth2 SSO", en: "Developer portal and OAuth2 SSO" },
+  "website.apps.sso_clients": { mn: "SSO клиентүүд — OAuth2/OIDC клиент бүртгэл", en: "SSO Clients — OAuth2/OIDC client registration" },
 
   "website.depth.eyebrow": { mn: "ПЛАТФОРМЫН СУУРЬ", en: "UNDER THE PLATFORM" },
   "website.depth.title": {
@@ -162,10 +153,10 @@ export const website = {
     mn: "Эдгээрийн аль нь ч нэмэлт биш. Платформын цөмд байрлах тул апп бүр тэднийг өвлөж авна.",
     en: "None of this is an add-on. It sits in the core, so every application inherits it.",
   },
-  "website.depth.resilience_title": { mn: "Тэсвэрлэлтийн хөдөлгүүр", en: "A resilience engine" },
+  "website.depth.resilience_title": { mn: "Хүсэлтийн хамгаалалт", en: "Request protection" },
   "website.depth.resilience_body": {
-    mn: "Ачааллын дагуу тохирдог таслуур, ачаалал хаях механизм, давхардсан хүсэлтийн нэгтгэл, ухарч давтах логик — платформын нэг хэсэг.",
-    en: "Adaptive circuit breaking, load shedding, request coalescing and backoff retries, all part of the platform rather than each service.",
+    mn: "Хэт олон зэрэг хүсэлтийг 503-аар хязгаарлах load shedder, гадаад дуудлагын timeout, зориулалтын retry бодлого платформд хэрэгжсэн.",
+    en: "The platform implements concurrency load shedding, outbound timeouts and operation-specific retry policies.",
   },
   "website.depth.gov_title": { mn: "Төрийн систем рүү шууд", en: "Straight into state systems" },
   "website.depth.gov_body": {
@@ -179,13 +170,13 @@ export const website = {
   },
   "website.depth.ai_title": { mn: "Өөрийн өгөгдөлд холбогдсон AI", en: "AI wired to your own data" },
   "website.depth.ai_body": {
-    mn: "Байгууллагын бодит төлөвт холбогдсон туслах, агуулахын эрэлт таамаглагч. Харилцан яриа, яриа таних, унших, орчуулга нэг урсгал дээр.",
-    en: "An assistant connected to the organisation's real state, plus inventory forecasting. Chat, speech, reading and translation on one pipeline.",
+    mn: "Gemini түлхүүр өгвөл чат, яриа таних, унших, орчуулга ажиллана. Бизнес өгөгдөлд хандах хэрэгслийг тухайн distribution-ийн апп өөрөө бүртгэнэ.",
+    en: "With a Gemini key, chat, speech, text-to-speech and translation are available. Product apps register the tools that expose their own business data.",
   },
   "website.depth.i18n_title": { mn: "Долоон хэл, цоорхойгүй", en: "Seven languages, no gaps" },
   "website.depth.i18n_body": {
-    mn: "Монгол хэл эх сурвалж, дээр нь НҮБ-ын албан ёсны зургаан хэл. Орчуулга дутуу бол CI алдаа өгдөг тул хагас орчуулагдсан дэлгэц нийтлэгдэхгүй.",
-    en: "Mongolian is the source, joined by the six official UN languages. CI fails on a missing translation, so a half-translated screen cannot ship.",
+    mn: "Монгол, англи эх мөрүүд дээр НҮБ-ын бусад таван хэлний overlay нэмэгдэнэ. Орчуулга дутвал англи руу fallback хийж, CI үлдсэн цоорхойг тайлагнана.",
+    en: "Mongolian and English source strings are joined by five UN-language overlays. Missing translations fall back to English and CI reports the remaining gaps.",
   },
   "website.depth.observability_title": { mn: "Ажиглалт ба аудит", en: "Observability and audit" },
   "website.depth.observability_body": {

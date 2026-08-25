@@ -5,13 +5,7 @@ import {CheckCircle2} from "lucide-react";
 import {APPLICATIONS} from "@/components/landing/content";
 import {useI18n} from "@/lib/i18n";
 
-/**
- * The nine applications that ship with the platform.
- *
- * This reuses the trust panel's layout — a claim on one side, a checked list on
- * the other — because the claim being made is the same shape: here is a set of
- * things you get, and each one is already true rather than promised.
- */
+/** The app compiled into the base distribution. Product distributions add more. */
 export default function Applications() {
   const {t} = useI18n();
 
