@@ -71,6 +71,15 @@ export const core = {
     mn: "{name} нэгжийг устгах уу? Энэ үйлдлийг буцаах боломжгүй — түүхээ хадгалах бол оронд нь архивлана уу.",
     en: "Delete {name}? This cannot be undone — archive it instead to keep its history.",
   },
+  "core.action.core_sync": { mn: "Core-оос шинэчлэх", en: "Refresh from the register" },
+  "core.hint.core_sync": {
+    mn: "Регистрийн дугаараар Gerege Core-оос албан ёсны нэр, хаяг, холбоо барих мэдээллийг татаж шинэчилнэ. Регистрд байхгүй талбарыг хөндөхгүй.",
+    en: "Looks the organisation up in Gerege Core by its registration number and refreshes the legal name, address and contact details. A field the register does not hold is left alone.",
+  },
+  "core.message.core_synced": {
+    mn: "Байгууллагын мэдээллийг Gerege Core-оос шинэчиллээ.",
+    en: "The organisation was refreshed from the Gerege Core register.",
+  },
   "core.message.saved": { mn: "Байгууллагын мэдээлэл хадгалагдлаа", en: "The organisation's details were saved" },
   // Says what this is and, just as importantly, what it is not: recording a
   // parent grants nobody anything.

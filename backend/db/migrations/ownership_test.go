@@ -104,8 +104,12 @@ var platformTables = map[string]table{
 	"pending_approvals":         {"platform", "control plane"},
 	// The names of the rights, not who holds them: role_permissions is the
 	// tenant's half of this pair.
-	"permissions":               {"platform", "access control"},
-	"platform_backups":          {"platform", "control plane"},
+	"permissions":      {"platform", "access control"},
+	"platform_backups": {"platform", "control plane"},
+	// The keys a deployment reaches other systems with, sealed. Its values
+	// never leave the process, which is why there is no history table beside
+	// it: a history of a credential is a list of the ones it used to have.
+	"platform_credentials":      {"platform", "control plane"},
 	"platform_settings":         {"platform", "control plane"},
 	"platform_settings_history": {"platform", "control plane"},
 	"store_app_versions":        {"platform", "app store"},
@@ -163,8 +167,8 @@ var platformTables = map[string]table{
 }
 
 var (
-	createTable = regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z0-9_]+)`)
-	dropTable   = regexp.MustCompile(`(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?([a-z0-9_]+)`)
+	createTable = regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:(?:public|platform|tenant)\.)?([a-z0-9_]+)`)
+	dropTable   = regexp.MustCompile(`(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:(?:public|platform|tenant)\.)?([a-z0-9_]+)`)
 	// Comments are stripped first. These files explain themselves at length,
 	// and a comment quoting `CREATE TABLE IF NOT EXISTS` was read as a table
 	// called "if".

@@ -825,6 +825,11 @@ func (s *Service) Routes(r chi.Router) {
 			// because these fields print on documents.
 			pr.Get("/tenant/profile", s.profile.HandleGetTenantProfile)
 			pr.With(s.authn.RequireAdmin).Put("/tenant/profile", s.profile.HandleUpdateTenantProfile)
+			// Refreshing those same fields from the register that holds them.
+			// Behind the same guard as the edit, because it is one: what comes
+			// back overwrites the organisation's legal identity.
+			pr.With(s.authn.RequireAdmin).
+				Post("/tenant/profile/sync-core", s.profile.HandleSyncTenantProfileFromCore)
 			// Ending the session in front of you needs no proof beyond the
 			// cookie; ending the ones you cannot see is a decision about an
 			// account, so it sits behind authentication with the rest.

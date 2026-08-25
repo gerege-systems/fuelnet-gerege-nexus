@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
+
 	"github.com/gerege-systems/open-gerege-core/pkg/gemini"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
@@ -49,58 +51,70 @@ type generator interface {
 	GenerateContent(context.Context, gemini.Request) (gemini.Response, error)
 }
 type CopilotService struct {
-	db  nexus.DB
-	tts generator
-	// base and key are held so the chat client can be rebuilt when the model
-	// changes. They are the two things that never change at runtime — an
-	// address and a credential, which is precisely the pair the settings
-	// registry refuses to hold.
-	base, key string
+	db nexus.DB
+	// base is the address the clients are built against. It is the one thing
+	// here that still cannot change at runtime.
+	base string
 
-	// chat is rebuilt when the configured model changes.
+	// chat and tts are rebuilt when the model or the key changes.
 	//
-	// The model is a platform setting now (settings.AIModel), so an operator
-	// can move the deployment onto a newer Gemini without a deploy — which is
-	// the whole point of it being a setting. The client carries its model, so
-	// "the model changed" means "build another client", and this is where that
-	// is noticed: once per call, comparing two strings.
+	// The model has been a platform setting since settings.AIModel, so an
+	// operator can move the deployment onto a newer Gemini without a deploy.
+	// The key can now change under the same hand — it is a console credential
+	// (credentials.GeminiAPIKey), which is what makes rotating it something
+	// other than an ssh session. A client carries both, so "either changed"
+	// means "build another one", and this is where that is noticed: once per
+	// call, comparing two strings.
 	chatMu    sync.Mutex
 	chatModel string
+	chatKey   string
 	chat      generator
+
+	ttsMu    sync.Mutex
+	ttsModel string
+	ttsKey   string
+	tts      generator
 
 	voice string
 }
 
-// chatClient returns a generator for the model that is configured now.
+// apiKey is the credential as it stands now: what the console holds, then the
+// environment.
+func apiKey() string { return credentials.Get(credentials.GeminiAPIKey) }
+
+// chatClient returns a generator for the model and key configured now.
 func (s *CopilotService) chatClient() generator {
-	model := settings.Get(settings.AIModel)
+	model, key := settings.Get(settings.AIModel), apiKey()
 
 	s.chatMu.Lock()
 	defer s.chatMu.Unlock()
-	if s.chat == nil || s.chatModel != model {
-		s.chat = observe(gemini.NewClient(s.base, s.key, model), "generate")
-		s.chatModel = model
+	if s.chat == nil || s.chatModel != model || s.chatKey != key {
+		s.chat = observe(gemini.NewClient(s.base, key, model), "generate")
+		s.chatModel, s.chatKey = model, key
 	}
 	return s.chat
 }
 
-func NewCopilotService(db nexus.DB) *CopilotService {
-	base, key := os.Getenv("GEMINI_API_BASE"), os.Getenv("GEMINI_API_KEY")
-	ttsModel := os.Getenv("GEMINI_TTS_MODEL")
-	if ttsModel == "" {
-		ttsModel = "gemini-2.5-flash-preview-tts"
+// ttsClient is chatClient for the voice model.
+func (s *CopilotService) ttsClient() generator {
+	model, key := settings.Get(settings.AITTSModel), apiKey()
+
+	s.ttsMu.Lock()
+	defer s.ttsMu.Unlock()
+	if s.tts == nil || s.ttsModel != model || s.ttsKey != key {
+		s.tts = observe(gemini.NewClient(s.base, key, model), "tts")
+		s.ttsModel, s.ttsKey = model, key
 	}
+	return s.tts
+}
+
+func NewCopilotService(db nexus.DB) *CopilotService {
+	base := os.Getenv("GEMINI_API_BASE")
 	voice := os.Getenv("GEMINI_VOICE")
 	if voice == "" {
 		voice = "Kore"
 	}
-	return &CopilotService{
-		db:    db,
-		base:  base,
-		key:   key,
-		tts:   observe(gemini.NewClient(base, key, ttsModel), "tts"),
-		voice: voice,
-	}
+	return &CopilotService{db: db, base: base, voice: voice}
 }
 
 func (s *CopilotService) Query(ctx context.Context, req CopilotRequest) (*CopilotResponse, error) {
@@ -315,7 +329,7 @@ func (s *CopilotService) Translate(ctx context.Context, text, target string) (st
 }
 func (s *CopilotService) Speak(ctx context.Context, text string) (*Audio, error) {
 	temp := 0.2
-	r, e := s.tts.GenerateContent(ctx, gemini.Request{Contents: []gemini.Content{{Role: "user", Parts: []gemini.Part{{Text: truncate(text, 2000)}}}}, GenerationConfig: &gemini.GenerationConfig{Temperature: &temp, ResponseModalities: []string{"AUDIO"}, SpeechConfig: &gemini.SpeechConfig{VoiceConfig: &gemini.VoiceConfig{PrebuiltVoiceConfig: &gemini.PrebuiltVoiceConfig{VoiceName: s.voice}}}}})
+	r, e := s.ttsClient().GenerateContent(ctx, gemini.Request{Contents: []gemini.Content{{Role: "user", Parts: []gemini.Part{{Text: truncate(text, 2000)}}}}, GenerationConfig: &gemini.GenerationConfig{Temperature: &temp, ResponseModalities: []string{"AUDIO"}, SpeechConfig: &gemini.SpeechConfig{VoiceConfig: &gemini.VoiceConfig{PrebuiltVoiceConfig: &gemini.PrebuiltVoiceConfig{VoiceName: s.voice}}}}})
 	if e != nil {
 		return nil, e
 	}

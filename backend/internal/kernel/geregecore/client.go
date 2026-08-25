@@ -17,6 +17,11 @@
 // Read-only, and deliberately narrow: two lookups, no writes, no caching. A
 // directory this platform does not own is not a directory it should be holding
 // a stale copy of.
+//
+// In the kernel rather than in either plane because both reach it: the console
+// plane stands a deployment up from a registration number, and the tenant plane
+// refreshes an organisation's own details from the same record. Neither plane
+// imports the other, so a client used by both is the floor underneath them.
 package geregecore
 
 import (
@@ -39,20 +44,28 @@ const DefaultBaseURL = "https://core.gerege.mn"
 // Client talks to the directory. The zero value is not usable; see New.
 type Client struct {
 	baseURL string
-	token   string
+	token   func() string
 	http    *http.Client
 }
 
-// New builds a client. An empty baseURL means the production directory; an
-// empty token means the directory is not configured, which Configured reports
-// and every lookup refuses rather than calling an endpoint that would 401.
-func New(baseURL, token string) *Client {
+// New builds a client. An empty baseURL means the production directory.
+//
+// token is a function rather than a string because the token is a console
+// credential: an operator can set or rotate it while the process is running,
+// and a client that captured the value at construction would go on presenting
+// the old one — or none — until somebody restarted the deployment. An empty
+// answer means the directory is not configured, which Configured reports and
+// every lookup refuses rather than calling an endpoint that would 401.
+func New(baseURL string, token func() string) *Client {
 	if baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/"); baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	if token == nil {
+		token = func() string { return "" }
+	}
 	return &Client{
 		baseURL: baseURL,
-		token:   strings.TrimSpace(token),
+		token:   token,
 		// Long enough for a directory that reaches a government register
 		// behind it, short enough that a wizard does not look hung.
 		http: &http.Client{Timeout: 20 * time.Second},
@@ -61,7 +74,7 @@ func New(baseURL, token string) *Client {
 
 // Configured reports whether a token was supplied. Without one the wizard shows
 // the fields to fill in by hand rather than a lookup that cannot work.
-func (c *Client) Configured() bool { return c != nil && c.token != "" }
+func (c *Client) Configured() bool { return c != nil && strings.TrimSpace(c.token()) != "" }
 
 // ErrNotConfigured is a lookup on a deployment with no directory token.
 var ErrNotConfigured = fmt.Errorf("GEREGE_CORE_TOKEN is not set, so the Gerege Core directory cannot be searched")
@@ -185,7 +198,7 @@ func (c *Client) call(ctx context.Context, method, endpoint string, body []byte,
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.token()))
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

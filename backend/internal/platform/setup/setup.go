@@ -35,8 +35,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/geregecore"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
-	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/geregecore"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenants"
 
 	"github.com/go-chi/chi/v5"
@@ -57,7 +58,8 @@ type Service struct {
 
 // New builds the wizard. It performs no I/O and arms nothing: see Arm.
 func New(db *pgxpool.Pool) *Service {
-	return &Service{db: db, core: geregecore.New(os.Getenv("GEREGE_CORE_URL"), os.Getenv("GEREGE_CORE_TOKEN"))}
+	return &Service{db: db, core: geregecore.New(os.Getenv("GEREGE_CORE_URL"),
+		func() string { return credentials.Get(credentials.CoreAPIToken) })}
 }
 
 // Arm mints the setup token when the deployment has no organisation, and says

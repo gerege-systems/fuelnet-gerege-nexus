@@ -49,6 +49,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/mailrail"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
@@ -85,6 +86,10 @@ type ConsoleDeps struct {
 	// felt by the running platform rather than by a second copy of it.
 	Settings *settings.Store
 	Flags    *flags.Store
+	// Credentials are the keys this deployment reaches other systems with,
+	// sealed. Held here for the same reason as the two above: a key set in the
+	// console has to be the key the running platform presents.
+	Credentials *credentials.Store
 	// TenantChanged is called after the console changes an organisation's
 	// lifecycle, so the other plane can drop what it has cached about it — on
 	// every replica, through the invalidation bus, rather than after each of
@@ -157,6 +162,7 @@ func New(db *pgxpool.Pool, deps ConsoleDeps) *Service {
 		audit:     auditScreen,
 		settings: platformsettings.New(op, platformsettings.Deps{
 			DB: db, Settings: deps.Settings, Flags: deps.Flags, Warnings: deps.Warnings,
+			Credentials: deps.Credentials,
 		}),
 		flags:         platformflags.New(op, platformflags.Deps{Flags: deps.Flags}),
 		announce:      announce.New(op, announce.Deps{DB: db}),

@@ -4,6 +4,7 @@ CONNECT /cp/api
 CONNECT /cp/api/*
 CONNECT /metrics
 DELETE /api/platform/v1/announcements/{id}
+DELETE /api/platform/v1/credentials/{name}
 DELETE /api/platform/v1/flags/{key}
 DELETE /api/platform/v1/session
 DELETE /api/platform/v1/tenants/{id}/deletion
@@ -22,6 +23,7 @@ GET /api/platform/v1/approvals
 GET /api/platform/v1/audit
 GET /api/platform/v1/catalog/overview
 GET /api/platform/v1/catalog/status
+GET /api/platform/v1/credentials
 GET /api/platform/v1/deletions
 GET /api/platform/v1/flags
 GET /api/platform/v1/health
@@ -161,6 +163,7 @@ POST /api/v1/store/apps/{slug}/disable
 POST /api/v1/store/apps/{slug}/enable
 POST /api/v1/store/apps/{slug}/install
 POST /api/v1/store/apps/{slug}/upgrade
+POST /api/v1/tenant/profile/sync-core
 POST /api/v1/urtuu/codes/
 POST /api/v1/urtuu/codes/ring-sync
 POST /api/v1/urtuu/exchange/push
@@ -178,6 +181,7 @@ POST /oauth2/logout
 POST /oauth2/revoke
 POST /oauth2/token
 POST /oauth2/userinfo
+PUT /api/platform/v1/credentials/{name}
 PUT /api/platform/v1/flags/{key}/override
 PUT /api/platform/v1/settings/{key}
 PUT /api/platform/v1/tenants/{id}/quota

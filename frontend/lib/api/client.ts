@@ -367,6 +367,15 @@ export const coreApi = {
   updateOrganisation: (patch: Record<string, string>) =>
     request("/tenant/profile", { method: "PUT", body: JSON.stringify(patch) }),
 
+  /**
+   * Refresh the organisation's legal identity from the Gerege Core register.
+   *
+   * Returns the profile as it stands afterwards, so the screen redraws from
+   * the server's answer rather than from what it hoped the register said.
+   */
+  syncOrganisationFromCore: () =>
+    request("/tenant/profile/sync-core", { method: "POST" }),
+
   getPreferences: () =>
     request<{
       name: string; email: string; phone: string; locale: string; timezone: string;
