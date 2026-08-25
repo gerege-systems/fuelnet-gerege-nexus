@@ -3,6 +3,10 @@
 `io.gerege.nexus.reports`: суулгасан апп бүрийн тайланг нэг дэлгэцээс
 ажиллуулах, график харах, Excel/CSV болгон гаргах, товлосон хугацаанд илгээх.
 
+Тайлангийн engine нь цөмийн `internal/tenant/reporting`-д, reports UI module нь
+`client-gerege-nexus` distribution-д байна. Гаднын module engine-ийн internal
+package-ийг импортлохгүй; тайлангаа нийтийн `pkg/nexus` SDK-аар бүртгэнэ.
+
 [Баримт бичгийн төв рүү буцах](README.md) ·
 [Дизайны санал](MONITORING_AND_REPORTING_PROPOSAL.md) ·
 [Модуль бичих заавар](MODULE_AUTHORING_GUIDE.md)
@@ -33,7 +37,9 @@ package billing
 
 import (
     "context"
-    "github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/reporting"
+    "time"
+
+    "github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 type revenueByMonth struct{}
@@ -45,37 +51,37 @@ func (revenueByMonth) Titles() map[string]string {
     return map[string]string{"mn": "Орлого сараар", "en": "Revenue by month"}
 }
 
-func (revenueByMonth) Params() []reporting.ParamSpec {
-    return []reporting.ParamSpec{{
+func (revenueByMonth) Params() []nexus.ParamSpec {
+    return []nexus.ParamSpec{{
         Key:           "period",
-        Kind:          reporting.ParamDateRange,
+        Kind:          nexus.ParamDateRange,
         Titles:        map[string]string{"mn": "Хугацаа", "en": "Period"},
         DefaultWindow: 365 * 24 * time.Hour,
     }}
 }
 
-func (revenueByMonth) Columns() []reporting.ColumnSpec {
-    return []reporting.ColumnSpec{
-        {Key: "month", Kind: reporting.ColumnMonth, Chart: reporting.ChartCategory,
+func (revenueByMonth) Columns() []nexus.ColumnSpec {
+    return []nexus.ColumnSpec{
+        {Key: "month", Kind: nexus.ColumnMonth, Chart: nexus.ChartCategory,
          Titles: map[string]string{"mn": "Сар", "en": "Month"}},
-        {Key: "gross", Kind: reporting.ColumnMoney, Chart: reporting.ChartValue, Total: true,
+        {Key: "gross", Kind: nexus.ColumnMoney, Chart: nexus.ChartValue, Total: true,
          Titles: map[string]string{"mn": "Нийт дүн", "en": "Gross"}},
     }
 }
 
-func (revenueByMonth) Run(ctx context.Context, q reporting.Querier,
-    p reporting.Params) (reporting.Result, error) {
+func (revenueByMonth) Run(ctx context.Context, q nexus.Querier,
+    p nexus.Params) (nexus.Result, error) {
 
     rows, err := q.Query(ctx, `
         SELECT date_trunc('month', created_at)::date, sum(amount + vat_amount)
-          FROM billing_invoices
+          FROM tenant.billing_invoices
          WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
          GROUP BY 1 ORDER BY 1`,
-        reporting.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
+        nexus.TenantOf(ctx), p.Time("period_from"), p.Time("period_to"))
     if err != nil {
-        return reporting.Result{}, err
+        return nexus.Result{}, err
     }
-    collected, err := reporting.Collect(rows, func() (map[string]any, error) {
+    collected, err := nexus.Collect(rows, func() (map[string]any, error) {
         var month time.Time
         var gross float64
         if err := rows.Scan(&month, &gross); err != nil {
@@ -84,19 +90,19 @@ func (revenueByMonth) Run(ctx context.Context, q reporting.Querier,
         return map[string]any{"month": month, "gross": gross}, nil
     })
     if err != nil {
-        return reporting.Result{}, err
+        return nexus.Result{}, err
     }
-    return reporting.Result{Rows: collected}, nil
+    return nexus.Result{Rows: collected}, nil
 }
 ```
 
 Модулийнхаа `New`-д бүртгэ:
 
 ```go
-func New(db *pgxpool.Pool) *BillingModule {
-    m := &BillingModule{db: db}
-    appregistry.Register(m)
-    registerReports()   // reporting.Register(revenueByMonth{}) энд
+func New(p nexus.Platform) *BillingModule {
+    m := &BillingModule{p: p}
+    nexus.Register(m)
+    nexus.RegisterReport(revenueByMonth{})
     return m
 }
 ```
@@ -109,7 +115,7 @@ Frontend-д ямар ч өөрчлөлт хэрэггүй.
 | Дүрэм | Яагаад |
 | --- | --- |
 | `WHERE tenant_id = $1` **заавал** бич | Хэрэглээний давхаргын шүүлт нь үндсэн хамгаалалт. RLS бол доод давхарга — мартсан заалтыг хоосон үр дүн болгож барих сүүлчийн тор, эхнийх нь биш |
-| Тенантыг `reporting.TenantOf(ctx)`-оос ав | Нэгдсэн тайланд яг энэ л зүйл өөр тенант болж солигдоно (§5) |
+| Тенантыг `nexus.TenantOf(ctx)`-оос ав | Нэгдсэн тайланд яг энэ л зүйл өөр тенант болж солигдоно (§5) |
 | Нэгтгэлийг SQL дотор хий | Мянган мөрийг Go руу татаад давталтаар нэмэх нь демо тенант дээр адилхан ажиллаж, бодит дээр унана |
 | Хүний нэр биш, регистрийн дугаар биш | Тайлан бол экспортлогдож, и-мэйлээр явж, татсан хавтсанд үлддэг зүйл |
 | `mn` гарчиг заавал | Байхгүй бол Register нь асах үед panic хийнэ |

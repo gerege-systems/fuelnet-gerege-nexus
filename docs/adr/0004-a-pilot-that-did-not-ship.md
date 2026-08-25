@@ -1,11 +1,17 @@
-# 0004 — Өртөө distribution болж гарсангүй, гарах гурван саад бичигдэв
+# 0004 — Өртөөний distribution pilot: гурван саад ба эцсийн гаргалт
 
 - **Огноо:** 2026-08-21
 - **Байдал:** Хүлээн авсан; **гурван саад хаагдаж, Өртөө 2026-08-23-нд гарав**
   — доорх «Юу болсон» хэсгийг үз.
 - **Холбоотой:** [`../CORE_BOUNDARY_PLAN.md`](../CORE_BOUNDARY_PLAN.md) §5 Үе 4c;
   [0001 — Домэйн эхэнд](0001-domain-first.md);
-  `internal/apps/urtuu`, `internal/platform/urtuu`, `pkg/urtuu`, `domain/urtuu`
+  одоогийн `internal/tenant/urtuu`, `pkg/urtuu`, `pkg/nexus`
+
+> Доорх `internal/apps/urtuu`, `domain/urtuu`, `internal/platform/urtuu` болон
+> `internal/platform/reporting` замууд нь pilot хэмжсэн үеийн snapshot.
+> Эцсийн төлөвт app/domain `client-gerege-nexus`-д, transport
+> `internal/tenant/urtuu`-д, reporting engine `internal/tenant/reporting`-д
+> байрлана.
 
 ## Юу болсон — 2026-08-23
 

@@ -4,6 +4,10 @@ How `io.gerege.nexus.gov_services` turns one codebase into a service-delivery
 capability that every tenant, and every service inside a tenant, configures for
 itself — locally fulfilled, delegated with verification, or routed per request.
 
+The module, domain, and migrations live in the `gov-gerege-nexus`
+distribution. This core repository supplies the public `pkg/nexus` contracts
+and the tenant/platform runtime; it does not carry the module package.
+
 <p>
   <img src="assets/icons/flag-en.png" width="18" height="18" alt=""> <b>English</b>
 </p>
@@ -301,7 +305,7 @@ concurrency on `row_version`, idempotent ingestion and derived overdue.
 
 ```bash
 # State machine and routing (no database required)
-cd backend && go test ./internal/apps/gov_services/...
+cd gov-gerege-nexus && go test ./modules/gov_services/...
 
 # Full workflow against a migrated throwaway database
 docker run -d --name gov-test-db -e POSTGRES_PASSWORD=test -e POSTGRES_DB=govtest \
@@ -309,7 +313,7 @@ docker run -d --name gov-test-db -e POSTGRES_PASSWORD=test -e POSTGRES_DB=govtes
 DATABASE_URL='postgres://postgres:test@localhost:55433/govtest?sslmode=disable' \
   go run ./cmd/migrate up
 GOV_TEST_DATABASE_URL='postgres://postgres:test@localhost:55433/govtest?sslmode=disable' \
-  go test -race ./internal/apps/gov_services/...
+  go test -race ./modules/gov_services/...
 ```
 
 The integration tests skip when `GOV_TEST_DATABASE_URL` is unset, so `go test

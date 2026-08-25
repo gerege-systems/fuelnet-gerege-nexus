@@ -1,5 +1,11 @@
 # Control Plane — операторын консолын төлөвлөгөө
 
+> **Түүхэн төлөвлөгөө — хэрэгжсэн.** Энэ файлд хуучин `/cp/api` prefix,
+> төлөвлөсөн capability болон CP үе шатны хэллэг үлдсэн. Одоогийн API,
+> deployment, UI contract-ын эх сурвалж нь
+> [CONTROL_PLANE.md](CONTROL_PLANE.md); хоёр урсгалын бүтцийг
+> [ARCHITECTURE_SPECIFICATION.md](ARCHITECTURE_SPECIFICATION.md)-аас харна уу.
+
 **cp.nexus.gerege.mn** дээр ажиллах платформ операторын консол —
 дэлхийн туршлагын судалгаа ба бүрэн feature төлөвлөгөө.
 
