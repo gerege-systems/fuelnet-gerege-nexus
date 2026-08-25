@@ -10,8 +10,8 @@
  *   GET  /esign/sign/{id}            poll until completed / rejected / expired
  *   GET  /esign/sign/{id}/download   stream the PAdES-signed PDF
  *
- * The ceremony itself belongs to the shared platform library
- * (internal/tenant/identity/eidmongolia over open-gerege-core): it talks to eID, holds
+ * The ceremony itself belongs to the platform's own signing packages
+ * (internal/tenant/identity/eidmongolia over internal/kernel/eidsign): it talks to eID, holds
  * the document, checks session ownership and produces the PAdES output. What
  * lives here is the part the library has no view of — which tenant, which
  * document, which batch, and the audit trail.

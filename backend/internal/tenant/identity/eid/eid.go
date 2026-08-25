@@ -506,11 +506,11 @@ func (s *EIDService) Endpoint() string { return s.authorizeURL }
 // resolveGeID fills in the citizen's Gerege number when the session did not
 // carry it.
 //
-// eID returns `person.geID` on a completed session, but the relying-party
-// client this platform uses to read that session — open-gerege-core's pkg/eid —
-// decodes the person block into a struct that has no field for it, so the
-// number is dropped a layer below this one. Until that release carries it, the
-// number is fetched from the register it comes from: geID *is*
+// eID returns `person.geID` on a completed session and internal/kernel/eidrp
+// reads it, so this normally does nothing. It is what answers for the two cases
+// that remain: an eID that has not been upgraded to send the field, and a
+// citizen the Gerege register has not been matched to. In both, the number is
+// fetched from the register it comes from: geID *is*
 // core.gerege.mn's `users.id`, by the eID platform's own definition, and a
 // lookup by registration number returns the same value eID would have handed
 // over.

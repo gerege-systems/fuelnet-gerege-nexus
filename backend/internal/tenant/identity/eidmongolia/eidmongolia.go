@@ -7,9 +7,9 @@
  * authentication, the citizen's PKI dashboard, organisation representation and
  * qualified PDF signing.
  *
- * All of it is delegated to the shared open-gerege-core library rather than
- * reimplemented. That library already carries the parts that are easy to get
- * subtly wrong and expensive to discover:
+ * All of it is delegated to internal/kernel/eidrp and internal/kernel/eidsign
+ * rather than reimplemented here. Those two carry the parts that are easy to
+ * get subtly wrong and expensive to discover:
  *
  *   - PAdES-T output — an RFC 3161 timestamp plus an eidmongolia.mn/verify
  *     page — via eID's stamp endpoint, with a server Document-Signer as the
