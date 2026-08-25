@@ -87,6 +87,14 @@ export interface Party {
   has_signed_copy: boolean;
 }
 
+/** The document's attached PDF, when one exists. */
+export interface Attachment {
+  file_name: string;
+  size_bytes: number;
+  /** The issuer has already signed the file with PIN2 — parties will sign bytes that cover that signature. */
+  master_signed: boolean;
+}
+
 /** The parties answer carries the contract's own facts too — one load per screen. */
 export interface ContractShape {
   parties: Party[];
@@ -100,6 +108,7 @@ export interface ContractShape {
   effective_from?: string;
   effective_to?: string;
   due_at?: string;
+  attachment?: Attachment | null;
 }
 
 export interface InboxItem {
@@ -245,6 +254,66 @@ export const contracts = {
     request<CeremonySession>(`/documents/${id}/parties/${pid}/sign/start`, { method: "POST", body: "{}" }),
   signPoll: (id: string, pid: string) =>
     request<CeremonyProgress>(`/documents/${id}/parties/${pid}/sign/poll`, { method: "POST", body: "{}" }),
+  // ── the master PDF: upload, download, and the issuer's own PIN2
+  attach: async (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${apiBase()}/documents/${id}/file`, {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body?.error) message = body.error;
+      } catch { /* keep the status message */ }
+      throw new Error(message);
+    }
+    return res.json() as Promise<{ file_name: string; size_bytes: number; sha256: string }>;
+  },
+  fileUrl: (id: string) => `${apiBase()}/documents/${id}/file`,
+  masterSignStart: (id: string, regNumber: string) =>
+    request<CeremonySession>(`/documents/${id}/sign/eid/start`, {
+      method: "POST",
+      body: JSON.stringify({ reg_number: regNumber }),
+    }),
+  masterSignPoll: (id: string, sessionID: string) =>
+    request<CeremonyProgress>(`/documents/${id}/sign/eid/poll`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionID }),
+    }),
+  /** The signed-in user's own eID registration number, or "" when none is linked. */
+  myEidReg: async (): Promise<string> => {
+    const profile = await request<{
+      identities?: Array<{ kind: string; claims?: { reg_number?: string } }>;
+    }>("/profile");
+    const eid = profile.identities?.find((identity) => identity.kind === "eid");
+    return eid?.claims?.reg_number ?? "";
+  },
+
+  // ── many recipients from one file
+  importParties: async (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${apiBase()}/documents/${id}/parties/import`, {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body?.error) message = body.error;
+      } catch { /* keep the status message */ }
+      throw new Error(message);
+    }
+    return res.json() as Promise<{ added: number; skipped: Array<{ row: number; name?: string; reason: string }> }>;
+  },
+  importTemplateUrl: () => `${apiBase()}/documents/parties/import-template.xlsx`,
+
   // Frozen and signed copies are links, not fetches: the PDF opens in a tab
   // and the cookie rides along on its own.
   copyUrl: (id: string, pid: string) => `${apiBase()}/documents/${id}/parties/${pid}/copy`,

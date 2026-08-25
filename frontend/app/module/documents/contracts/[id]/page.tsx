@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  contracts, ContractShape, Invitation, Party,
+  contracts, CeremonySession, ContractShape, Invitation, Party,
 } from "@/lib/contracts";
 import { useResource, useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
@@ -13,7 +13,7 @@ import { Banner, LoadingBlock, Modal, cardClass, fieldClass, selectClass } from 
 import {
   CeremonyButton, ContractBadge, PartyBadge, fmtWhen, useContractLabels,
 } from "@/components/documents/contracts";
-import { ArrowLeft, Copy, Link2, Plus, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Copy, FileUp, Link2, Plus, Send, Undo2, Upload } from "lucide-react";
 
 /**
  * One contract, everything the issuer does to it: the facts (number, amount,
@@ -77,6 +77,15 @@ export default function ContractPage() {
       {message && <Banner tone={message.tone} message={message.text} />}
 
       <FactsCard id={id} contract={contract} editable={mayManage} onSaved={reload} onError={fail} />
+      <MasterPdfCard
+        id={id}
+        contract={contract}
+        mayManage={mayManage}
+        maySign={maySign}
+        onChanged={reload}
+        onError={fail}
+        onInfo={(value) => say("success", value)}
+      />
       <BodyCard
         id={id}
         text={text.data}
@@ -287,6 +296,7 @@ function PartiesCard({
         />
       ))}
 
+      {mayParties && <ImportPartiesForm id={id} onImported={onChanged} onError={onError} />}
       {mayParties && <AddPartyForm id={id} onAdded={onChanged} onError={onError} />}
 
       {signatoryFor && (
@@ -656,5 +666,192 @@ function SendCard({ id, state, mode, onChanged, onError, onInfo }: {
         )}
       </div>
     </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────── мастер PDF
+
+/**
+ * Гэрээний PDF: гаргагч өөрийн бэлтгэсэн файлаа хавсаргаж, ӨӨРӨӨ PIN2-оор
+ * зурна. Илгээх агшинд тал бүрийн хөлдсөн хувь нь энэ файл — гаргагч зурсан
+ * бол ГАРЫН ҮСЭГТЭЙ хувь нь — болно: захирал бүрийн зурах байт гаргагчийн
+ * гарын үсгийг хамарна.
+ *
+ * Дараалал нь чухал бөгөөд сервер өөрөө барьдаг: гарын үсэг зурагдмагц файл
+ * ч, талууд ч, бичвэр ч өөрчлөгдөхгүй. Тиймээс UI зөв дарааллыг хэлж өгнө:
+ * PDF → талууд → өөрийн гарын үсэг → илгээх.
+ */
+function MasterPdfCard({ id, contract, mayManage, maySign, onChanged, onError, onInfo }: {
+  id: string;
+  contract: ContractShape;
+  mayManage: boolean;
+  maySign: boolean;
+  onChanged: () => Promise<void>;
+  onError: (err: unknown) => void;
+  onInfo: (value: string) => void;
+}) {
+  const { t } = useI18n();
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [reg, setReg] = useState("");
+  const attachment = contract.attachment ?? null;
+
+  // Гаргагчийн өөрийн eID регистр — PIN2 яг түүний утсанд очно.
+  React.useEffect(() => {
+    let alive = true;
+    contracts.myEidReg().then((value) => { if (alive && value) setReg(value); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    try {
+      await contracts.attach(id, file);
+      onInfo(t("contracts.msg.pdf_attached"));
+      await onChanged();
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+
+  return (
+    <section className={`${cardClass} p-5 space-y-3`}>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-slate-800">{t("contracts.section.pdf")}</h2>
+        {mayManage && (
+          <>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void upload(file);
+              }}
+            />
+            <button
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+              className="text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {attachment ? t("contracts.action.replace_pdf") : t("contracts.action.attach_pdf")}
+            </button>
+          </>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">{t("contracts.pdf.note")}</p>
+      {attachment ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+          <FileUp className="w-4 h-4 text-slate-400" />
+          <a href={contracts.fileUrl(id)} target="_blank" rel="noopener noreferrer"
+            className="text-sm font-semibold text-indigo-700 hover:underline">
+            {attachment.file_name}
+          </a>
+          <span className="text-xs text-slate-400">{(attachment.size_bytes / (1024 * 1024)).toFixed(1)} MB</span>
+          {attachment.master_signed ? (
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 rounded-full px-2.5 py-0.5">
+              {t("contracts.pdf.master_signed")}
+            </span>
+          ) : maySign ? (
+            <span className="ml-auto flex items-center gap-2">
+              <input
+                className={`${fieldClass} !w-44`}
+                placeholder={t("contracts.field.reg")}
+                value={reg}
+                onChange={(event) => setReg(event.target.value)}
+              />
+              <CeremonyButton
+                label={t("contracts.action.master_sign")}
+                start={() => contracts.masterSignStart(id, reg.trim())}
+                poll={(session: CeremonySession) => contracts.masterSignPoll(id, session.session_id)}
+                onDone={async () => {
+                  onInfo(t("contracts.msg.master_signed"));
+                  await onChanged();
+                }}
+                onError={(value) => onError(new Error(value))}
+              />
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400">{t("contracts.pdf.none")}</p>
+      )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────── Excel-ээс талууд
+
+function ImportPartiesForm({ id, onImported, onError }: {
+  id: string;
+  onImported: () => Promise<void>;
+  onError: (err: unknown) => void;
+}) {
+  const { t } = useI18n();
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ added: number; skipped: Array<{ row: number; name?: string; reason: string }> } | null>(null);
+
+  const run = async (file: File) => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await contracts.importParties(id, file);
+      setResult(res);
+      await onImported();
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-200 pt-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400 grow">
+          {t("contracts.section.import")}
+        </h3>
+        <a href={contracts.importTemplateUrl()} className="text-xs text-indigo-700 hover:underline">
+          {t("contracts.action.import_template")}
+        </a>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".xlsx,.csv"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void run(file);
+          }}
+        />
+        <button
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+          className="text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 px-3 py-1.5 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          <FileUp className="w-3.5 h-3.5" />
+          {t("contracts.action.import_excel")}
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">{t("contracts.import.hint")}</p>
+      {result && (
+        <Banner
+          tone={result.skipped.length ? "warning" : "success"}
+          message={t("contracts.import.result", { added: result.added, skipped: result.skipped.length })}
+        />
+      )}
+      {result?.skipped.slice(0, 6).map((skip) => (
+        <p key={skip.row} className="text-[11px] text-amber-700">
+          {t("contracts.import.row", { row: skip.row })}: {skip.name ? `${skip.name} — ` : ""}{skip.reason}
+        </p>
+      ))}
+    </div>
   );
 }

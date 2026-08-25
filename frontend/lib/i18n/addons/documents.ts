@@ -463,4 +463,28 @@ export const documents = {
   "contracts.msg.load_failed": { mn: "Ачаалж чадсангүй.", en: "Could not load." },
   "contracts.msg.you": { mn: "(та)", en: "(you)" },
   "contracts.msg.signs_at": { mn: "{n}-рт зурна", en: "signs {n}." },
+
+  // Мастер PDF ба Excel импорт.
+  "contracts.section.pdf": { mn: "Гэрээний PDF", en: "Contract PDF" },
+  "contracts.pdf.note": {
+    mn: "Өөрийн бэлтгэсэн PDF-ээ хавсаргаад, доор нь өөрөө PIN2-оор зурна. Илгээхэд тал бүр яг энэ файлыг — таны гарын үсэгтэйгээр нь — авч зурна. PDF байхгүй бол доорх бичвэрээс тал бүрд PDF үүсгэнэ.",
+    en: "Attach your own PDF and sign it below with PIN2. At send time every party receives exactly this file — carrying your signature — and signs it. Without a PDF, a per-party PDF is rendered from the text below.",
+  },
+  "contracts.pdf.none": { mn: "PDF хавсаргаагүй — гэрээ доорх бичвэрээс үүснэ.", en: "No PDF attached — the contract is rendered from the text below." },
+  "contracts.pdf.master_signed": { mn: "Гаргагч зурсан ✓", en: "Signed by issuer ✓" },
+  "contracts.action.attach_pdf": { mn: "PDF хавсаргах", en: "Attach a PDF" },
+  "contracts.action.replace_pdf": { mn: "PDF солих", en: "Replace the PDF" },
+  "contracts.action.master_sign": { mn: "Өөрөө зурах (PIN2)", en: "Sign it yourself (PIN2)" },
+  "contracts.msg.pdf_attached": { mn: "PDF хавсаргагдлаа.", en: "The PDF is attached." },
+  "contracts.msg.master_signed": { mn: "Таны гарын үсэг PDF дээр суулаа.", en: "Your signature is on the PDF." },
+
+  "contracts.section.import": { mn: "Excel-ээс талууд оруулах", en: "Import parties from a file" },
+  "contracts.action.import_excel": { mn: "Файл сонгох (.xlsx / .csv)", en: "Choose a file (.xlsx / .csv)" },
+  "contracts.action.import_template": { mn: "Загвар татах", en: "Download the template" },
+  "contracts.import.hint": {
+    mn: "Мөр бүр нэг хүлээн авагч: нэр | байгууллагын регистр | зурагчийн нэр | зурагчийн регистр | албан тушаал. Хоёрхон баганатай нь ч болно: нэр + регистр. Нэг мөрийн алдаа бусдыг унагахгүй.",
+    en: "One recipient per row: name | org registration | signatory name | signatory registration | position. Two columns also work: name + registration. One bad row does not stop the rest.",
+  },
+  "contracts.import.result": { mn: "{added} тал нэмэгдэв, {skipped} мөр алгасав.", en: "{added} parties added, {skipped} rows skipped." },
+  "contracts.import.row": { mn: "{row}-р мөр", en: "Row {row}" },
 } as const;
