@@ -55,7 +55,10 @@ compile-time Go module хэлбэрээр distribution репо нэмдэг. Э
 - Contacts, products, inventory, billing бизнес аппууд
 - Organisation & People-ийн хэлтэс/ажилтны апп (харин байгууллагын legal
   profile `/organisation` дээр платформын хэсэг хэвээр)
-- Documents UI/module болон report UI
+- Documents backend module, report UI. Contract/inbox-ийн optional frontend
+  client энэ repo-д бий ч түүнд таарах contract API одоогийн base болон
+  `client-gerege-nexus` distribution-д хараахан байхгүй; endpoint бодитоор
+  хариулахгүй бол landing дээр холбоос нь гарахгүй
 - Government services workflow UI/module
 - Өртөөний task board (суваг ба peer/exchange API нь платформд үлдсэн)
 - Ерөнхий adaptive circuit breaker, singleflight, generic retry engine

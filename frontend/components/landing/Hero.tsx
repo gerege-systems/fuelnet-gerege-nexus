@@ -5,9 +5,10 @@ import {useEffect, useState} from "react";
 import {ArrowRight, FileSignature} from "lucide-react";
 
 import EIDLogin from "@/components/EIDLogin";
+import {APPLICATIONS} from "@/components/landing/content";
 import {useAccess} from "@/lib/access";
 import {contracts, InboxItem} from "@/lib/contracts";
-import {useI18n} from "@/lib/i18n";
+import {LOCALES, useI18n} from "@/lib/i18n";
 
 /**
  * The first screen: what the platform is, and the eID panel to act on it.
@@ -40,6 +41,33 @@ export default function Hero({
   // ижил markup гарна (hydration зөрөхгүй), нэвтрээгүй зочинд юу ч
   // өөрчлөгдөхгүй.
   const {me} = useAccess();
+  const [contractInbox, setContractInbox] = useState<InboxItem[] | null>(null);
+
+  // A signed-in account, or even an installed Documents module, is not evidence
+  // that this distribution carries the newer contracts API. The screen is a
+  // capability client, so only a successful endpoint response may advertise
+  // it. Current base and client distributions do not provide that endpoint.
+  useEffect(() => {
+    let alive = true;
+    if (!me) {
+      setContractInbox(null);
+      return () => {
+        alive = false;
+      };
+    }
+    contracts.inbox(false)
+      .then((response) => {
+        if (alive) setContractInbox(response.items);
+      })
+      .catch(() => {
+        if (alive) setContractInbox(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [me]);
+
+  const showContracts = Boolean(me && contractInbox !== null);
 
   return (
     <section className="gp-hero">
@@ -55,9 +83,13 @@ export default function Hero({
           </h1>
           <p>{t("website.view.hero_lede")}</p>
           <div className="gp-cta">
-            {me ? (
+            {showContracts ? (
               <Link href="/module/documents/inbox" className="gp-gold gp-gold--large">
                 {t("website.action.my_contracts")} <ArrowRight />
+              </Link>
+            ) : me ? (
+              <Link href="/apps" className="gp-gold gp-gold--large">
+                {t("website.action.open_platform")} <ArrowRight />
               </Link>
             ) : localSignIn ? (
               <a href="#eid-login" className="gp-gold gp-gold--large">
@@ -68,7 +100,7 @@ export default function Hero({
                 {t("website.action.sign_in")} <ArrowRight />
               </Link>
             )}
-            {me ? (
+            {showContracts ? (
               <Link href="/apps" className="gp-outline">
                 {t("website.action.open_platform")}
               </Link>
@@ -80,11 +112,11 @@ export default function Hero({
           </div>
           <div className="gp-stats">
             <span>
-              <b>{t("website.stat.apps_count")}</b>
+              <b>{APPLICATIONS.length}</b>
               {t("website.stat.apps")}
             </span>
             <span>
-              <b>{t("website.stat.languages_count")}</b>
+              <b>{LOCALES.length}</b>
               {t("website.stat.languages")}
             </span>
             <span>
@@ -93,9 +125,9 @@ export default function Hero({
             </span>
           </div>
         </div>
-        {me ? (
+        {showContracts ? (
           <div className="gp-login-slot">
-            <HeroInbox />
+            <HeroInbox items={contractInbox || []} />
           </div>
         ) : localSignIn ? (
           <div id="eid-login" className="gp-login-slot">
@@ -114,21 +146,8 @@ export default function Hero({
  * байна. Жагсаалт нь хариу хүлээж буй гэрээ л — түүх биш: нүүр хуудас бол
  * ажлын ширээ, архив нь Ирсэн гэрээ дэлгэцэд.
  */
-function HeroInbox() {
+function HeroInbox({items}: {items: InboxItem[]}) {
   const {t} = useI18n();
-  const [items, setItems] = useState<InboxItem[] | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    contracts
-      .inbox(false)
-      .then((res) => alive && setItems(res.items))
-      // Documents апп суугаагүй, эсвэл эрхгүй — карт мэндчилгээ болно.
-      .catch(() => alive && setItems([]));
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   return (
     <div className="rounded-2xl bg-white/95 shadow-xl border border-slate-200 p-6 w-full max-w-md">
@@ -136,9 +155,7 @@ function HeroInbox() {
         <FileSignature className="w-5 h-5 text-indigo-600" />
         <h3 className="font-bold text-slate-900">{t("website.view.hero_inbox_title")}</h3>
       </div>
-      {items === null ? (
-        <p className="text-sm text-slate-400">…</p>
-      ) : items.length === 0 ? (
+      {items.length === 0 ? (
         <p className="text-sm text-slate-500">{t("website.view.hero_inbox_empty")}</p>
       ) : (
         <ul className="space-y-2">

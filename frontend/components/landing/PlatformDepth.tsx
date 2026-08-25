@@ -4,9 +4,9 @@ import {PLATFORM_DEPTH} from "@/components/landing/content";
 import {useI18n} from "@/lib/i18n";
 
 /**
- * The six things sitting under every application: resilience, the state
- * integrations, the security posture, the AI, the seven languages and the
- * instrumentation.
+ * Six shared capabilities implemented by the base runtime: resilience, state
+ * connectors, security controls, AI endpoints, locale fallback and
+ * instrumentation. External integrations still require deployment config.
  *
  * These are the sections a reader evaluating the platform against building it
  * themselves actually weighs, which is why they come last — by this point the

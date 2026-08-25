@@ -78,7 +78,7 @@ export const APPLICATIONS: TranslationKey[] = [
   "website.apps.sso_clients",
 ];
 
-/** What every application inherits from the core, whether or not it asks. */
+/** Shared capabilities present in the base runtime; some require credentials. */
 export const PLATFORM_DEPTH: {icon: Icon; title: TranslationKey; body: TranslationKey}[] = [
   {icon: Activity, title: "website.depth.resilience_title", body: "website.depth.resilience_body"},
   {icon: Landmark, title: "website.depth.gov_title", body: "website.depth.gov_body"},

@@ -26,12 +26,12 @@ export const website = {
   // stored in three parts rather than as markup inside a translation. The split
   // falls mid-phrase on purpose: what is highlighted is the claim, not a whole
   // clause, and each language chooses its own break.
-  "website.view.hero_title_lead": { mn: "Байгууллагын бүх систем", en: "Every system an organisation runs" },
-  "website.view.hero_title_highlight": { mn: "нэг цэгт", en: "meets in one" },
-  "website.view.hero_title_tail": { mn: "уулзана", en: "place" },
+  "website.view.hero_title_lead": { mn: "Модульт дижитал үйлчилгээний", en: "An open core for" },
+  "website.view.hero_title_highlight": { mn: "нээлттэй цөм", en: "modular digital services" },
+  "website.view.hero_title_tail": { mn: "юм", en: "on your infrastructure" },
   "website.view.hero_lede": {
-    mn: "{brand} нь байгууллагын үйлчилгээ, үйл ажиллагаа, систем, өгөгдлийг нэгтгэх модульт платформ юм. Модулиуд нэг Go бинарид компиллогдож, тенант бүрт аль апп идэвхтэйг апп стор шийднэ.",
-    en: "{brand} is a modular platform that brings an organisation's services, operations, systems and data together. Modules compile into a single Go binary, and an app store decides which of them each tenant runs.",
+    mn: "{brand}-ийн base repository нь identity, tenant, RBAC, SSO, апп суулгах runtime болон нэг built-in SSO Clients апп агуулна. Бизнес аппууд тусдаа product distribution-аас нэмэгдэнэ.",
+    en: "The {brand} base repository provides identity, tenancy, RBAC, SSO, the app runtime and one built-in SSO Clients app. Product distributions add business applications separately.",
   },
 
   // Three numbers that hold still. Keep the app count in step with the base
@@ -48,37 +48,37 @@ export const website = {
   "website.stat.languages_count": { mn: "7", en: "7" },
   "website.stat.languages": { mn: "хэл — монгол + НҮБ-ын 6", en: "languages: Mongolian plus the UN six" },
   "website.stat.binary_count": { mn: "1", en: "1" },
-  "website.stat.binary": { mn: "суулгах бинари", en: "binary to deploy" },
+  "website.stat.binary": { mn: "Go API бинари", en: "Go API binary" },
 
-  "website.view.features_eyebrow": { mn: "GEREGE IDENTITY LAYER", en: "GEREGE IDENTITY LAYER" },
+  "website.view.features_eyebrow": { mn: "IDENTITY БА ACCESS", en: "IDENTITY AND ACCESS" },
   "website.view.features_title": {
-    mn: "Нэвтрэлт бол тусдаа дэлгэц биш, платформын суурь",
-    en: "Sign-in is not a screen, it is the floor the platform stands on",
+    mn: "Нэг серверийн identity ба access урсгал",
+    en: "One server-side identity and access flow",
   },
   "website.view.features_lede": {
-    mn: "Gerege Platform-ийн батлагдсан урсгалыг {brand}-ийн tenant, role, audit болон SSO загварт нэгтгэлээ.",
-    en: "The Gerege Platform's proven flow, folded into {brand}'s tenants, roles, audit trail and SSO model.",
+    mn: "{brand} нь local login, eID, federated SSO-г tenant membership, role, audit болон OIDC provider-тэй нэг server-side урсгалд холбодог.",
+    en: "{brand} connects local login, eID and federated SSO to tenant membership, roles, audit and its OIDC provider in one server-side flow.",
   },
 
-  "website.feature.instant_title": { mn: "Цахим үнэмлэхээр хормын дотор", en: "Digital ID in seconds" },
+  "website.feature.instant_title": { mn: "eID нэвтрэх сувгууд", en: "eID sign-in channels" },
   "website.feature.instant_body": {
-    mn: "Регистрийн дугаараар eID апп руу хүсэлт илгээх, компьютер дээр QR уншуулах, утсан дээр App2App холбоосоор нэвтэрнэ.",
-    en: "Push a request to the eID app by registration number, scan a QR on the desktop, or hand off App2App on the phone.",
+    mn: "Тохируулсан deployment дээр регистрийн дугаарын push, desktop QR болон mobile App2App урсгалыг backend эхлүүлж, төлвийг шалгана.",
+    en: "When a deployment is configured for eID, the backend starts and polls registration-number push, desktop QR and mobile App2App flows.",
   },
   "website.feature.sso_title": { mn: "Нэг нэвтрэлт — олон систем", en: "One sign-in, many systems" },
   "website.feature.sso_body": {
-    mn: "Платформын баталгаажсан session нь OAuth2/OIDC provider-тэй нэг trust boundary ашиглана. Холбогдсон апп бүр дахин нэвтрүүлэх шаардлагагүй.",
-    en: "The platform session and the OAuth2/OIDC provider share one trust boundary, so no connected app asks again.",
+    mn: "Built-in OAuth2/OIDC provider нь идэвхтэй platform session-ийг бүртгэлтэй redirect URI бүхий клиентүүдэд дахин ашиглах боломж олгоно.",
+    en: "The built-in OAuth2/OIDC provider can reuse an active platform session for clients with registered redirect URIs.",
   },
-  "website.feature.passwordless_title": { mn: "Нууц үггүй, сервер талын хамгаалалт", en: "Passwordless, guarded server-side" },
+  "website.feature.passwordless_title": { mn: "Credential сервер талд үлдэнэ", en: "Credentials stay server-side" },
   "website.feature.passwordless_body": {
-    mn: "RP secret зөвхөн backend-д хадгалагдана. Browser-д identity credential ил гарахгүй, session token hash хэлбэрээр хадгалагдана.",
-    en: "The RP secret never leaves the backend, no identity credential reaches the browser, and session tokens are stored hashed.",
+    mn: "eID RP secret болон бусад provider credential browser-д очихгүй. Session token database-д зөвхөн hash хэлбэрээр хадгалагдана.",
+    en: "The eID RP secret and other provider credentials do not reach the browser. Session tokens are stored in the database only as hashes.",
   },
   "website.feature.channels_title": { mn: "Апп ба вэбийн нэг урсгал", en: "One flow across app and web" },
   "website.feature.channels_body": {
-    mn: "Desktop cross-device, mobile same-device callback, push болон QR бүгд ижил start/poll contract-аар ажиллана.",
-    en: "Desktop cross-device, mobile same-device callback, push and QR all run on the same start/poll contract.",
+    mn: "Web болон native shell нь backend-ийн эхлүүлэх, төлөв шалгах endpoint-уудыг ашиглана; provider credential клиентэд хадгалагдахгүй.",
+    en: "Web and native shells use backend start and status endpoints; provider credentials are not stored in either client.",
   },
 
   "website.view.trust_eyebrow": { mn: "ИДЭВХТЭЙ ХАМГААЛАЛТ", en: "ACTIVE PROTECTION" },
@@ -92,7 +92,7 @@ export const website = {
   },
   "website.trust.cookie": { mn: "httpOnly, SameSite session cookie", en: "httpOnly, SameSite session cookie" },
   "website.trust.rbac": { mn: "Tenant-аар тусгаарласан role ба permission", en: "Roles and permissions isolated per tenant" },
-  "website.trust.allowlist": { mn: "RP callback origin allowlist", en: "RP callback origin allowlist" },
+  "website.trust.allowlist": { mn: "Бүртгэлтэй OAuth2 redirect URI шалгалт", en: "Registered OAuth2 redirect URI validation" },
   "website.trust.audit": { mn: "Login ба access audit event", en: "Login and access audit events" },
 
   // Key kept as-is: it is internal, and renaming it would touch every caller
@@ -108,17 +108,17 @@ export const website = {
 
   "website.arch.eyebrow": { mn: "ЯАГААД ЭНЭ АРХИТЕКТУР", en: "WHY THIS ARCHITECTURE" },
   "website.arch.title": {
-    mn: "Модульт монолит — микросервисийн уян хатан, монолитын хурд",
-    en: "A modular monolith: the flexibility of microservices at the speed of one process",
+    mn: "Нэг API процесс, тенант бүрт тусдаа суулгалт",
+    en: "One API process, separate installation state per tenant",
   },
   "website.arch.lede": {
-    mn: "Модуль бүр өөрийн домэйн, миграц, эрхтэй. Гэвч бүгд нэг процесс дотор ажилладаг тул модуль хоорондын дуудлага сүлжээгээр явахгүй — Go-ийн функцийн дуудлага л болно.",
-    en: "Every module owns its domain, its migrations and its permissions. They all run in one process, so a call between two of them is a function call, not a network hop.",
+    mn: "Compile хийсэн module-ууд Go process дотор route, menu, permission, migration-аа бүртгэнэ. Аль модуль идэвхтэйг tenant бүрийн installation state шийднэ.",
+    en: "Compiled modules register routes, menus, permissions and migrations in the Go process. Each tenant's installation state decides which modules are enabled.",
   },
   "website.arch.modules_title": { mn: "Компиллогдсон Go модулиуд", en: "Compiled-in Go modules" },
   "website.arch.modules_body": {
-    mn: "Модуль бүр нэг Go гэрээг хэрэгжүүлж нэг бинарид компиллогдоно. Маршрут, цэс, эрх, миграц бүгд модулийн өөрийнх.",
-    en: "Each module implements one Go contract and compiles into a single binary. Routes, menus, permissions and migrations all belong to the module itself.",
+    mn: "Модуль бүр `pkg/nexus` Go гэрээг хэрэгжүүлж нэг API бинарид компиллогдоно. Маршрут, цэс, эрх, миграцаа module өөрөө бүртгэнэ.",
+    en: "Each module implements the `pkg/nexus` Go contract and compiles into one API binary. The module registers its routes, menus, permissions and migrations.",
   },
   "website.arch.store_title": { mn: "Тенант бүрийн апп стор", en: "An app store for each tenant" },
   "website.arch.store_body": {
@@ -130,10 +130,10 @@ export const website = {
     mn: "Рекурсив шийдвэрлэлт, мөчлөг илрүүлэлт, хувилбарын шалгалт. Апп суулгахад түүний хамаарал бүр тохирох хувилбартайгаа хамт орно.",
     en: "Recursive resolution with cycle detection and version checks, so installing an app brings every dependency it needs at a version that fits.",
   },
-  "website.arch.catalog_title": { mn: "Нэг эх сурвалжтай каталог", en: "One catalogue, one source" },
+  "website.arch.catalog_title": { mn: "Bundled эсвэл signed remote каталог", en: "Bundled or signed remote catalogue" },
   "website.arch.catalog_body": {
-    mn: "Апп сторын каталог нь цорын ганц эх сурвалж бөгөөд гарын үсэгтэйгээр татагдана. Систем асах бүрд апп жагсаалт түүнээс шинэчлэгдэнэ.",
-    en: "The app catalogue is the single source of truth and is fetched signed. The list of apps is refreshed from it every time the system starts.",
+    mn: "Default горимд release-тэй ирсэн `catalog/apps.json`-ийг уншина. `APP_CATALOG_URL` тохируулбал Ed25519 гарын үсэгтэй remote catalog-ийг шалгаж, cache болон bundled файл руу аюулгүй fallback хийнэ.",
+    en: "By default the release reads its bundled `catalog/apps.json`. With `APP_CATALOG_URL`, it verifies an Ed25519-signed remote catalogue and safely falls back to its cache or bundled file.",
   },
 
   "website.apps.eyebrow": { mn: "ҮНДСЭН DISTRIBUTION", en: "BASE DISTRIBUTION" },
@@ -150,30 +150,30 @@ export const website = {
     en: "The parts you would otherwise rewrite for every product",
   },
   "website.depth.lede": {
-    mn: "Эдгээрийн аль нь ч нэмэлт биш. Платформын цөмд байрлах тул апп бүр тэднийг өвлөж авна.",
-    en: "None of this is an add-on. It sits in the core, so every application inherits it.",
+    mn: "Эдгээр нь base runtime-д бодитоор байгаа shared capability-ууд. Гадаад provider ашигладаг хэсэг нь production credential болон тохиргоо шаарддаг.",
+    en: "These shared capabilities exist in the base runtime. Features that call external providers still require production credentials and configuration.",
   },
   "website.depth.resilience_title": { mn: "Хүсэлтийн хамгаалалт", en: "Request protection" },
   "website.depth.resilience_body": {
     mn: "Хэт олон зэрэг хүсэлтийг 503-аар хязгаарлах load shedder, гадаад дуудлагын timeout, зориулалтын retry бодлого платформд хэрэгжсэн.",
     en: "The platform implements concurrency load shedding, outbound timeouts and operation-specific retry policies.",
   },
-  "website.depth.gov_title": { mn: "Төрийн систем рүү шууд", en: "Straight into state systems" },
+  "website.depth.gov_title": { mn: "Төрийн системийн connector", en: "State-system connectors" },
   "website.depth.gov_body": {
-    mn: "Иргэн, хуулийн этгээдийн лавлагаа төрийн мэдээлэл солилцооны системээс; тоон гарын үсэг, нэг удаагийн код, банкны суваг, царай танилт eID ба ДАН-аар.",
-    en: "Citizen and legal-entity lookups through the state exchange, with signatures, one-time codes, bank channels and biometrics via eID and DAN.",
+    mn: "XYP-ийн иргэн, хуулийн этгээдийн лавлагаа болон eID/ДАН identity connector код багтсан. Live үйлчилгээ нь тус бүрийн endpoint, client credential шаардана.",
+    en: "The codebase includes XYP citizen/legal-entity lookups and eID/DAN identity connectors. Live use requires each provider's endpoint and client credentials.",
   },
-  "website.depth.security_title": { mn: "Анхдагчаараа хатуу", en: "Secure by default" },
+  "website.depth.security_title": { mn: "Кодонд хэрэгжсэн хамгаалалт", en: "Controls implemented in code" },
   "website.depth.security_body": {
-    mn: "Session токен зөвхөн хэшээрээ хадгалагдана, нууц үг bcrypt-ээр, OAuth2 танилт тогтмол хугацаанд шалгагдана, асуулга бүр байгууллагаараа хязгаарлагдана.",
-    en: "Session tokens are stored only as hashes, passwords use bcrypt, OAuth2 clients are compared in constant time, and every query is bounded by organisation.",
+    mn: "Session token hash-аар, нууц үг bcrypt-ээр хадгалагдана. Tenant хүсэлт database role, tenant context болон RLS хамгаалалттай хүснэгтүүдээр тусгаарлагдана.",
+    en: "Session tokens are hashed and passwords use bcrypt. Tenant requests are isolated with a database role, tenant context and RLS on declared tenant tables.",
   },
   "website.depth.ai_title": { mn: "Өөрийн өгөгдөлд холбогдсон AI", en: "AI wired to your own data" },
   "website.depth.ai_body": {
     mn: "Gemini түлхүүр өгвөл чат, яриа таних, унших, орчуулга ажиллана. Бизнес өгөгдөлд хандах хэрэгслийг тухайн distribution-ийн апп өөрөө бүртгэнэ.",
     en: "With a Gemini key, chat, speech, text-to-speech and translation are available. Product apps register the tools that expose their own business data.",
   },
-  "website.depth.i18n_title": { mn: "Долоон хэл, цоорхойгүй", en: "Seven languages, no gaps" },
+  "website.depth.i18n_title": { mn: "Долоон locale, англи fallback", en: "Seven locales with English fallback" },
   "website.depth.i18n_body": {
     mn: "Монгол, англи эх мөрүүд дээр НҮБ-ын бусад таван хэлний overlay нэмэгдэнэ. Орчуулга дутвал англи руу fallback хийж, CI үлдсэн цоорхойг тайлагнана.",
     en: "Mongolian and English source strings are joined by five UN-language overlays. Missing translations fall back to English and CI reports the remaining gaps.",
@@ -185,8 +185,8 @@ export const website = {
   },
 
   "website.message.footer_note": {
-    mn: "eID-д суурилсан · Нээлттэй стандарт · Secure by design",
-    en: "Built on eID · Open standards · Secure by design",
+    mn: "Apache 2.0 · Go · Next.js · PostgreSQL",
+    en: "Apache 2.0 · Go · Next.js · PostgreSQL",
   },
 
   // Shown only by a deployment running under its own name — see SiteFooter.

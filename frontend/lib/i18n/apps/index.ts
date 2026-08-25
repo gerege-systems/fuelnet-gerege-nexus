@@ -8,9 +8,11 @@
  * The apps this build carries, registering their own words.
  *
  * Imported for the side effect: each module calls registerDictionary at the top
- * level, so by the time anything renders, every app in this binary has handed
- * its strings over. A distribution's app does the same from its own code and
- * this file never learns its name.
+ * level, so by the time anything renders, every app UI bundled in this
+ * frontend has handed its strings over. This is not a claim that its backend
+ * module is in the base Go binary: Documents is an optional UI consumed by a
+ * product distribution. A distribution's own frontend entry can register more
+ * dictionaries without changing the platform dictionary.
  *
  * Why eager, and not from each app's route.
  *
@@ -21,7 +23,7 @@
  *
  *   ai            components/AICopilot.tsx, mounted in the shell header on
  *                 every page (components/Layout.tsx:359, :399)
- *   esign         app/module/documents/* — six screens under another app
+ *   documents     contract/inbox screens bundled for the client distribution
  *   urtuu         app/settings/urtuu/page.tsx — a platform settings route
  *   storefront    components/landing/Storefront.tsx — the signed-out page
  *
@@ -38,12 +40,12 @@
  * touching either this file or that one. Adding an in-repo app is one line
  * here, in a file that exists for that line.
  *
- * Six entries were removed on 2026-08-21 — contacts, products, inventory,
- * billing, gov and appstore_modules. Their screens went with them: the core
- * served no route for any of them, so every one of those pages was calling an
- * endpoint that answered 404.
+ * Contacts, products, inventory, billing, gov and appstore_modules were
+ * removed on 2026-08-21. Documents later returned only as a gated frontend
+ * bundle; its module, migrations and API still live in client-gerege-nexus.
  */
 
 import "./sso_clients";
+import "./documents";
 import "./storefront";
 import "./urtuu";

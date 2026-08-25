@@ -40,9 +40,10 @@ frontend/lib/i18n/
   addons/
     access.ts  ai.ts  app_store.ts  appearance.ts  auth.ts  core.ts
     cp.ts      emailverify.ts integrations.ts modules.ts setup.ts
-    sso_clients.ts storefront.ts urtuu.ts website.ts
+    documents.ts sso_clients.ts storefront.ts urtuu.ts website.ts
   apps/
     index.ts          Энэ build-д орсон аппын dictionary registration
+    documents.ts      Distribution module-д зориулсан optional UI bundle
     sso_clients.ts    Base distribution-ийн built-in апп
     storefront.ts     Storefront integration
     urtuu.ts          Core transport-ын UI үгс
