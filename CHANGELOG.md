@@ -15,6 +15,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — open-gerege-core-оос бүрмөсөн салав
+
+Гурван багц үлдсэнийг nexus дотроо бичив:
+
+| Хуучин | Шинэ | Юу |
+|---|---|---|
+| `pkg/eid` | `internal/kernel/eidrp` | eID-гийн RP клиент (QR/push нэвтрэлт, poll, төлөөлөл) |
+| `pkg/gemini` | `internal/kernel/gemini` | generateContent + WAV туслах |
+| `core/business/usecases/sign` | `internal/kernel/eidsign` | PDF/digest-д PIN2 гарын үсэг, PAdES |
+
+`go.mod`-оос `github.com/gerege-systems/open-gerege-core` бүрэн хасагдав.
+pdfcpu, digitorus/pdf, digitorus/pdfsign гурав indirect байснаа шууд хамаарал
+болов — өөрчлөлт нь тэднийг ХЭН эзэмшиж байгаад л, аль хувилбар ажиллаж
+байгаад биш.
+
+Юуг нь авчирсангүй: gemini-гийн embedding клиент, streaming, model fallback —
+энэ репод хэн ч дуудаагүй. eID-гийн гарын үсэг зурагчид, PKI самбар,
+төлөөллийн бичилт — өөр бүтээгдэхүүнийх.
+
+Wire protocol гурвуулаа өөрчлөгдөөгүй. Гарын үсгийн багц дээр нэг зүйл сайжрав:
+өмнө нь алдааны утгыг («represent» гэсэн үг агуулж буй эсэх) хайж HTTP статус
+шийддэг байсныг одоо `errors.Is`-ээр яг таарууллаа — үг солиход статус
+өөрчлөгддөггүй болов.
+
+Гарын үсгийн урсгалын хамгаалалтууд хэвээр бөгөөд одоо тестээр барьцаалагдав:
+өөр иргэний session «олдсонгүй» гэж хариулна (IDOR), хэрэглэгчийн өгсөн зургийн
+URL дотоод сүлжээ рүү хүрэхгүй (dial түвшний SSRF шалгалт, redirect дагахгүй),
+production-д түр зуурын Document-Signer хориотой, displayText кирилл тэмдэгтээр
+таслагдана.
+
 ### Changed — eID-ийн RP клиентийг nexus дотроо бичив, person блокийн шинэ нэршилд оруулав
 
 eID нь person блокоо core.gerege.mn-ий нэршилд оруулж, `birthDate`, `gender`,
