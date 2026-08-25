@@ -22,6 +22,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
 )
 
 // ErrDeliveryNotConfigured is what a scheduled run reports when this deployment
@@ -57,14 +59,21 @@ type Deliverer interface {
 // SMTPDeliverer sends over SMTP, configured from the environment.
 type SMTPDeliverer struct{}
 
-// NewSMTPDeliverer returns the deliverer, or nil when REPORT_SMTP_URL is unset.
+// NewSMTPDeliverer returns the deliverer, or nil when no relay is configured.
 // A nil Deliverer is handled by the scheduler; it is not an error at startup.
+//
+// Asked again rather than remembered: the relay is a credential an operator can
+// set from the console now, and a deployment that had none when it booted would
+// otherwise go on producing undelivered reports until somebody restarted it.
 func NewSMTPDeliverer() Deliverer {
-	if strings.TrimSpace(os.Getenv("REPORT_SMTP_URL")) == "" {
+	if smtpURL() == "" {
 		return nil
 	}
 	return &SMTPDeliverer{}
 }
+
+// smtpURL is the relay: what the console holds, then the environment.
+func smtpURL() string { return strings.TrimSpace(credentials.Get(credentials.ReportSMTPURL)) }
 
 // smtpTimeout bounds a delivery. A relay that has stopped answering must not
 // hold the scheduler's goroutine into the next minute's tick.
@@ -76,7 +85,7 @@ const smtpTimeout = 30 * time.Second
 // multipart body with two parts, and the alternative is a dependency whose API
 // surface is larger than this function.
 func (d *SMTPDeliverer) Deliver(ctx context.Context, to []string, subject, body, filename string, attachment []byte) error {
-	config, err := smtpConfigFromEnv()
+	config, err := smtpConfigFromStore()
 	if err != nil {
 		return err
 	}
@@ -143,7 +152,7 @@ type smtpConfig struct {
 	startTLS bool
 }
 
-// smtpConfigFromEnv reads REPORT_SMTP_URL, in the shape everything else uses:
+// smtpConfigFromStore reads the relay URL, in the shape everything else uses:
 //
 //	smtp://user:password@relay.example.mn:587
 //	smtps://user:password@relay.example.mn:465   (implicit TLS is not supported)
@@ -151,8 +160,8 @@ type smtpConfig struct {
 // A URL rather than five variables, because five variables is five things to
 // get wrong separately and this is one string an operator copies from their
 // mail provider's page.
-func smtpConfigFromEnv() (smtpConfig, error) {
-	raw := strings.TrimSpace(os.Getenv("REPORT_SMTP_URL"))
+func smtpConfigFromStore() (smtpConfig, error) {
+	raw := smtpURL()
 	if raw == "" {
 		return smtpConfig{}, ErrDeliveryNotConfigured
 	}

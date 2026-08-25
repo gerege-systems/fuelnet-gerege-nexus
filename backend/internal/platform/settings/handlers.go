@@ -198,6 +198,16 @@ func (s *Service) Routes(r chi.Router) {
 		Put("/settings/{key}", s.handleSetSetting)
 	r.With(s.op.RequireCapability(operator.CapSettingsWrite), s.op.RequireStepUp).
 		Post("/settings/rollback/{id}", s.handleRollbackSetting)
+
+	// The keys, beside the settings they are not. Reading is the same
+	// capability as reading a setting because nothing readable here is secret;
+	// writing asks for the second factor again, because setting a credential
+	// is pointing this deployment at a system it will then trust.
+	r.With(s.op.RequireCapability(operator.CapTenantRead)).Get("/credentials", s.handleListCredentials)
+	r.With(s.op.RequireCapability(operator.CapSettingsWrite), s.op.RequireStepUp).
+		Put("/credentials/{name}", s.handleSetCredential)
+	r.With(s.op.RequireCapability(operator.CapSettingsWrite), s.op.RequireStepUp).
+		Delete("/credentials/{name}", s.handleClearCredential)
 }
 
 // warnings is what the configuration screen shows above the fields: the

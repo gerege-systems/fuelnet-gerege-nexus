@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Banner } from "@/components/ui";
 import { useAccess } from "@/lib/permissions";
-import { Building2 } from "lucide-react";
+import { Building2, RefreshCw } from "lucide-react";
 
 /**
  * The organisation as it is, rather than as it is labelled.
@@ -66,6 +66,7 @@ export default function OrganisationPage() {
   const [candidates, setCandidates] = useState<Array<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -100,6 +101,25 @@ export default function OrganisationPage() {
     }
   };
 
+  // What the register holds, rather than what somebody typed once. Deliberately
+  // a button: it overwrites fields an administrator can see on the screen in
+  // front of them, and doing that on a timer would mean Tuesday's edit quietly
+  // disappearing on Wednesday.
+  const syncFromCore = async () => {
+    setSyncing(true);
+    setMessage(null);
+    try {
+      await api.syncOrganisationFromCore();
+      setDraft({});
+      await load();
+      setMessage({ type: "success", text: t("core.message.core_synced") });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message || t("base.message.error") });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (!organisation) {
     return <div className="py-12 text-center text-slate-500 text-sm">{t("base.message.loading")}</div>;
   }
@@ -114,6 +134,18 @@ export default function OrganisationPage() {
           <h1 className="text-2xl font-bold text-slate-900">{t("core.view.organisation_title")}</h1>
           <p className="text-sm text-slate-500">{t("core.view.organisation_subtitle")}</p>
         </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => void syncFromCore()}
+            disabled={syncing || !value("registration_number")}
+            title={t("core.hint.core_sync")}
+            className="ml-auto inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+            {t("core.action.core_sync")}
+          </button>
+        )}
       </div>
 
       {message && <Banner tone={message.type} message={message.text} onDismiss={() => setMessage(null)} />}

@@ -53,6 +53,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
 # above: the production host has a Docker daemon and nothing else.
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
         -o /bin/operator-bootstrap ./cmd/operator-bootstrap
+# And the tenant plane's equivalent: a fresh deployment has no organisation and
+# no sign-up screen, so without this nobody can sign in to it at all. Same
+# reasoning as above — the host has a Docker daemon and nothing else.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/tenant-bootstrap ./cmd/tenant-bootstrap
 
 
 # Production Alpine image
@@ -80,6 +85,7 @@ COPY --from=builder /bin/migrate /app/migrate
 COPY --from=builder /bin/catalog-diff /app/catalog-diff
 COPY --from=builder /bin/publish-catalog /app/publish-catalog
 COPY --from=builder /bin/operator-bootstrap /app/operator-bootstrap
+COPY --from=builder /bin/tenant-bootstrap /app/tenant-bootstrap
 # App-store catalog + goose migrations are read from disk at runtime.
 COPY catalog/ /app/catalog/
 COPY backend/db/migrations/ /app/db/migrations/

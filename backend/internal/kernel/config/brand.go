@@ -1,8 +1,9 @@
 package config
 
 import (
-	"os"
 	"strings"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 )
 
 // defaultBrandName is what this platform calls itself when nobody has said
@@ -31,7 +32,11 @@ const defaultBrandName = "Gerege Nexus"
 // party name eID Mongolia puts in front of the citizen when it asks them to
 // approve a request. Everything else visible is the browser app's.
 func BrandName() string {
-	if name := strings.TrimSpace(os.Getenv("BRAND_NAME")); name != "" {
+	// A platform setting now (settings.BrandName), so a deployment can be
+	// renamed from the console. The setting reads the same variable when
+	// nobody has: what changed is that somebody can, not where the value comes
+	// from on a deployment that never opens the console.
+	if name := strings.TrimSpace(settings.Get(settings.BrandName)); name != "" {
 		return name
 	}
 	return defaultBrandName

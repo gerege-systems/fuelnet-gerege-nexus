@@ -10,7 +10,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
 )
 
@@ -18,7 +20,9 @@ import (
 // and everything else through the console's shared answer.
 func fail(w http.ResponseWriter, err error, doing string) {
 	switch {
-	case errors.Is(err, ErrHistoryNotFound), errors.Is(err, ErrNoSettingsStore):
+	case errors.Is(err, ErrHistoryNotFound), errors.Is(err, ErrNoSettingsStore),
+		errors.Is(err, ErrNoCredentialStore), errors.Is(err, credentials.ErrUnknownCredential),
+		errors.Is(err, security.ErrNoEncryptionKey):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 	default:
 		operator.Fail(w, err, doing)

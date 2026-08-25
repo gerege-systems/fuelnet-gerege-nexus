@@ -37,6 +37,35 @@ const (
 
 	// MaintenanceMessage is what people are told while it is closed.
 	MaintenanceMessage = "platform.maintenance_message"
+
+	// AITTSModel is the Gemini model the voice features ask. Beside AIModel,
+	// and separate from it, because the two move for different reasons: the
+	// chat model changes when a better one ships, the voice model when the
+	// preview one it names is retired.
+	AITTSModel = "ai.tts_model"
+
+	// BrandName is what this deployment calls itself.
+	//
+	// A name, not an address: what it changes is the word a citizen reads on
+	// the eID approval prompt, which is the one place this API puts a product
+	// name in front of a human. The browser app reads its own copy
+	// (frontend/lib/brand.ts) — the two are halves of one setting, and a
+	// deployment that renames only one has a sign-in screen and an eID prompt
+	// that disagree about which product somebody is standing in front of.
+	BrandName = "brand.name"
+
+	// The addresses of this deployment's own monitoring stack, which the
+	// console's front page links to and reads its numbers from.
+	//
+	// Addresses, which the note at the top of registry.go says do not belong
+	// here. That line is about credentials, and these three carry none: they
+	// are where an operator's own Prometheus answers, and getting one wrong
+	// makes a panel on one console screen say "not configured". Kept out of
+	// the credentials store for the same reason — nothing here is secret, and
+	// a value nobody may read back is a value nobody can check.
+	PrometheusURL   = "observability.prometheus_url"
+	AlertmanagerURL = "observability.alertmanager_url"
+	GrafanaURL      = "observability.grafana_url"
 )
 
 // The access modes.
@@ -110,5 +139,41 @@ func init() {
 		Kind:        KindString,
 		Default:     "",
 		Description: "Засварын горимд хэрэглэгчдэд харагдах мессеж. Хоосон бол ерөнхий текст.",
+	})
+	Register(Spec{
+		Key:     AITTSModel,
+		Kind:    KindString,
+		Default: "gemini-2.5-flash-preview-tts",
+		Env:     "GEMINI_TTS_MODEL",
+		Description: "Дуут боломжуудын асуудаг Gemini загвар. Preview загвар хаагдвал 404 " +
+			"буцаадаг бөгөөд түүнийг deploy хийхгүйгээр энд солино.",
+	})
+	Register(Spec{
+		Key:     BrandName,
+		Kind:    KindString,
+		Default: "Gerege Nexus",
+		Env:     "BRAND_NAME",
+		Description: "Энэ суулгац өөрийгөө юу гэж нэрлэх вэ. API нь хүний өмнө нэр тавьдаг " +
+			"хоёр газарт үйлчилнэ: eID-гийн зөвшөөрлийн цонх, мөн иргэний бүртгэл холбох амжилтгүй " +
+			"болсон үеийн мессеж. Хөтчийн апп өөрийн хуулбарыг уншина (BRAND_NAME).",
+	})
+	Register(Spec{
+		Key:  PrometheusURL,
+		Kind: KindString,
+		Env:  "PROMETHEUS_URL",
+		Description: "Консол энэ суулгацын хэмжүүрийг хаанаас уншихыг заана. Хоосон бол " +
+			"хэмжүүрийн хэсэг «тохируулаагүй» гэж харагдана.",
+	})
+	Register(Spec{
+		Key:         AlertmanagerURL,
+		Kind:        KindString,
+		Env:         "ALERTMANAGER_URL",
+		Description: "Консол идэвхтэй дохиог хаанаас уншихыг заана. Хоосон бол тэр хэсэг унтарна.",
+	})
+	Register(Spec{
+		Key:         GrafanaURL,
+		Kind:        KindString,
+		Env:         "GRAFANA_URL",
+		Description: "Консолын хяналтын самбар руу чиглэсэн шууд холбоос хаашаа заахыг тодорхойлно. Хоосон бол холбоос гарахгүй.",
 	})
 }

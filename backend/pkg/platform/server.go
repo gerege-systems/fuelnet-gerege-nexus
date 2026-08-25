@@ -28,6 +28,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/cache"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/flags"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/httpx"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/resilience"
@@ -35,6 +36,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 	core "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/setup"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -46,17 +48,24 @@ import (
 // names are this seam's arrangement, which is why they are declared where the
 // stores are handed out rather than where they are read.
 const (
-	settingsCacheName = "settings"
-	flagsCacheName    = "flags"
+	settingsCacheName    = "settings"
+	flagsCacheName       = "flags"
+	credentialsCacheName = "credentials"
 )
 
 // server is the assembled process: both planes and the router they share.
 type server struct {
-	router   *chi.Mux
-	tenant   *tenant.Service
-	platform *core.Service
-	settings *settings.Store
-	flags    *flags.Store
+	router      *chi.Mux
+	tenant      *tenant.Service
+	platform    *core.Service
+	settings    *settings.Store
+	flags       *flags.Store
+	credentials *credentials.Store
+	// setup is the first-run wizard. It belongs to neither plane: it runs
+	// before there is an organisation for the tenant plane to act for, and it
+	// is not the console — a deployment with no console at all still has to be
+	// able to open its first organisation.
+	setup *setup.Service
 }
 
 // newServer builds what the planes share, then each plane, then the router.
@@ -71,6 +80,10 @@ func newServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...te
 	// by half the process.
 	settingsStore := settings.NewStore(db)
 	flagsStore := flags.NewStore(db)
+	// The keys, sealed. A third store rather than a third kind of setting: see
+	// internal/kernel/credentials for why the line between them is drawn in
+	// code rather than in a comment.
+	credentialStore := credentials.NewStore(db)
 
 	tenantPlane, err := tenant.New(tenant.Deps{
 		DB: db, Bus: bus, Settings: settingsStore, Flags: flagsStore,
@@ -88,7 +101,7 @@ func newServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...te
 	platformPlane := core.New(db, core.ConsoleDeps{
 		Installer: tenantPlane, Mail: tenantPlane.Mail(),
 		TenantChanged: tenantPlane.ForgetSuspension,
-		Settings:      settingsStore, Flags: flagsStore,
+		Settings:      settingsStore, Flags: flagsStore, Credentials: credentialStore,
 		Warnings: tenantPlane.ConfigurationWarnings, CatalogStatus: tenantPlane.CatalogStatus,
 		SyncCatalog:     tenantPlane.SyncCatalog,
 		PlatformVersion: config.PlatformVersion,
@@ -101,6 +114,7 @@ func newServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...te
 	// while a value sits in the database.
 	settings.UseStore(settingsStore)
 	flags.UseStore(flagsStore)
+	credentials.UseStore(credentialStore)
 
 	// A first read, so the platform starts with what the console last decided
 	// rather than with the defaults for the first thirty seconds. A failure is
@@ -114,27 +128,36 @@ func newServer(db *pgxpool.Pool, catalogPath string, bus *cache.Bus, extra ...te
 	if err := flagsStore.Load(settingsCtx); err != nil {
 		slog.Warn("could not read the feature flags at startup", "error", err)
 	}
+	if err := credentialStore.Load(settingsCtx); err != nil {
+		slog.Warn("could not read the platform credentials at startup", "error", err)
+	}
 	cancelSettings()
 
 	// The bus has to know the caches before a message can arrive for one, and a
 	// message can arrive as soon as the subscriber connects.
 	bus.Register(settingsCacheName, settingsStore)
 	bus.Register(flagsCacheName, flagsStore)
+	bus.Register(credentialsCacheName, credentialStore)
 	settingsStore.OnChange(func() { bus.Invalidate(settingsCacheName, "") })
 	flagsStore.OnChange(func() { bus.Invalidate(flagsCacheName, "") })
+	credentialStore.OnChange(func() { bus.Invalidate(credentialsCacheName, "") })
+
+	setupWizard := setup.New(db)
 
 	return &server{
-		router:   newRouter(db, tenantPlane, platformPlane),
-		tenant:   tenantPlane,
-		platform: platformPlane,
-		settings: settingsStore,
-		flags:    flagsStore,
+		router:      newRouter(db, tenantPlane, platformPlane, setupWizard),
+		tenant:      tenantPlane,
+		platform:    platformPlane,
+		settings:    settingsStore,
+		flags:       flagsStore,
+		credentials: credentialStore,
+		setup:       setupWizard,
 	}, nil
 }
 
 // newRouter is the process's HTTP surface: what every request passes through,
 // the three routes that belong to no plane, and then the planes themselves.
-func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *core.Service) *chi.Mux {
+func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *core.Service, wizard *setup.Service) *chi.Mux {
 	r := chi.NewRouter()
 
 	// First, so everything below it — the access log, every slog line a handler
@@ -154,9 +177,15 @@ func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *cor
 	r.Use(telemetry.MetricsMiddleware)
 	r.Use(security.HeadersMiddleware)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   security.SafeCORSOrigins(),
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Tenant-ID"},
+		AllowedOrigins: security.SafeCORSOrigins(),
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		// X-Setup-Token is the first-run wizard's, and it has to be here for the
+		// same reason X-Tenant-ID is: a header the preflight does not name is a
+		// request the browser never sends. In production the browser app and
+		// the API share an origin and none of this is consulted; in
+		// development they are :3000 and :8080, which is exactly where a
+		// deployment is stood up for the first time.
+		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Tenant-ID", "X-Setup-Token"},
 		AllowCredentials: true,
 	}))
 	r.Use(security.CSRFMiddleware)
@@ -187,6 +216,10 @@ func newRouter(db *pgxpool.Pool, tenantPlane *tenant.Service, platformPlane *cor
 	// against its history when the history is the only thing that changed.
 	platformPlane.Routes(r)
 	tenantPlane.Routes(r)
+	// Last, and unconditionally: the wizard answers 404 to everything until it
+	// is armed, so mounting it on a deployment that was set up years ago costs
+	// one route table entry and nothing else.
+	wizard.Routes(r)
 
 	return r
 }
@@ -203,6 +236,7 @@ func (s *server) StartBackgroundJobs(ctx context.Context) {
 	// thirty seconds behind.
 	s.settings.StartRefresh(ctx)
 	s.flags.StartRefresh(ctx)
+	s.credentials.StartRefresh(ctx)
 	s.tenant.StartBackgroundJobs(ctx)
 	s.platform.StartBackgroundJobs(ctx)
 }

@@ -1,0 +1,56 @@
+/**
+ * setup — The first-run wizard: the screen a deployment is opened from, before
+ * there is an organisation or anybody to sign in as.
+ */
+export const setup = {
+  "setup.view.title": { mn: "Анхны тохиргоо", en: "First-run setup" },
+  "setup.view.subtitle": {
+    mn: "Энэ суулгацад байгууллага хараахан алга. Эхний байгууллага, түүнийг ажиллуулах админыг үүсгэе.",
+    en: "This deployment has no organisation yet. Let us open the first one and the administrator who runs it.",
+  },
+  "setup.view.step_organisation": { mn: "Байгууллага", en: "Organisation" },
+  "setup.view.step_admin": { mn: "Админ", en: "Administrator" },
+  "setup.view.step_password": { mn: "Нууц үг", en: "Password" },
+
+  "setup.field.registration_number": { mn: "Регистрийн дугаар", en: "Registration number" },
+  "setup.field.person_registration_number": { mn: "Хүний регистрийн дугаар", en: "Person's registration number" },
+  "setup.field.organisation_name": { mn: "Байгууллагын нэр", en: "Organisation name" },
+  "setup.field.legal_name": { mn: "Албан ёсны нэр", en: "Legal name" },
+  "setup.field.slug": { mn: "Богино нэр (URL)", en: "Slug (URL)" },
+  "setup.field.admin_name": { mn: "Админы нэр", en: "Administrator's name" },
+  "setup.field.password_again": { mn: "Нууц үгээ давтах", en: "Repeat the password" },
+
+  "setup.action.lookup": { mn: "Core-оос хайх", en: "Look up in Gerege Core" },
+  "setup.action.finish": { mn: "Тохиргоог дуусгах", en: "Finish setup" },
+  "setup.action.sign_in": { mn: "Нэвтрэх", en: "Sign in" },
+
+  "setup.message.slug_hint": {
+    mn: "Хаяг, OAuth audience-д ордог. Жижиг латин үсэг, тоо, зураас.",
+    en: "It appears in URLs and in the OAuth audience. Lowercase letters, digits and hyphens.",
+  },
+  "setup.message.core_off": {
+    mn: "GEREGE_CORE_TOKEN тохируулаагүй тул регистрээр хайх боломжгүй. Талбаруудыг гараар бөглөнө үү.",
+    en: "GEREGE_CORE_TOKEN is not set, so the register cannot be searched. Fill the fields in by hand.",
+  },
+  "setup.message.password_rule": {
+    mn: "Дор хаяж 10 тэмдэгт.",
+    en: "At least 10 characters.",
+  },
+  "setup.message.password_mismatch": { mn: "Хоёр нууц үг таарахгүй байна.", en: "The two passwords are not the same." },
+  "setup.message.not_required": {
+    mn: "Энэ суулгац аль хэдийн тохируулагдсан байна.",
+    en: "This deployment has already been set up.",
+  },
+  "setup.message.not_armed": {
+    mn: "Тохиргооны токен байхгүй байна. Сервер асахад бичсэн лог мөрөөс хаягийг нь аваарай, эсвэл серверийг дахин асаагаад шинэ токен авна уу.",
+    en: "There is no setup token. Take the address from the line the server wrote to its log at boot, or restart it for a new one.",
+  },
+  "setup.message.done": {
+    mn: "Байгууллага нээгдлээ. Одоо шинэ бүртгэлээрээ нэвтэрнэ үү.",
+    en: "The organisation is open. Sign in with the account you just made.",
+  },
+  "setup.message.apps_next": {
+    mn: "Аппуудаа нэвтэрсний дараа Апп Дэлгүүрээс суулгана.",
+    en: "Apps are installed from the store once you are in.",
+  },
+} as const;

@@ -145,7 +145,7 @@ func (s *Service) CreateTenant(ctx context.Context, sess operator.Session, param
 		}
 
 		var err error
-		adminUserID, err = ensureAdmin(ctx, tx, created.ID, adminEmail, strings.TrimSpace(params.AdminName))
+		adminUserID, err = ensureAdmin(ctx, tx, created.ID, adminEmail, strings.TrimSpace(params.AdminName), "")
 		return err
 	})
 	if err != nil {
@@ -176,16 +176,22 @@ func (s *Service) CreateTenant(ctx context.Context, sess operator.Session, param
 // first password would be an operator who could sign in as the customer, which
 // is exactly what impersonation exists to make deliberate and visible.
 //
+// passwordHash is empty for exactly that reason on every call from the console.
+// The one caller that passes one is the first-boot bootstrap, where there is no
+// operator to distrust and no mail to invite anybody with: see bootstrap.go.
+//
 // An address that already belongs to somebody is reused rather than refused:
 // one person administering two organisations is ordinary, and their existing
 // password is not touched.
-func ensureAdmin(ctx context.Context, tx pgx.Tx, tenantID, email, name string) (string, error) {
+func ensureAdmin(ctx context.Context, tx pgx.Tx, tenantID, email, name, passwordHash string) (string, error) {
 	if name == "" {
 		name = email
 	}
-	unusable, err := support.UnusablePassword()
-	if err != nil {
-		return "", err
+	if passwordHash == "" {
+		var err error
+		if passwordHash, err = support.UnusablePassword(); err != nil {
+			return "", err
+		}
 	}
 
 	// Insert-or-select rather than an upsert, in all three of the statements
@@ -201,7 +207,7 @@ func ensureAdmin(ctx context.Context, tx pgx.Tx, tenantID, email, name string) (
 		 VALUES ($1, $2, $3, FALSE) ON CONFLICT (email) DO NOTHING
 		 RETURNING id::text`,
 		`SELECT id::text FROM platform.users WHERE email = $1`,
-		[]any{email, unusable, name}, []any{email})
+		[]any{email, passwordHash, name}, []any{email})
 	if err != nil {
 		return "", fmt.Errorf("create the administrator's account: %w", err)
 	}

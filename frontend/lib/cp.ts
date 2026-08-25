@@ -305,6 +305,15 @@ export const cp = {
     request<{ status: string }>(`/settings/rollback/${changeID}`,
       { method: "POST", body: JSON.stringify({ reason }) }),
 
+  credentials: () =>
+    request<{ credentials: Credential[]; sealing_configured: boolean }>("/credentials"),
+  setCredential: (name: string, value: string, reason: string) =>
+    request<{ status: string }>(`/credentials/${encodeURIComponent(name)}`,
+      { method: "PUT", body: JSON.stringify({ value, reason }) }),
+  clearCredential: (name: string, reason: string) =>
+    request<{ status: string }>(`/credentials/${encodeURIComponent(name)}`,
+      { method: "DELETE", body: JSON.stringify({ reason }) }),
+
   flags: () => request<{ flags: Flag[] }>("/flags"),
   saveFlag: (flag: Partial<Flag> & { key: string; reason: string }) =>
     request<{ status: string }>("/flags", { method: "POST", body: JSON.stringify(flag) }),
@@ -338,6 +347,25 @@ export interface Setting {
   /** Where the current value came from: the console, the environment, or the code. */
   source: "database" | "environment" | "default";
   updated_at: string | null;
+}
+
+/**
+ * A credential as the console may see it.
+ *
+ * There is no field here that holds the value, and that is the point of the
+ * type: the platform has no route that returns one. `hint` is the last four
+ * characters of a value stored in the database — enough to tell two keys apart
+ * and to see that a rotation landed, and not enough to use.
+ */
+export interface Credential {
+  name: string;
+  env: string;
+  description: string;
+  docs?: string;
+  source: "database" | "environment" | "unset";
+  hint?: string;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 export interface SettingChange {

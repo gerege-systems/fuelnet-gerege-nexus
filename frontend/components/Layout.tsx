@@ -28,7 +28,11 @@ interface AppNav { id:string; name:string; icon:string; path:string; externalUrl
 // Routes that render without the ERP chrome. /oauth/consent is signed-in but
 // belongs here too: it is an identity handoff to another product, and framing
 // it in this one's navigation invites the user to wander off mid-flow.
-const PUBLIC_ROUTES=["/","/login","/auth/eid/callback","/oauth/consent","/kiosk"];
+// /setup is public in the only sense that matters here: it runs on a
+// deployment with no organisation, so there is nobody to hold a session and
+// asking /me for one would push the wizard to a sign-in screen that cannot
+// work. What authorises it is the setup token, not a session.
+const PUBLIC_ROUTES=["/","/login","/setup","/auth/eid/callback","/oauth/consent","/kiosk"];
 // Шугамын нүүр дэлгэц нэвтрэлт шаардахгүй. Тэр нь ажлын мужид web-ийн нэвтрэх
 // дэлгэц гарч ирэхийг ОРЛОХЫН тулд байгаа тул session байхгүй үед ч зогсох
 // ёстой — эс бөгөөс дахин /login руу түлхэж, шийдэх гэсэн асуудлаа өөрөө

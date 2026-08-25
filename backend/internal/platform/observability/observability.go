@@ -8,10 +8,11 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/settings"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/backup"
 )
@@ -36,12 +37,12 @@ import (
 // (deploy/docker-compose.monitoring.yml), so a containerised API reaches it
 // through the host gateway — see docs/CONTROL_PLANE.md §4з for the two lines
 // that arrange it.
-func prometheusURL() string   { return strings.TrimRight(os.Getenv("PROMETHEUS_URL"), "/") }
-func alertmanagerURL() string { return strings.TrimRight(os.Getenv("ALERTMANAGER_URL"), "/") }
+func prometheusURL() string   { return strings.TrimRight(settings.Get(settings.PrometheusURL), "/") }
+func alertmanagerURL() string { return strings.TrimRight(settings.Get(settings.AlertmanagerURL), "/") }
 
 // GrafanaURL is where the "look closer" links point. Public, because the
 // operator's browser follows them.
-func GrafanaURL() string { return strings.TrimRight(os.Getenv("GRAFANA_URL"), "/") }
+func GrafanaURL() string { return strings.TrimRight(settings.Get(settings.GrafanaURL), "/") }
 
 // monitoringTimeout bounds one query. The console must not hang because
 // Prometheus is busy; a panel that says "could not read" is a better page than

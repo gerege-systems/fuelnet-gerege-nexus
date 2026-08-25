@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/security"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/term"
 )
 
 func main() {
@@ -73,7 +73,7 @@ func main() {
 		return
 	}
 
-	password, err := readPassword()
+	password, err := security.ReadNewPassword(operator.MinPasswordLength)
 	if err != nil {
 		fail("%v", err)
 	}
@@ -135,41 +135,6 @@ func confirmLoop(ctx context.Context, db *pgxpool.Pool, operatorID, email string
 		}
 	}
 	return false
-}
-
-// readPassword asks twice and never echoes.
-//
-// It reads from the terminal rather than from a flag or an environment
-// variable, both of which leave the password in a shell history, a process
-// list, or a container's inspect output — places it outlives the command in.
-func readPassword() (string, error) {
-	fd := int(os.Stdin.Fd())
-	if !term.IsTerminal(fd) {
-		return "", errors.New("this command needs a terminal to read the password from " +
-			"(use `docker exec -it`, not `docker exec`)")
-	}
-
-	// The rule is said before the password is asked for, not after it has been
-	// typed twice. Learning a requirement by being refused is a small thing
-	// that wastes somebody's time at exactly the wrong moment — the first
-	// minute of setting up the console.
-	fmt.Printf("Choose a password of at least %d characters.\n", operator.MinPasswordLength)
-	fmt.Print("Password: ")
-	first, err := term.ReadPassword(fd)
-	fmt.Println()
-	if err != nil {
-		return "", fmt.Errorf("could not read the password: %w", err)
-	}
-	fmt.Print("Again: ")
-	second, err := term.ReadPassword(fd)
-	fmt.Println()
-	if err != nil {
-		return "", fmt.Errorf("could not read the password: %w", err)
-	}
-	if string(first) != string(second) {
-		return "", errors.New("the two passwords were not the same")
-	}
-	return string(first), nil
 }
 
 func usage() {

@@ -481,6 +481,33 @@ html[data-theme="dark"] .divide-slate-100 > * { border-color: var(--gerege-borde
 .signin-alert{border-radius:8px;padding:10px 12px;font-size:13px;background:var(--sg-danger-soft);color:var(--sg-danger)}
 .signin-note{color:var(--sg-muted);font-size:12.5px;text-align:center;margin:0}
 
+/* Анхны тохиргооны шидтэн. Нэвтрэх картын дотор амьдардаг тул хүрээ, товчны
+   хэлбэрийг тэндээсээ авна — энэ хоёр дэлгэц нь хүний хувьд нэг л мөч:
+   суулгацын гадаа зогсоод дотогш орох гэж байгаа. */
+.signin-btn--primary{background:var(--sg-blue);color:#fff}
+.signin-btn--primary:hover:not(:disabled){filter:brightness(1.06)}
+.signin-btn--quiet{background:var(--sg-surface);color:var(--sg-fg);border-color:var(--sg-border)}
+.signin-btn--quiet:hover:not(:disabled){background:var(--sg-surface-2)}
+
+.setup-steps{display:flex;gap:8px;list-style:none;margin:0;padding:0}
+.setup-steps li{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border:1px solid var(--sg-border);border-radius:8px;color:var(--sg-muted);font-size:13px;font-weight:500}
+.setup-steps li.is-current{border-color:var(--sg-blue);color:var(--sg-blue-text);background:var(--sg-blue-soft)}
+.setup-steps li.is-done{color:var(--sg-fg)}
+
+.setup-form{display:flex;flex-direction:column;gap:16px}
+.setup-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500}
+.setup-form input{width:100%;background:var(--sg-surface);border:1px solid var(--sg-border);border-radius:8px;color:var(--sg-fg);font-size:15px;font-weight:400;padding:11px 12px;transition:border-color .12s,box-shadow .12s}
+.setup-form input:focus{border-color:var(--sg-blue);box-shadow:0 0 0 3px var(--sg-blue-soft);outline:none}
+.setup-form small{color:var(--sg-muted);font-size:12px;font-weight:400}
+
+.setup-lookup{display:flex;gap:8px}
+.setup-lookup input{flex:1}
+.setup-lookup button{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;background:var(--sg-surface-2);border:1px solid var(--sg-border);border-radius:8px;color:var(--sg-fg);font-size:13px;font-weight:500;padding:0 14px;cursor:pointer}
+.setup-lookup button:hover:not(:disabled){background:var(--sg-surface)}
+.setup-lookup button:disabled{opacity:.5;cursor:not-allowed}
+
+.setup-actions{display:flex;gap:10px}
+
 /* eID картыг энэ дизайны дотор буулгах. EIDLogin өөрөө навигацийн логикоо
    барина — энд зөвхөн харагдац солигдоно. */
 .signin-card .eid-login{background:0 0;border:0;padding:0;box-shadow:none;gap:16px;display:flex;flex-direction:column}

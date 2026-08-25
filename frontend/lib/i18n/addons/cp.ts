@@ -172,6 +172,28 @@ export const cp = {
   "cp.source.database": { mn: "Консол", en: "Console" },
   "cp.source.environment": { mn: "Env", en: "Environment" },
   "cp.source.default": { mn: "Анхдагч", en: "Default" },
+  "cp.source.unset": { mn: "Тохируулаагүй", en: "Not set" },
+
+  // Түлхүүрүүд. Утгыг нь буцаадаг API байхгүй тул энд ч гэсэн "харах" гэсэн
+  // үйлдэл байхгүй — зөвхөн тавих ба цэвэрлэх.
+  "cp.section.credentials": { mn: "Түлхүүрүүд", en: "Credentials" },
+  "cp.hint.credentials": {
+    mn: "Гадаад системд хандах түлхүүрүүд. Утга нь шифрлэгдэж хадгалагдана, буцааж харагдахгүй — зөвхөн сүүлийн дөрвөн тэмдэгт.",
+    en: "The keys this deployment reaches other systems with. Values are stored sealed and never read back — only the last four characters.",
+  },
+  "cp.field.credential": { mn: "Түлхүүр", en: "Credential" },
+  "cp.field.updated": { mn: "Шинэчилсэн", en: "Updated" },
+  "cp.action.set_credential": { mn: "Тавих", en: "Set" },
+  "cp.action.clear_credential": { mn: "Цэвэрлэх", en: "Clear" },
+  "cp.message.no_credentials": { mn: "Түлхүүр бүртгэгдээгүй байна.", en: "No credentials are registered." },
+  "cp.message.sealing_off": {
+    mn: "INTEGRATION_ENCRYPTION_KEY тохируулаагүй тул түлхүүр хадгалах боломжгүй. Цэвэр текстээр хадгалахын оронд бичилт татгалзана.",
+    en: "INTEGRATION_ENCRYPTION_KEY is not set, so no credential can be stored. The write is refused rather than storing it in the clear.",
+  },
+  "cp.message.credential_write_only": {
+    mn: "Одоогийн утгыг харуулах боломжгүй. Шинэ утга оруулбал хуучныг орлоно.",
+    en: "The current value cannot be shown. A new value replaces the old one.",
+  },
 
   "cp.kind.release": { mn: "Гаргалт", en: "Release" },
   "cp.kind.kill_switch": { mn: "Унтраалга", en: "Kill switch" },
