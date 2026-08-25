@@ -132,6 +132,15 @@ export function EmptyState({ message }: { message: string }) {
 export const fieldClass =
   "w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500";
 
+/**
+ * A <select> wearing fieldClass alone renders SHORTER than the input beside
+ * it: the vertical padding that gives an input its height is not honoured by
+ * the native control on every browser, macOS Safari most visibly. The height
+ * an input reaches implicitly — text-sm line + py-2 + borders — is stated
+ * explicitly here, so a select in a form row sits flush with its neighbours.
+ */
+export const selectClass = `${fieldClass} h-[38px] bg-white`;
+
 /** The white panel a section sits on. */
 export const cardClass = "bg-white rounded-xl border border-slate-200 shadow-sm";
 

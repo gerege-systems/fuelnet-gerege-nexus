@@ -9,7 +9,7 @@ import {
 import { useResource, useLoadOnMount } from "@/lib/useResource";
 import { useAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
-import { Banner, LoadingBlock, Modal, cardClass, fieldClass } from "@/components/ui";
+import { Banner, LoadingBlock, Modal, cardClass, fieldClass, selectClass } from "@/components/ui";
 import {
   CeremonyButton, ContractBadge, PartyBadge, fmtWhen, useContractLabels,
 } from "@/components/documents/contracts";
@@ -451,7 +451,7 @@ function AddPartyForm({ id, onAdded, onError }: {
         {field(t("contracts.field.name"), <input className={fieldClass} value={form.display_name} onChange={set("display_name")} />)}
         {field(t("contracts.field.reg"), <input className={fieldClass} value={form.registration_number} onChange={set("registration_number")} />)}
         {field(t("contracts.field.role"), (
-          <select className={fieldClass} value={form.party_role} onChange={set("party_role")}>
+          <select className={selectClass} value={form.party_role} onChange={set("party_role")}>
             <option value="counterparty">{t("contracts.role.counterparty")}</option>
             <option value="issuer">{t("contracts.role.issuer")}</option>
             <option value="witness">{t("contracts.role.witness")}</option>
@@ -459,7 +459,7 @@ function AddPartyForm({ id, onAdded, onError }: {
           </select>
         ))}
         {field(t("contracts.field.kind"), (
-          <select className={fieldClass} value={form.party_kind} onChange={set("party_kind")}>
+          <select className={selectClass} value={form.party_kind} onChange={set("party_kind")}>
             <option value="organisation">{t("contracts.kind.organisation")}</option>
             <option value="person">{t("contracts.kind.person")}</option>
             <option value="tenant">{t("contracts.kind.tenant")}</option>
@@ -609,7 +609,7 @@ function SendCard({ id, state, mode, onChanged, onError, onInfo }: {
       {state === "WITHDRAWN" && <Banner tone="warning" message={t("contracts.send.withdrawn_note")} />}
       <div className="max-w-xs">
         <label className="block text-xs font-medium text-slate-500 mb-1">{t("contracts.field.mode")}</label>
-        <select className={fieldClass} value={signingMode} onChange={(event) => setSigningMode(event.target.value as "counterpart" | "joint")}>
+        <select className={selectClass} value={signingMode} onChange={(event) => setSigningMode(event.target.value as "counterpart" | "joint")}>
           <option value="counterpart">{t("contracts.mode.counterpart")}</option>
           <option value="joint">{t("contracts.mode.joint")}</option>
         </select>
