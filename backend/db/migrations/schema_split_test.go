@@ -86,8 +86,12 @@ func TestEveryPlatformMigrationTableLandsOnItsDeclaredPlane(t *testing.T) {
 			t.Errorf("%s is in %s, ownership_test.go declares %s", name, actual, declared.plane)
 		}
 	}
-	if counts["platform"] != 26 || counts["tenant"] != 40 {
-		t.Errorf("schema counts: platform=%d tenant=%d; want 26 and 40", counts["platform"], counts["tenant"])
+	// The counts are written down so that a table appearing in the wrong schema
+	// cannot pass by moving another one: 27 became 27 when migration 00081 added
+	// platform.platform_credentials, and a number that is edited alongside the
+	// migration is a number somebody looked at.
+	if counts["platform"] != 27 || counts["tenant"] != 40 {
+		t.Errorf("schema counts: platform=%d tenant=%d; want 27 and 40", counts["platform"], counts["tenant"])
 	}
 }
 
