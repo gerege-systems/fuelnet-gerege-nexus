@@ -351,6 +351,8 @@ jobs:
         run: npm run lint
       - name: Run frontend unit tests
         run: npm test
+      - name: Check the FuelNet presentation
+        run: node ../ppt/check-deck.mjs
       # The service worker sits in front of every request the app makes, and
       # this platform's requests carry tenant data. It is written so that /api
       # is never cached; this asserts that rather than trusting a handful of

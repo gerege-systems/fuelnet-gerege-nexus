@@ -1,59 +1,44 @@
-# Танилцуулга — ppt.nexus.gerege.mn
+# FuelNet танилцуулга — ppt.fuelnet.gerege.mn
 
-Gerege Nexus-ийг тайлбарласан 20 хуудас танилцуулга. Нэг бие даасан
-`index.html` — build алхамгүй, гадаад хамааралгүй, offline ч нээгдэнэ.
+FuelNet-ийн төлөвлөгөөг төрийн шийдвэр гаргагч, зохицуулагч, импортлогч,
+ШТС-ын сүлжээний удирдлагад тайлбарлах 20 слайдтай standalone HTML deck.
+Build алхам, гаднын font эсвэл JavaScript dependency байхгүй.
 
-## Ашиглах
-
-- Хөтчөөр `index.html`-ийг шууд нээнэ, эсвэл:
-
-```bash
-cd ppt && python3 -m http.server 8090   # http://localhost:8090
-```
-
-- Удирдлага: ← → сумнууд, Space, PgUp/PgDn, Home/End; `f` эсвэл ⛶ товч —
-  бүтэн дэлгэц; утсан дээр зүүн/баруун шудрах. `#N` hash-аар тодорхой слайд
-  руу очно (жишээ нь `index.html#17`).
-- Бүтэн дэлгэц: Chrome/Firefox стандарт API, Safari webkit- угтвартайг
-  хэрэглэнэ. iPhone-ы Safari-д энэ API огт байхгүй тул тэнд хуудас өөрөө
-  дүүргэх горимд шилжинэ (Esc эсвэл товчоор гарна).
-
-## ppt.nexus.gerege.mn дээр байршуулах
-
-Статик файл тул сервер дээр хавтсаа хуулаад nginx-д нэг server block
-нэмэхэд хангалттай (`nginx-ppt.conf.example`). Анхны суулгалт 2026-08-14-нд
-хийгдсэн; шинэ орчинд давтахад:
+## Локал ажиллуулах
 
 ```bash
-# 1. файлаа хуулах (ssh alias: nexus / nexus-root)
-scp ppt/index.html nexus-root:/tmp/
-ssh nexus-root 'mkdir -p /var/www/nexus-ppt &&
-                install -m 0644 /tmp/index.html /var/www/nexus-ppt/index.html'
-
-# 2. vhost суулгаад асаах
-scp ppt/nginx-ppt.conf.example nexus-root:/tmp/
-ssh nexus-root 'install -m 0644 /tmp/nginx-ppt.conf.example \
-                  /etc/nginx/sites-available/ppt.nexus.gerege.mn &&
-                ln -sfn /etc/nginx/sites-available/ppt.nexus.gerege.mn \
-                        /etc/nginx/sites-enabled/ppt.nexus.gerege.mn &&
-                nginx -t && systemctl reload nginx'
-
-# 3. гэрчилгээ (443 блокийг certbot өөрөө бичнэ)
-ssh nexus-root 'certbot --nginx -d ppt.nexus.gerege.mn --redirect'
+cd ppt
+python3 -m http.server 8090
 ```
 
-Зөвхөн агуулга шинэчлэх бол 1-р алхмыг давтаад л болно — nginx reload хэрэггүй.
+`http://localhost:8090`-г нээнэ. Удирдлага:
 
-DNS: `ppt.nexus.gerege.mn` нь `*.nexus.gerege.mn` wildcard-аар аль хэдийн
-38.180.145.75 рүү заадаг. TLS нь энэ хостын конвенцоор дэд домэйн тус бүрдээ
-certbot гэрчилгээтэй (wildcard биш), авто-шинэчлэлт certbot дээр тохирсон.
+- `←` / `→`, Space, Page Up / Page Down — слайд солих
+- Home / End — эхний / сүүлийн слайд
+- `f` — fullscreen
+- `s` — тухайн слайдын эх сурвалж
+- Touch дэлгэц дээр зүүн / баруун swipe
+- `#s=12` — тодорхой слайд руу шууд орох
 
-Deploy автоматжуулах бол `.github/workflows/deploy.yml`-ийн серверт файл
-хуулдаг алхамд `ppt/` хавтсыг нэмэхэд л болно — build шаардлагагүй.
+Print dialog-аас landscape PDF болгон хадгалж болно. Слайд бүр 1280×720 буюу
+16:9 харьцаатай.
 
-## Засварлах
+## Production deploy
 
-Слайд бүр `index.html` доторх нэг `<section class="slide">`. Дизайны
-токенууд (өнгө, хэмжээ) файлын эхний `:root` блокт байгаа. Diagram-ууд
-нь энгийн HTML/CSS (`.dg`, `.layer`, `.chips` классууд) тул текст
-шиг засагдана.
+`main` branch-д push хийсний дараа GitHub Actions:
+
+1. CI-г бүрэн ажиллуулна.
+2. `ppt/index.html` болон nginx bootstrap config-ийг production серверт хуулна.
+3. Deck-ийг `/var/www/fuelnet-ppt` рүү atomically install хийнэ.
+4. Анхны deploy дээр `ppt.fuelnet.gerege.mn` vhost болон Let's Encrypt TLS
+   гэрчилгээг үүсгэнэ.
+5. HTTPS хаягийг smoke-test хийнэ.
+
+DNS нь `*.fuelnet.gerege.mn` wildcard-аар production host руу заасан.
+Vhost-ыг certbot анх удаа TLS болгон өргөтгөсний дараа CI зөвхөн content-ийг
+шинэчилж, certbot-ийн удирддаг TLS мөрүүдийг дахин бичихгүй.
+
+## Агуулгын эх сурвалж
+
+Deck-ийн гол эх сурвалж нь repository root дахь `FUELNET_PLAN.md`. Слайд бүр
+далд `[Sources]` notes блоктой бөгөөд танилцуулга дээр `s` дарж харна.

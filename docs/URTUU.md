@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | **Гэрээ** | `backend/pkg/urtuu` | Дугтуй, Ed25519 гарын үсэг, даалгаврын статусын машин, хүсэлтийн кодын төрөл. Distribution бүр (gov, commerce…) ижил ойлголттой байхын тулд `pkg`-д |
 | **Тээвэр** | `backend/internal/tenant/urtuu` | Холбоос, гарах/ирэх дараалал, хүргэлтийн retry, идемпотент хүлээн авалт, pull/push цэгүүд. Платформын үйлчилгээ — суулгасан аппаас хамаарахгүй |
-| **Апп «Өртөө»** | `backend/internal/apps/urtuu` (`io.gerege.nexus.urtuu`) | Даалгаврын амьдралын мөчлөг, дэлгэцүүд, самбар, тайлангууд. Тенант өөрөө суулгах бүтээгдэхүүн |
+| **Апп «Өртөө»** | `client-gerege-nexus` distribution (`io.gerege.nexus.urtuu`) | Даалгаврын амьдралын мөчлөг, дэлгэцүүд, самбар, тайлангууд. Цөмд код/хүснэгтээ хадгалахгүй, `pkg/nexus` capability-аар тээвэрт хүрнэ |
 
 **Яагаад тээврийг цөмд оруулсан бэ.** Админы байгуулсан холбоос дээгүүр яваа
 ажил нь тухайн аппыг устгасан ч алга болох ёсгүй. Мөн ирээдүйд өөр модуль (жишээ
@@ -75,7 +75,7 @@ handshake нь ойлгомжгүй алдаагаар унана.
 | `RING_BASE_URL` | Кодын эх сурвалж | ring.dgov.mn-ий хаяг. `mock` гэж тавибал хөгжүүлэлтийн жишиг кодууд ирнэ (нэр дээрээ «жишиг» гэж бичигдсэн). Тавигдаагүй бол импорт унтраалттай, локал кодууд ажиллана |
 | `RING_API_KEY` | Кодын эх сурвалж | Ring-ийн Bearer түлхүүр. `RING_BASE_URL` бодит хаягтай бол заавал |
 | `RING_PUBLIC_KEY` | Кодын эх сурвалж | Бүртгэлийн гарын үсэг шалгах Ed25519 нийтийн түлхүүр, base64. **Заавал** — шалгагдаагүй бүртгэл нь улсын бүх суулгац дээрх кодын утга, хугацааны нормыг өөрчлөх эрхтэй баримт |
-| `PLATFORM_TIMEZONE` | Платформ даяар | Календарийн цагийн бүс. Анхдагч `Asia/Ulaanbaatar`. Бүртгэлийн дугаарын он, хугацааны заагийг энэ шийднэ — тохируулгыг [`internal/kernel/config/timezone.go`](../backend/internal/kernel/config/timezone.go)-оос үз |
+| `PLATFORM_TIMEZONE` | Платформ даяар | Календарийн цагийн бүс. Анхдагч `Asia/Ulaanbaatar`. Бүртгэлийн дугаарын он, хугацааны заагийг энэ шийднэ — public contract-ыг [`pkg/nexus/clock.go`](../backend/pkg/nexus/clock.go)-оос үз |
 
 Түлхүүр үүсгэх:
 
@@ -417,8 +417,12 @@ Integration тестүүд яг үүнийг нэг процесс дотор х
 
 ```bash
 cd backend
-URTUU_TEST_DATABASE_URL=postgres://... go test ./internal/tenant/urtuu/... ./internal/apps/urtuu/...
+URTUU_TEST_DATABASE_URL=postgres://... go test ./internal/tenant/urtuu/... ./pkg/urtuu/...
 ```
+
+Өртөө аппын domain/module тест нь `client-gerege-nexus` distribution-ын CI-д
+ажиллана; энэ репогийн command зөвхөн цөмд үлдсэн wire contract ба transport-ыг
+шалгана.
 
 ---
 

@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./fuelnet.css";
 import type { Metadata, Viewport } from "next";
 import React from "react";
 

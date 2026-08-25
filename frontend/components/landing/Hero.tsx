@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import {ArrowRight} from "lucide-react";
+import {useEffect, useState} from "react";
+import {ArrowRight, FileSignature} from "lucide-react";
 
 import EIDLogin from "@/components/EIDLogin";
-import {useI18n} from "@/lib/i18n";
+import {APPLICATIONS} from "@/components/landing/content";
+import {useAccess} from "@/lib/access";
+import {contracts, InboxItem} from "@/lib/contracts";
+import {LOCALES, useI18n} from "@/lib/i18n";
 
 /**
  * The first screen: what the platform is, and the eID panel to act on it.
@@ -32,6 +36,38 @@ export default function Hero({
   localSignIn = true,
 }: {seeMoreAnchor?: string; localSignIn?: boolean}) {
   const {t} = useI18n();
+  // Нэвтэрсэн хүнд энэ хуудас ӨӨР асуултад хариулна: «надад юу ирсэн бэ».
+  // Нөхцөл нь зөвхөн `me` — эхний client render дээр null тул сервертэй яг
+  // ижил markup гарна (hydration зөрөхгүй), нэвтрээгүй зочинд юу ч
+  // өөрчлөгдөхгүй.
+  const {me} = useAccess();
+  const [contractInbox, setContractInbox] = useState<InboxItem[] | null>(null);
+
+  // A signed-in account, or even an installed Documents module, is not evidence
+  // that this distribution carries the newer contracts API. The screen is a
+  // capability client, so only a successful endpoint response may advertise
+  // it. Current base and client distributions do not provide that endpoint.
+  useEffect(() => {
+    let alive = true;
+    if (!me) {
+      setContractInbox(null);
+      return () => {
+        alive = false;
+      };
+    }
+    contracts.inbox(false)
+      .then((response) => {
+        if (alive) setContractInbox(response.items);
+      })
+      .catch(() => {
+        if (alive) setContractInbox(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [me]);
+
+  const showContracts = Boolean(me && contractInbox !== null);
 
   return (
     <section className="gp-hero">
@@ -47,7 +83,15 @@ export default function Hero({
           </h1>
           <p>{t("website.view.hero_lede")}</p>
           <div className="gp-cta">
-            {localSignIn ? (
+            {showContracts ? (
+              <Link href="/module/documents/inbox" className="gp-gold gp-gold--large">
+                {t("website.action.my_contracts")} <ArrowRight />
+              </Link>
+            ) : me ? (
+              <Link href="/apps" className="gp-gold gp-gold--large">
+                {t("website.action.open_platform")} <ArrowRight />
+              </Link>
+            ) : localSignIn ? (
               <a href="#eid-login" className="gp-gold gp-gold--large">
                 {t("website.action.eid_sign_in")} <ArrowRight />
               </a>
@@ -56,7 +100,11 @@ export default function Hero({
                 {t("website.action.sign_in")} <ArrowRight />
               </Link>
             )}
-            {seeMoreAnchor ? (
+            {showContracts ? (
+              <Link href="/apps" className="gp-outline">
+                {t("website.action.open_platform")}
+              </Link>
+            ) : seeMoreAnchor ? (
               <a href={`#${seeMoreAnchor}`} className="gp-outline">
                 {t("website.action.see_features")}
               </a>
@@ -64,11 +112,11 @@ export default function Hero({
           </div>
           <div className="gp-stats">
             <span>
-              <b>{t("website.stat.apps_count")}</b>
+              <b>{APPLICATIONS.length}</b>
               {t("website.stat.apps")}
             </span>
             <span>
-              <b>{t("website.stat.languages_count")}</b>
+              <b>{LOCALES.length}</b>
               {t("website.stat.languages")}
             </span>
             <span>
@@ -77,12 +125,66 @@ export default function Hero({
             </span>
           </div>
         </div>
-        {localSignIn ? (
+        {showContracts ? (
+          <div className="gp-login-slot">
+            <HeroInbox items={contractInbox || []} />
+          </div>
+        ) : localSignIn ? (
           <div id="eid-login" className="gp-login-slot">
             <EIDLogin compact />
           </div>
         ) : null}
       </div>
     </section>
+  );
+}
+
+/**
+ * Нэвтэрсэн хүний ИРСЭН ГЭРЭЭ, eID картын суусан яг тэр нүдэнд.
+ *
+ * Захирал eID-ээрээ орж ирээд өөр юу ч хайхгүй: гэрээ нь нүүрэн дээр нь
+ * байна. Жагсаалт нь хариу хүлээж буй гэрээ л — түүх биш: нүүр хуудас бол
+ * ажлын ширээ, архив нь Ирсэн гэрээ дэлгэцэд.
+ */
+function HeroInbox({items}: {items: InboxItem[]}) {
+  const {t} = useI18n();
+
+  return (
+    <div className="rounded-2xl bg-white/95 shadow-xl border border-slate-200 p-6 w-full max-w-md">
+      <div className="flex items-center gap-2 mb-4">
+        <FileSignature className="w-5 h-5 text-indigo-600" />
+        <h3 className="font-bold text-slate-900">{t("website.view.hero_inbox_title")}</h3>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">{t("website.view.hero_inbox_empty")}</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.slice(0, 4).map((item) => (
+            <li key={item.party_id}>
+              <Link
+                href={`/module/documents/inbox/${item.party_id}`}
+                className="block rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 px-4 py-3"
+              >
+                <div className="text-sm font-semibold text-slate-800">{item.title}</div>
+                <div className="text-xs text-slate-500">
+                  {item.issuer_name}
+                  {" · "}
+                  {item.state === "invited"
+                    ? t("website.view.hero_inbox_new")
+                    : t("website.view.hero_inbox_opened")}
+                </div>
+              </Link>
+            </li>
+          ))}
+          {items.length > 4 ? (
+            <li className="text-xs text-slate-400 pt-1">
+              <Link href="/module/documents/inbox" className="hover:underline">
+                +{items.length - 4} {t("website.view.hero_inbox_more")}
+              </Link>
+            </li>
+          ) : null}
+        </ul>
+      )}
+    </div>
   );
 }

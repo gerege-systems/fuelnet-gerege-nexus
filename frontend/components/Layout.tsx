@@ -14,6 +14,7 @@ import AICopilot from "@/components/AICopilot";
 import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigatePayload, type ShellSearchPayload } from "@/lib/shell";
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
 import { MenuIcon } from "@/lib/icons";
+import { isPublicPath } from "@/lib/publicPath.mjs";
 import { LayoutGrid, Settings, Menu as HamburgerIcon, Palette, Building2, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Sparkles, Link2 } from "lucide-react";
 
 // app_order and app_chrome describe the app rather than the entry: where its
@@ -32,10 +33,6 @@ interface AppNav { id:string; name:string; icon:string; path:string; externalUrl
 // deployment with no organisation, so there is nobody to hold a session and
 // asking /me for one would push the wizard to a sign-in screen that cannot
 // work. What authorises it is the setup token, not a session.
-// `/` is the citizen's fuel map on this deployment — see app/page.tsx. It was
-// already public, so nothing was added for it; the API behind it is on the
-// public list in pkg/platform/route_policy_test.go, where that is reviewed.
-const PUBLIC_ROUTES=["/","/login","/setup","/auth/eid/callback","/oauth/consent","/kiosk"];
 // Шугамын нүүр дэлгэц нэвтрэлт шаардахгүй. Тэр нь ажлын мужид web-ийн нэвтрэх
 // дэлгэц гарч ирэхийг ОРЛОХЫН тулд байгаа тул session байхгүй үед ч зогсох
 // ёстой — эс бөгөөс дахин /login руу түлхэж, шийдэх гэсэн асуудлаа өөрөө
@@ -46,7 +43,6 @@ const PUBLIC_ROUTES=["/","/login","/setup","/auth/eid/callback","/oauth/consent"
 // tenant shell — which asks /api/v1/me on mount, gets a 401 because an operator
 // holds no tenant session, and redirects the console to the platform's login
 // screen before it can draw its own.
-const isPublicPath=(path:string)=>PUBLIC_ROUTES.includes(path)||path.startsWith("/line/")||path==="/cp"||path.startsWith("/cp/");
 // The platform groups are the only ones not backed by a server menu row, so
 // they need ids of their own. Not the translated title: the collapsed set is
 // remembered across sessions and a Mongolian operator who switches to English
@@ -572,7 +568,23 @@ function AppMenuGroups({menus,pathname,closedGroups,onToggle}:{menus:MenuItem[];
   // Decided once across the whole menu, not per link: the answer depends on
   // what the other entries claim.
   const here=currentPath(pathname,menus.map(item=>item.path||""));
-  return <>{roots.map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{menus.filter(item=>item.parent_id===root.id&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order).map(item=>item.path
+  // Which group an entry belongs to. The server parents every entry a module
+  // declares under the app's "Modules" group — the "Settings" group used to be
+  // filled from the platform's own blueprint, and an app that has left the
+  // platform has none. The module still knows which of its screens are
+  // configuration, and says so in the entry's id: ".settings." re-parents it
+  // under the sibling Settings group, when that group exists.
+  const parentOf=(item:MenuItem)=>{
+    if(item.parent_id?.endsWith("_modules")&&item.id.includes(".settings.")){
+      const settings=item.parent_id.replace(/_modules$/,"_settings");
+      if(menus.some(m=>m.id===settings))return settings;
+    }
+    return item.parent_id;
+  };
+  const childrenOf=(rootId:string)=>menus.filter(item=>parentOf(item)===rootId&&(item.path||item.external_url)).sort((a,b)=>a.order-b.order);
+  // A group with nothing in it is a heading over silence — the Settings group
+  // of every extracted app, until that app declares configuration screens.
+  return <>{roots.filter(root=>childrenOf(root.id).length>0).map(root=><MenuGroup key={root.id} id={root.id} title={root.label} closed={closedGroups.includes(root.id)} onToggle={onToggle}>{childrenOf(root.id).map(item=>item.path
   ?<NavLink key={item.id} href={item.path} active={item.path===here} icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>
   :<ExternalNavLink key={item.id} href={item.external_url!} icon={<MenuIcon name={item.icon} className="w-5 h-5"/>} label={item.label}/>)}</MenuGroup>)}</>}
 
