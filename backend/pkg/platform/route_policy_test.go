@@ -80,7 +80,7 @@ var publicRoutes = []string{
 	"/api/v1/auth/dan/login",
 	// Choosing a password from an invitation or a reset, and stepping into an
 	// organisation as an operator. Both journeys begin in the control plane,
-	// on a hostname behind an address allowlist, and finish here — where the
+	// on its own hostname, and finish here — where the
 	// person has no session yet and the operator's console session means
 	// nothing. What authorises each is a single-use token: 256 bits, stored as
 	// a digest, claimed with a conditional UPDATE, and short-lived (an hour

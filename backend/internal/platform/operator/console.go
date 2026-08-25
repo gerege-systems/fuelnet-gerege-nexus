@@ -15,6 +15,7 @@
 package operator
 
 import (
+	"net/netip"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,12 +30,19 @@ type Console struct {
 	// CONTROL_PLANE_HOST. Empty has a meaning that depends on the environment —
 	// see HostGate.
 	host string
+	// allowedCIDRs are the addresses the console answers to while the platform
+	// is private. Empty means no address restriction. See address.go.
+	allowedCIDRs []netip.Prefix
 }
 
 // New builds it. It performs no I/O: a deployment without the migrations still
 // constructs one, and its routes refuse at the door.
 func New(db *pgxpool.Pool) *Console {
-	return &Console{db: db, sessions: NewSessionStore(db), host: normaliseHost(os.Getenv("CONTROL_PLANE_HOST"))}
+	return &Console{
+		db: db, sessions: NewSessionStore(db),
+		host:         normaliseHost(os.Getenv("CONTROL_PLANE_HOST")),
+		allowedCIDRs: allowedCIDRsFromEnv(),
+	}
 }
 
 // Sessions is the store the console's own sign-in path issues through.
