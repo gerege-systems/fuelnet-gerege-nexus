@@ -53,6 +53,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
 # above: the production host has a Docker daemon and nothing else.
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
         -o /bin/operator-bootstrap ./cmd/operator-bootstrap
+# Onboarding a fuel operator's stations, and putting invented lorries on the
+# road for a demonstration. Same reasoning as everything above: the host has a
+# Docker daemon and nothing else, so a tool that is not in the image is a tool
+# nobody on that host can run.
+#
+# fuel-demo-trips writes rows marked source='demo' and is never wired into the
+# boot path — a deployment carrying real dispatches is not going to grow
+# invented ones because this binary is present.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/fuel-import ./cmd/fuel-import
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" \
+        -o /bin/fuel-demo-trips ./cmd/fuel-demo-trips
 # And the tenant plane's equivalent: a fresh deployment has no organisation and
 # no sign-up screen, so without this nobody can sign in to it at all. Same
 # reasoning as above — the host has a Docker daemon and nothing else.
@@ -86,6 +98,8 @@ COPY --from=builder /bin/catalog-diff /app/catalog-diff
 COPY --from=builder /bin/publish-catalog /app/publish-catalog
 COPY --from=builder /bin/operator-bootstrap /app/operator-bootstrap
 COPY --from=builder /bin/tenant-bootstrap /app/tenant-bootstrap
+COPY --from=builder /bin/fuel-import /app/fuel-import
+COPY --from=builder /bin/fuel-demo-trips /app/fuel-demo-trips
 # App-store catalog + goose migrations are read from disk at runtime.
 COPY catalog/ /app/catalog/
 COPY backend/db/migrations/ /app/db/migrations/
