@@ -1,7 +1,7 @@
 # Хоёр урсгал — хэрэгжилтийн дараах шалгалт
 
 [`TWO_PLANES_PROPOSAL.md`](TWO_PLANES_PROPOSAL.md)-ын хэрэгжилтийг одоогийн
-`main` кодтой тулгасан уншилт. Огноо: 2026-08-24.
+`main` кодтой тулгасан уншилт. Огноо: 2026-08-25.
 
 > Энэ файл өмнө нь хэрэгжүүлэх саналуудыг жагсааж байсан. Host routing, local
 > хоёр origin, audit UI, шинэ platform хүснэгтийн default-deny test аль хэдийн
@@ -27,7 +27,7 @@ package, schema, role, API, cookie, origin, test тусдаа. `controlplane` г
 | Plane хооронд import байхгүй | ✅ | `backend/internal/planes_test.go`; `crossPlaneExceptions` хоосон |
 | Platform root зөвхөн composition | ✅ | `internal/platform/service.go` — 266 мөр |
 | Tenant домэйнүүд задарсан | ✅ | `internal/tenant` дотор 18 дэд package |
-| DB хоёр schema | ✅ | `00079_two_schemas.sql` — 26 platform, 40 tenant хүснэгт |
+| DB хоёр schema | ✅ | `ownership_test.go` — 27 platform, 40 tenant хүснэгт |
 | Runtime `public` search path-гүй | ✅ | `00080_search_path_has_no_public.sql` |
 | Tenant role нэр тодорхой | ✅ | `gerege_nexus_tenant`; хуучин `gerege_nexus_app` байхгүй |
 | Canonical platform API | ✅ | `/api/platform/v1` — 44 route |
@@ -161,4 +161,4 @@ Backend-ийн том задралыг UI-ийн жижиг нөхөөсүүдт
 
 DB integration test нь `TEST_DATABASE_URL` шаардана. CI дээр migrated
 PostgreSQL-тэй ажиллуулж байж schema/grant дүгнэлтийг баталгаажуулна; зөвхөн
-Markdown дахь 26/40 тоонд найдахгүй.
+Markdown дахь 27/40 тоонд найдахгүй.

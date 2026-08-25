@@ -124,19 +124,13 @@ los microservicios.
 
 ## Aplicaciones de negocio
 
-La mayoría de las aplicaciones siguientes son módulos de distribución: aportan
-su propio código y migraciones mediante `pkg/nexus`, fuera del repositorio núcleo.
+Este repositorio base solo incluye una aplicación en `catalog/apps.json`.
+Las distribuciones de producto registran sus propios módulos y migraciones
+mediante `pkg/nexus`; sus aplicaciones no son funciones incluidas aquí.
 
 | # | Aplicación | ID | Ruta | Descripción |
 | --- | --- | --- | --- | --- |
-| 1 | Organización y personas | `io.gerege.nexus.organisation` | `/organisation` | Los departamentos y las personas que trabajan en ellos. Instalada por defecto para un inquilino nuevo y desinstalable; la identidad legal de la organización no es una app, sino parte de la plataforma |
-| 2 | Enlace con la administración electrónica | `io.gerege.nexus.egov` | `/egov` | Consultas a ХУР (ciudadanos y personas jurídicas), estado de los canales eID y ДАН, e historial. Instalada por defecto y desinstalable |
-| 3 | Contactos | `io.gerege.nexus.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
-| 4 | Productos | `io.gerege.nexus.products` | `/products` | Catálogo, precios y SKU por inquilino |
-| 5 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
-| 6 | Facturación y e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
-| 7 | Documentos digitales y firma electrónica | `io.gerege.nexus.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
-| 8 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
+| 1 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
 
 Las rutas solo se abren una vez que la aplicación está instalada y habilitada
 para el inquilino; de lo contrario el control devuelve `403 Forbidden`.

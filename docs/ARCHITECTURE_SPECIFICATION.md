@@ -1,7 +1,7 @@
 # Архитектурын тодорхойлолт
 
 **Gerege Nexus**-ын одоогийн кодын бүтэц, хоёр урсгалын хил ба өгөгдлийн
-эзэмшил. Шинэчлэгдсэн: 2026-08-24.
+эзэмшил. Шинэчлэгдсэн: 2026-08-25.
 
 <p>
   <img src="assets/icons/flag-mn.png" width="18" height="18" alt=""> <b>Монгол</b>
@@ -57,7 +57,7 @@ store, middleware, router-ийг босгож хоёр route table-ийг зэр
 | `backend/internal/kernel` | Аль ч урсгалыг import хийдэггүй cache, config, security, telemetry, settings, flags зэрэг суурь primitive |
 | `backend/internal/tenant` | Auth, access, directory, devices, identity, integrations, profile, SSO, app install зэрэг нэг тенантын ажиллагаа |
 | `backend/internal/platform` | Operator session, tenants, approvals, settings, flags, audit, support, metering, backup, catalog, observability |
-| `backend/internal/apps` | Distribution-аас нийлүүлсэн бизнес модуль бүрийн адаптер |
+| `backend/internal/apps` | Base binary-д compile болсон апп (одоогоор зөвхөн SSO Clients); distribution модуль `pkg/nexus`-ээр тусдаа бүртгэгдэнэ |
 | `backend/pkg/platform` | Хоёр урсгалыг нэг HTTP процесст угсрах public host package |
 | `backend/pkg/nexus` | Гадаад module/distribution-д зориулсан тогтвортой SDK contract |
 
@@ -107,7 +107,7 @@ origin, session, DB role, audit нь тус тусдаа хамгаалалты�
 | `tenant` | memberships, roles, sessions, app installations, profile/directory/device/integration/SSO/audit өгөгдөл |
 | `public` | goose migration ledger болон зориуд үлдээсэн `SECURITY DEFINER` function |
 
-Одоогийн migration inventory нь 26 platform, 40 tenant хүснэгттэй. Энэ тоо
+Одоогийн migration inventory нь 27 platform, 40 tenant хүснэгттэй. Энэ тоо
 дангаараа contract биш; `backend/db/migrations/ownership_test.go`-д нэр бүрийн
 эзэмшлийг зарласан бөгөөд `schema_split_test.go` бодит DB-тэй тулгана.
 
@@ -152,7 +152,7 @@ distribution `stock_forecast` capability нийлүүлсэн үед delegation 
 | Тенант role зөвхөн таван boundary хүснэгт уншина | `schema_split_test.go` |
 | Шинэ platform хүснэгт анхдагчаар хаалттай | `TestNewPlatformTableIsClosedToTenantRole` |
 | API route санамсаргүй өөрчлөгдөхгүй | `backend/pkg/platform/testdata/routes.txt` |
-| Origin ба `/cp` host routing | `frontend/proxy.test.ts`, `frontend/scripts/host-boundary-smoke.mjs` |
+| Origin ба `/cp` host routing | `frontend/tests/control-plane-host.test.mjs`, `frontend/scripts/check-control-plane-host.mjs`, `frontend/scripts/smoke-control-plane-host.mjs` |
 
 Шийдвэрийн үндэслэлийг [хоёр урсгалын санал](TWO_PLANES_PROPOSAL.md),
 [хэрэгжилтийн шалгалт](TWO_PLANES_REVIEW.md),

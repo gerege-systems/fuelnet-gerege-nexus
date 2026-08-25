@@ -126,19 +126,13 @@ d'exploitation des microservices.
 
 ## Applications métier
 
-La plupart des applications ci-dessous sont des modules de distribution :
-elles apportent code et migrations via `pkg/nexus`, sans résider dans le cœur.
+Ce dépôt de base ne fournit qu'une seule application dans `catalog/apps.json`.
+Les distributions de produit enregistrent leurs propres modules et migrations
+via `pkg/nexus` ; leurs applications ne sont pas des fonctions incluses ici.
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation et personnes | `io.gerege.nexus.organisation` | `/organisation` | Les départements et les personnes qui y travaillent. Installée par défaut pour un nouveau locataire et désinstallable ; l'identité légale de l'organisation n'est pas une application mais une partie de la plateforme |
-| 2 | Liaison e-gouvernement | `io.gerege.nexus.egov` | `/egov` | Consultations ХУР (citoyens, personnes morales), état des canaux eID et ДАН, historique des demandes. Installée par défaut et désinstallable |
-| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Répertoire clients et fournisseurs avec préremplissage XYP |
-| 4 | Produits | `io.gerege.nexus.products` | `/products` | Catalogue, tarifs et SKU par locataire |
-| 5 | Stocks | `io.gerege.nexus.inventory` | `/inventory` | Entrepôts, niveaux de stock, journal des mouvements |
-| 6 | Facturation & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturation, TVA 10 %, reçus e-Barimt |
-| 7 | Documents & signature électronique | `io.gerege.nexus.documents` | `/documents` | Circulation des documents, signatures, approbations |
-| 8 | Clients SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clients OAuth2 des systèmes qui connectent des personnes via cette plateforme |
+| 1 | Clients SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clients OAuth2 des systèmes qui connectent des personnes via cette plateforme |
 
 Les routes ne s'ouvrent qu'une fois l'application installée et activée pour le
 locataire ; sinon le contrôle renvoie `403 Forbidden`.

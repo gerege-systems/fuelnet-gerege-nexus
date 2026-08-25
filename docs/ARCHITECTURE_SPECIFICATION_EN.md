@@ -1,7 +1,7 @@
 # Architecture Specification
 
 The current code structure, two-plane boundary, and data ownership model of
-**Gerege Nexus**. Updated 2026-08-24.
+**Gerege Nexus**. Updated 2026-08-25.
 
 <p>
   <a href="ARCHITECTURE_SPECIFICATION.md"><img src="assets/icons/flag-mn.png" width="18" height="18" alt=""> Монгол</a>
@@ -57,7 +57,7 @@ import graph.
 | `backend/internal/kernel` | Plane-neutral cache, config, security, telemetry, settings, flags, and other primitives |
 | `backend/internal/tenant` | Authentication, access, directory, devices, identity, integrations, profile, SSO, and app installation for one tenant |
 | `backend/internal/platform` | Operator sessions, tenants, approvals, settings, flags, audit, support, metering, backup, catalog, and observability |
-| `backend/internal/apps` | Adapters for business modules supplied by a distribution |
+| `backend/internal/apps` | Apps compiled into the base binary (currently only SSO Clients); distributions register separate modules through `pkg/nexus` |
 | `backend/pkg/platform` | Public host package that assembles both planes into one HTTP process |
 | `backend/pkg/nexus` | Stable SDK contract for external modules and distributions |
 
@@ -107,7 +107,7 @@ paths.
 | `tenant` | Memberships, roles, sessions, app installations, profile, directory, device, integration, SSO, and tenant audit data |
 | `public` | Goose migration ledgers and deliberately retained `SECURITY DEFINER` functions |
 
-The current migration inventory contains 26 platform and 40 tenant tables.
+The current migration inventory contains 27 platform and 40 tenant tables.
 Counts are not the contract: `backend/db/migrations/ownership_test.go` declares
 ownership by name, and `schema_split_test.go` compares that declaration with a
 real database.
@@ -156,7 +156,7 @@ returns `404` when no provider exists.
 | Tenant role reads only five platform boundary tables | `schema_split_test.go` |
 | New platform tables are closed by default | `TestNewPlatformTableIsClosedToTenantRole` |
 | The HTTP surface does not drift silently | `backend/pkg/platform/testdata/routes.txt` |
-| Origin and `/cp` host routing remain separated | `frontend/proxy.test.ts`, `frontend/scripts/host-boundary-smoke.mjs` |
+| Origin and `/cp` host routing remain separated | `frontend/tests/control-plane-host.test.mjs`, `frontend/scripts/check-control-plane-host.mjs`, `frontend/scripts/smoke-control-plane-host.mjs` |
 
 For rationale, see the [two-plane proposal](TWO_PLANES_PROPOSAL.md),
 [implementation review](TWO_PLANES_REVIEW.md), and

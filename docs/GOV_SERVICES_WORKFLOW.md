@@ -4,7 +4,7 @@ How `io.gerege.nexus.gov_services` turns one codebase into a service-delivery
 capability that every tenant, and every service inside a tenant, configures for
 itself — locally fulfilled, delegated with verification, or routed per request.
 
-The module, domain, and migrations live in the `client-gerege-nexus`
+The module, domain, and migrations live in the `gov-gerege-nexus`
 distribution. This core repository supplies the public `pkg/nexus` contracts
 and the tenant/platform runtime; it does not carry the module package.
 
@@ -305,7 +305,7 @@ concurrency on `row_version`, idempotent ingestion and derived overdue.
 
 ```bash
 # State machine and routing (no database required)
-cd client-gerege-nexus && go test ./modules/gov_services/...
+cd gov-gerege-nexus && go test ./modules/gov_services/...
 
 # Full workflow against a migrated throwaway database
 docker run -d --name gov-test-db -e POSTGRES_PASSWORD=test -e POSTGRES_DB=govtest \

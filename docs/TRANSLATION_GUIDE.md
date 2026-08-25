@@ -17,10 +17,11 @@ Gerege Nexus-ийн хэрэглэгчид харагдах бүх текст `f
 асуусанаас үл хамаарах хариулт байх ёстой. Шинэ хэл нэмэх нь энэ бодлогыг
 өөрчлөх шийдвэр — тохиолдлын хүсэлт биш.
 
-**Баримт бичиг** долоон хэл дээр бүрэн байдаг. **Програм хангамж** нь монгол,
-англи хоёрыг л анхнаасаа санал болгоно; үлдсэн тавыг **Тохиргоо → Харагдац**
-дотроос төхөөрөмж тус бүрээр асаана. Монгол, англи хоёрыг унтраах боломжгүй —
-яг үүнээс болж "бүх хэл унтарсан" төлөв үүсэхгүй.
+**Бүтээгдэхүүний README тойм** долоон хэлтэй; техникийн баримт бүр долоон
+орчуулгатай биш. **Програм хангамж** нь монгол, англи хоёрыг анхнаасаа
+санал болгож, үлдсэн тавыг **Тохиргоо → Харагдац** дотроос төхөөрөмж тус
+бүрээр асаана. Монгол, англи хоёрыг унтраах боломжгүй — яг үүнээс болж "бүх
+хэл унтарсан" төлөв үүсэхгүй.
 
 Яагаад бүгдийг нь анхнаасаа асаадаггүй вэ: толь бичиг `mn`/`en` дээр бичигдэж,
 бусад хэл аажмаар дүүрдэг. `t()` нь түлхүүр тус бүрээр англи руу шилждэг тул
@@ -31,17 +32,29 @@ Gerege Nexus-ийн хэрэглэгчид харагдах бүх текст `f
 
 ```
 frontend/lib/i18n/
-  index.tsx          I18nProvider, useI18n, t(), хэлний бүртгэл
-  base.ts            Бүх дэлгэцийн хуваалцдаг нэр томьёо  (Odoo "base")
+  index.tsx          I18nProvider, useI18n, t(), fallback
+  core.ts            Платформын dictionary-г compile-time угсарна
+  registry.ts        Аппын dictionary-г runtime бүртгэнэ
+  base.ts            Бүх дэлгэцийн хуваалцдаг нэр томьёо (Odoo "base")
   web.ts             Клиентийн бүрхүүл: цэс, толгой, хайлт (Odoo "web")
   addons/
-    access.ts  ai.ts  app_store.ts  appearance.ts  auth.ts
-    billing.ts contacts.ts developer.ts documents.ts esign.ts
-    gov.ts     integrations.ts inventory.ts products.ts website.ts
+    access.ts  ai.ts  app_store.ts  appearance.ts  auth.ts  core.ts
+    cp.ts      emailverify.ts integrations.ts modules.ts setup.ts
+    sso_clients.ts storefront.ts urtuu.ts website.ts
+  apps/
+    index.ts          Энэ build-д орсон аппын dictionary registration
+    sso_clients.ts    Base distribution-ийн built-in апп
+    storefront.ts     Storefront integration
+    urtuu.ts          Core transport-ын UI үгс
+  locales/<code>/
+    core.ts           Тухайн хэлний platform overlay
+    <app>.ts          Апп тус бүрийн overlay
 ```
 
-App бүр өөрийн файлтай. Нэг л дэлгэц харуулдаг текст тухайн addon-д, хоёроос
-дээш апп харуулдаг текст `base` эсвэл `web`-д очно.
+Платформын хэсэг бүр `addons/` дотор өөрийн файлтай бөгөөд `core.ts` тэдгээрийг
+угсарна. Апп өөрийн source dictionary, таван overlay-оо `registry.ts`-ээр
+бүртгэнэ. Нэгээс олон хэсэгт хэрэглэдэг ерөнхий нэр томьёо `base.ts` эсвэл
+`web.ts`-д очно.
 
 ## 2. Түлхүүрийн бүтэц
 
@@ -111,10 +124,18 @@ dictionary-д баттай байгаа үед хэрэглэнэ (`gov.state.*`
 
 ## 6. Шинэ апп нэмэх үед
 
-1. `frontend/lib/i18n/addons/<app>.ts` файл үүсгэнэ.
-2. `export const <app> = { ... } as const;` гэж бичнэ.
-3. `index.tsx`-д import хийж `dictionary` дотор spread хийнэ.
-4. `npx tsc --noEmit` ажиллуулна.
+1. `frontend/lib/i18n/addons/<app>.ts`-д `mn`/`en` source dictionary үүсгэнэ.
+2. `frontend/lib/i18n/locales/<code>/<app>.ts`-д байгаа орчуулгуудыг хийнэ.
+3. `frontend/lib/i18n/apps/<app>.ts`-ээс `registerDictionary()` дуудна.
+4. Энэ repository-ийн build-д апп ордог бол `apps/index.ts`-д registration
+   файлыг import хийнэ. Distribution апп бол өөрийн frontend entry point-оос
+   import хийнэ; core-ийн `index.tsx` болон `core.ts`-ийг засахгүй.
+5. `npm run i18n:check` болон `npx tsc --noEmit` ажиллуулна.
+
+CI нь `npm run i18n:check -- --warn` ажиллуулдаг. Өнөөгийн overlay backlog
+build-ийг унагахгүй, харин тоог тайлагнана; orphaned эсвэл буруу app файлд
+орсон түлхүүр бол алдаа хэвээр. Runtime дээр дутуу overlay англи руу fallback
+хийнэ.
 
 ## 7. Сервер талын текст
 

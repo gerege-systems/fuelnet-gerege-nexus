@@ -63,12 +63,12 @@ languages; individual technical documents may remain in their source language.
 | [`NATIVE_SETTINGS_SPEC.md`](NATIVE_SETTINGS_SPEC.md) | MN | Бүрхүүл, төхөөрөмж, peripheral, fleet тохиргоо |
 | [`MODULE_AUTHORING_GUIDE.md`](MODULE_AUTHORING_GUIDE.md) | EN | Шинэ апп модуль хөгжүүлэх алхам алхмаар заавар |
 | [`RELEASING.md`](RELEASING.md) | MN | `pkg/nexus`-ийн semver амлалт, түүнийг хамгаалдаг тест, tag гаргах журам |
-| [`GOV_SERVICES_WORKFLOW.md`](GOV_SERVICES_WORKFLOW.md) | EN | Тохируулж болох төрийн үйлчилгээний урсгал, шилжүүлэлт, баталгаажуулалт |
-| [`DOCUMENTS_SIGNING.md`](DOCUMENTS_SIGNING.md) | EN | Цахим баримтын гарын үсэг ба батламжийн урсгал |
+| [`GOV_SERVICES_WORKFLOW.md`](GOV_SERVICES_WORKFLOW.md) | EN | `gov-gerege-nexus` distribution-д байдаг төрийн үйлчилгээний модулийн reference |
+| [`DOCUMENTS_SIGNING.md`](DOCUMENTS_SIGNING.md) | EN | `client-gerege-nexus` distribution-ийн Documents модуль ба core signing rail-ийн хил |
 | [`APPSTORE_OPERATIONS.md`](APPSTORE_OPERATIONS.md) | EN | Апп сторын каталог нийтлэх, хувилбар шилжүүлэх ажиллагаа |
-| [`REPORTS.md`](REPORTS.md) | MN | Тайлангийн хөдөлгүүр: шинэ тайлан нэмэх, хамгаалалт, товлосон илгээлт |
+| [`REPORTS.md`](REPORTS.md) | MN | Core тайлангийн хөдөлгүүр ба `client-gerege-nexus`-ийн report UI модулийн хил |
 | [`REPORT_SHARING.md`](REPORT_SHARING.md) | MN | Тенант дамнасан тайлан: grant, counterparty хүрээ, хоёр талын audit |
-| [`URTUU.md`](URTUU.md) | MN | «Өртөө» — платформ хоорондын даалгаврын суваг: тохиргоо, холбоос байгуулах, runbook |
+| [`URTUU.md`](URTUU.md) | MN | Core transport ба `client-gerege-nexus`-ийн task app-ийн хил, тохиргоо, runbook |
 | [`RING_STANDARD.md`](RING_STANDARD.md) | MN | Үйлчилгээний процессын бүртгэлийн формат — ring.dgov.mn-д санал болгож буй гэрээ |
 | [`MONITORING.md`](MONITORING.md) | MN | Ажиглалтын стек: асаах, Grafana, лог хайх, шинэ хэмжүүр нэмэх |
 | [`RUNBOOKS.md`](RUNBOOKS.md) | MN | Дохио бүрд: юу болсон, юу шалгах, яаж засах, хэзээ өргөжүүлэх |

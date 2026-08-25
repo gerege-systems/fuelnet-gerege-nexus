@@ -17,9 +17,10 @@ network hops or operational cost of microservices.
 
 **Language policy: Mongolian plus the six official languages of the United
 Nations** — Arabic, Chinese, English, French, Russian, Spanish. Seven in total.
-Mongolian is the source. The documentation exists in all seven; the application
-ships offering Mongolian and English and the rest are switched on per device
-from **Settings → Appearance**. See the
+Mongolian is the source. This product overview exists in all seven languages;
+individual technical documents do not necessarily do so. The UI has Mongolian
+and English source dictionaries plus Arabic, Chinese, French, Russian, and
+Spanish overlays; missing overlay strings fall back to English. See the
 [translation guide](TRANSLATION_GUIDE.md).
 
 <p>
@@ -127,19 +128,13 @@ from **Settings → Appearance**. See the
 
 ## Business applications
 
-Most applications below are distribution modules: they bring their own code
-and migrations through `pkg/nexus`; the core repository does not carry them.
+This base repository ships exactly one app in `catalog/apps.json`. Product
+distributions register their own modules and migrations through `pkg/nexus`;
+their apps must not be read as features included in this repository.
 
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Departments and the people in them. Installed by default for a new tenant and removable; the organisation's legal profile is not an app but part of the platform |
-| 2 | e-Government Link | `io.gerege.nexus.egov` | `/egov` | ХУР citizen and legal-entity lookups, the state of the eID and ДАН rails, and a record of what was asked. Installed by default and removable |
-| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
-| 4 | Products | `io.gerege.nexus.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
-| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
-| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
-| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Document routing, signatures, approvals |
-| 8 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for the systems that sign people in through this platform |
+| 1 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for systems that sign people in through this platform |
 
 Routes only open once the app is installed and enabled for the tenant; otherwise
 the gate returns `403 Forbidden`.
