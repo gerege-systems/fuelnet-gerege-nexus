@@ -69,6 +69,7 @@ func TestTheAppRailIsOrderedByTheManifests(t *testing.T) {
 	}
 
 	wantRail := []string{
+		"io.gerege.nexus.fuel",        // order 10
 		"io.gerege.nexus.sso_clients", // order 20
 		// No order declared, so id order among themselves — which is where the
 		// list this replaced also put them, by falling through to 999. egov,

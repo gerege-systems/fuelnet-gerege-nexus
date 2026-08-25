@@ -1,0 +1,21 @@
+{
+  "app_id": "io.gerege.nexus.fuel",
+  "entries": [
+    {
+      "version": "0.1.0",
+      "released_at": "2026-08-25",
+      "kind": "feature",
+      "summary": {
+        "mn": "ШТС-ын бүртгэл, иргэний өдрийн эрх, ваучер, цистерний мөрдлөг.",
+        "en": "The station register, a citizen's daily entitlement, vouchers, and tanker tracking."
+      },
+      "details": {
+        "mn": "Иргэн ойролцоох станцыг хараад савны түвшнийг нь мэдэж, өдрийн эрхээсээ ваучер авна. Оператор өөрийн ШТС-аа хөтөлнө. Хуваарилалт нь литрээр биш ТӨГРӨГӨӨР, машины дугаараар биш ИРГЭНЭЭР тоологдож, ваучер нь дурын колонк дээр хүчинтэй — тиймээс ямар ч станц дээр литр захиалдаггүй.",
+        "en": "A citizen sees nearby stations with what is in their tanks and draws a voucher against a daily entitlement; an operator keeps the register. The ration is counted in tugrik rather than litres and against a person rather than a vehicle plate, and a voucher is good at any pump — so it reserves stock nowhere."
+      },
+      "authors": [
+        "Gerege Systems Development Team"
+      ]
+    }
+  ]
+}
