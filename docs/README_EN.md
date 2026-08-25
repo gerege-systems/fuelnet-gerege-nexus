@@ -17,9 +17,10 @@ network hops or operational cost of microservices.
 
 **Language policy: Mongolian plus the six official languages of the United
 Nations** — Arabic, Chinese, English, French, Russian, Spanish. Seven in total.
-Mongolian is the source. The documentation exists in all seven; the application
-ships offering Mongolian and English and the rest are switched on per device
-from **Settings → Appearance**. See the
+Mongolian is the source. This product overview exists in all seven languages;
+individual technical documents do not necessarily do so. The UI has Mongolian
+and English source dictionaries plus Arabic, Chinese, French, Russian, and
+Spanish overlays; missing overlay strings fall back to English. See the
 [translation guide](TRANSLATION_GUIDE.md).
 
 <p>
@@ -74,28 +75,29 @@ from **Settings → Appearance**. See the
 
 ### 1. High-performance modular monolith
 
-- **Compile-time Go app modules** — `contacts`, `products`, `inventory`,
-  `billing`, `documents` and `sso_clients` compile into one binary and are
-  invoked in-process.
+- **Compile-time Go app modules** — core carries only `sso_clients`.
+  Product distributions register their modules through the public `pkg/nexus`
+  contract in the final binary, where they are invoked in-process.
 - **Per-tenant app store** — application entitlements, menus and RBAC are driven
   from PostgreSQL (`app_installations`).
 - **Dependency resolver** — recursive resolution over a directed acyclic graph
   with cycle detection and semver constraint checking.
-- **Catalog sync** — `catalog/apps.json` is the single source of truth; the
-  `apps` table is reconciled from it on every boot.
+- **Catalog sync** — production fetches a signed catalog from
+  `APP_CATALOG_URL`; development/offline mode falls back to
+  `catalog/apps.json`, and metadata is reconciled into `platform.apps`.
 
-### 2. Cloud-native resilience engine
+### 2. Cloud-native resilience and multiple replicas
 
 | Module | Purpose |
 | --- | --- |
-| `resilience/breaker.go` | Google SRE style adaptive circuit breaker |
-| `resilience/loadshedder.go` | Sheds load with `503` + `Retry-After` under pressure |
-| `resilience/singleflight.go` | Collapses duplicate in-flight work |
-| `resilience/retry.go` | Exponential backoff retry helper |
+| `internal/kernel/resilience/loadshedder.go` | Sheds load with `503` + `Retry-After` under pressure |
+| `internal/kernel/cache/bus.go` | Redis-backed invalidation across replicas, with a local fallback |
+| `internal/kernel/memo/memo.go` | Short-TTL, prefix-invalidated local cache for authorisation decisions |
+| `internal/kernel/async/async.go` | Named goroutines with panic recovery and stack logging |
 
 ### 3. National digital infrastructure
 
-- **XYP — State Information Exchange** (`platform/gerege/xyp.go`): citizen civil
+- **XYP — State Information Exchange** (`internal/tenant/identity/gerege/xyp.go`): citizen civil
   registration (`WS100101`) and legal entity verification (`WS100201`).
 - **National E-ID and DAN** ([`developer.gerege.mn`](https://developer.gerege.mn),
   [`eidmongolia.mn`](https://eidmongolia.mn)) — PKI digital signature, mobile
@@ -103,7 +105,7 @@ from **Settings → Appearance**. See the
 - **Built-in OAuth2 / OIDC provider**
   (`/.well-known/openid-configuration`) issuing client-credentials tokens to
   third-party systems.
-- **Email verification** (`platform/emailverify`) — one shared flow for proving
+- **Email verification** (`internal/tenant/emailverify`) — one shared flow for proving
   an address, called in process by every app module. The mail is sent by the
   hosted service (`enigma.mn`), so the platform holds no mailbox credential and
   owns no sender address; the verification is recorded when the person comes
@@ -116,25 +118,23 @@ from **Settings → Appearance**. See the
 
 ### 4. AI copilot and analytics
 
-- **AI assistant** (`platform/ai/copilot.go`) — intent-classified conversation
+- **AI assistant** (`internal/tenant/ai/copilot.go`) — intent-classified conversation
   wired to live tenant data.
-- **Inventory demand forecaster** (`platform/ai/inventory_forecaster.go`) —
-  safety-stock and reorder-point recommendations from historical movement.
+- **Stock forecast endpoint** (`internal/tenant/ai/handlers.go`) — delegates to
+  an enabled distribution's `stock_forecast` capability and returns `404` when
+  no module provides it.
 
 ---
 
 ## Business applications
 
+This base repository ships exactly one app in `catalog/apps.json`. Product
+distributions register their own modules and migrations through `pkg/nexus`;
+their apps must not be read as features included in this repository.
+
 | # | Application | ID | Route | Description |
 | --- | --- | --- | --- | --- |
-| 1 | Organisation & People | `io.gerege.nexus.organisation` | `/organisation` | Departments and the people in them. Installed by default for a new tenant and removable; the organisation's legal profile is not an app but part of the platform |
-| 2 | e-Government Link | `io.gerege.nexus.egov` | `/egov` | ХУР citizen and legal-entity lookups, the state of the eID and ДАН rails, and a record of what was asked. Installed by default and removable |
-| 3 | Contacts | `io.gerege.nexus.contacts` | `/contacts` | Customer and vendor directory with XYP auto-fill |
-| 4 | Products | `io.gerege.nexus.products` | `/products` | Catalog, pricing and tenant-scoped SKUs |
-| 5 | Inventory | `io.gerege.nexus.inventory` | `/inventory` | Warehouses, stock levels, movement ledger |
-| 6 | Public Billing & e-Barimt | `io.gerege.nexus.billing` | `/billing` | Invoicing, 10% VAT, e-Barimt receipts |
-| 7 | Digital Documents & E-Sign | `io.gerege.nexus.documents` | `/documents` | Document routing, signatures, approvals |
-| 8 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for the systems that sign people in through this platform |
+| 1 | SSO Clients | `io.gerege.nexus.sso_clients` | `/sso-clients` | OAuth2 clients for systems that sign people in through this platform |
 
 Routes only open once the app is installed and enabled for the tenant; otherwise
 the gate returns `403 Forbidden`.
@@ -149,9 +149,13 @@ backend/
   cmd/migrate/        Goose migration runner
   db/migrations/      SQL migrations
   internal/
-    module.go         The Go Module contract
-    apps/             Business modules
-    platform/         Platform core services
+    kernel/           Plane-neutral technical primitives
+    tenant/           Work performed for one organisation
+    platform/         Operations for the whole deployment
+    apps/             Modules carried by this distribution
+  pkg/
+    nexus/            Public SDK and contracts for external modules
+    platform/         Composition root for both planes
 frontend/             Next.js 16 (App Router) web client
 catalog/              App store catalog and manifests
 deploy/               Production Dockerfile, Nginx config

@@ -3,7 +3,12 @@
 - **Огноо:** 2026-08-20
 - **Байдал:** Хүлээн авсан. Гурван зүсэм ба PAdES хэрэгжсэн.
 - **Холбоотой:** [0002 — Нэг гарын үсгийн зам](0002-one-signing-rail.md);
-  `internal/apps/documents`, `internal/platform/esign`, `pkg/nexus/signing.go`
+  `internal/tenant/signing`, `pkg/nexus/signing.go`, `pkg/nexus/documents.go`
+
+> Documents module, domain, migration нь 2026-08-23-нд
+> `client-gerege-nexus` distribution руу гарсан. Доорх `internal/apps/documents`
+> болон хуучин хүснэгтийн тайлбар нь тухайн шийдвэрийн snapshot; цөмд signing
+> rail ба module ашиглах нийтийн contract үлдсэн.
 
 ## Яагаад
 

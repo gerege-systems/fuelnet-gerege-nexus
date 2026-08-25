@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 export interface Identity {
   id: string;
   is_admin: boolean;
+  name?: string;
+  tenant_name?: string;
   permissions?: string[];
 }
 
@@ -57,6 +59,12 @@ export function useAccess() {
 
   return {
     ready,
+    // The identity itself, for a screen that greets the person or renders a
+    // signed-in variant. null until loaded AND on every anonymous visit, so a
+    // public page that branches on it renders its public form first — the
+    // same markup the server rendered — and only re-renders once a session is
+    // confirmed. That ordering is what keeps hydration honest.
+    me,
     isAdmin: me?.is_admin === true,
     can: (code: string) => me?.is_admin === true || granted.has(code),
   };

@@ -1,9 +1,16 @@
 # 0001 — Домэйн эхэнд: дүрэм нь платформоо мэдэхгүй
 
 - **Огноо:** 2026-08-18
-- **Байдал:** Хүлээн авсан. Эхний хэрэгжилт: `organisation`.
+- **Байдал:** Хүлээн авсан, хэрэгжсэн; business domain-ууд distribution руу гарсан.
 - **Холбоотой:** `docs/ECOSYSTEM_GIT_STRATEGY.md` §2.5, §4.1;
   `backend/domain/boundaries_test.go`; `backend/internal/apps/boundaries_test.go`
+
+> **Одоогийн байрлал (2026-08-24).** Доорх `domain/<app>` ба
+> `internal/apps/<app>` замууд нь шийдвэр гарах үеийн snapshot. Organisation,
+> documents, reports, egov, urtuu зэрэг module/domain-ууд өөрсдийн
+> distribution руу migration-тайгаа гарсан; цөмд `internal/apps/sso_clients`
+> адаптер, `internal/tenant/*` engine/rail, нийтийн `pkg/nexus` contract үлдсэн.
+> Доорх дүгнэлтүүдийн шалтгаан хэвээр, package inventory нь түүхэн.
 
 ## Дүрэм
 

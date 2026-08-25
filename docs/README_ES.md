@@ -69,28 +69,29 @@ los microservicios.
 
 ### 1. Monolito modular de alto rendimiento
 
-- **Módulos Go compilados** — `contacts`, `products`, `inventory`, `billing`,
-  `documents` y `sso_clients` se compilan en un solo binario y se invocan
-  dentro del proceso.
+- **Módulos Go compilados** — el núcleo solo incluye `sso_clients`. Las
+  distribuciones de producto registran sus módulos mediante el contrato
+  público `pkg/nexus` en el binario final, donde se invocan en proceso.
 - **Tienda de aplicaciones por inquilino** — los permisos de aplicación, los
   menús y el RBAC se gobiernan desde PostgreSQL (`app_installations`).
 - **Resolutor de dependencias** — resolución recursiva sobre un grafo dirigido
   acíclico, con detección de ciclos y verificación de restricciones semver.
-- **Sincronización del catálogo** — `catalog/apps.json` es la fuente de verdad;
-  la tabla `apps` se reconcilia con él en cada arranque.
+- **Sincronización del catálogo** — producción obtiene un catálogo firmado de
+  `APP_CATALOG_URL`; desarrollo/offline usa `catalog/apps.json` como respaldo y
+  sincroniza los metadatos en `platform.apps`.
 
-### 2. Motor de resiliencia cloud-native
+### 2. Resiliencia cloud-native y múltiples réplicas
 
 | Módulo | Propósito |
 | --- | --- |
-| `resilience/breaker.go` | Cortacircuitos adaptativo al estilo SRE de Google |
-| `resilience/loadshedder.go` | Descarta carga con `503` + `Retry-After` bajo presión |
-| `resilience/singleflight.go` | Fusiona trabajo duplicado en vuelo |
-| `resilience/retry.go` | Reintento con retroceso exponencial |
+| `internal/kernel/resilience/loadshedder.go` | Descarta carga con `503` + `Retry-After` bajo presión |
+| `internal/kernel/cache/bus.go` | Invalida caché entre réplicas mediante Redis, con respaldo local |
+| `internal/kernel/memo/memo.go` | Caché local de TTL corto, invalidada por prefijo, para decisiones de autorización |
+| `internal/kernel/async/async.go` | Goroutines con nombre, recuperación de panic y registro de pila |
 
 ### 3. Infraestructura digital nacional
 
-- **XYP — Intercambio de Información del Estado** (`platform/gerege/xyp.go`):
+- **XYP — Intercambio de Información del Estado** (`internal/tenant/identity/gerege/xyp.go`):
   registro civil de ciudadanos (`WS100101`) y verificación de personas
   jurídicas (`WS100201`).
 - **E-ID nacional y DAN** ([`developer.gerege.mn`](https://developer.gerege.mn),
@@ -99,7 +100,7 @@ los microservicios.
 - **Proveedor OAuth2 / OIDC integrado**
   (`/.well-known/openid-configuration`) que emite tokens de tipo
   client-credentials a sistemas de terceros.
-- **Verificación de correo electrónico** (`platform/emailverify`) — un único
+- **Verificación de correo electrónico** (`internal/tenant/emailverify`) — un único
   flujo para demostrar una dirección, que cada módulo de aplicación llama en
   proceso. El correo lo envía el servicio alojado (`enigma.mn`), de modo que la
   plataforma no guarda credenciales de buzón ni posee dirección de remitente. La
@@ -113,26 +114,23 @@ los microservicios.
 
 ### 4. Copiloto de IA y analítica
 
-- **Asistente de IA** (`platform/ai/copilot.go`) — conversación clasificada por
+- **Asistente de IA** (`internal/tenant/ai/copilot.go`) — conversación clasificada por
   intención y conectada a los datos reales del inquilino.
-- **Previsión de demanda de inventario**
-  (`platform/ai/inventory_forecaster.go`) — recomendaciones de stock de
-  seguridad y punto de pedido a partir del histórico de movimientos.
+- **Previsión de inventario** (`internal/tenant/ai/handlers.go`) — delega en la
+  capacidad `stock_forecast` de una distribución habilitada y devuelve `404`
+  cuando ningún módulo la ofrece.
 
 ---
 
 ## Aplicaciones de negocio
 
+Este repositorio base solo incluye una aplicación en `catalog/apps.json`.
+Las distribuciones de producto registran sus propios módulos y migraciones
+mediante `pkg/nexus`; sus aplicaciones no son funciones incluidas aquí.
+
 | # | Aplicación | ID | Ruta | Descripción |
 | --- | --- | --- | --- | --- |
-| 1 | Organización y personas | `io.gerege.nexus.organisation` | `/organisation` | Los departamentos y las personas que trabajan en ellos. Instalada por defecto para un inquilino nuevo y desinstalable; la identidad legal de la organización no es una app, sino parte de la plataforma |
-| 2 | Enlace con la administración electrónica | `io.gerege.nexus.egov` | `/egov` | Consultas a ХУР (ciudadanos y personas jurídicas), estado de los canales eID y ДАН, e historial. Instalada por defecto y desinstalable |
-| 3 | Contactos | `io.gerege.nexus.contacts` | `/contacts` | Directorio de clientes y proveedores con autocompletado XYP |
-| 4 | Productos | `io.gerege.nexus.products` | `/products` | Catálogo, precios y SKU por inquilino |
-| 5 | Inventario | `io.gerege.nexus.inventory` | `/inventory` | Almacenes, niveles de stock, libro de movimientos |
-| 6 | Facturación y e-Barimt | `io.gerege.nexus.billing` | `/billing` | Facturación, IVA del 10 %, recibos e-Barimt |
-| 7 | Documentos digitales y firma electrónica | `io.gerege.nexus.documents` | `/documents` | Circulación de documentos, firmas, aprobaciones |
-| 8 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
+| 1 | Clientes SSO | `io.gerege.nexus.sso_clients` | `/sso-clients` | Clientes OAuth2 de los sistemas que inician sesión de personas a través de esta plataforma |
 
 Las rutas solo se abren una vez que la aplicación está instalada y habilitada
 para el inquilino; de lo contrario el control devuelve `403 Forbidden`.
@@ -147,9 +145,13 @@ backend/
   cmd/migrate/        Ejecutor de migraciones Goose
   db/migrations/      Migraciones SQL
   internal/
-    module.go         El contrato de módulo de Go
-    apps/             Módulos de negocio
-    platform/         Servicios del núcleo de la plataforma
+    kernel/           Primitivas técnicas comunes
+    tenant/           Trabajo para una organización
+    platform/         Operación de todo el deployment
+    apps/             Módulos incluidos por esta distribución
+  pkg/
+    nexus/            SDK público y contratos de módulos externos
+    platform/         Raíz de composición de ambos planos
 frontend/             Cliente web Next.js 16 (App Router)
 catalog/              Catálogo y manifiestos de la tienda de aplicaciones
 deploy/               Dockerfile de producción, configuración de Nginx
