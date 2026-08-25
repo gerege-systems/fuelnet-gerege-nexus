@@ -198,4 +198,16 @@ export const website = {
     mn: "Gerege Nexus дээр суурилсан",
     en: "Powered by Gerege Nexus",
   },
+
+  // Нэвтэрсэн хүний hero: eID картын оронд ирсэн гэрээ.
+  "website.action.my_contracts": { mn: "Надад ирсэн гэрээ", en: "My incoming contracts" },
+  "website.action.open_platform": { mn: "Платформ руу", en: "Open the platform" },
+  "website.view.hero_inbox_title": { mn: "Танд ирсэн гэрээ", en: "Contracts sent to you" },
+  "website.view.hero_inbox_empty": {
+    mn: "Одоогоор хариу хүлээж буй гэрээ алга.",
+    en: "Nothing is waiting for your signature right now.",
+  },
+  "website.view.hero_inbox_new": { mn: "Шинэ", en: "New" },
+  "website.view.hero_inbox_opened": { mn: "Уншсан", en: "Opened" },
+  "website.view.hero_inbox_more": { mn: "өөр гэрээ", en: "more" },
 } as const;

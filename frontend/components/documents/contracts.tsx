@@ -133,7 +133,8 @@ export function CeremonyButton({
 }: {
   label: string;
   start: () => Promise<CeremonySession>;
-  poll: () => Promise<CeremonyProgress>;
+  /** Receives the session start returned — the master-sign poll needs its id. */
+  poll: (session: CeremonySession) => Promise<CeremonyProgress>;
   onDone: () => void | Promise<void>;
   onError: (message: string) => void;
   className?: string;
@@ -151,7 +152,7 @@ export function CeremonyButton({
         await new Promise((resolve) => setTimeout(resolve, 3000));
         let progress: CeremonyProgress;
         try {
-          progress = await poll();
+          progress = await poll(session);
         } catch (err) {
           // A 409 is an answer (settled elsewhere, bytes changed); a dropped
           // connection is not — the ceremony is still open on the phone.
@@ -163,7 +164,9 @@ export function CeremonyButton({
           continue;
         }
         if (progress.state === "COMPLETE") { await onDone(); break; }
-        if (progress.state === "PENDING") continue;
+        // Хоёр рельс хоёр өөр үгээр «хүлээж байна» гэдэг: талын зам PENDING,
+        // мастерын зам RUNNING. Аль аль нь — асуусаар байх.
+        if (progress.state === "PENDING" || progress.state === "RUNNING") continue;
         onError(progress.state === "REFUSED" ? t("contracts.msg.refused") : t("contracts.msg.ceremony_ended", { state: progress.state }));
         break;
       }
