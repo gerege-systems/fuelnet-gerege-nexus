@@ -327,6 +327,26 @@ NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://cp.localhost:8080/api/platform/v1 \
 Серверт зөвхөн Docker шаардлагатай — эх код ч, Go/Node ч хэрэггүй. Утгуудын
 жишээг [`deploy/.env.prod.example`](deploy/.env.prod.example)-ээс үзнэ үү.
 
+### Анхны байгууллага — шинэ deployment дээр эхлээд хийх зүйл
+
+Шинэ deployment дээр **бүртгүүлэх дэлгэц байхгүй**, demo бүртгэл production
+дээр үүсэхгүй. Тэгэхээр миграц дуусаад контейнерууд асахад өгөгдлийн сан
+хоосон, `/ready` ногоон, нэвтрэх дэлгэц гарч ирдэг ч **хэн ч нэвтэрч чадахгүй**.
+Асах үед лог үүнийг хэлж, доорх командыг зааж өгнө:
+
+```bash
+docker exec -it gerege_nexus_backend /app/tenant-bootstrap   -org "Байгууллагын нэр" -slug baiguullaga   -email you@example.mn -name "Таны нэр"
+```
+
+Энэ нь эхний байгууллага, түүний админ хэрэглэгч, гишүүнчлэл, `admin` эрхийг
+нэг transaction-д үүсгэнэ. Нууц үгийг TTY-ээс хоёр удаа асууна — flag эсвэл
+env-д бүү дамжуул (`docker exec -it`, `docker exec` биш): shell history,
+process list, container inspect-д үлдэнэ.
+
+**Нэг л удаа ажиллана.** Байгууллага аль хэдийн байвал команд татгалзана —
+дараагийнхыг нь [control plane консолоос](docs/CONTROL_PLANE.md) үүсгэнэ.
+Аппуудыг админ нь нэвтрээд дэлгүүрээс суулгана.
+
 ---
 
 ## Тохиргооны хувьсагчид

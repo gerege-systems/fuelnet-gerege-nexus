@@ -256,6 +256,7 @@ func Run(opts Options) error {
 	// NewServer is what fills from the catalogue file.
 	if databaseReachable {
 		seedInitialData(ctx, db, srv.tenant)
+		warnIfUnprovisioned(ctx, db)
 	}
 
 	// Background jobs run until this context is cancelled during shutdown, so

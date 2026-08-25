@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/tenants"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/auth"
 )
 
@@ -220,4 +221,23 @@ func ensureDemoMembership(ctx context.Context, db *pgxpool.Pool, tenantID, userI
 		 ON CONFLICT DO NOTHING`, membershipID, adminRoleID); err != nil {
 		slog.Error("failed to grant admin role", "error", err)
 	}
+}
+
+// warnIfUnprovisioned says so when the deployment has no organisation at all.
+//
+// That state is not an error — a freshly migrated database is exactly it — but
+// it is one nobody can sign in to, and it used to be silent: the containers
+// came up, /ready was green, the sign-in page rendered, and every attempt to
+// use it failed with bad credentials because there was no account to be wrong
+// about. Two deployments were debugged from that symptom before anybody
+// realised the answer was a command, so the log says the command.
+func warnIfUnprovisioned(ctx context.Context, db *pgxpool.Pool) {
+	empty, err := tenants.Unprovisioned(ctx, db)
+	if err != nil || !empty {
+		return
+	}
+	slog.Warn("this deployment has no organisation, so nobody can sign in yet; "+
+		"create the first one and its administrator with the tenant-bootstrap command",
+		"command", `docker exec -it <backend container> /app/tenant-bootstrap `+
+			`-org "Your Organisation" -slug your-org -email you@example.mn -name "Your Name"`)
 }
