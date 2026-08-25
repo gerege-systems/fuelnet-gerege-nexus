@@ -1,5 +1,47 @@
 [
   {
+    "id": "io.gerege.nexus.fuel",
+    "slug": "fuel",
+    "name": "Fuel Network",
+    "description": "The fuel distribution network: stations, stock, daily entitlements and vouchers.",
+    "icon_url": "/icons/fuel.png",
+    "category": "Operations",
+    "visibility": "public",
+    "version": "0.1.0",
+    "translations": {
+      "mn": {
+        "name": "Шатахууны сүлжээ",
+        "description": "Шатахуун түгээх сүлжээ: ШТС, нөөц, иргэний өдрийн эрх, ваучер.",
+        "category": "Үйл ажиллагаа"
+      },
+      "ar": {
+        "name": "شبكة الوقود",
+        "description": "شبكة توزيع الوقود: المحطات والمخزون والاستحقاقات اليومية والقسائم.",
+        "category": "العمليات"
+      },
+      "zh": {
+        "name": "燃料网络",
+        "description": "燃料分销网络：加油站、库存、每日额度和代金券。",
+        "category": "运营"
+      },
+      "fr": {
+        "name": "Réseau de carburant",
+        "description": "Le réseau de distribution de carburant : stations, stocks, droits journaliers et bons.",
+        "category": "Opérations"
+      },
+      "ru": {
+        "name": "Топливная сеть",
+        "description": "Сеть распределения топлива: станции, запасы, суточные лимиты и ваучеры.",
+        "category": "Операции"
+      },
+      "es": {
+        "name": "Red de combustible",
+        "description": "La red de distribución de combustible: estaciones, existencias, derechos diarios y vales.",
+        "category": "Operaciones"
+      }
+    }
+  },
+  {
     "id": "io.gerege.nexus.sso_clients",
     "slug": "sso-clients",
     "name": "SSO Clients",

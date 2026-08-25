@@ -9,6 +9,7 @@ import (
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/fuel"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/tenant/ssoprovider"
 )
@@ -29,6 +30,14 @@ func Bootstrap(p nexus.Platform) Runtime {
 	sso := required[*ssoprovider.SSOProvider]()
 
 	sso_clients.New(sso)
+	// This deployment's own product: the fuel distribution network. It takes
+	// only the platform, so it is constructed wherever is convenient — the
+	// order here is for the modules that need each other, and this needs none.
+	//
+	// Returned as a background module: it keeps the invented fleet moving when
+	// FUEL_DEMO_DISPATCH says to, and does nothing otherwise. The platform hands
+	// it a context that is cancelled at shutdown.
+	fuelModule := fuel.New(p)
 	// Өртөө's task board was constructed here until 2026-08-23. It is
 	// client-gerege-nexus's now, and it reaches the channel the way any
 	// distribution's module does: nexus.Link to send, nexus.PeerDirectory to
@@ -49,7 +58,7 @@ func Bootstrap(p nexus.Platform) Runtime {
 	// one organisation's report read another's rows — published as
 	// nexus.ReportEngine, ReportSchedules and ReportGrants.
 
-	return Runtime{}
+	return Runtime{Background: []BackgroundModule{fuelModule}}
 }
 
 // required fetches a capability the platform is expected to have provided.

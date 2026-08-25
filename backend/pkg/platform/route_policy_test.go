@@ -134,6 +134,34 @@ var publicRoutes = []string{
 	"/api/v1/integrations/oauth/callback",
 	"/api/v1/verify/landed",
 
+	// Where to buy fuel. Reached by a citizen with no organisation and, on a
+	// first visit, no session — which is the whole point of it: somebody
+	// looking for a station that has petrol is not a member of anything.
+	//
+	// It answers across every operator, because dbguard leaves a request with
+	// no tenant on the login role and outside the row-level policies. What
+	// keeps an operator's private columns out of it is the SELECT list in the
+	// handler, written by hand: tank capacity, litres in the ground and the
+	// supply schedule behind them are a rival's read of a business, and this
+	// route would publish them nationally for free. The citizen's response
+	// type is a separate struct for that reason rather than the operator's
+	// with fields blanked, since a blanked field is one somebody fills back in.
+	//
+	// Rate limited in the module (60/min, burst 20). It is a database query
+	// anybody may ask for, and nothing else on this list is.
+	"/api/v1/fuel/public/stations",
+
+	// Deliveries on the road. Position, destination and ETA — the driver's name
+	// and phone, the electronic seal number and the load volume are withheld in
+	// the handler, each for its own reason (internal/apps/fuel/dispatch.go).
+	//
+	// A fuel tanker is hazardous cargo, so publishing live positions is also
+	// publishing a target list. It is on this list because somebody decided the
+	// delivery estimate is worth that, not because nobody thought about it; the
+	// gated operator view carries everything and would be the place to retreat
+	// to if that judgement changes.
+	"/api/v1/fuel/public/trips",
+
 	// The Өртөө channel. All three are reached by another Gerege Nexus
 	// installation rather than by a person, so a session is not something the
 	// caller could hold. Each carries its own authority: the redemption is

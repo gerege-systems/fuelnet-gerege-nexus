@@ -44,6 +44,7 @@
  * endpoint that answered 404.
  */
 
+import "./fuel";
 import "./sso_clients";
 import "./storefront";
 import "./urtuu";

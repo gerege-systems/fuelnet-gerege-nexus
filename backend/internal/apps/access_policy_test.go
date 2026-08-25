@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/fuel"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
@@ -15,6 +16,12 @@ var corePolicies = map[string]struct {
 	whyNoRouteGate string
 }{
 	"sso_clients": {(*sso_clients.SSOClientsModule)(nil), "sso_clients.read", "sso_clients", ""},
+	"fuel": {(*fuel.Module)(nil), "fuel.read", "", "" +
+		"it serves two kinds of person from one module. The prefix gate reads " +
+		"the permission off the HTTP method, which would make a citizen taking " +
+		"their own daily ration — a POST — need fuel.manage, the permission to " +
+		"edit a company's forecourt. The module names the permission on each " +
+		"operator route instead and leaves the citizen routes on a session."},
 }
 
 func TestEveryCoreModuleDeclaresTheAccessPolicyWeThinkItDoes(t *testing.T) {

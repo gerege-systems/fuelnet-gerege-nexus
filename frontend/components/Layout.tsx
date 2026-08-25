@@ -32,6 +32,9 @@ interface AppNav { id:string; name:string; icon:string; path:string; externalUrl
 // deployment with no organisation, so there is nobody to hold a session and
 // asking /me for one would push the wizard to a sign-in screen that cannot
 // work. What authorises it is the setup token, not a session.
+// `/` is the citizen's fuel map on this deployment — see app/page.tsx. It was
+// already public, so nothing was added for it; the API behind it is on the
+// public list in pkg/platform/route_policy_test.go, where that is reviewed.
 const PUBLIC_ROUTES=["/","/login","/setup","/auth/eid/callback","/oauth/consent","/kiosk"];
 // Шугамын нүүр дэлгэц нэвтрэлт шаардахгүй. Тэр нь ажлын мужид web-ийн нэвтрэх
 // дэлгэц гарч ирэхийг ОРЛОХЫН тулд байгаа тул session байхгүй үед ч зогсох

@@ -11,17 +11,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/fuel"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/apps/sso_clients"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
 var everyModule = map[string]nexus.Module{
 	"sso_clients": (*sso_clients.SSOClientsModule)(nil),
+	"fuel":        (*fuel.Module)(nil),
 }
 
 var defaultGrants = map[string]string{
 	"sso_clients.read":   "suffix",
 	"sso_clients.manage": "suffix",
+
+	// Stated rather than derived: a station's stock is this organisation's own
+	// operational data, so every member reads it and only a manager edits.
+	"fuel.read":   "manager,user",
+	"fuel.manage": "manager",
 }
 
 // Өртөө's three permissions were here until 2026-08-23. They are
