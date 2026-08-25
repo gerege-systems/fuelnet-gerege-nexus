@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
+	coreeid "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/eidrp"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	signuc "github.com/gerege-systems/open-gerege-core/core/business/usecases/sign"

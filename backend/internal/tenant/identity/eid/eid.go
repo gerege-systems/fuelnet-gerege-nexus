@@ -26,8 +26,8 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/credentials"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/geregecore"
 
-	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/config"
+	coreeid "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/eidrp"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/telemetry"
 )
 
@@ -50,12 +50,20 @@ const (
 
 // EIDIdentity matches official DAN / E-ID Mongolia user profile schema
 type EIDIdentity struct {
-	CivilID         string     `json:"civil_id"`        // Иргэний бүртгэлийн дугаар
-	RegNumber       string     `json:"reg_number"`      // Регистрийн дугаар (e.g. AA90010111)
-	FirstName       string     `json:"first_name"`      // Өөрийн нэр
-	LastName        string     `json:"last_name"`       // Эцэг/Эхийн нэр
-	FamilyName      string     `json:"family_name"`     // Ургийн овог
-	Gender          string     `json:"gender"`          // Хүйс
+	CivilID    string `json:"civil_id"`    // Иргэний бүртгэлийн дугаар
+	RegNumber  string `json:"reg_number"`  // Регистрийн дугаар (e.g. AA90010111)
+	FirstName  string `json:"first_name"`  // Өөрийн нэр
+	LastName   string `json:"last_name"`   // Эцэг/Эхийн нэр
+	FamilyName string `json:"family_name"` // Ургийн овог
+	// The Latin transliterations, as the passport spells them. eID began
+	// returning these with the person block; there is no Latin clan name,
+	// because the certificate does not carry one.
+	FirstNameEn string `json:"first_name_en,omitempty"`
+	LastNameEn  string `json:"last_name_en,omitempty"`
+	// BirthDate is a date and nothing more: YYYY-MM-DD. Neither this nor
+	// Gender is in the certificate, which is why the person block carries them.
+	BirthDate       string     `json:"birth_date,omitempty"`
+	Gender          string     `json:"gender"`          // Хүйс: M | F | X
 	Email           string     `json:"email"`           // И-мэйл хаяг
 	Phone           string     `json:"phone"`           // Утасны дугаар
 	AuthMethod      AuthMethod `json:"auth_method"`     // Танилт хийсэн арга
@@ -306,7 +314,16 @@ func (s *EIDService) poll(ctx context.Context, sessionID string) (*PollResult, e
 	result := &PollResult{State: session.State}
 	if session.State == coreeid.StateComplete && session.Identity != nil {
 		id := session.Identity
-		result.Identity = &EIDIdentity{CivilID: id.CivilID, RegNumber: id.NationalID, FirstName: id.GivenName, LastName: id.Surname, AuthMethod: AuthMethodPKISignature, VerifiedStatus: true, AuthenticatedAt: time.Now()}
+		result.Identity = &EIDIdentity{
+			CivilID: id.CivilID, RegNumber: id.NationalID,
+			// Three names, three things: FirstName is the citizen's own name,
+			// LastName the patronymic, FamilyName the clan name. eID says which
+			// is which now, so this stops guessing.
+			FirstName: id.FirstName, LastName: id.LastName, FamilyName: id.FamilyName,
+			FirstNameEn: id.FirstNameEn, LastNameEn: id.LastNameEn,
+			BirthDate: id.BirthDate, Gender: id.Gender, GeID: id.GeID,
+			AuthMethod: AuthMethodPKISignature, VerifiedStatus: true, AuthenticatedAt: time.Now(),
+		}
 		resolveGeID(ctx, result.Identity)
 		// The certificate is optional — a login does not stop when it cannot be
 		// parsed — but when it is there it is what an e-signature record anchors on.

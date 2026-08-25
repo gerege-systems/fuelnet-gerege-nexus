@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	coreeid "github.com/gerege-systems/open-gerege-core/pkg/eid"
+	coreeid "github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/eidrp"
 )
 
 // The relying party reports no deadline for push sessions and keeps them alive
