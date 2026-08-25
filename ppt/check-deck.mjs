@@ -24,6 +24,13 @@ assert.doesNotMatch(html, /<link[^>]+stylesheet/, "the deck must remain standalo
 assert.doesNotMatch(html, /Gerege Nexus — Танилцуулга/);
 assert.equal(scripts.length, 1, "the deck must have one inline controller");
 assert.doesNotThrow(() => new Function(scripts[0]), "the deck controller must parse");
+assert.match(
+  html,
+  /stage\.style\.transform='translate\(-50%,-50%\) scale\('/,
+  "the scaled slide must remain centered on narrow mobile viewports",
+);
+assert.match(html, /height:calc\(100dvh - var\(--controls-space\)\)/);
+assert.match(html, /visualViewport\.addEventListener\('resize',fit\)/);
 assert.equal(
   (html.match(/<section\b/g) || []).length,
   (html.match(/<\/section>/g) || []).length,

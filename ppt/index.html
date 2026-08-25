@@ -15,12 +15,13 @@
   --green:#0b9b70;--red:#d94b4b;--cyan:#36b8c8;
   --display:"Arial Narrow","Aptos Display","Noto Sans",Arial,sans-serif;
   --body:"Aptos","Noto Sans",Arial,sans-serif;
+  --controls-space:0px;--canvas-pad:48px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#dfe5ea;font-family:var(--body);color:var(--ink)}
 button{font:inherit}
-.deck{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(circle at 50% 20%,#f7fafc 0,#dce3e9 64%,#cbd4dc 100%)}
-.stage{position:relative;width:1280px;height:720px;overflow:hidden;background:var(--paper);box-shadow:0 22px 70px rgba(7,19,31,.22);transform-origin:center}
+.deck{position:fixed;left:0;top:0;width:100vw;height:calc(100vh - var(--controls-space));height:calc(100dvh - var(--controls-space));overflow:hidden;background:radial-gradient(circle at 50% 20%,#f7fafc 0,#dce3e9 64%,#cbd4dc 100%)}
+.stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;overflow:hidden;background:var(--paper);box-shadow:0 22px 70px rgba(7,19,31,.22);transform:translate(-50%,-50%);transform-origin:center center}
 .slide{position:absolute;inset:0;display:none;flex-direction:column;padding:46px 58px 54px;background:var(--paper);overflow:hidden}
 .slide.on{display:flex;animation:rise .26s ease both}
 @keyframes rise{from{opacity:.2;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -245,9 +246,21 @@ button{font:inherit}
 .source-panel{display:none;position:fixed;inset:0;background:rgba(7,19,31,.74);z-index:20;place-items:center;padding:24px}
 .source-panel.open{display:grid}.source-card{width:min(820px,92vw);max-height:80vh;overflow:auto;background:#fff;padding:28px 32px;box-shadow:0 20px 70px rgba(0,0,0,.4)}.source-card h2{font-family:var(--display);font-size:27px;margin:0 0 12px}.source-card pre{white-space:pre-wrap;font-family:var(--body);font-size:14px;line-height:1.5;color:var(--slate)}
 body.fs .counter,body.fs .nav{opacity:0;pointer-events:none}body.fs.chrome .nav{opacity:1;pointer-events:auto}body.nocursor{cursor:none}
+@media(max-width:900px),(pointer:coarse){
+  :root{--controls-space:76px;--canvas-pad:14px}
+  body.fs{--controls-space:0px;--canvas-pad:0px}
+  .counter{left:14px;bottom:calc(19px + env(safe-area-inset-bottom))}
+  .nav{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));gap:6px}
+  .nav button{padding:9px 11px}
+}
+@media(pointer:coarse) and (orientation:landscape) and (max-height:600px){
+  :root{--controls-space:0px;--canvas-pad:8px}
+  .nav{opacity:0;pointer-events:none}
+  .counter{bottom:10px;opacity:.58}
+}
 @media(prefers-reduced-motion:reduce){.slide.on{animation:none}}
 @page{size:1280px 720px;margin:0}
-@media print{html,body{overflow:visible;background:#fff}.deck{position:static;display:block}.stage{transform:none!important;width:1280px;height:auto;box-shadow:none}.slide{display:flex!important;position:relative;width:1280px;height:720px;break-after:page}.nav,.counter,.source-panel{display:none!important}}
+@media print{html,body{overflow:visible;background:#fff}.deck{position:static;display:block;width:auto;height:auto}.stage{position:relative;left:auto;top:auto;transform:none!important;width:1280px;height:auto;box-shadow:none}.slide{display:flex!important;position:relative;width:1280px;height:720px;break-after:page}.nav,.counter,.source-panel{display:none!important}}
 </style>
 </head>
 <body>
@@ -587,7 +600,7 @@ body.fs .counter,body.fs .nav{opacity:0;pointer-events:none}body.fs.chrome .nav{
   var index=0,N=slides.length,idle=null;
   function fsElement(){return document.fullscreenElement||document.webkitFullscreenElement||null}
   function isFullscreen(){return !!fsElement()||document.body.classList.contains('pseudo-fs')}
-  function fit(){var pad=isFullscreen()?0:48;var scale=Math.min((innerWidth-pad)/1280,(innerHeight-pad)/720);stage.style.transform='scale('+scale+')'}
+  function fit(){var deck=document.querySelector('.deck'),rect=deck.getBoundingClientRect(),styles=getComputedStyle(document.documentElement),pad=isFullscreen()?0:parseFloat(styles.getPropertyValue('--canvas-pad'))||0;var scale=Math.min((rect.width-pad*2)/1280,(rect.height-pad*2)/720);stage.style.transform='translate(-50%,-50%) scale('+Math.max(scale,.1)+')'}
   function show(value){index=(value+N)%N;slides.forEach(function(sl,i){sl.classList.toggle('on',i===index)});var fill=slides[index].querySelector('.track i');if(fill)fill.style.width=((index+1)/N*100).toFixed(1)+'%';counter.textContent=String(index+1).padStart(2,'0')+' / '+N;history.replaceState(null,'','#s='+(index+1))}
   function fromHash(){var m=/#s=(\d+)/.exec(location.hash||'');return m?Math.min(Math.max(parseInt(m[1],10),1),N)-1:0}
   function openSources(){var raw=(slides[index].querySelector('.notes')||{}).textContent||'Эх сурвалж бүртгэгдээгүй.';sourceText.textContent=raw.replace(/\\n/g,'\n');panel.classList.add('open')}
@@ -600,7 +613,7 @@ body.fs .counter,body.fs .nav{opacity:0;pointer-events:none}body.fs.chrome .nav{
   document.getElementById('closeSources').onclick=closeSources;
   document.getElementById('fs').onclick=toggleFullscreen;
   panel.onclick=function(e){if(e.target===panel)closeSources()};
-  addEventListener('resize',fit);addEventListener('hashchange',function(){show(fromHash())});
+  addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,80)});if(window.visualViewport){visualViewport.addEventListener('resize',fit);visualViewport.addEventListener('scroll',fit)}addEventListener('hashchange',function(){show(fromHash())});
   document.addEventListener('fullscreenchange',onFullscreen);document.addEventListener('webkitfullscreenchange',onFullscreen);
   document.addEventListener('keydown',function(e){if(panel.classList.contains('open')){if(e.key==='Escape')closeSources();return}if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();show(index+1)}else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(index-1)}else if(e.key==='Home')show(0);else if(e.key==='End')show(N-1);else if(e.key.toLowerCase()==='f')toggleFullscreen();else if(e.key.toLowerCase()==='s')openSources()});
   var touchX=null;stage.addEventListener('touchstart',function(e){touchX=e.changedTouches[0].clientX},{passive:true});stage.addEventListener('touchend',function(e){if(touchX===null)return;var dx=e.changedTouches[0].clientX-touchX;if(Math.abs(dx)>45)show(index+(dx<0?1:-1));touchX=null},{passive:true});
