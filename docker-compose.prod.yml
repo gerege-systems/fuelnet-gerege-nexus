@@ -169,6 +169,23 @@ services:
       EID_CERT_LEVEL: ${EID_CERT_LEVEL:-ADVANCED}
       EID_DISPLAY_TEXT: ${EID_DISPLAY_TEXT:-Gerege Nexus-д нэвтрэх}
       EID_JIT_TENANT_SLUG: ${EID_JIT_TENANT_SLUG:-}
+
+      # The fuel network.
+      #
+      # Both default to off, and the defaults are the ones a real deployment
+      # wants. FUEL_DEMO_DISPATCH keeps invented tankers moving for a
+      # demonstration; a deployment carrying an operator's real dispatches must
+      # never grow them because somebody set a variable and forgot.
+      # FUEL_DAILY_GRANT_MNT is the ration, and unset means the 50,000₮ the
+      # policy says — it is here so it can be changed without a rebuild when
+      # that policy moves, not so it can be raised to get past a test.
+      FUEL_DEMO_DISPATCH: ${FUEL_DEMO_DISPATCH:-false}
+      FUEL_DAILY_GRANT_MNT: ${FUEL_DAILY_GRANT_MNT:-}
+      # Where the road network and the map tiles come from. Unset falls back to
+      # public services that are fine for development and are not ours to lean
+      # on in production — see lib/fuel/tileProxy.ts and demofleet.go.
+      OSRM_URL: ${OSRM_URL:-}
+      MAP_TILES_UPSTREAM: ${MAP_TILES_UPSTREAM:-}
       # eID Mongolia qualified PDF signing. It reuses the RP credentials above —
       # one registration carries both the authentication and the SIGNATURE
       # permission — so only the signing-specific overrides appear here.
