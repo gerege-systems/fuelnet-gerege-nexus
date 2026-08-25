@@ -1,0 +1,143 @@
+"use client";
+
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { contracts, ContractRow } from "@/lib/contracts";
+import { useResource, useLoadOnMount } from "@/lib/useResource";
+import { useAccess } from "@/lib/access";
+import { useI18n } from "@/lib/i18n";
+import { Banner, LoadingBlock, Modal, PageHeader, TableCard, EmptyState, fieldClass } from "@/components/ui";
+import { ContractBadge, fmtDate, fmtMoney } from "@/components/documents/contracts";
+import { FileSignature, Plus } from "lucide-react";
+
+/**
+ * The issuer's register: every contract this organisation has drawn up, one
+ * row each, newest first. A row opens the contract's own page; the button
+ * starts a new one with nothing but a title — everything else (facts, text,
+ * parties) belongs to the contract page, because that is where it is edited.
+ */
+export default function ContractsPage() {
+  const { t } = useI18n();
+  const { can } = useAccess();
+  const router = useRouter();
+  const mayManage = can("documents.manage");
+
+  const list = useResource<ContractRow[]>(
+    async () => (await contracts.list()).contracts,
+    { initial: [] },
+  );
+  useLoadOnMount(list.reload);
+
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const doc = await contracts.create(title.trim());
+      router.push(`/module/documents/contracts/${doc.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        icon={<FileSignature className="w-6 h-6 text-indigo-600" />}
+        title={t("contracts.view.title")}
+        subtitle={t("contracts.view.subtitle")}
+        actions={
+          mayManage ? (
+            <button
+              onClick={() => setCreating(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              {t("contracts.view.new")}
+            </button>
+          ) : undefined
+        }
+      />
+
+      {list.failed && <Banner tone="error" message={t("contracts.msg.load_failed")} />}
+      {list.loading ? (
+        <LoadingBlock />
+      ) : list.data.length === 0 ? (
+        <EmptyState message={t("contracts.view.empty")} />
+      ) : (
+        <TableCard
+          head={
+            <tr>
+              <th className="px-4 py-3">{t("contracts.col.contract")}</th>
+              <th className="px-4 py-3">{t("contracts.col.parties")}</th>
+              <th className="px-4 py-3">{t("contracts.col.state")}</th>
+              <th className="px-4 py-3">{t("contracts.col.signatures")}</th>
+              <th className="px-4 py-3">{t("contracts.col.amount")}</th>
+              <th className="px-4 py-3">{t("contracts.col.date")}</th>
+            </tr>
+          }
+        >
+          {list.data.map((row) => (
+            <tr
+              key={row.id}
+              onClick={() => router.push(`/module/documents/contracts/${row.id}`)}
+              className="cursor-pointer hover:bg-slate-50"
+            >
+              <td className="px-4 py-3">
+                <div className="font-semibold text-slate-800">{row.title}</div>
+                {row.contract_number && <div className="text-[11px] text-slate-400">№ {row.contract_number}</div>}
+              </td>
+              <td className="px-4 py-3">{row.counterparties || "—"}</td>
+              <td className="px-4 py-3"><ContractBadge state={row.contract_state} /></td>
+              <td className="px-4 py-3 font-mono">{row.signed_count} / {row.required_count}</td>
+              <td className="px-4 py-3">{fmtMoney(row.amount, row.currency)}</td>
+              <td className="px-4 py-3 text-slate-400">{fmtDate(row.sent_at || row.created_at)}</td>
+            </tr>
+          ))}
+        </TableCard>
+      )}
+
+      {creating && (
+        <Modal label={t("contracts.view.new")}>
+          <form onSubmit={create} className="space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">{t("contracts.view.new")}</h2>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{t("contracts.field.title")}</label>
+              <input
+                autoFocus
+                className={fieldClass}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+              <p className="text-[11px] text-slate-400 mt-1">{t("contracts.field.title_hint")}</p>
+            </div>
+            {error && <Banner tone="error" message={error} />}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCreating(false)}
+                className="text-sm font-medium text-slate-500 px-4 py-2 rounded-lg hover:bg-slate-100"
+              >
+                {t("contracts.action.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={busy || !title.trim()}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+              >
+                {t("contracts.action.create")}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
