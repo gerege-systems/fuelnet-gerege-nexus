@@ -37,6 +37,7 @@ package fuel
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -198,21 +199,24 @@ type Collector struct{ db nexus.DB }
 // Called by the module's constructor. A failure to register is logged rather
 // than fatal: a deployment that cannot export these is a deployment with a
 // blind spot, not one that should refuse to serve fuel.
+//
+// Registering twice is not one of those failures. The module is constructed
+// once per process in production and more than once in tests, which build
+// several servers against one registry — and a test that fell over on the
+// second one would be failing for a reason that cannot happen in the thing it
+// is testing. errors.As rather than a type assertion: the registry is free to
+// wrap, and a wrapped AlreadyRegisteredError would otherwise read as a real
+// fault and log a warning that means nothing.
 func RegisterMetrics(db nexus.DB) {
-	if err := prometheus.Register(&Collector{db: db}); err != nil {
-		var already prometheus.AlreadyRegisteredError
-		if !asAlreadyRegistered(err, &already) {
-			slog.Warn("fuel: metrics are not being exported", "error", err)
-		}
+	err := prometheus.Register(&Collector{db: db})
+	if err == nil {
+		return
 	}
-}
-
-func asAlreadyRegistered(err error, target *prometheus.AlreadyRegisteredError) bool {
-	value, ok := err.(prometheus.AlreadyRegisteredError)
-	if ok {
-		*target = value
+	var already prometheus.AlreadyRegisteredError
+	if errors.As(err, &already) {
+		return
 	}
-	return ok
+	slog.Warn("fuel: metrics are not being exported", "error", err)
 }
 
 // Describe is deliberately empty, which makes this an unchecked collector.
