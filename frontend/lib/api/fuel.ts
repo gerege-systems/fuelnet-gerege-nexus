@@ -27,11 +27,31 @@ export type FuelStation = {
   status: string;
   is_voucher_enabled: boolean;
   fuel_type_count: number;
+  /** The grades this forecourt sells; they travel with it, like a depot's tanks. */
+  fuels?: StationGrade[];
 };
 
 export type FuelStationList = {
   stations: FuelStation[];
   count: number;
+};
+
+/**
+ * One grade at one forecourt: what it costs, how big the vessel is, and
+ * whether it can be had.
+ *
+ * `current_stock_liters` is read-only everywhere. Litres in a tank are the sum
+ * of what deliveries put there — see internal/apps/fuel/station.go — and the
+ * honest way to say "we are out" is `status`, not a zero typed into a box.
+ */
+export type StationGrade = {
+  fuel_type: string;
+  fuel_label: string;
+  price_mnt: number;
+  tank_capacity_liters: number;
+  current_stock_liters: number;
+  status: string;
+  last_reported_at: string | null;
 };
 
 /** One fuel a station sells, as a citizen sees it. No litres — see the handler. */
@@ -212,6 +232,80 @@ export type DepotReceipt = {
 export const fuelApi = {
   /** The stations this organisation operates. Requires a session. */
   listFuelStations: () => request<FuelStationList>("/fuel/stations"),
+
+  /** Register a forecourt. Coordinates are required: the map has to draw it. */
+  createFuelStation: (body: {
+    name: string;
+    brand?: string;
+    brand_label?: string;
+    aimag?: string;
+    district?: string;
+    address?: string;
+    phone?: string;
+    opening_hours?: string;
+    lat: number;
+    lon: number;
+    total_pumps?: number;
+    active_pumps?: number;
+    is_voucher_enabled?: boolean;
+  }) => request<FuelStation>("/fuel/stations", { method: "POST", body: JSON.stringify(body) }),
+
+  /** Correct a row. Only what is sent changes; the rest is written back to itself. */
+  updateFuelStation: (
+    stationId: string,
+    body: Partial<{
+      name: string;
+      brand: string;
+      brand_label: string;
+      aimag: string;
+      district: string;
+      address: string;
+      phone: string;
+      opening_hours: string;
+      lat: number;
+      lon: number;
+      total_pumps: number;
+      active_pumps: number;
+      status: string;
+      is_voucher_enabled: boolean;
+    }>,
+  ) =>
+    request<FuelStation>(`/fuel/stations/${stationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * Remove a forecourt nothing has happened at.
+   *
+   * Answers 409 once a delivery has been received there: at that point the row
+   * is part of the chain a batch travelled, and the way to take it out of
+   * service is to close it.
+   */
+  deleteFuelStation: (stationId: string) =>
+    request<void>(`/fuel/stations/${stationId}`, { method: "DELETE" }),
+
+  /** Add a grade to a forecourt, or change its price, vessel size or availability. */
+  setStationGrade: (
+    stationId: string,
+    body: {
+      fuel_type: string;
+      fuel_label?: string;
+      price_mnt?: number;
+      tank_capacity_liters?: number;
+      status?: string;
+    },
+  ) =>
+    request<StationGrade>(`/fuel/stations/${stationId}/grades`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  /** Stop selling a grade. Different from being out of it — that is `status`. */
+  deleteStationGrade: (stationId: string, fuelType: string) =>
+    request<void>(`/fuel/stations/${stationId}/grades/${encodeURIComponent(fuelType)}`, {
+      method: "DELETE",
+    }),
 
   /** Consignments this organisation has declared, newest first. */
   listFuelShipments: () => request<{ shipments: Shipment[]; count: number }>("/fuel/shipments"),

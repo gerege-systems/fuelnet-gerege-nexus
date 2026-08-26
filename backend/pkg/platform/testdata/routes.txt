@@ -215,6 +215,8 @@ TRACE /metrics
 [app] DELETE /api/v1/developer/apps/{clientID}
 [app] DELETE /api/v1/developer/apps/{clientID}/consents/{userID}
 [app] DELETE /api/v1/developer/apps/{clientID}/tokens
+[app] DELETE /api/v1/fuel/stations/{id}
+[app] DELETE /api/v1/fuel/stations/{id}/grades/{fuelType}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/consents/{userID}
 [app] DELETE /api/v1/sso-clients/apps/{clientID}/tokens
@@ -240,6 +242,7 @@ TRACE /metrics
 [app] GET /api/v1/sso-clients/scopes
 [app] GET /api/v1/sso-clients/signing-keys
 [app] PATCH /api/v1/fuel/depots/{id}/tanks/{tankId}
+[app] PATCH /api/v1/fuel/stations/{id}
 [app] POST /api/v1/developer/apps/
 [app] POST /api/v1/developer/apps/{clientID}/rotate-secret
 [app] POST /api/v1/fuel/depots
@@ -248,9 +251,11 @@ TRACE /metrics
 [app] POST /api/v1/fuel/me/vouchers
 [app] POST /api/v1/fuel/shipments
 [app] POST /api/v1/fuel/shipments/{id}/status
+[app] POST /api/v1/fuel/stations
 [app] POST /api/v1/fuel/trips/{id}/receive
 [app] POST /api/v1/fuel/trips/{id}/telemetry
 [app] POST /api/v1/sso-clients/apps/
 [app] POST /api/v1/sso-clients/apps/{clientID}/rotate-secret
 [app] PUT /api/v1/developer/apps/{clientID}
+[app] PUT /api/v1/fuel/stations/{id}/grades
 [app] PUT /api/v1/sso-clients/apps/{clientID}

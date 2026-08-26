@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 	"github.com/go-chi/chi/v5"
@@ -166,6 +167,21 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		// one is a route any member of the organisation may make.
 		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
 			Get("/stations", m.handleListStations)
+
+		// Keeping the register rather than only reading it — see station.go.
+		// Adding a forecourt, correcting one, retiring one, and saying which
+		// grades it sells at what price. No route here sets a litre figure:
+		// stock rises through /trips/{id}/receive and nowhere else.
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/stations", m.handleCreateStation)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Patch("/stations/{id}", m.handleUpdateStation)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Delete("/stations/{id}", m.handleDeleteStation)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Put("/stations/{id}/grades", m.handleSetStationGrade)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Delete("/stations/{id}/grades/{fuelType}", m.handleDeleteStationGrade)
 		// A tracker reporting where a tanker is. Gated, and narrowed to the
 		// caller's own organisation by the row-level policy — an operator must
 		// not be able to move somebody else's lorry.
@@ -260,6 +276,26 @@ type Station struct {
 	Status        string  `json:"status"`
 	VoucherOpen   bool    `json:"is_voucher_enabled"`
 	FuelTypeCount int     `json:"fuel_type_count"`
+	// Fuels are the grades this forecourt sells. They travel with the station
+	// for the reason the depot's tanks travel with the depot: a station without
+	// its grades is a name and a dot on a map, and every screen that asks for
+	// one asks for the other in the next breath.
+	Fuels []StationGrade `json:"fuels,omitempty"`
+}
+
+// StationGrade is one fuel grade at one forecourt.
+//
+// CurrentLiters is here to be read and is not settable: see station.go. It is
+// the sum of what deliveries have put in the tank, and ReportedAt is when
+// somebody last said anything about whether the grade could be had.
+type StationGrade struct {
+	FuelType       string     `json:"fuel_type"`
+	FuelLabel      string     `json:"fuel_label"`
+	PriceMNT       float64    `json:"price_mnt"`
+	CapacityLiters float64    `json:"tank_capacity_liters"`
+	CurrentLiters  float64    `json:"current_stock_liters"`
+	Status         string     `json:"status"`
+	ReportedAt     *time.Time `json:"last_reported_at"`
 }
 
 // handleListStations answers the stations this organisation operates.
@@ -283,7 +319,20 @@ func (m *Module) handleListStations(w http.ResponseWriter, r *http.Request) {
 		       s.lat, s.lon, s.aimag, s.district, s.address, s.phone,
 		       s.opening_hours, s.total_pumps, s.active_pumps,
 		       s.current_queue_count, s.status, s.is_voucher_enabled,
-		       COUNT(i.fuel_type)::int
+		       COUNT(i.fuel_type)::int,
+		       COALESCE(
+		           json_agg(
+		               json_build_object(
+		                   'fuel_type', i.fuel_type,
+		                   'fuel_label', i.fuel_label,
+		                   'price_mnt', i.price_mnt::float8,
+		                   'tank_capacity_liters', i.tank_capacity_liters::float8,
+		                   'current_stock_liters', i.current_stock_liters::float8,
+		                   'status', i.status,
+		                   'last_reported_at', i.last_reported_at)
+		               ORDER BY i.fuel_type)
+		           FILTER (WHERE i.fuel_type IS NOT NULL),
+		           '[]'::json)
 		  FROM fuel_stations s
 		  LEFT JOIN fuel_station_inventory i ON i.station_id = s.id
 		 GROUP BY s.id
@@ -301,7 +350,8 @@ func (m *Module) handleListStations(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&s.ID, &s.Name, &s.Brand, &s.BrandLabel,
 			&s.Lat, &s.Lon, &s.Aimag, &s.District, &s.Address, &s.Phone,
 			&s.OpeningHours, &s.TotalPumps, &s.ActivePumps,
-			&s.QueueCount, &s.Status, &s.VoucherOpen, &s.FuelTypeCount); err != nil {
+			&s.QueueCount, &s.Status, &s.VoucherOpen, &s.FuelTypeCount,
+			&s.Fuels); err != nil {
 			nexus.Error(w, http.StatusInternalServerError, "could not read the stations")
 			return
 		}
