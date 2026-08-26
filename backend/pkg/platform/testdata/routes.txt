@@ -228,6 +228,7 @@ TRACE /metrics
 [app] GET /api/v1/fuel/public/stations
 [app] GET /api/v1/fuel/public/trips
 [app] GET /api/v1/fuel/stations
+[app] GET /api/v1/fuel/stations/{id}/receipts
 [app] GET /api/v1/sso-clients/apps/
 [app] GET /api/v1/sso-clients/apps/{clientID}
 [app] GET /api/v1/sso-clients/audit
@@ -237,6 +238,7 @@ TRACE /metrics
 [app] POST /api/v1/developer/apps/
 [app] POST /api/v1/developer/apps/{clientID}/rotate-secret
 [app] POST /api/v1/fuel/me/vouchers
+[app] POST /api/v1/fuel/trips/{id}/receive
 [app] POST /api/v1/fuel/trips/{id}/telemetry
 [app] POST /api/v1/sso-clients/apps/
 [app] POST /api/v1/sso-clients/apps/{clientID}/rotate-secret

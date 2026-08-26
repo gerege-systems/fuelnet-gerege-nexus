@@ -157,11 +157,27 @@ func (m *Module) Menus() []nexus.MenuDefinition {
 func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/v1/fuel", func(fr chi.Router) {
 		fr.Use(tenantAuthMiddleware)
-		fr.Get("/stations", m.handleListStations)
+
+		// The operator's half. Each route names the permission it needs.
+		//
+		// RoutePermissionPrefix is empty — see the note on it — so the platform
+		// gates nothing here beyond checking the app is installed. That makes
+		// these calls the whole of the check, and a route added below without
+		// one is a route any member of the organisation may make.
+		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
+			Get("/stations", m.handleListStations)
 		// A tracker reporting where a tanker is. Gated, and narrowed to the
 		// caller's own organisation by the row-level policy — an operator must
 		// not be able to move somebody else's lorry.
-		fr.Post("/trips/{id}/telemetry", m.handleTripTelemetry)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/trips/{id}/telemetry", m.handleTripTelemetry)
+
+		// Unloading a tanker. The only place a forecourt's stock goes up, and
+		// the last link in the chain a batch travels — see receipt.go.
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/trips/{id}/receive", m.handleReceiveDelivery)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
+			Get("/stations/{id}/receipts", m.handleListReceipts)
 
 		// A citizen's own ration and the vouchers drawn on it.
 		//

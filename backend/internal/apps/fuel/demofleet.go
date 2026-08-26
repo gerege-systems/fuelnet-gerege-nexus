@@ -168,12 +168,46 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 		return routeErr
 	}
 
+	// A batch for this load.
+	//
+	// One per run, which is not how a real import works — a batch is thousands
+	// of tonnes crossing a border and is split across many tankers. It is right
+	// for a demonstration, because the point being shown is that the chain
+	// holds: this litre came from that batch, which entered at that port, with
+	// that laboratory certificate.
+	fuel := demoFuels[rand.IntN(len(demoFuels))]
+
+	origin, refinery := "ОХУ", "Ангарскийн НПЗ"
+	if depot.name == "Замын-Үүд боомт" {
+		origin, refinery = "БНХАУ", "Sinopec"
+	}
+	volume := float64(12000 + rand.IntN(4)*4000)
+	var batchID string
+	err = m.db.QueryRow(ctx, `
+		INSERT INTO fuel_batches
+		       (tenant_id, batch_code, fuel_type, fuel_label, origin_country,
+		        refinery, imported_liters, quality_cert_no, octane_tested,
+		        sulfur_ppm, lab_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'passed')
+		RETURNING id::text`,
+		tenantID,
+		fmt.Sprintf("BATCH-%d-%06d", time.Now().Year(), rand.IntN(999999)),
+		fuel.code, fuel.label, origin, refinery, volume,
+		fmt.Sprintf("LAB-%05d", rand.IntN(99999)),
+		octaneFor(fuel.code),
+		// Euro-5 дизель 10 ppm хүртэл; бусад нь өндөр. Тоо нь дүр эсгэсэн ч
+		// хэмжээсийн зэрэг нь бодитой — К4 энэ багана дээр ажиллана.
+		float64(8+rand.IntN(42)),
+	).Scan(&batchID)
+	if err != nil {
+		return fmt.Errorf("mint a batch: %w", err)
+	}
+
 	// Lorries are slower than the router's car profile and they stop.
 	total := time.Duration(float64(seconds)*1.35) * time.Second
 	if total < 20*time.Minute {
 		total = 20 * time.Minute
 	}
-	fuel := demoFuels[rand.IntN(len(demoFuels))]
 	routeJSON, _ := json.Marshal(route)
 
 	// Departing now, every time. The first fleet was scattered along its runs so
@@ -186,24 +220,38 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 		        fuel_type, fuel_label, volume_liters,
 		        seal_no, seal_status, status,
 		        departed_at, eta_at, source, source_ref,
-		        route_geom, route_distance_m, route_duration_s)
+		        route_geom, route_distance_m, route_duration_s, batch_id)
 		VALUES ($1, $2, $3, '—', '—', $4, $5, $6, $7::uuid, $8, $9, $10,
 		        $11, 'sealed_intact', 'in_transit',
 		        NOW(), NOW() + $12::interval, $13, $14,
-		        $15::jsonb, NULL, $16)`,
+		        $15::jsonb, NULL, $16, $17::uuid)`,
 		tenantID,
 		fmt.Sprintf("TRIP-%d-%06d", time.Now().Year(), rand.IntN(999999)),
 		fmt.Sprintf("%04d%s", 1000+rand.IntN(8999), demoPlateSuffix[rand.IntN(len(demoPlateSuffix))]),
 		depot.name, depot.lat, depot.lon, stationID,
-		fuel.code, fuel.label, float64(12000+rand.IntN(4)*4000),
+		fuel.code, fuel.label, volume,
 		fmt.Sprintf("E-SEAL-%05d", rand.IntN(99999)),
 		total.String(), demoSource,
 		// Unique per run, so the seeder's rows and these never collide on the
 		// (tenant, source, source_ref) index.
 		fmt.Sprintf("auto-%d-%d", time.Now().UnixNano(), rand.IntN(1000)),
-		routeJSON, seconds,
+		routeJSON, seconds, batchID,
 	)
 	return err
+}
+
+// octaneFor is the grade's nominal octane, for a batch nobody has tested.
+//
+// Diesel has none — it is measured by cetane — so it answers nil rather than a
+// number that would read as a very poor petrol.
+func octaneFor(code string) *float64 {
+	nominal := map[string]float64{"ai80": 80, "ai92": 92, "ai95": 95, "ai98": 98, "euro92": 92}
+	if value, ok := nominal[code]; ok {
+		// A real assay lands near the grade, not on it.
+		measured := value + float64(rand.IntN(9))/10
+		return &measured
+	}
+	return nil
 }
 
 // roadRoute asks the router how a lorry gets from one point to another.
