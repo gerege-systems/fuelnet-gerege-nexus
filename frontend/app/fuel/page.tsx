@@ -47,6 +47,17 @@ const GRADES = [
 
 const GRADE_STATUSES = ["available", "low", "out"] as const;
 
+/**
+ * A status this screen has a word for, or the raw value.
+ *
+ * The column is free text and the seed importer has written others; t() answers
+ * with the key itself when it has never heard of one, and a pill reading
+ * "fuel.station.grade_status.suspended" is worse than the word the row holds.
+ */
+function knownGradeStatus(status: string): boolean {
+  return (GRADE_STATUSES as readonly string[]).includes(status);
+}
+
 export default function FuelPage() {
   const { t } = useI18n();
   const [stations, setStations] = useState<FuelStation[] | null>(null);
@@ -321,7 +332,9 @@ function GradeCard({
           {grade.fuel_label || grade.fuel_type}
         </span>
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${gradeTone(grade.status)}`}>
-          {t(`fuel.station.grade_status.${grade.status}`)}
+          {knownGradeStatus(grade.status)
+            ? t(`fuel.station.grade_status.${grade.status}`)
+            : grade.status}
         </span>
       </div>
       <p className="tabular-nums text-sm font-semibold text-slate-900">
