@@ -79,9 +79,12 @@ var demoDepots = []struct {
 // base. It matters that the number is realistic rather than enormous: a tank
 // that never runs low never exercises the restock path, and the restock path is
 // the one that walks a consignment through customs.
+// The level a tank is topped up from, so a base that nobody draws from still
+// shows fuel rather than an empty vessel that reads as a broken screen.
 const (
 	demoTankCapacity = 500_000.0
 	demoRestockTo    = 0.85
+	demoLowWater     = 0.20
 )
 
 var demoFuels = []struct{ code, label string }{
@@ -121,6 +124,17 @@ func (m *Module) StartHousekeeping(ctx context.Context) {
 
 // rollDemoFleet retires what has arrived and dispatches what is missing.
 func (m *Module) rollDemoFleet(ctx context.Context) {
+	// The bases first, and before anything is asked about the fleet.
+	//
+	// They used to be created inside dispatchOneDemoRun, which meant they only
+	// appeared when a replacement lorry was needed. On the deployment that first
+	// carried this code the fleet was already full of runs dispatched by the
+	// previous build, so nothing was dispatched, so no base was ever created —
+	// and the depot screen was empty for reasons that had nothing to do with
+	// depots. A base is a property of the deployment, not a side effect of
+	// sending a lorry somewhere.
+	m.ensureDemoBases(ctx)
+
 	// Arrived. `status` and `completed_at` together, so a run is either in
 	// flight or finished and never half of each.
 	if _, err := m.db.Exec(ctx, `
@@ -167,11 +181,6 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 		 LIMIT 1`).Scan(&stationID, &tenantID, &sLat, &sLon)
 	if err != nil {
 		return fmt.Errorf("pick a destination: %w", err)
-	}
-
-	// The bases exist before anything is dispatched from one.
-	if err := m.ensureDemoDepots(ctx, tenantID); err != nil {
-		return err
 	}
 
 	fuel := demoFuels[rand.IntN(len(demoFuels))]
@@ -289,7 +298,50 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 	return err
 }
 
-// ensureDemoDepots puts the invented bases and their tanks in place.
+// ensureDemoBases puts the invented bases in place for every organisation that
+// has stations the demo dispatcher might deliver to.
+//
+// By organisation rather than for one, because which tenant a run belongs to is
+// decided by the station it is going to — so the bases have to exist for all of
+// them before any station is picked. Failures are logged and the sweep goes on:
+// a base that could not be created is a base the next sweep will try again in
+// forty-five seconds, and it must not stop lorries that are already running.
+func (m *Module) ensureDemoBases(ctx context.Context) {
+	rows, err := m.db.Query(ctx, `
+		SELECT DISTINCT tenant_id::text FROM fuel_stations
+		 WHERE lat BETWEEN 47.65 AND 48.15 AND lon BETWEEN 106.5 AND 107.4`)
+	if err != nil {
+		slog.Warn("fuel: could not find who to build demo bases for", "error", err)
+		return
+	}
+	defer rows.Close()
+
+	var tenants []string
+	for rows.Next() {
+		var tenantID string
+		if err := rows.Scan(&tenantID); err != nil {
+			slog.Warn("fuel: could not read a tenant for demo bases", "error", err)
+			return
+		}
+		tenants = append(tenants, tenantID)
+	}
+	if rows.Err() != nil {
+		slog.Warn("fuel: could not read the tenants for demo bases", "error", rows.Err())
+		return
+	}
+
+	// Read to the end before writing: ensureDemoDepots runs its own statements
+	// on the same pool, and holding this cursor open across them would keep a
+	// connection busy for the whole loop.
+	for _, tenantID := range tenants {
+		if err := m.ensureDemoDepots(ctx, tenantID); err != nil {
+			slog.Warn("fuel: could not build the demo bases", "tenant", tenantID, "error", err)
+		}
+	}
+}
+
+// ensureDemoDepots puts one organisation's invented bases and tanks in place,
+// and fills any tank that is running dry.
 //
 // Idempotent by the (tenant, source, source_ref) index the migration installs,
 // so the sweep can call it every time without checking first — which is what
@@ -317,14 +369,29 @@ func (m *Module) ensureDemoDepots(ctx context.Context, tenantID string) error {
 		// interchangeable; one apiece is enough to show a level moving, and
 		// every extra invented vessel is a number somebody has to read.
 		for _, fuel := range demoFuels {
-			if _, err := m.db.Exec(ctx, `
+			var tankID string
+			var current, capacity float64
+			err := m.db.QueryRow(ctx, `
 				INSERT INTO fuel_depot_tanks
 				       (depot_id, tenant_id, tank_no, fuel_type, fuel_label, capacity_liters)
 				VALUES ($1::uuid, $2, $3, $4, $5, $6)
-				ON CONFLICT (depot_id, tank_no) DO NOTHING`,
+				ON CONFLICT (depot_id, tank_no) DO UPDATE SET updated_at = NOW()
+				RETURNING id::text, current_liters::float8, capacity_liters::float8`,
 				depotID, tenantID, "Т-"+fuel.code, fuel.code, fuel.label,
-				demoTankCapacity); err != nil {
+				demoTankCapacity).Scan(&tankID, &current, &capacity)
+			if err != nil {
 				return fmt.Errorf("ensure a tank: %w", err)
+			}
+
+			// A tank running dry gets a consignment — declared at a port,
+			// cleared by customs, unloaded. Here rather than only at dispatch
+			// so a base that nobody has drawn from still shows a level, and so
+			// the customs register has something in it on a deployment where no
+			// lorry has needed replacing yet.
+			if current < capacity*demoLowWater {
+				if err := m.restockDemoTank(ctx, tenantID, depotID, tankID, depot.name, fuel); err != nil {
+					return err
+				}
 			}
 		}
 	}
