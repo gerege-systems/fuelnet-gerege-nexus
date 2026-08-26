@@ -26,6 +26,7 @@ package fuel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -35,6 +36,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // How many invented runs to keep in flight, and how often to look.
@@ -50,17 +53,36 @@ const (
 )
 
 // Depots, as in the seeder. Real rail terminals and storage.
+//
+// These are now rows rather than names in a string column: a run has to be
+// drawn out of a tank at one of them, and a tank needs somewhere to belong.
+// `port` marks the two that sit on the frontier — the only places a consignment
+// can enter, which is why they are where the invented imports arrive.
 var demoDepots = []struct {
-	name     string
-	lat, lon float64
+	name        string
+	lat, lon    float64
+	aimag       string
+	railStation string
+	port        string
 }{
-	{"Сүхбаатар боомт", 50.2350, 106.2070},
-	{"Замын-Үүд боомт", 43.7200, 111.8980},
-	{"Дархан нефть бааз", 49.4860, 105.9220},
-	{"Улаанбаатар төв бааз", 47.9060, 106.8300},
-	{"Багануур бааз", 47.8280, 108.3450},
-	{"Эрдэнэт бааз", 49.0280, 104.0450},
+	{"Сүхбаатар боомт", 50.2350, 106.2070, "Сэлэнгэ", "СХБТ", "Сүхбаатар"},
+	{"Замын-Үүд боомт", 43.7200, 111.8980, "Дорноговь", "ЗМҮД", "Замын-Үүд"},
+	{"Дархан нефть бааз", 49.4860, 105.9220, "Дархан-Уул", "ДРХН", ""},
+	{"Улаанбаатар төв бааз", 47.9060, 106.8300, "Улаанбаатар", "УБТЗ", ""},
+	{"Багануур бааз", 47.8280, 108.3450, "Улаанбаатар", "БГНР", ""},
+	{"Эрдэнэт бааз", 49.0280, 104.0450, "Орхон", "ЭРДН", ""},
 }
+
+// How big an invented tank is, and how full a restock leaves it.
+//
+// Five hundred cubic metres is an ordinary vertical steel tank at a Mongolian
+// base. It matters that the number is realistic rather than enormous: a tank
+// that never runs low never exercises the restock path, and the restock path is
+// the one that walks a consignment through customs.
+const (
+	demoTankCapacity = 500_000.0
+	demoRestockTo    = 0.85
+)
 
 var demoFuels = []struct{ code, label string }{
 	{"ai92", "АИ-92"},
@@ -147,60 +169,86 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 		return fmt.Errorf("pick a destination: %w", err)
 	}
 
-	// Usually the nearest depot — what a dispatcher would choose, and what keeps
-	// a city delivery on city roads. One in four comes from further out, because
-	// border runs are the shape of the supply chain this platform is for.
-	depot := demoDepots[0]
-	best := math.Inf(1)
-	for _, candidate := range demoDepots {
-		dLat := candidate.lat - sLat
-		dLon := (candidate.lon - sLon) * math.Cos(sLat*math.Pi/180)
-		if distance := dLat*dLat + dLon*dLon; distance < best {
-			depot, best = candidate, distance
-		}
-	}
-	if rand.IntN(4) == 0 {
-		depot = demoDepots[rand.IntN(len(demoDepots))]
+	// The bases exist before anything is dispatched from one.
+	if err := m.ensureDemoDepots(ctx, tenantID); err != nil {
+		return err
 	}
 
-	route, _, seconds, routeErr := roadRoute(ctx, depot.lat, depot.lon, sLat, sLon)
+	fuel := demoFuels[rand.IntN(len(demoFuels))]
+	volume := float64(12000 + rand.IntN(4)*4000)
+
+	// Usually the nearest base holding this grade — what a dispatcher would
+	// choose, and what keeps a city delivery on city roads. One in four comes
+	// from further out, because border runs are the shape of the supply chain
+	// this platform is for.
+	//
+	// The choice is made in SQL, against tanks that actually exist, rather than
+	// against a list of names in this file. That is the whole change: a run now
+	// has somewhere it was loaded, and the litres it carries left a tank.
+	order := "distance"
+	if rand.IntN(4) == 0 {
+		order = "random"
+	}
+	var (
+		depotID, depotName, tankID string
+		dLat, dLon                 float64
+		tankLiters                 float64
+	)
+	err = m.db.QueryRow(ctx, `
+		SELECT d.id::text, d.name, t.id::text, d.lat, d.lon, t.current_liters::float8
+		  FROM fuel_depots d
+		  JOIN fuel_depot_tanks t ON t.depot_id = d.id AND t.fuel_type = $4
+		 WHERE d.tenant_id = $1 AND d.source = $5 AND d.lat IS NOT NULL
+		 ORDER BY CASE WHEN $6 = 'random' THEN random()
+		               ELSE (d.lat - $2) ^ 2 + ((d.lon - $3) * 0.67) ^ 2 END
+		 LIMIT 1`,
+		tenantID, sLat, sLon, fuel.code, demoSource, order).
+		Scan(&depotID, &depotName, &tankID, &dLat, &dLon, &tankLiters)
+	if err != nil {
+		return fmt.Errorf("pick a depot: %w", err)
+	}
+
+	// A tank that cannot fill this lorry gets a consignment first — declared at
+	// a port, cleared by customs, unloaded into the tank. That is the real
+	// chain, walked by the demonstration rather than described by it.
+	if tankLiters < volume {
+		if err := m.restockDemoTank(ctx, tenantID, depotID, tankID, depotName, fuel); err != nil {
+			return err
+		}
+	}
+
+	route, _, seconds, routeErr := roadRoute(ctx, dLat, dLon, sLat, sLon)
 	if routeErr != nil {
 		return routeErr
 	}
 
-	// A batch for this load.
+	// Out of the tank, and the batch that comes with those litres.
 	//
-	// One per run, which is not how a real import works — a batch is thousands
-	// of tonnes crossing a border and is split across many tankers. It is right
-	// for a demonstration, because the point being shown is that the chain
-	// holds: this litre came from that batch, which entered at that port, with
-	// that laboratory certificate.
-	fuel := demoFuels[rand.IntN(len(demoFuels))]
-
-	origin, refinery := "ОХУ", "Ангарскийн НПЗ"
-	if depot.name == "Замын-Үүд боомт" {
-		origin, refinery = "БНХАУ", "Sinopec"
-	}
-	volume := float64(12000 + rand.IntN(4)*4000)
-	var batchID string
+	// A tank is commingled — yesterday's consignment and today's are the same
+	// fuel once they are in it — so a load carries the most recent batch to
+	// enter. That is an approximation, and it is the one the industry makes:
+	// the alternative is claiming a precision about which molecule came from
+	// where that no depot in the country can support.
+	var batchID *string
 	err = m.db.QueryRow(ctx, `
-		INSERT INTO fuel_batches
-		       (tenant_id, batch_code, fuel_type, fuel_label, origin_country,
-		        refinery, imported_liters, quality_cert_no, octane_tested,
-		        sulfur_ppm, lab_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'passed')
-		RETURNING id::text`,
-		tenantID,
-		fmt.Sprintf("BATCH-%d-%06d", time.Now().Year(), rand.IntN(999999)),
-		fuel.code, fuel.label, origin, refinery, volume,
-		fmt.Sprintf("LAB-%05d", rand.IntN(99999)),
-		octaneFor(fuel.code),
-		// Euro-5 дизель 10 ppm хүртэл; бусад нь өндөр. Тоо нь дүр эсгэсэн ч
-		// хэмжээсийн зэрэг нь бодитой — К4 энэ багана дээр ажиллана.
-		float64(8+rand.IntN(42)),
-	).Scan(&batchID)
+		WITH drawn AS (
+			UPDATE fuel_depot_tanks
+			   SET current_liters = current_liters - $2, updated_at = NOW()
+			 WHERE id = $1::uuid AND current_liters >= $2
+			RETURNING id
+		)
+		SELECT (SELECT rc.batch_id::text
+		          FROM fuel_depot_receipts rc
+		         WHERE rc.tank_id = $1::uuid AND rc.batch_id IS NOT NULL
+		         ORDER BY rc.received_at DESC LIMIT 1)
+		  FROM drawn`, tankID, volume).Scan(&batchID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The tank emptied between the read and the write. The next sweep will
+		// restock it; nothing is broken.
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("mint a batch: %w", err)
+		return fmt.Errorf("draw from a tank: %w", err)
 	}
 
 	// Lorries are slower than the router's car profile and they stop.
@@ -216,19 +264,20 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 	_, err = m.db.Exec(ctx, `
 		INSERT INTO fuel_dispatch_trips
 		       (tenant_id, trip_code, tanker_plate, driver_name, driver_phone,
-		        from_depot, origin_lat, origin_lon, to_station_id,
-		        fuel_type, fuel_label, volume_liters,
+		        from_depot, from_depot_id, from_tank_id, origin_lat, origin_lon,
+		        to_station_id, fuel_type, fuel_label, volume_liters,
 		        seal_no, seal_status, status,
 		        departed_at, eta_at, source, source_ref,
 		        route_geom, route_distance_m, route_duration_s, batch_id)
-		VALUES ($1, $2, $3, '—', '—', $4, $5, $6, $7::uuid, $8, $9, $10,
-		        $11, 'sealed_intact', 'in_transit',
-		        NOW(), NOW() + $12::interval, $13, $14,
-		        $15::jsonb, NULL, $16, $17::uuid)`,
+		VALUES ($1, $2, $3, '—', '—', $4, $5::uuid, $6::uuid, $7, $8,
+		        $9::uuid, $10, $11, $12,
+		        $13, 'sealed_intact', 'in_transit',
+		        NOW(), NOW() + $14::interval, $15, $16,
+		        $17::jsonb, NULL, $18, $19::uuid)`,
 		tenantID,
 		fmt.Sprintf("TRIP-%d-%06d", time.Now().Year(), rand.IntN(999999)),
 		fmt.Sprintf("%04d%s", 1000+rand.IntN(8999), demoPlateSuffix[rand.IntN(len(demoPlateSuffix))]),
-		depot.name, depot.lat, depot.lon, stationID,
+		depotName, depotID, tankID, dLat, dLon, stationID,
 		fuel.code, fuel.label, volume,
 		fmt.Sprintf("E-SEAL-%05d", rand.IntN(99999)),
 		total.String(), demoSource,
@@ -238,6 +287,167 @@ func (m *Module) dispatchOneDemoRun(ctx context.Context) error {
 		routeJSON, seconds, batchID,
 	)
 	return err
+}
+
+// ensureDemoDepots puts the invented bases and their tanks in place.
+//
+// Idempotent by the (tenant, source, source_ref) index the migration installs,
+// so the sweep can call it every time without checking first — which is what
+// makes it correct after a database is restored, a tenant is added, or somebody
+// deletes a row by hand.
+func (m *Module) ensureDemoDepots(ctx context.Context, tenantID string) error {
+	for _, depot := range demoDepots {
+		var depotID string
+		err := m.db.QueryRow(ctx, `
+			INSERT INTO fuel_depots
+			       (tenant_id, name, brand, aimag, lat, lon,
+			        has_rail_siding, rail_station_code, source, source_ref)
+			VALUES ($1, $2, 'Демо', $3, $4, $5, TRUE, $6, $7, $2)
+			ON CONFLICT (tenant_id, source, source_ref)
+			    WHERE source IS NOT NULL AND source_ref IS NOT NULL
+			DO UPDATE SET updated_at = NOW()
+			RETURNING id::text`,
+			tenantID, depot.name, depot.aimag, depot.lat, depot.lon,
+			depot.railStation, demoSource).Scan(&depotID)
+		if err != nil {
+			return fmt.Errorf("ensure a depot: %w", err)
+		}
+
+		// One tank per grade. A real base has several of each and they are not
+		// interchangeable; one apiece is enough to show a level moving, and
+		// every extra invented vessel is a number somebody has to read.
+		for _, fuel := range demoFuels {
+			if _, err := m.db.Exec(ctx, `
+				INSERT INTO fuel_depot_tanks
+				       (depot_id, tenant_id, tank_no, fuel_type, fuel_label, capacity_liters)
+				VALUES ($1::uuid, $2, $3, $4, $5, $6)
+				ON CONFLICT (depot_id, tank_no) DO NOTHING`,
+				depotID, tenantID, "Т-"+fuel.code, fuel.code, fuel.label,
+				demoTankCapacity); err != nil {
+				return fmt.Errorf("ensure a tank: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// restockDemoTank walks one consignment from the frontier into a tank.
+//
+// Declared, cleared, unloaded — the three states a real import passes through,
+// written the same way the handlers write them, in one transaction. The point
+// is not the fuel: it is that every litre a demo lorry carries can be traced to
+// a customs declaration, so the chain the regulator's screens will read is a
+// real chain rather than a picture of one.
+func (m *Module) restockDemoTank(ctx context.Context, tenantID, depotID, tankID,
+	depotName string, fuel struct{ code, label string }) error {
+
+	var capacity, current float64
+	if err := m.db.QueryRow(ctx,
+		`SELECT capacity_liters::float8, current_liters::float8
+		   FROM fuel_depot_tanks WHERE id = $1::uuid`, tankID).
+		Scan(&capacity, &current); err != nil {
+		return fmt.Errorf("read a tank: %w", err)
+	}
+	liters := math.Round(capacity*demoRestockTo - current)
+	if liters <= 0 {
+		return nil
+	}
+
+	// Which frontier it came through. Fuel reaching a base in the north came up
+	// from Russia through Сүхбаатар; the Gobi bases are supplied from China.
+	port, origin, exporter := "Сүхбаатар", "ОХУ", "Роснефть"
+	if depotName == "Замын-Үүд боомт" {
+		port, origin, exporter = "Замын-Үүд", "БНХАУ", "Sinopec"
+	}
+
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	declaration := fmt.Sprintf("ГМ-%d-%06d", time.Now().Year(), rand.IntN(999999))
+
+	// Density is what turns a declaration written in tonnes into litres. The
+	// paperwork figure is derived from the litres here, which is backwards from
+	// reality and honest about it: what this stores is a plausible pair, not a
+	// measurement.
+	density := 725.0 + float64(rand.IntN(120))
+	if fuel.code == "diesel" {
+		density = 830.0 + float64(rand.IntN(20))
+	}
+	// litres → m³ → kg → tonnes. Both divisions are needed and the first draft
+	// had only one, which declared a rail consignment at 359,550 tonnes: about
+	// six thousand wagons, on a train reaching from the border to the capital.
+	// A figure that wrong is easy to catch here and impossible to catch on a
+	// screen that only ever shows one shipment at a time.
+	tons := math.Round(liters/1000*density/1000*1000) / 1000
+
+	var shipmentID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO fuel_customs_shipments
+		       (tenant_id, declaration_no, border_port, origin_country, exporter,
+		        fuel_type, fuel_label, declared_liters, declared_tons,
+		        wagons, convoy_code, status, lab_status, quality_cert_no,
+		        octane_tested, sulfur_ppm, cleared_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+		        'cleared', 'passed', $12, $13, $14, NOW())
+		RETURNING id::text`,
+		tenantID, declaration, port, origin, exporter,
+		fuel.code, fuel.label, liters, tons,
+		// A rail tanker wagon holds about 60 m³.
+		int(math.Ceil(liters/60000)),
+		fmt.Sprintf("ЦВ-%05d", rand.IntN(99999)),
+		fmt.Sprintf("LAB-%05d", rand.IntN(99999)),
+		octaneFor(fuel.code),
+		// Euro-5 дизель 10 ppm хүртэл; бусад нь өндөр. Тоо нь дүр эсгэсэн ч
+		// хэмжээсийн зэрэг нь бодитой — К4 энэ багана дээр ажиллана.
+		float64(8+rand.IntN(42)),
+	).Scan(&shipmentID)
+	if err != nil {
+		return fmt.Errorf("declare a shipment: %w", err)
+	}
+
+	// Clearing mints the batch, exactly as handleAdvanceShipment does.
+	var batchID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO fuel_batches
+		       (tenant_id, batch_code, fuel_type, fuel_label, origin_country,
+		        refinery, customs_decl_no, customs_shipment_id, imported_liters,
+		        quality_cert_no, octane_tested, sulfur_ppm, lab_status)
+		SELECT $1, $2, s.fuel_type, s.fuel_label, s.origin_country,
+		       s.exporter, s.declaration_no, s.id, s.declared_liters,
+		       s.quality_cert_no, s.octane_tested, s.sulfur_ppm, s.lab_status
+		  FROM fuel_customs_shipments s WHERE s.id = $3::uuid
+		RETURNING id::text`,
+		tenantID, batchCodeFor(declaration), shipmentID).Scan(&batchID)
+	if err != nil {
+		return fmt.Errorf("mint a batch: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO fuel_depot_receipts
+		       (tenant_id, depot_id, tank_id, shipment_id, batch_id, liters, note)
+		VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, 'демо нийлүүлэлт')`,
+		tenantID, depotID, tankID, shipmentID, batchID, liters); err != nil {
+		return fmt.Errorf("record a depot receipt: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE fuel_depot_tanks
+		   SET current_liters = current_liters + $2, updated_at = NOW()
+		 WHERE id = $1::uuid`, tankID, liters); err != nil {
+		return fmt.Errorf("fill a tank: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE fuel_customs_shipments
+		   SET status = 'at_depot', updated_at = NOW()
+		 WHERE id = $1::uuid`, shipmentID); err != nil {
+		return fmt.Errorf("close a shipment: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // octaneFor is the grade's nominal octane, for a batch nobody has tested.

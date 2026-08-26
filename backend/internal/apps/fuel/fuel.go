@@ -179,6 +179,33 @@ func (m *Module) RegisterRoutes(r chi.Router, tenantAuthMiddleware func(http.Han
 		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
 			Get("/stations/{id}/receipts", m.handleListReceipts)
 
+		// The top of the chain: what crossed the border, and the bases it was
+		// unloaded into. See border.go and depot.go.
+		//
+		// Everything that changes a customs record or a tank level asks for
+		// fuel.manage. An ordinary member reads the register — which grades the
+		// company holds, and where — and a manager is the one who can say a
+		// consignment cleared or that sixty thousand litres went into tank 3.
+		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
+			Get("/shipments", m.handleListShipments)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/shipments", m.handleCreateShipment)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/shipments/{id}/status", m.handleAdvanceShipment)
+
+		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
+			Get("/depots", m.handleListDepots)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/depots", m.handleCreateDepot)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/depots/{id}/tanks", m.handleCreateTank)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Patch("/depots/{id}/tanks/{tankId}", m.handleUpdateTank)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.read")).
+			Get("/depots/{id}/receipts", m.handleListDepotReceipts)
+		fr.With(nexus.RequirePermission(m.perms, "fuel.manage")).
+			Post("/depots/{id}/receipts", m.handleReceiveIntoDepot)
+
 		// A citizen's own ration and the vouchers drawn on it.
 		//
 		// Inside the gate: taking a share of a national ration is not something

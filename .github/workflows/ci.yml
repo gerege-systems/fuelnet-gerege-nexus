@@ -144,6 +144,10 @@ jobs:
       # single-use UPDATE predicate, a unique index and a WHERE clause. Two
       # installations are stood up in one process against this schema.
       URTUU_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
+      # Түлш: the chain from the border to a tank is held by a partial unique
+      # index, a CHECK constraint and a row-level policy. Every rule those tests
+      # assert is PostgreSQL's, so none of them is observable without it.
+      FUEL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/platform_test?sslmode=disable
       TEST_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v7
@@ -154,6 +158,16 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: Migrate the test database
+        run: go run ./cmd/migrate up
+      # An app module carries its own schema and its own goose history, and
+      # nothing in db/migrations creates its tables — on a running deployment
+      # they appear when the app is installed. A test package is not an install,
+      # so without this step the fuel tests run against a database that has no
+      # fuel_depots in it, and every one of them fails on a missing relation.
+      - name: Migrate the fuel module's schema
+        env:
+          MIGRATIONS_DIR: internal/apps/fuel/migrations
+          MIGRATIONS_TABLE: goose_db_version_fuel
         run: go run ./cmd/migrate up
       - name: Run tests
         run: go test -race ./...
@@ -244,6 +258,20 @@ jobs:
             ./internal/tenant/ | tee /tmp/lockout.log
           if grep -q -- '--- SKIP' /tmp/lockout.log; then
             echo "::error::login lockout tests skipped — AUTH_TEST_DATABASE_URL is not reaching the test"
+            exit 1
+          fi
+      - name: Fail if the fuel chain tests were skipped
+        # Whether a consignment can enter a tank before customs cleared it,
+        # whether the same one can be unloaded twice, and whether a tank can be
+        # overfilled are decided by a status check inside a transaction, a
+        # partial unique index and a CHECK constraint. Skipped, the chain from
+        # the border to a pump could stop holding with every other test green —
+        # and the stock figures it produces are what the regulator reads.
+        run: |
+          go test -run 'TestOneConsignmentUnloadsOnce|TestATankCannotBeOverfilled|TestUnclearedFuelCannotEnterATank|TestOneCompanyCannotSeeAnothersDepots' -v \
+            ./internal/apps/fuel/ | tee /tmp/fuel.log
+          if grep -q -- '--- SKIP' /tmp/fuel.log; then
+            echo "::error::fuel chain tests skipped — FUEL_TEST_DATABASE_URL is not reaching the test"
             exit 1
           fi
       - name: Fail if the tenant isolation tests were skipped
