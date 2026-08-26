@@ -60,6 +60,7 @@ import (
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/backup"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/catalog"
 	platformflags "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/flags"
+	platformfuel "github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/fuel"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/metering"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/observability"
 	"github.com/gerege-systems/open-gerege-nexus/backend/internal/platform/operator"
@@ -129,6 +130,7 @@ type Service struct {
 	backup        *backup.Service
 	metering      *metering.Service
 	catalog       *catalog.Service
+	fuel          *platformfuel.Service
 }
 
 // New builds the plane. It performs no I/O: a deployment without the migrations
@@ -172,6 +174,10 @@ func New(db *pgxpool.Pool, deps ConsoleDeps) *Service {
 		catalog: catalog.New(op, catalog.Deps{
 			Observability: observabilityScreen, SyncCatalog: deps.SyncCatalog,
 		}),
+		// The deployment's own subject matter, which the console could not see
+		// at all: how much fuel each organisation is reporting, and which of
+		// them have stopped reporting.
+		fuel: platformfuel.New(op, platformfuel.Deps{DB: db}),
 	}
 }
 
@@ -253,6 +259,7 @@ func (s *Service) console(r chi.Router) {
 		s.catalog.Routes(signedIn)
 		s.backup.Routes(signedIn)
 		s.announce.Routes(signedIn)
+		s.fuel.Routes(signedIn)
 	})
 }
 

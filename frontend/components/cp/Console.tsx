@@ -20,6 +20,7 @@ import {
   Activity,
   Building2,
   CheckCheck,
+  Fuel,
   LifeBuoy,
   LogOut,
   Megaphone,
@@ -139,6 +140,7 @@ export default function Console({ children }: { children: React.ReactNode }) {
                 <ConsoleLink href="/cp/tenants" icon={<Building2 className="w-5 h-5" />} label={t("cp.section.tenants")} />
                 <ConsoleLink href="/cp/support" icon={<LifeBuoy className="w-5 h-5" />} label={t("cp.section.support")} />
                 <ConsoleLink href="/cp/approvals" icon={<CheckCheck className="w-5 h-5" />} label={t("cp.section.approvals")} />
+                <ConsoleLink href="/cp/fuel" icon={<Fuel className="w-5 h-5" />} label={t("cp.section.fuel")} />
               </MenuGroup>
 
               <MenuGroup title={t("cp.group.platform")}>

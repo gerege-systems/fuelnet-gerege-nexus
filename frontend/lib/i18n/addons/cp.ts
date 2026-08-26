@@ -56,6 +56,7 @@ export const cp = {
   "cp.action.refresh": { mn: "Шинэчлэх", en: "Refresh" },
 
   "cp.section.tenants": { mn: "Байгууллагууд", en: "Organisations" },
+  "cp.section.fuel": { mn: "Шатахуун", en: "Fuel" },
   "cp.section.apps": { mn: "Суусан аппууд", en: "Installed apps" },
   "cp.section.members": { mn: "Хэрэглэгчид", en: "People" },
   "cp.section.activity": { mn: "Сүүлийн идэвх", en: "Recent activity" },

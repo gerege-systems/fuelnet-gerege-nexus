@@ -26,6 +26,7 @@ GET /api/platform/v1/catalog/status
 GET /api/platform/v1/credentials
 GET /api/platform/v1/deletions
 GET /api/platform/v1/flags
+GET /api/platform/v1/fuel/overview
 GET /api/platform/v1/health
 GET /api/platform/v1/me
 GET /api/platform/v1/operators

@@ -163,6 +163,62 @@ export interface TenantDetail extends TenantSummary {
  * sign-in form. A distinct class rather than a status code compared at each
  * call site, so that a screen cannot forget which number meant what.
  */
+/**
+ * The national fuel picture, added up from every operator's own registry.
+ *
+ * `installed` is false on a deployment where no organisation has installed the
+ * fuel app: there are no tables to read yet, which is an empty screen rather
+ * than a failure.
+ *
+ * `stale_rows` and `stale` sit beside the totals and are never folded into
+ * them. A forecourt whose stock was last reported a day ago is not a forecourt
+ * holding that much fuel — it is one nobody has heard from.
+ */
+export interface FuelOperatorRow {
+  id: string;
+  name: string;
+  slug: string;
+  stations: number;
+  depots: number;
+  station_liters: number;
+  depot_liters: number;
+  stale_rows: number;
+  in_transit: number;
+  at_border: number;
+  last_report_at: string | null;
+}
+
+export interface FuelStockRow {
+  fuel_type: string;
+  station_liters: number;
+  depot_liters: number;
+  /** Declared at customs and not yet at a depot: coming, not held. */
+  border_liters: number;
+  capacity_liters: number;
+  stale: number;
+}
+
+export interface FuelOverview {
+  installed: boolean;
+  operators: FuelOperatorRow[];
+  stock: FuelStockRow[];
+  aimags: { aimag: string; stations: number; liters: number }[];
+  dry: {
+    id: string; name: string; aimag: string; district: string; brand_label: string;
+    fuel_type: string; liters: number; last_reported_at: string | null;
+  }[];
+  totals: {
+    operators: number;
+    stations: number;
+    depots: number;
+    in_transit: number;
+    in_transit_liters: number;
+    at_border: number;
+    received_7d_liters: number;
+    batches_open: number;
+  };
+}
+
 export class Unauthorized extends Error {
   constructor() {
     super("unauthorized");
@@ -228,6 +284,9 @@ export const cp = {
     request<{ tenants: TenantSummary[] }>(`/tenants?q=${encodeURIComponent(search)}`),
 
   tenant: (id: string) => request<TenantDetail>(`/tenants/${encodeURIComponent(id)}`),
+
+  /** Every operator's fuel records, added up. Read-only; see internal/platform/fuel. */
+  fuelOverview: () => request<FuelOverview>("/fuel/overview"),
 
   audit: (params: { action?: string; target_type?: string; target_id?: string } = {}) => {
     const query = new URLSearchParams(
