@@ -37,14 +37,8 @@ export default function FuelPage() {
   }, []);
 
   return (
-    <div className="p-6 max-w-5xl">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-3">
-          <Fuel className="w-6 h-6 text-[var(--gerege-blue)]" />
-          {t("fuel.view.title")}
-        </h1>
-        <p className="mt-1 text-slate-500">{t("fuel.view.subtitle")}</p>
-      </header>
+    <div>
+      <p className="mb-6 text-slate-500">{t("fuel.view.subtitle")}</p>
 
       {error ? (
         <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>
