@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -254,5 +255,86 @@ func TestAnAppIDThatCannotNameATableIsRefused(t *testing.T) {
 	got, err := versionTable("io.gerege.nexus.sso-clients")
 	if err != nil || got != "public.goose_db_version_sso_clients" {
 		t.Errorf("versionTable = %q, %v; want public.goose_db_version_sso_clients", got, err)
+	}
+}
+
+// A module's schema is applied even though the caller may not create tables.
+//
+// This is the install path rather than the boot sweep, and the difference is
+// the whole point: at boot nothing has bound the context, while an install
+// arrives inside a request that dbguard has bound to a tenant's role — or, from
+// the console, to the operator's. Neither role may create a table or even read
+// goose's version table, so before runModuleMigrations stripped both marks the
+// install failed with `permission denied for table goose_db_version_<app>` and
+// the organisation was created without the app it asked for.
+func TestAModuleSchemaIsAppliedFromATenantBoundRequest(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set TEST_DATABASE_URL to a migrated test database to run the module migration tests")
+	}
+	ctx := context.Background()
+
+	// The pool production hands the installer: every connection bound to
+	// whoever the context says is asking.
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("parse the dsn: %v", err)
+	}
+	guard := &dbguard.Guard{}
+	guard.Install(config)
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := guard.Probe(ctx, pool); err != nil {
+		t.Skipf("the tenant role is not available in this database: %v", err)
+	}
+
+	const appID = "io.gerege.nexus.bound_canary"
+	nexus.Migrations(appID, fstest.MapFS{
+		"00001_create.sql": &fstest.MapFile{Data: []byte(`-- +goose Up
+CREATE TABLE bound_canary (id uuid PRIMARY KEY);
+-- +goose Down
+DROP TABLE bound_canary;
+`)},
+	})
+	drop := func() {
+		plain, err := pgxpool.New(ctx, dsn)
+		if err != nil {
+			return
+		}
+		defer plain.Close()
+		_, _ = plain.Exec(ctx, `DROP TABLE IF EXISTS tenant.bound_canary`)
+		_, _ = plain.Exec(ctx, `DROP TABLE IF EXISTS public.goose_db_version_bound_canary`)
+	}
+	t.Cleanup(func() {
+		nexus.Migrations(appID, nil)
+		drop()
+	})
+	drop()
+
+	// A tenant id that need not exist: the binding sets it on the connection,
+	// and nothing in a migration reads it.
+	bound := nexus.WithTenantID(ctx, "00000000-0000-0000-0000-000000000001")
+
+	installer := NewAppInstaller(pool, nil, "1.0.0")
+	if err := installer.runModuleMigrations(bound, appID); err != nil {
+		t.Fatalf("a module's schema could not be applied from a tenant-bound request: %v", err)
+	}
+
+	plain, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer plain.Close()
+	var exists bool
+	if err := plain.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'tenant' AND tablename = 'bound_canary')`,
+	).Scan(&exists); err != nil {
+		t.Fatalf("look for the table: %v", err)
+	}
+	if !exists {
+		t.Error("the table was not created, so an app installed from the store would answer 500 for every request")
 	}
 }

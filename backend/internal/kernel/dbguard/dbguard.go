@@ -72,6 +72,21 @@ func AsOperator(ctx context.Context) context.Context {
 	return context.WithValue(ctx, operatorKey, true)
 }
 
+// AsPlatform takes the control-plane mark back off a context.
+//
+// It exists for one caller: the work a console request sets in motion that is
+// not the console's own reading. Installing an app runs the module's
+// migrations, and DDL belongs to neither the console's read-only role nor a
+// tenant's — it is the deployment's, which is the login role, which is what a
+// context carrying neither mark binds to.
+//
+// Paired with nexus.WithoutTenant rather than replacing it: the two marks are
+// independent, and clearing one silently would leave a caller believing it had
+// cleared both.
+func AsPlatform(ctx context.Context) context.Context {
+	return context.WithValue(ctx, operatorKey, false)
+}
+
 // IsOperator reports whether ctx was marked by AsOperator.
 func IsOperator(ctx context.Context) bool {
 	marked, _ := ctx.Value(operatorKey).(bool)

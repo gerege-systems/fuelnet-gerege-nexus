@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
+	"github.com/gerege-systems/open-gerege-nexus/backend/internal/kernel/dbguard"
 	"github.com/gerege-systems/open-gerege-nexus/backend/pkg/nexus"
 )
 
@@ -62,6 +63,23 @@ func (ai *AppInstaller) runModuleMigrations(ctx context.Context, appID string) e
 	// does not open a second set of connections to the database.
 	db := stdlib.OpenDBFromPool(ai.db)
 	defer func() { _ = db.Close() }()
+
+	// Creating tables is the deployment's act, not the caller's.
+	//
+	// Every other statement this package makes runs bound to whoever asked for
+	// it — a tenant's role when somebody installs from the store, the console's
+	// read-only role when an operator opens an organisation. Neither may create
+	// a table, and neither may even read goose's version table, so an install
+	// through either path failed at `permission denied for table
+	// goose_db_version_<app>` — before this line, no module carrying a schema
+	// of its own could be installed by anybody after the process had started.
+	// The boot sweep worked precisely because nothing had bound its context.
+	//
+	// Stripping both marks rather than opening a second pool: the cancellation,
+	// the deadline and the tracing all travel with the context, and a pool of
+	// its own would be a second set of connections whose configuration has to
+	// be kept in step with the first.
+	ctx = dbguard.AsPlatform(nexus.WithoutTenant(ctx))
 
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithTableName(table))
 	if err != nil {
