@@ -5,6 +5,7 @@ import { Building2, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { resetAccess } from "@/lib/access";
 import { useI18n } from "@/lib/i18n";
+import { switchDestination } from "@/lib/nav.mjs";
 
 export interface TenantOption {
   id: string;
@@ -66,12 +67,21 @@ export function useTenants(active: boolean) {
     try {
       await api.switchTenant(id);
       // Everything on screen was fetched for the tenant being left — the menus,
-      // the permissions, every list on the page behind this control. A full
-      // load is the only honest way to drop all of it at once, and /apps is
-      // somewhere every tenant has, unlike the screen being stood on.
+      // the permissions, every list on the page behind this control — so a full
+      // load is still the only honest way to drop all of it at once. Where it
+      // lands is the new tenant's answer, not a constant: this used to go to
+      // /apps every time, which threw somebody keeping the same books for two
+      // organisations back out to the store on every switch. The menus are the
+      // list of screens the tenant being moved to actually has, so ask them,
+      // and fall back to the store only when the app behind this screen is not
+      // installed over there. A query string is dropped: it names records of
+      // the organisation being left.
+      const here = window.location.pathname;
+      const menus = await api.getMenus().catch(() => []);
+      const target = switchDestination(here, menus.map((menu) => menu.path || ""));
       resetAccess();
       forgetTenants();
-      window.location.assign("/apps");
+      window.location.assign(target);
     } catch {
       setSwitching(false);
       setFailed(true);

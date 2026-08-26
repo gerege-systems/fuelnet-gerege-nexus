@@ -15,6 +15,7 @@ import { invokeShell, useShell, SHELL_EVENTS, SHELL_METHODS, type ShellNavigateP
 import { currentDeviceLine, type DeviceLine } from "@/lib/deviceLine";
 import { MenuIcon } from "@/lib/icons";
 import { isPublicPath } from "@/lib/publicPath.mjs";
+import { isUnder } from "@/lib/nav.mjs";
 import { LayoutGrid, Settings, Menu as HamburgerIcon, Palette, Building2, Search, Ellipsis, ShieldCheck, RefreshCw, Route, MailCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Sparkles, Link2 } from "lucide-react";
 
 // app_order and app_chrome describe the app rather than the entry: where its
@@ -49,13 +50,6 @@ interface AppNav { id:string; name:string; icon:string; path:string; externalUrl
 // would otherwise find every group open again.
 const PLATFORM_GROUPS={modules:"platform.modules",settings:"platform.settings"};
 const GROUPS_KEY="gerege_sidebar_groups";
-// Whether a route lives under a menu path. Compared segment by segment, because
-// a raw prefix test also matches a sibling whose path merely begins with the
-// same characters: "/products-catalog".startsWith("/products") is true, so the
-// Products app would claim the other app's routes, highlight its own tile in
-// the rail and render its own menu — leaving the sibling unreachable whenever
-// both are installed.
-function isUnder(pathname:string,path:string){return pathname===path||pathname.startsWith(path.endsWith("/")?path:path+"/")}
 // Which entry is *the* current one, when several of them match.
 //
 // isUnder is the right test for "does this app own this route" — an app claims
