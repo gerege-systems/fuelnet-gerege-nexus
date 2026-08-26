@@ -16,8 +16,8 @@ export const fuel = {
   },
   "fuel.view.empty_title": { mn: "Бүртгэлтэй ШТС алга", en: "No stations yet" },
   "fuel.view.empty_body": {
-    mn: "ШТС-ын бүртгэл дараагийн үе шатанд нэмэгдэнэ.",
-    en: "The station register arrives in the next phase.",
+    mn: "«ШТС нэмэх» товчоор эхний станцаа бүртгэнэ үү.",
+    en: "Register the first forecourt with “Add a station”.",
   },
   "fuel.view.count": { mn: "Бүртгэлтэй ШТС", en: "Stations registered" },
 
@@ -34,6 +34,7 @@ export const fuel = {
     mn: "Энэ ШТС-ыг устгах уу? Ачаа хүлээж авсан ШТС-ыг устгах боломжгүй — оронд нь төлөвийг нь өөрчилнө.",
     en: "Delete this station? One that has received a delivery cannot be deleted — change its status instead.",
   },
+  "fuel.station.grade": { mn: "Түлш", en: "Grade" },
   "fuel.station.grades": { mn: "Түлш, үнэ", en: "Grades & prices" },
   "fuel.station.add_grade": { mn: "Түлш нэмэх", en: "Add a grade" },
   "fuel.station.no_grades": { mn: "Түлш бүртгэгдээгүй", en: "No grades registered" },

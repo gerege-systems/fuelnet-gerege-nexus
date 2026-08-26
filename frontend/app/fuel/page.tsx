@@ -120,7 +120,7 @@ export default function FuelPage() {
             <Fuel className="h-7 w-7" />
           </div>
           <h2 className="text-lg font-semibold text-slate-900">{t("fuel.view.empty_title")}</h2>
-          <p className="mt-2 text-sm text-slate-500">{t("fuel.station.subtitle")}</p>
+          <p className="mt-2 text-sm text-slate-500">{t("fuel.view.empty_body")}</p>
         </section>
       ) : (
         <div className="grid gap-4">
@@ -400,7 +400,7 @@ function GradeRow({
     <form onSubmit={submit} className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label={t("fuel.tab.stations")}>
+        <Field label={t("fuel.station.grade")}>
           <select
             className={inputClass}
             value={form.fuel_type}
