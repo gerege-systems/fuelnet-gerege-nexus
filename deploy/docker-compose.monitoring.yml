@@ -196,10 +196,25 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
-      # Served under /grafana by the nginx snippet, so it has to know its own
-      # root or every link it generates points at the bare domain.
-      GF_SERVER_ROOT_URL: ${MONITORING_PUBLIC_URL:-http://localhost:3000}/grafana
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # Where Grafana thinks it lives. Two arrangements are supported and the
+      # nginx side has to match whichever is chosen:
+      #
+      #   a path on the platform's host — snippets/nexus-monitoring.conf
+      #     GRAFANA_ROOT_URL=https://fuelnet.gerege.mn/grafana
+      #     GRAFANA_SUBPATH=true
+      #
+      #   a host of its own — nginx/monitor.fuelnet.gerege.mn.conf
+      #     GRAFANA_ROOT_URL=https://monitor.fuelnet.gerege.mn
+      #     GRAFANA_SUBPATH=false
+      #
+      # Get the pair wrong and every page renders while every link Grafana
+      # generates points somewhere that does not exist — which looks like a
+      # broken dashboard rather than a misconfigured proxy.
+      #
+      # The default keeps the older sub-path arrangement, so a deployment that
+      # set only MONITORING_PUBLIC_URL behaves exactly as it did before.
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-${MONITORING_PUBLIC_URL:-http://localhost:3000}/grafana}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "${GRAFANA_SUBPATH:-true}"
       # Nobody signs up for an operations dashboard.
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"

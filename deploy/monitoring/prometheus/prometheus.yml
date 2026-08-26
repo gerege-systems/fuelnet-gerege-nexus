@@ -77,11 +77,20 @@ scrape_configs:
     static_configs:
       - targets: ["gerege_nexus_loki:3100"]
 
-  # Grafana is told to serve from /grafana (GF_SERVER_SERVE_FROM_SUB_PATH), so
-  # its own metrics move with everything else. Scraping /metrics gets a 302 to
-  # the public root URL, which Prometheus then cannot reach from inside the
-  # network — it looked like Grafana was down while it was serving fine.
+  # Grafana's own metrics, and the one target whose path depends on how Grafana
+  # is published.
+  #
+  # This deployment serves it at the root of monitor.fuelnet.gerege.mn
+  # (GRAFANA_SUBPATH=false), so /metrics is correct. A deployment that puts it
+  # under /grafana instead — snippets/nexus-monitoring.conf, GRAFANA_SUBPATH
+  # unset — must change this to /grafana/metrics, because with a sub-path every
+  # request to /metrics answers 302 to the public root URL, which Prometheus
+  # cannot reach from inside the Docker network. That failure reads as "Grafana
+  # is down" while Grafana is serving perfectly.
+  #
+  # Prometheus expands the environment only in external_labels, so this cannot
+  # follow the variable and is a deliberate one-line edit instead.
   - job_name: grafana
-    metrics_path: /grafana/metrics
+    metrics_path: /metrics
     static_configs:
       - targets: ["gerege_nexus_grafana:3000"]

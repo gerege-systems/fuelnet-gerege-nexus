@@ -71,6 +71,11 @@ func New(p nexus.Platform) *Module {
 	}
 	nexus.Migrations(ID, sub)
 
+	// The chain on /metrics. National aggregates only, and no tenant label —
+	// see metrics.go for why a per-company series would be a competitor's read
+	// of a business kept for sixty days.
+	RegisterMetrics(m.db)
+
 	return m
 }
 

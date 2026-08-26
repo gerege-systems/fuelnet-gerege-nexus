@@ -215,7 +215,13 @@ jobs:
           username: ${{ secrets.DEPLOY_USER || 'root' }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "docker-compose.prod.yml,deploy/nginx/snippets/nexus-oauth.conf,deploy/nginx/snippets/cp-api.conf,deploy/scripts/render_cp_allowlist.py,ppt/index.html,ppt/nginx-ppt.conf.example"
+          # The monitoring tree travels with every deploy, so the dashboards and
+          # alert rules on the server are the ones in this repository. Grafana
+          # rereads its dashboard directory on a timer and Prometheus is given
+          # --web.enable-lifecycle, so a changed panel or rule needs no restart
+          # of the monitoring stack — and a stack that is down simply picks the
+          # new files up when it comes back. Nothing here touches the platform.
+          source: "docker-compose.prod.yml,deploy/docker-compose.monitoring.yml,deploy/monitoring/**,deploy/nginx/monitor.fuelnet.gerege.mn.conf,deploy/nginx/snippets/nexus-oauth.conf,deploy/nginx/snippets/cp-api.conf,deploy/scripts/render_cp_allowlist.py,ppt/index.html,ppt/nginx-ppt.conf.example"
           target: /opt/fuelnet-gerege-nexus
 
       - name: Pull images, migrate and restart
